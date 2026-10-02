@@ -59,6 +59,13 @@ pub enum EngineError {
     )]
     InitialSceneWithoutScenes,
 
+    #[error(
+        "EngineBuilder: .track_group(\"{name}\") is {len} bytes; group names are limited \
+         to {max} bytes.",
+        max = crate::resources::worldsignals::MAX_GROUP_NAME_LEN
+    )]
+    GroupNameTooLong { name: String, len: usize },
+
     #[error("EngineBuilder missing required system registrations: {0}")]
     MissingSystems(String),
 

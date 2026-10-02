@@ -696,6 +696,19 @@ fn valid_replay_and_scene_setups_pass_validation() {
 }
 
 #[test]
+fn track_group_rejects_names_too_long_for_a_signal_key() {
+    use aberred_core::resources::worldsignals::MAX_GROUP_NAME_LEN;
+
+    let too_long = "g".repeat(MAX_GROUP_NAME_LEN + 1);
+    let err = validate(&EngineBuilder::new().track_group(too_long.clone())).unwrap_err();
+    assert!(
+        matches!(&err, EngineError::GroupNameTooLong { name, .. } if *name == too_long),
+        "{err}"
+    );
+    validate(&EngineBuilder::new().track_group("g".repeat(MAX_GROUP_NAME_LEN))).unwrap();
+}
+
+#[test]
 fn initial_scene_not_registered_lists_every_registered_scene() {
     let err = validate(
         &EngineBuilder::new()

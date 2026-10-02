@@ -119,7 +119,7 @@ pub struct SceneLogic {
 ///
 /// Reads the target from `WorldSignals["scene"]` and checks it first: an
 /// unregistered name logs an error and leaves the current scene untouched.
-/// Otherwise it despawns non-[`Persistent`](crate::components::persistent::Persistent) entities, clears tracked groups,
+/// Otherwise it despawns non-[`Persistent`](crate::components::persistent::Persistent) entities, resets tracked groups to the persistent ones,
 /// runs the old scene's `on_exit`, records `WorldSignals["previous_scene"]`,
 /// and enters the new scene.
 pub fn scene_switch_system(
@@ -151,7 +151,7 @@ pub fn scene_switch_system(
     ctx.world_signals
         .clear_non_persistent_entities(&persistent_set);
 
-    tracked_groups.clear();
+    tracked_groups.reset_to_persistent();
     ctx.world_signals.clear_group_counts();
 
     if let Some(prev) = scene_manager.active_scene.take() {

@@ -91,6 +91,7 @@ pub struct TestWorldBuilder {
     extra_observers: Vec<ObserverRegistrar>,
     scenes: Vec<(String, SceneDescriptor)>,
     initial_scene: Option<String>,
+    tracked_groups: Vec<String>,
     #[cfg(feature = "lua")]
     lua_script: Option<PathBuf>,
     deterministic_seed: Option<u64>,
@@ -120,6 +121,7 @@ impl TestWorldBuilder {
             extra_observers: Vec::new(),
             scenes: Vec::new(),
             initial_scene: None,
+            tracked_groups: Vec::new(),
             #[cfg(feature = "lua")]
             lua_script: None,
             deterministic_seed: None,
@@ -204,6 +206,12 @@ impl TestWorldBuilder {
         self
     }
 
+    /// Track a scene-persistent group, mirroring [`EngineBuilder::track_group`].
+    pub fn track_group(mut self, name: impl Into<String>) -> Self {
+        self.tracked_groups.push(name.into());
+        self
+    }
+
     /// Opt into deterministic mode, mirroring `EngineBuilder::deterministic`:
     /// `SimRng` is seeded from `seed` instead of entropy.
     pub fn deterministic(mut self, seed: u64) -> Self {
@@ -258,6 +266,7 @@ impl TestWorldBuilder {
             extra_observers: std::mem::take(&mut self.extra_observers),
             scenes: std::mem::take(&mut self.scenes),
             initial_scene: self.initial_scene.take(),
+            tracked_groups: std::mem::take(&mut self.tracked_groups),
             #[cfg(feature = "lua")]
             lua_script: self.lua_script.take(),
             deterministic_seed: self.deterministic_seed,

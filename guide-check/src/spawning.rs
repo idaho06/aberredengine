@@ -231,19 +231,9 @@ mod group_tracking_across_scenes {
     use aberredengine::engine_app::EngineBuilder; // GLUE
 
     fn register() -> EngineBuilder { // GLUE
-    use aberredengine::bevy_ecs::prelude::*;
-    use aberredengine::core::resources::group::TrackedGroups;
-
-    fn track_groups(mut tracked: ResMut<TrackedGroups>) {
-        for name in ["enemies", "bricks"] {
-            if !tracked.has_group(name) {
-                tracked.add_group(name);
-            }
-        }
-    }
-
     EngineBuilder::new()
-        .add_system(track_groups)
+        .track_group("enemies")
+        .track_group("bricks")
         // …
     } // GLUE
 }

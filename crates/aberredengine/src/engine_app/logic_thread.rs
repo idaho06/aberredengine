@@ -74,6 +74,8 @@ pub(crate) struct LogicInit {
     pub(crate) extra_observers: Vec<ObserverRegistrar>,
     pub(crate) scenes: Vec<(String, SceneDescriptor)>,
     pub(crate) initial_scene: Option<String>,
+    /// Scene-persistent group names (`EngineBuilder::track_group`).
+    pub(crate) tracked_groups: Vec<String>,
     #[cfg(feature = "lua")]
     pub(crate) lua_script: Option<PathBuf>,
     /// `Some(seed)` in deterministic mode (`EngineBuilder::deterministic`),

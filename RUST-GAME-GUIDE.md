@@ -449,6 +449,7 @@ Setup ──→ Playing ──→ Quitting
 | `.on_switch_scene(system)` | Called when a scene transition is requested |
 | `.add_scene(name, descriptor)` | Register a named scene (SceneManager path) |
 | `.initial_scene(name)` | Which scene starts first (required with `.add_scene()`) |
+| `.track_group(name)` | Count group `name`'s entities for the whole game (published as `"group_count:<name>"`, kept across scene switches). Can be called multiple times. See [Group tracking across scenes](#64-group-tracking-across-scenes). |
 | `.add_system(system)` | Add a per-sim-tick system, run only while `Playing` (`run_if(state_is_playing)`, ordered alongside script-update systems). Can be called multiple times. A sim tick is not the same as a render frame; see [Threading Model](#threading-model-what-your-code-can-access). |
 | `.configure_schedule(closure)` | Add systems to the same schedule `.add_system()` targets, with full ordering control — no auto-constraints applied. Use this for custom ordering relative to the engine's own systems (via `SimSet` or `.after()`/`.before()`). |
 | `.add_observer(observer_fn)` | Register a persistent observer for a custom or engine event. |
@@ -1492,13 +1493,13 @@ When the `scene_switch_system` runs, it performs these steps in order:
 1. **Read and check the target scene** — reads `WorldSignals["scene"]` for the target scene name (defaults to `"menu"` if unset). If no scene is registered under that name, the system logs "No scene registered" and returns: nothing below runs, and the current scene keeps running untouched
 2. **Despawn non-persistent entities** — every entity *without* the `Persistent` component is despawned
 3. **Clear entity registrations** — non-persistent entity refs stored in `WorldSignals` are removed
-4. **Clear group tracking** — `TrackedGroups::clear()` and `WorldSignals` group counts are wiped
+4. **Reset group tracking** — `TrackedGroups` drops every group except the `.track_group()` ones, and `WorldSignals` group counts are wiped (they are published again on the next tick)
 5. **Call `on_exit` on previous scene** — if there was an active scene with an `on_exit` callback, it fires
 6. **Write `previous_scene`** — the old active scene name is stored in `WorldSignals["previous_scene"]`
 7. **Set active scene** — updates `SceneManager.active_scene` to the new scene name
 8. **Call `on_enter` on new scene** — fires the new scene's `on_enter` callback, which typically spawns entities and sets up initial state
 
-When `on_exit` runs, the old scene's entities still exist (their despawn is queued, not applied yet), but steps 3 and 4 have already run: `WorldSignals` entity registrations of non-persistent entities, `TrackedGroups` and group counts are gone, so `get_entity()` and `get_group_count()` return `None` there. Read what you need from them in `on_update` before triggering the switch.
+When `on_exit` runs, the old scene's entities still exist (their despawn is queued, not applied yet), but steps 3 and 4 have already run: `WorldSignals` entity registrations of non-persistent entities and all group counts are gone, so `get_entity()` and `get_group_count()` return `None` there. Read what you need from them in `on_update` before triggering the switch.
 
 > **Note:** a mistyped scene name only logs an error ("No scene registered for '…'", followed by the list of registered scenes), so it is easy to miss. Prefer constants over repeated string literals.
 
@@ -1558,22 +1559,12 @@ A per-entity observer added with `.observe(...)` on a `Persistent` entity surviv
 
 `TrackedGroups` (`aberred-core/src/resources/group.rs`) is a resource holding a set of group names to count. The engine's `update_group_counts_system` publishes entity counts for each tracked group to `WorldSignals` every sim tick.
 
-`GameCtx` has no `TrackedGroups` field, so scene callbacks cannot register groups. Use a system with `ResMut<TrackedGroups>` instead. Because a scene switch wipes the tracked set, an idempotent system that re-adds missing groups every tick covers every scene:
+Register the groups your game counts on the builder. `.track_group()` keeps them tracked for the whole game, across every scene switch:
 
 ```rust
-use aberredengine::bevy_ecs::prelude::*;
-use aberredengine::core::resources::group::TrackedGroups;
-
-fn track_groups(mut tracked: ResMut<TrackedGroups>) {
-    for name in ["enemies", "bricks"] {
-        if !tracked.has_group(name) {
-            tracked.add_group(name);
-        }
-    }
-}
-
 EngineBuilder::new()
-    .add_system(track_groups)
+    .track_group("enemies")
+    .track_group("bricks")
     // …
 ```
 
@@ -1581,9 +1572,9 @@ Scene callbacks then read the counts through `ctx.world_signals.get_group_count(
 
 Key behaviors:
 
-- `TrackedGroups::add_group("enemies")` registers a group for counting
 - The engine publishes `"group_count:enemies"` to `WorldSignals` each sim tick
-- **Cleared on scene switch** — group tracking is wiped by `scene_switch_system`. Re-register groups after every switch (the system above does this automatically)
+- Group names are limited to `MAX_GROUP_NAME_LEN` (52) bytes; a longer `.track_group()` name is a startup error (`EngineError::GroupNameTooLong`)
+- **Per-scene groups** — a system with `ResMut<TrackedGroups>` can call `add_group("bullets")` at runtime (`GameCtx` has no `TrackedGroups` field). A scene switch drops these and keeps only the `.track_group()` groups
 - Bind a `SignalBinding::new("group_count:enemies")` to auto-display the count in UI text
 
 ### 6.5 Per-sim-tick scene updates

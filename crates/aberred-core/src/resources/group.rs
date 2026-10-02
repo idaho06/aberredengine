@@ -44,17 +44,34 @@ use rustc_hash::FxHashSet;
 
 use crate::resources::worldsignals::MAX_GROUP_NAME_LEN;
 
+/// Whether `group_name`'s `"group_count:{name}"` key fits the no-allocation
+/// stack buffer; warns when it doesn't.
+fn fits_signal_key(group_name: &str) -> bool {
+    let fits = group_name.len() <= MAX_GROUP_NAME_LEN;
+    if !fits {
+        log::warn!(
+            "track_group: group name '{group_name}' is {} bytes; the maximum is {MAX_GROUP_NAME_LEN}. Not tracked.",
+            group_name.len()
+        );
+    }
+    fits
+}
+
 /// Resource that holds the set of group names to track for entity counting.
 ///
 /// Groups added here will have their entity counts published to
 /// [`WorldSignals`](crate::resources::worldsignals::WorldSignals) by
 /// [`update_group_counts_system`](crate::systems::group::update_group_counts_system).
 ///
-/// This resource should be cleared when switching scenes to avoid stale counts.
+/// A scene switch resets it to its persistent groups (see
+/// [`reset_to_persistent`](Self::reset_to_persistent)), so per-scene groups
+/// never leave stale counts behind.
 #[derive(Debug, Clone, Resource, Default)]
 pub struct TrackedGroups {
     /// The set of group names currently being tracked.
     pub groups: FxHashSet<String>,
+    /// Groups re-tracked on every scene switch (`EngineBuilder::track_group`).
+    persistent: FxHashSet<String>,
 }
 
 impl TrackedGroups {
@@ -64,14 +81,27 @@ impl TrackedGroups {
     /// `"group_count:{name}"` key would not fit the no-allocation stack buffer.
     pub fn add_group(&mut self, group_name: impl Into<String>) {
         let group_name = group_name.into();
-        if group_name.len() > MAX_GROUP_NAME_LEN {
-            log::warn!(
-                "track_group: group name '{group_name}' is {} bytes; the maximum is {MAX_GROUP_NAME_LEN}. Not tracked.",
-                group_name.len()
-            );
-            return;
+        if fits_signal_key(&group_name) {
+            self.groups.insert(group_name);
         }
-        self.groups.insert(group_name);
+    }
+
+    /// Adds a group that stays tracked across scene switches: it is tracked
+    /// now and re-added by every [`reset_to_persistent`](Self::reset_to_persistent).
+    ///
+    /// The [`MAX_GROUP_NAME_LEN`] limit of [`add_group`](Self::add_group) applies.
+    pub fn add_persistent(&mut self, group_name: impl Into<String>) {
+        let group_name = group_name.into();
+        if fits_signal_key(&group_name) {
+            self.groups.insert(group_name.clone());
+            self.persistent.insert(group_name);
+        }
+    }
+
+    /// Drops every tracked group except the persistent ones. The scene-switch
+    /// paths call this instead of [`clear`](Self::clear).
+    pub fn reset_to_persistent(&mut self) {
+        self.groups.clone_from(&self.persistent);
     }
 
     /// Returns `true` if the given group name is being tracked.
@@ -109,5 +139,38 @@ mod tests {
         let at_limit = "g".repeat(MAX_GROUP_NAME_LEN);
         tracked.add_group(at_limit.clone());
         assert!(tracked.has_group(&at_limit));
+    }
+
+    #[test]
+    fn reset_to_persistent_keeps_only_persistent_groups() {
+        let mut tracked = TrackedGroups::default();
+        tracked.add_persistent("enemies");
+        tracked.add_group("bullets");
+
+        tracked.reset_to_persistent();
+
+        assert!(tracked.has_group("enemies"));
+        assert!(!tracked.has_group("bullets"));
+    }
+
+    #[test]
+    fn clear_drops_persistent_groups_until_the_next_reset() {
+        let mut tracked = TrackedGroups::default();
+        tracked.add_persistent("enemies");
+
+        tracked.clear();
+        assert!(!tracked.has_group("enemies"));
+
+        tracked.reset_to_persistent();
+        assert!(tracked.has_group("enemies"));
+    }
+
+    #[test]
+    fn add_persistent_refuses_names_longer_than_the_signal_key_allows() {
+        let mut tracked = TrackedGroups::default();
+        let too_long = "g".repeat(MAX_GROUP_NAME_LEN + 1);
+        tracked.add_persistent(too_long.clone());
+        tracked.reset_to_persistent();
+        assert!(!tracked.has_group(&too_long));
     }
 }

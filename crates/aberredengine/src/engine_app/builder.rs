@@ -32,6 +32,8 @@ pub struct EngineBuilder {
     pub(super) switch_scene_hook: Option<HookRegistrar>,
     pub(super) scenes: Vec<(String, SceneDescriptor)>,
     pub(super) initial_scene: Option<String>,
+    /// Group names from `.track_group()`, tracked across scene switches.
+    pub(super) tracked_groups: Vec<String>,
     pub(super) extra_systems: Vec<UpdateRegistrar>,
     pub(super) extra_observers: Vec<ObserverRegistrar>,
     /// Name of the first `on_*` hook method explicitly called by the
@@ -68,6 +70,7 @@ impl EngineBuilder {
             switch_scene_hook: None,
             scenes: Vec::new(),
             initial_scene: None,
+            tracked_groups: Vec::new(),
             extra_systems: Vec::new(),
             extra_observers: Vec::new(),
             first_user_hook: None,
@@ -268,6 +271,19 @@ impl EngineBuilder {
     /// game transitions to the `Playing` state.
     pub fn initial_scene(mut self, name: impl Into<String>) -> Self {
         self.initial_scene = Some(name.into());
+        self
+    }
+
+    /// Track the entity count of group `name` for the whole game.
+    ///
+    /// The count is published to `WorldSignals` every sim tick (read it with
+    /// `get_group_count(name)`), and the group stays tracked across scene
+    /// switches, which otherwise reset group tracking. Names longer than
+    /// `MAX_GROUP_NAME_LEN` bytes are a startup error
+    /// ([`EngineError::GroupNameTooLong`](aberred_core::error::EngineError::GroupNameTooLong)).
+    /// Can be called multiple times.
+    pub fn track_group(mut self, name: impl Into<String>) -> Self {
+        self.tracked_groups.push(name.into());
         self
     }
 

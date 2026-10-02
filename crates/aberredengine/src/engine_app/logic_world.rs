@@ -104,7 +104,11 @@ impl EngineBuilder {
         world.insert_resource(WorldSignals::default());
         world.insert_resource(AppState::default());
         world.insert_resource(SignalIntents::default());
-        world.insert_resource(TrackedGroups::default());
+        let mut tracked_groups = TrackedGroups::default();
+        for name in init.tracked_groups.drain(..) {
+            tracked_groups.add_persistent(name);
+        }
+        world.insert_resource(tracked_groups);
         world.insert_resource(CollisionRuleIndex::default());
         world.insert_resource(ScreenSize {
             w: render_width as i32,

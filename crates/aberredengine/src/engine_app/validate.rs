@@ -1,5 +1,6 @@
 use super::builder::EngineBuilder;
 use aberred_core::error::EngineError;
+use aberred_core::resources::worldsignals::MAX_GROUP_NAME_LEN;
 
 impl EngineBuilder {
     pub(super) fn validate_builder(&self, use_scene_manager: bool) -> Result<(), EngineError> {
@@ -7,6 +8,23 @@ impl EngineBuilder {
         self.validate_scene_manager(use_scene_manager)?;
         self.validate_deterministic()?;
         self.validate_replay()?;
+        self.validate_tracked_groups()?;
+        Ok(())
+    }
+
+    /// Rejects `.track_group()` names whose group-count signal key would not
+    /// fit (see `TrackedGroups::add_group`, which only warns at runtime).
+    fn validate_tracked_groups(&self) -> Result<(), EngineError> {
+        if let Some(name) = self
+            .tracked_groups
+            .iter()
+            .find(|name| name.len() > MAX_GROUP_NAME_LEN)
+        {
+            return Err(EngineError::GroupNameTooLong {
+                name: name.clone(),
+                len: name.len(),
+            });
+        }
         Ok(())
     }
 

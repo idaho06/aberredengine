@@ -493,3 +493,36 @@ fn scene_switch_keeps_observers_of_persistent_entities() {
         "only the scene entity's observer goes"
     );
 }
+
+/// A group tracked through `.track_group()` keeps its count published
+/// across a SceneManager scene switch, which resets per-scene tracking.
+#[test]
+fn track_group_survives_a_scene_switch() {
+    use aberredengine::core::components::persistent::Persistent;
+
+    let mut tw = TestWorld::builder()
+        .add_scene("a", empty_scene())
+        .add_scene("b", empty_scene())
+        .initial_scene("a")
+        .track_group("enemies")
+        .build()
+        .expect("build should succeed");
+    tw.tick_to_play(DT, 8);
+    tw.world.spawn((Persistent, Group::new("enemies")));
+    tw.tick(1, DT);
+    let count = |tw: &TestWorld| {
+        tw.world
+            .resource::<WorldSignals>()
+            .get_group_count("enemies")
+    };
+    assert_eq!(count(&tw), Some(1));
+
+    tw.world.resource_mut::<WorldSignals>().request_scene("b");
+    tw.tick(2, DT);
+
+    assert_eq!(
+        count(&tw),
+        Some(1),
+        "count is published again after the switch"
+    );
+}

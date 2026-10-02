@@ -499,7 +499,7 @@ pub fn switch_scene(
         .world_signals
         .clear_non_persistent_entities(&persistent_set);
 
-    tracked_groups.clear();
+    tracked_groups.reset_to_persistent();
     scene_state.world_signals.clear_group_counts();
     lua_runtime.update_tracked_groups_cache(&tracked_groups.groups);
 
@@ -758,6 +758,22 @@ mod tests {
             !world.resource::<WorldSignals>().has_flag("stale_flag"),
             "scene-scoped signal_commands should still be cleared by switch_scene"
         );
+    }
+
+    #[test]
+    fn switch_scene_keeps_only_persistent_tracked_groups() {
+        let mut world = new_drain_test_world();
+        {
+            let mut tracked = world.resource_mut::<TrackedGroups>();
+            tracked.add_persistent("enemies");
+            tracked.add_group("bullets");
+        }
+
+        world.run_system_once(switch_scene).unwrap();
+
+        let tracked = world.resource::<TrackedGroups>();
+        assert!(tracked.has_group("enemies"), "persistent group survives");
+        assert!(!tracked.has_group("bullets"), "scene group is dropped");
     }
 
     #[test]
