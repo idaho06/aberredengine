@@ -1,3 +1,10 @@
+// Cargo.toml
+mod cargo_toml {
+    fn main() { // GLUE
+    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
+    } // GLUE
+}
+
 // config.ini
 mod config_ini {
     use aberredengine::engine_app::EngineBuilder; // GLUE

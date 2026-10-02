@@ -38,6 +38,9 @@ edition = "2024"
 
 [dependencies]
 aberredengine = { path = "../aberredengine/crates/aberredengine", default-features = false }
+rustc-hash = "2.1"   # FxHashMap, for Phase::new (Section 7.2)
+log = "0.4"          # log::info!/warn!/error! from your own code
+env_logger = "0.11"  # prints the engine's and your log output
 ```
 
 For a git dependency:
@@ -52,6 +55,12 @@ Cargo finds the `aberredengine` package by name inside the repository's workspac
 The `path` form must point at the facade crate (`crates/aberredengine`), not the repository root: the root `Cargo.toml` is a virtual workspace manifest with no `[package]`.
 
 Setting `default-features = false` disables the `lua` feature flag. This removes all mlua/LuaJIT dependencies, the Lua runtime, and all Lua-specific components and systems. Your binary will have zero Lua overhead.
+
+The facade re-exports `bevy_ecs`, `glam`, `imgui` and `raylib`, but not `rustc-hash` or `log`: add those yourself when your code names them. The engine logs through `log` and installs no logger, so nothing is printed until your `main` installs one before building the engine:
+
+```rust
+env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
+```
 
 ### Recommended directory layout
 
@@ -2355,7 +2364,7 @@ First build takes ~5–15 minutes (compiles raylib from source via cmake). Incre
 ```bash
 cargo run                      # Run debug build
 cargo run --release            # Run release build
-RUST_LOG=info cargo run        # With engine logging
+RUST_LOG=debug cargo run       # More log output (needs the logger from Section 2)
 ```
 
 Working directory matters — `config.ini` and `assets/` are loaded relative to where you run the binary.
