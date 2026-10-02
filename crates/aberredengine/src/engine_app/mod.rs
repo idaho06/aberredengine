@@ -31,7 +31,7 @@
 //!         .title("My Game")
 //!         .on_setup(my_game::setup)
 //!         .on_enter_play(my_game::enter_play)
-//!         .on_update(my_game::update)
+//!         .add_system(my_game::update)
 //!         .on_switch_scene(my_game::switch_scene)
 //!         .try_run()
 //! }

@@ -79,7 +79,7 @@ pub struct TestWorld {
 }
 
 /// Builder for [`TestWorld`], mirroring [`EngineBuilder`]'s registrar
-/// surface (`on_setup`/`on_enter_play`/`on_update`/scenes/Lua) minus
+/// surface (`on_setup`/`on_enter_play`/`add_system`/scenes/Lua) minus
 /// anything window/render-related.
 pub struct TestWorldBuilder {
     config: GameConfig,
@@ -154,18 +154,6 @@ impl TestWorldBuilder {
         system: impl IntoSystem<(), (), M> + Send + 'static,
     ) -> Self {
         self.switch_scene_hook = Some(hook_registrar(hook_keys::SWITCH_SCENE, system));
-        self
-    }
-
-    /// Register the `update` hook (runs once per sim tick, `SimSet::ScriptUpdate`).
-    pub fn on_update<M>(mut self, system: impl IntoSystem<(), (), M> + Send + 'static) -> Self {
-        self.update_hook = Some(Box::new(|schedule: &mut Schedule| {
-            schedule.add_systems(
-                system
-                    .run_if(aberred_core::systems::gamestate::state_is_playing)
-                    .in_set(crate::engine_app::SimSet::ScriptUpdate),
-            );
-        }));
         self
     }
 

@@ -129,7 +129,7 @@ The engine owns the main loop. You configure it through `EngineBuilder` and supp
 
 The engine runs **three separate ECS worlds on three threads**: render (the main thread — owns the raylib window and GPU resources), logic/sim (a spawned thread — this is where **all your game code runs**), and audio (a spawned thread, talked to via message queues you already use for sound/music). Understanding this is required to use the rest of this guide correctly.
 
-- **Every hook and callback you write — `on_setup`, `on_enter_play`, `on_update`, scene `on_enter`/`on_update`/`on_exit`, systems added via `.add_system()`/`.configure_schedule()`, `Timer`/`Phase`/`CollisionRule` callbacks, and `.add_observer()` observers — runs on the LOGIC thread**, once per **sim tick**. Sim ticks happen at a configurable rate (`[simulation] hz` in `config.ini`, default 240) **decoupled from your render frame rate** — a sim tick is not the same thing as a rendered frame. `dt` is always the fixed constant `1.0 / hz` (scaled by `WorldTime.time_scale`), never a measured wall-clock value — a render stall does not spike `dt` or replay missed ticks, it simply dilates game time until the stall clears, and sim ticks keep running throughout.
+- **Every hook and callback you write — `on_setup`, `on_enter_play`, scene `on_enter`/`on_update`/`on_exit`, systems added via `.add_system()`/`.configure_schedule()`, `Timer`/`Phase`/`CollisionRule` callbacks, and `.add_observer()` observers — runs on the LOGIC thread**, once per **sim tick**. Sim ticks happen at a configurable rate (`[simulation] hz` in `config.ini`, default 240) **decoupled from your render frame rate** — a sim tick is not the same thing as a rendered frame. `dt` is always the fixed constant `1.0 / hz` (scaled by `WorldTime.time_scale`), never a measured wall-clock value — a render stall does not spike `dt` or replay missed ticks, it simply dilates game time until the stall clears, and sim ticks keep running throughout.
 - **`gui_callback` and `world_draw_callback` are the one exception** — they run on the RENDER thread, inside the render pass itself. This is why their signatures look different from everything else (read-only signal snapshots instead of live, mutable `WorldSignals` — see below).
 - **A direct consequence**: logic-thread code (everything in the first bullet) can **never** take `RaylibAccess`, `NonSend<FontStore>`, `NonSend<ShaderStore>`, or `Res<TextureStore>` as a system parameter — those resources only exist in the render world. A logic-side system that requests one panics the first time it runs: Bevy checks a system's resources when the system runs, not when the schedule is built. There is no escape hatch to register a custom system on the render thread. This is why asset loading (Section 4) goes through a message queue instead of calling `rl.load_texture(...)` directly inside `setup()`.
 
@@ -356,7 +356,7 @@ Register it on the descriptor:
 
 ### Approach B — Raw hooks (single-scene or full manual control)
 
-For single-scene games or when you need full control over scene transitions, use the four hook methods directly. All four are optional; register the ones your game needs:
+For single-scene games or when you need full control over scene transitions, use the hook methods (`.on_setup()`, `.on_enter_play()`, `.on_switch_scene()`) plus `.add_system()` for per-tick logic. All are optional; register the ones your game needs:
 
 ```rust
 use aberredengine::engine_app::EngineBuilder;
@@ -367,7 +367,7 @@ fn main() -> Result<(), aberredengine::EngineError> {
         .title("My Game")
         .on_setup(my_setup)
         .on_enter_play(my_enter_play)
-        .on_update(my_update)
+        .add_system(my_update)
         .on_switch_scene(my_switch_scene)
         .try_run()
 }
@@ -407,7 +407,7 @@ Setup ──→ Playing ──→ Quitting
 ```
 
 1. **Setup** — The engine calls the `setup` hook once, on the logic thread. Load assets here (textures, fonts, sounds, shaders, animations) — see [Section 4](#4-loading-assets) for how texture/font/shader loading works. Omit `.on_setup()` if you have nothing to load. Once the hook has run, the engine moves to `Playing` on its own; a hook that requests another state through `ResMut<NextGameState>` (e.g. `GameStates::Quitting`) overrides that.
-2. **Playing** — The engine transitions to playing, calls `enter_play` (or the initial scene's `on_enter`), then runs `update` (or `on_update`) once per sim tick.
+2. **Playing** — The engine transitions to playing, calls `enter_play` (or the initial scene's `on_enter`), then runs your `.add_system()` systems (and the active scene's `on_update`) once per sim tick.
 3. **Scene switches** — With the SceneManager, setting the `"switch_scene"` flag on `WorldSignals` runs the exit→enter sequence on the next sim tick. With raw hooks, only a `MenuAction::SetScene` menu item runs the `switch_scene` hook; nothing polls the flag in a pure-Rust game unless you register a poll system (see below).
 4. **Quitting** — When the game state becomes `GameStates::Quitting` (via `NextGameState::set(GameStates::Quitting)`, `ctx.world_signals.request_quit()`, or a `MenuAction::QuitGame` menu item) or the window is closed, the engine shuts down. Scene, timer, phase, collision and menu callbacks use `request_quit()`, since `GameCtx` has no `NextGameState`.
 
@@ -446,11 +446,10 @@ Setup ──→ Playing ──→ Quitting
 | `.title(name)` | Window title (overrides config) |
 | `.on_setup(system)` | Asset loading hook (called once in the `Setup` state, on the logic thread). Optional; the engine moves to `Playing` after it runs. |
 | `.on_enter_play(system)` | Called once when transitioning to `Playing`. Optional with raw hooks; the SceneManager supplies its own. |
-| `.on_update(system)` | Runs once per sim tick while `Playing` — single system only. A sim tick is not the same as a render frame; see [Threading Model](#threading-model-what-your-code-can-access). |
 | `.on_switch_scene(system)` | Called when a scene transition is requested |
 | `.add_scene(name, descriptor)` | Register a named scene (SceneManager path) |
 | `.initial_scene(name)` | Which scene starts first (required with `.add_scene()`) |
-| `.add_system(system)` | Add an extra per-sim-tick system. Same auto-constraints as `.on_update()` (`run_if(state_is_playing)`, ordered alongside script-update systems). Can be called multiple times. |
+| `.add_system(system)` | Add a per-sim-tick system, run only while `Playing` (`run_if(state_is_playing)`, ordered alongside script-update systems). Can be called multiple times. A sim tick is not the same as a render frame; see [Threading Model](#threading-model-what-your-code-can-access). |
 | `.configure_schedule(closure)` | Add systems to the same schedule `.add_system()` targets, with full ordering control — no auto-constraints applied. Use this for custom ordering relative to the engine's own systems (via `SimSet` or `.after()`/`.before()`). |
 | `.add_observer(observer_fn)` | Register a persistent observer for a custom or engine event. |
 | `.with_lua(path)` | **Lua builds only** (`lua` feature). Run a Lua game from the `main.lua` at `path`. Listed here because the conflict rules below refer to it; a pure-Rust game never calls it. |
@@ -460,7 +459,7 @@ Setup ──→ Playing ──→ Quitting
 | `.try_run()` | Start the engine and return `Result<(), aberredengine::EngineError>` on startup failure. Recommended for Rust `main`. |
 | `.run()` | Convenience wrapper around `.try_run()` that logs the error, prints it to stderr, and exits the process with status 1 on startup failure. |
 
-**Conflict rules:** `.add_scene()` cannot be combined with `.on_switch_scene()`, `.on_enter_play()`, or `.with_lua()` — the SceneManager owns those hooks, and a Lua game drives scenes from `main.lua`'s scene registry instead. `.add_scene()` also requires `.initial_scene(...)`, and that name must match a scene actually registered via `.add_scene()` — a missing or misspelled `.initial_scene(...)` is a startup error, and so is calling `.initial_scene(...)` with no `.add_scene()` calls at all. `.with_lua()` also conflicts with any explicit `.on_setup()`/`.on_enter_play()`/`.on_update()`/`.on_switch_scene()` call, in either order — it installs its own four hooks, and mixing in your own is ambiguous. Use `.on_setup()` for asset loading in the SceneManager approach. With `.try_run()`, all of these are returned as startup errors instead of panicking; `.run()` prints the error to stderr and exits with a nonzero status instead of failing silently.
+**Conflict rules:** `.add_scene()` cannot be combined with `.on_switch_scene()`, `.on_enter_play()`, or `.with_lua()` — the SceneManager owns those hooks, and a Lua game drives scenes from `main.lua`'s scene registry instead. `.add_scene()` also requires `.initial_scene(...)`, and that name must match a scene actually registered via `.add_scene()` — a missing or misspelled `.initial_scene(...)` is a startup error, and so is calling `.initial_scene(...)` with no `.add_scene()` calls at all. `.with_lua()` also conflicts with any explicit `.on_setup()`/`.on_enter_play()`/`.on_switch_scene()` call, in either order — it installs its own hooks, and mixing in your own is ambiguous. `.add_system()` combines with `.with_lua()` freely. Use `.on_setup()` for asset loading in the SceneManager approach. With `.try_run()`, all of these are returned as startup errors instead of panicking; `.run()` prints the error to stderr and exits with a nonzero status instead of failing silently.
 
 ### Custom systems and observers
 
@@ -468,7 +467,7 @@ These builder methods let you register multiple independent ECS systems and even
 
 #### `.add_system(system)` — multiple per-sim-tick systems
 
-Registers a Bevy ECS system that runs once per sim tick while `Playing`. Same automatic constraints as `.on_update()`: `run_if(state_is_playing)`, ordered alongside the engine's own script-update systems. Can be called multiple times.
+Registers a Bevy ECS system that runs once per sim tick while `Playing` (`run_if(state_is_playing)`), ordered alongside the engine's own script-update systems. Can be called multiple times.
 
 ```rust
 EngineBuilder::new()
@@ -2313,7 +2312,7 @@ fn launch_ball(
 
 All resources are accessed as Bevy ECS system parameters. Use `Res<T>` / `ResMut<T>` for Send resources, `NonSend<T>` / `NonSendMut<T>` for main-thread-only resources. Scene callbacks access most of these through `GameCtx` fields.
 
-**Read this table by thread, not just by Send/NonSend** — see [Threading Model](#threading-model-what-your-code-can-access). The tables below are split into logic-thread resources (everything your `setup`/`on_update`/scene callbacks/custom systems can request) and render-thread-only resources (things only `process_render_asset_cmds`/`render_system` touch — a logic-side system that requests one panics the first time it runs, whether through `Res` or `NonSend`).
+**Read this table by thread, not just by Send/NonSend** — see [Threading Model](#threading-model-what-your-code-can-access). The tables below are split into logic-thread resources (everything your `setup`/scene callbacks/custom systems can request) and render-thread-only resources (things only `process_render_asset_cmds`/`render_system` touch — a logic-side system that requests one panics the first time it runs, whether through `Res` or `NonSend`).
 
 ### Logic-thread resources (Send) — what your game code can use
 
@@ -2345,7 +2344,7 @@ All resources are accessed as Bevy ECS system parameters. Use `Res<T>` / `ResMut
 
 ### Render-thread-only resources — inaccessible from your game code
 
-These exist only in the render world. `RaylibAccess`/`NonSend<FontStore>`/`NonSend<ShaderStore>`/`Res<TextureStore>` as a parameter on any `setup`/`on_update`/scene-callback/`.add_system()`/`.configure_schedule()` system panics the first time that system runs — there is no way around this from a custom Rust system. Listed here for completeness (e.g. if you're reading engine source), not because you can request them:
+These exist only in the render world. `RaylibAccess`/`NonSend<FontStore>`/`NonSend<ShaderStore>`/`Res<TextureStore>` as a parameter on any `setup`/scene-callback/`.add_system()`/`.configure_schedule()` system panics the first time that system runs — there is no way around this from a custom Rust system. Listed here for completeness (e.g. if you're reading engine source), not because you can request them:
 
 | Resource | Access (render-side only) | Purpose |
 |----------|---------------------------|---------|

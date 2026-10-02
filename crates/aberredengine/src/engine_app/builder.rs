@@ -129,21 +129,6 @@ impl EngineBuilder {
         self
     }
 
-    /// Register the `update` hook.
-    ///
-    /// Runs once per sim tick (`[simulation] hz` in `config.ini`),
-    /// in [`SimSet::ScriptUpdate`]. Treat it as idempotent/edge-triggered the
-    /// same way Lua's `on_update_<scene>` must be: gate one-shot effects on an edge,
-    /// not on "runs once per visible frame" -- the sim ticks faster than the
-    /// render thread. The system is added with `.run_if(state_is_playing)`.
-    pub fn on_update<M>(mut self, system: impl IntoSystem<(), (), M> + Send + 'static) -> Self {
-        self.update_hook = Some(Box::new(|schedule: &mut Schedule| {
-            schedule.add_systems(system.run_if(state_is_playing).in_set(SimSet::ScriptUpdate));
-        }));
-        self.first_user_hook.get_or_insert("on_update");
-        self
-    }
-
     /// Register the `switch_scene` hook (called when a scene transition is requested).
     ///
     /// The system is registered into [`SystemsStore`](aberred_core::resources::systemsstore::SystemsStore)
@@ -157,13 +142,13 @@ impl EngineBuilder {
         self
     }
 
-    /// Add a system to the sim schedule alongside `on_update`/Lua's
-    /// `on_update_<scene>`.
+    /// Add a per-tick system to the sim schedule.
     ///
-    /// Runs once per sim tick, in [`SimSet::ScriptUpdate`] -- see
-    /// [`.on_update()`](Self::on_update)'s doc for the cadence implications.
-    /// The system is added with `.run_if(state_is_playing)`, matching the
-    /// behaviour of [`.on_update()`](Self::on_update). Can be called multiple
+    /// Runs once per sim tick (`[simulation] hz` in `config.ini`), in
+    /// [`SimSet::ScriptUpdate`], with `.run_if(state_is_playing)`. Treat it as
+    /// idempotent/edge-triggered the same way Lua's `on_update_<scene>` must be:
+    /// gate one-shot effects on an edge, not on "runs once per visible frame"
+    /// -- the sim ticks faster than the render thread. Can be called multiple
     /// times to register several systems.
     ///
     /// For custom ordering relative to other engine systems (e.g. `.after(movement)`)

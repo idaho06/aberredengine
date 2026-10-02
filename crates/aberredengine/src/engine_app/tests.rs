@@ -107,7 +107,6 @@ fn test_raylib_log_level_from_rust_log_uses_global_directive_only() {
     );
 }
 
-#[cfg(feature = "lua")]
 fn dummy_setup() {}
 fn dummy_enter_play() {}
 fn dummy_switch_scene() {}
@@ -784,10 +783,7 @@ fn lua_conflict_names_the_first_user_hook_for_every_hook() {
             EngineBuilder::new().on_enter_play(dummy_enter_play),
             "on_enter_play",
         ),
-        (
-            EngineBuilder::new().on_update(dummy_enter_play),
-            "on_update",
-        ),
+        (EngineBuilder::new().on_setup(dummy_setup), "on_setup"),
         (
             EngineBuilder::new().on_switch_scene(dummy_switch_scene),
             "on_switch_scene",
@@ -817,10 +813,21 @@ struct Ping;
 #[test]
 fn first_user_hook_latches_the_first_on_hook_called() {
     let builder = EngineBuilder::new()
-        .on_update(dummy_enter_play)
+        .on_switch_scene(dummy_switch_scene)
         .on_enter_play(dummy_enter_play)
-        .on_switch_scene(dummy_switch_scene);
-    assert_eq!(builder.first_user_hook, Some("on_update"));
+        .on_setup(dummy_setup);
+    assert_eq!(builder.first_user_hook, Some("on_switch_scene"));
+}
+
+#[cfg(feature = "lua")]
+#[test]
+fn with_lua_combines_with_add_system() {
+    validate(
+        &EngineBuilder::new()
+            .with_lua("main.lua")
+            .add_system(bump_ran),
+    )
+    .unwrap();
 }
 
 #[cfg(feature = "lua")]
@@ -843,14 +850,6 @@ fn runs_outside_and_while_playing(mut schedule: Schedule) -> (u32, u32) {
     world.resource_mut::<GameState>().set(GameStates::Playing);
     schedule.run(&mut world);
     (outside, world.resource::<Ran>().0 - outside)
-}
-
-#[test]
-fn on_update_runs_only_while_playing() {
-    let builder = EngineBuilder::new().on_update(bump_ran);
-    let mut schedule = Schedule::default();
-    (builder.update_hook.expect("on_update stores a registrar"))(&mut schedule);
-    assert_eq!(runs_outside_and_while_playing(schedule), (0, 1));
 }
 
 #[test]

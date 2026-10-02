@@ -187,7 +187,7 @@ mod approach_b_raw_hooks {
             .title("My Game")
             .on_setup(my_setup)
             .on_enter_play(my_enter_play)
-            .on_update(my_update)
+            .add_system(my_update)
             .on_switch_scene(my_switch_scene)
             .try_run()
     }

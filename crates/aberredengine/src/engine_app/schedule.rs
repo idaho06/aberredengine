@@ -84,7 +84,7 @@ pub enum SimSet {
     /// `forward_audio_cmds` -> `poll_audio_messages` ->
     /// `update_bevy_audio_messages`, kept as an explicit `.chain()`).
     AudioPump,
-    /// User `on_update`/`add_system` hooks. Lua's
+    /// User `add_system` systems. Lua's
     /// `on_update_<scene>` is dispatched separately, from
     /// `lua_plugin::update` in `SimSet::Bookkeeping`, so it runs after
     /// camera-follow/collision rather than before.
@@ -517,11 +517,10 @@ impl EngineBuilder {
         );
     }
 
-    /// Applies user-supplied `sim`-schedule registrars: the single
-    /// `update_hook` installed by `.on_update()`, plus every
-    /// `extra_systems` closure installed by `.add_system()`/
-    /// `.configure_schedule()`. Each closure supplies its own
-    /// `.in_set(SimSet::X)` (see `on_update`/`add_system`/`with_lua`'s hook
+    /// Applies user-supplied `sim`-schedule registrars: the `update_hook`
+    /// installed by `.with_lua()`, plus every `extra_systems` closure
+    /// installed by `.add_system()`/`.configure_schedule()`. Each closure
+    /// supplies its own `.in_set(SimSet::X)` (see `add_system`/`with_lua`'s hook
     /// installation for the concrete sets used); `configure_schedule`
     /// closures are free to pick any `SimSet` (exported for exactly this).
     fn apply_user_registrars(
