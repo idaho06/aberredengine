@@ -47,11 +47,25 @@ pub struct Tilemap {
     pub layers: Vec<TileLayer>,
 }
 
-/// Returns the last `/`-separated segment of `path` (the directory stem).
-fn path_stem(path: &str) -> &str {
-    // Trailing slashes ("maps/x/") would otherwise yield an empty stem.
+/// The one spelling of a tilemap directory path: no trailing slashes, no
+/// leading `./`. Both the file paths and the atlas key derive from it.
+fn normalize_tilemap_dir(path: &str) -> &str {
     let path = path.trim_end_matches('/');
-    path.split('/').next_back().unwrap_or(path)
+    path.strip_prefix("./").unwrap_or(path)
+}
+
+/// Returns the last `/`-separated segment of a normalized `path` (the
+/// directory stem).
+fn path_stem(path: &str) -> &str {
+    path.rsplit('/').next().unwrap_or(path)
+}
+
+/// `TextureStore` key of the atlas for the tilemap directory at `path`:
+/// `"tilemap:"` plus the path without trailing slashes or a leading `./`.
+/// The prefix keeps it apart from textures a game loads itself, and the
+/// whole path keeps same-named directories apart.
+pub fn tilemap_texture_key(path: &str) -> String {
+    format!("tilemap:{}", normalize_tilemap_dir(path))
 }
 
 const PNG_SIGNATURE: [u8; 8] = [0x89, b'P', b'N', b'G', b'\r', b'\n', 0x1a, b'\n'];
@@ -90,7 +104,7 @@ fn read_png_dimensions(mut reader: impl Read, path: &str) -> Result<(i32, i32), 
 /// the computed `png_path` (so callers building a
 /// `RenderAssetCmd::TilemapTexture` don't need to recompute it).
 pub fn load_tilemap_data(path: &str) -> Result<(Tilemap, i32, i32, String), String> {
-    let path = path.trim_end_matches('/');
+    let path = normalize_tilemap_dir(path);
     let dirname = path_stem(path);
     let json_path = format!("{}/{}.txt", path, dirname);
     let png_path = format!("{}/{}.png", path, dirname);
@@ -210,8 +224,6 @@ pub fn tilemap_spawn_system(
 ) {
     for (entity, tilemap_comp, has_map_pos) in query.iter() {
         let path = &tilemap_comp.path;
-        let key: String = path_stem(path).to_owned();
-
         let (tilemap_data, tex_w, tex_h, png_path) = match load_tilemap_data(path) {
             Ok(loaded) => loaded,
             Err(err) => {
@@ -223,6 +235,7 @@ pub fn tilemap_spawn_system(
             }
         };
 
+        let key = tilemap_texture_key(path);
         render_asset_cmd_writer.write(RenderAssetCmd::TilemapTexture {
             key: key.clone(),
             png_path,
@@ -234,7 +247,7 @@ pub fn tilemap_spawn_system(
 
         spawn_tiles(
             &mut commands,
-            &key,
+            key,
             tex_w,
             tex_h,
             &tilemap_data,
@@ -430,7 +443,7 @@ mod tests {
         assert!(matches!(
             cmds.as_slice(),
             [RenderAssetCmd::TilemapTexture { key, png_path }]
-                if key == "sidescroller_test01" && png_path.ends_with("sidescroller_test01.png")
+                if key == &tilemap_texture_key(FIXTURE_DIR) && png_path.ends_with("sidescroller_test01.png")
         ));
         assert_eq!(
             world.get::<MapPosition>(root).unwrap().pos,
@@ -487,9 +500,58 @@ mod tests {
         let cmds = run_system(&mut world);
         assert!(matches!(
             cmds.as_slice(),
-            [RenderAssetCmd::TilemapTexture { key, .. }] if key == "sidescroller_test01"
+            [RenderAssetCmd::TilemapTexture { key, .. }] if key == &tilemap_texture_key(FIXTURE_DIR)
         ));
         assert!(!in_group(&mut world, TILES_GROUP).is_empty());
+    }
+
+    /// Copies the fixture tilemap into `<parent>/<fixture stem>` and returns
+    /// that directory's path.
+    fn copy_fixture_into(parent: &std::path::Path) -> String {
+        let stem = path_stem(FIXTURE_DIR);
+        let dir = parent.join(stem);
+        std::fs::create_dir_all(&dir).unwrap();
+        for ext in ["png", "txt"] {
+            let file = format!("{stem}.{ext}");
+            std::fs::copy(format!("{FIXTURE_DIR}/{file}"), dir.join(&file)).unwrap();
+        }
+        dir.to_str().unwrap().to_owned()
+    }
+
+    #[test]
+    fn same_named_tilemaps_in_different_directories_get_distinct_atlas_keys() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path_a = copy_fixture_into(&tmp.path().join("a"));
+        let path_b = copy_fixture_into(&tmp.path().join("b"));
+        let (key_a, key_b) = (tilemap_texture_key(&path_a), tilemap_texture_key(&path_b));
+        assert_ne!(key_a, key_b, "each directory gets its own atlas");
+
+        let mut world = World::new();
+        let root_a = world.spawn(TileMap::new(path_a)).id();
+        let root_b = world.spawn(TileMap::new(path_b)).id();
+        assert_eq!(run_system(&mut world).len(), 2, "one atlas upload per map");
+
+        let tiles = in_group(&mut world, TILES_GROUP);
+        for (root, key) in [(root_a, &key_a), (root_b, &key_b)] {
+            let own_keys: Vec<_> = tiles
+                .iter()
+                .filter(|(e, _)| world.get::<ChildOf>(*e).map(|c| c.parent()) == Some(root))
+                .map(|(_, sprite)| sprite.tex_key.clone())
+                .collect();
+            assert!(
+                !own_keys.is_empty() && own_keys.iter().all(|k| &**k == key.as_str()),
+                "tiles draw with their own map's atlas"
+            );
+        }
+    }
+
+    #[test]
+    fn spellings_of_one_tilemap_directory_share_an_atlas_key() {
+        assert_eq!(tilemap_texture_key("maps/level01"), "tilemap:maps/level01");
+        assert_eq!(
+            tilemap_texture_key("./maps/level01/"),
+            "tilemap:maps/level01"
+        );
     }
 
     #[test]

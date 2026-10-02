@@ -1088,7 +1088,7 @@ engine.spawn()
     :build()
 ```
 
-The atlas texture is stored in `TextureStore` under the directory's last path component (`"level01"` above) and loaded once per key, so two `TileMap` entities pointing to the same directory share one GPU texture. The key ignores the rest of the path: two tilemap directories with the same name (`world1/level01` and `world2/level01`) collide, and the second map draws with the first map's atlas. A texture your game loads under the same key collides the same way. Give each tilemap directory a unique name. Tile entities are in `Group("tiles")` and get `ZIndex` values automatically based on layer order (first layer most negative, last layer least negative).
+The atlas texture is stored in `TextureStore` under `"tilemap:"` plus the directory path (`"tilemap:assets/tilemaps/level01"` above; `tilemap_texture_key(path)` in `aberredengine::core::systems::tilemap` computes it), and loaded once per key, so two `TileMap` entities pointing to the same directory share one GPU texture. Directories with the same name in different places get separate atlases, and the prefix keeps the key apart from your own texture keys. Tile entities are in `Group("tiles")` and get `ZIndex` values automatically based on layer order (first layer most negative, last layer least negative).
 
 Tile entities carry only `Group`, `Sprite`, `MapPosition`, `ZIndex` and `ChildOf` — **no `BoxCollider`**. Collision detection needs a `BoxCollider` on both entities, so a `CollisionRule` on `"tiles"` never fires until your game adds colliders. One way is a system that gives every newly spawned tile a sprite-sized collider:
 
