@@ -84,6 +84,27 @@ mod example_3_ui_text_with_signal_binding {
     } // GLUE
 }
 
+// Component constructor quick reference: animation controller rules
+mod animation_controller_rules {
+    use aberredengine::core::systems::GameCtx; // GLUE
+
+    fn enter(ctx: &mut GameCtx) { // GLUE
+    use aberredengine::core::components::animation::{Animation, AnimationController, CmpOp, Condition};
+    use aberredengine::core::components::signals::Signals;
+
+    ctx.commands.spawn((
+        Animation::new("player_idle"),
+        AnimationController::new("player_idle")
+            .with_rule(Condition::HasFlag { key: "dead".into() }, "player_dead")
+            .with_rule(
+                Condition::ScalarCmp { key: "speed".into(), op: CmpOp::Gt, value: 1.0 },
+                "player_run",
+            ),
+        Signals::default(), // write "dead" / "speed" here from your game logic
+    ));
+    } // GLUE
+}
+
 // Tween components in Rust
 mod tween_components_in_rust {
     use aberredengine::core::systems::GameCtx; // GLUE

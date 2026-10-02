@@ -1165,7 +1165,7 @@ When `WorldSignals` has a value for key `"score"`, the text automatically update
 | `RigidBody` | `RigidBody::new()` or `RigidBody::with_physics(friction, max_speed)` |
 | `BoxCollider` | `BoxCollider::new(w, h).with_origin(v).with_offset(v)` |
 | `Animation` | `Animation::new("anim_key")` |
-| `AnimationController` | `AnimationController::new("fallback_key").with_rule(condition, "key")` |
+| `AnimationController` | `AnimationController::new("fallback_key").with_rule(condition, "key")`, `condition` a `Condition` (see below) |
 | `Group` | `Group::new("name")` |
 | `ZIndex` | `ZIndex(f32)` |
 | `Rotation` | `Rotation { degrees: f32 }` |
@@ -1194,6 +1194,24 @@ When `WorldSignals` has a value for key `"score"`, the text automatically update
 | `Shadow` | `Shadow::new(dx, dy, r, g, b, a)` or `Shadow::default_color(dx, dy)` — pre-pass shadow for `Sprite` and `DynamicText` entities; see §7.7 |
 | `GuiInteractable` | `GuiInteractable::rust(width, height, callback)` — use `::rust()` for Rust callbacks; see §7.7 |
 | `GuiOffset` | `GuiOffset(Vec2::new(x, y))` — position relative to a `ChildOf` parent |
+
+**Animation controller rules.** `with_rule` takes a `Condition` (`aberredengine::core::components::animation::{Condition, CmpOp}`) evaluated against the entity's **own** `Signals` component, not `WorldSignals`. An entity without `Signals` is skipped. Rules run in order every sim tick and the first match sets the animation; when none matches, the fallback key plays. `Condition` variants: `ScalarCmp`, `ScalarRange`, `IntegerCmp`, `IntegerRange`, `HasFlag`, `LacksFlag`, and the combinators `All`, `Any`, `Not`.
+
+```rust
+use aberredengine::core::components::animation::{Animation, AnimationController, CmpOp, Condition};
+use aberredengine::core::components::signals::Signals;
+
+ctx.commands.spawn((
+    Animation::new("player_idle"),
+    AnimationController::new("player_idle")
+        .with_rule(Condition::HasFlag { key: "dead".into() }, "player_dead")
+        .with_rule(
+            Condition::ScalarCmp { key: "speed".into(), op: CmpOp::Gt, value: 1.0 },
+            "player_run",
+        ),
+    Signals::default(), // write "dead" / "speed" here from your game logic
+));
+```
 
 ### Tween components in Rust
 
