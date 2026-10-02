@@ -97,12 +97,11 @@ mod imgui_gui_callback {
 
         ui.text(format!("Active tool: {tool}"));
 
-        if let Some(_mb) = ui.begin_main_menu_bar() {
-            if let Some(_file) = ui.begin_menu("File") {
-                if ui.menu_item("Save") {
-                    intents.set_flag("gui:action:file:save"); // consumed by on_update next sim tick
-                }
-            }
+        if let Some(_mb) = ui.begin_main_menu_bar()
+            && let Some(_file) = ui.begin_menu("File")
+            && ui.menu_item("Save")
+        {
+            intents.set_flag("gui:action:file:save"); // consumed by on_update next sim tick
         }
     }
 

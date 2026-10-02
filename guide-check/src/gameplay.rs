@@ -131,10 +131,10 @@ mod phase_state_machines {
     }
 
     fn jumping_update(entity: Entity, ctx: &mut GameCtx, _input: &InputState, _dt: f32) -> Option<String> {
-        if let Ok(rb) = ctx.rigid_bodies.get(entity) {
-            if rb.velocity.y > 0.0 {
-                return Some("falling".to_string());
-            }
+        if let Ok(rb) = ctx.rigid_bodies.get(entity)
+            && rb.velocity.y > 0.0
+        {
+            return Some("falling".to_string());
         }
         None
     }
@@ -145,10 +145,10 @@ mod phase_state_machines {
 
     fn falling_update(entity: Entity, ctx: &mut GameCtx, _input: &InputState, _dt: f32) -> Option<String> {
         // Transition back to idle when landing (detected by some condition)
-        if let Ok(rb) = ctx.rigid_bodies.get(entity) {
-            if rb.velocity.y == 0.0 {
-                return Some("idle".to_string());
-            }
+        if let Ok(rb) = ctx.rigid_bodies.get(entity)
+            && rb.velocity.y == 0.0
+        {
+            return Some("idle".to_string());
         }
         None
     }

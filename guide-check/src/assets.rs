@@ -304,9 +304,11 @@ mod tilemaps {
     use aberredengine::core::components::sprite::Sprite;
     use aberredengine::core::systems::tilemap::TILES_GROUP;
 
+    type NewUncollidedTiles = (Added<Group>, Without<BoxCollider>);
+
     fn add_tile_colliders(
         mut commands: Commands,
-        tiles: Query<(Entity, &Group, &Sprite), (Added<Group>, Without<BoxCollider>)>,
+        tiles: Query<(Entity, &Group, &Sprite), NewUncollidedTiles>,
     ) {
         for (entity, group, sprite) in &tiles {
             if group.0 == TILES_GROUP {

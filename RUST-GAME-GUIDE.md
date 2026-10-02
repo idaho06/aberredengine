@@ -272,12 +272,11 @@ fn editor_gui(
 
     ui.text(format!("Active tool: {tool}"));
 
-    if let Some(_mb) = ui.begin_main_menu_bar() {
-        if let Some(_file) = ui.begin_menu("File") {
-            if ui.menu_item("Save") {
-                intents.set_flag("gui:action:file:save"); // consumed by on_update next sim tick
-            }
-        }
+    if let Some(_mb) = ui.begin_main_menu_bar()
+        && let Some(_file) = ui.begin_menu("File")
+        && ui.menu_item("Save")
+    {
+        intents.set_flag("gui:action:file:save"); // consumed by on_update next sim tick
     }
 }
 
@@ -1100,9 +1099,11 @@ use aberredengine::core::components::group::Group;
 use aberredengine::core::components::sprite::Sprite;
 use aberredengine::core::systems::tilemap::TILES_GROUP;
 
+type NewUncollidedTiles = (Added<Group>, Without<BoxCollider>);
+
 fn add_tile_colliders(
     mut commands: Commands,
-    tiles: Query<(Entity, &Group, &Sprite), (Added<Group>, Without<BoxCollider>)>,
+    tiles: Query<(Entity, &Group, &Sprite), NewUncollidedTiles>,
 ) {
     for (entity, group, sprite) in &tiles {
         if group.0 == TILES_GROUP {
@@ -1801,10 +1802,10 @@ fn jumping_enter(_entity: Entity, ctx: &mut GameCtx, _input: &InputState) -> Opt
 }
 
 fn jumping_update(entity: Entity, ctx: &mut GameCtx, _input: &InputState, _dt: f32) -> Option<String> {
-    if let Ok(rb) = ctx.rigid_bodies.get(entity) {
-        if rb.velocity.y > 0.0 {
-            return Some("falling".to_string());
-        }
+    if let Ok(rb) = ctx.rigid_bodies.get(entity)
+        && rb.velocity.y > 0.0
+    {
+        return Some("falling".to_string());
     }
     None
 }
@@ -1815,10 +1816,10 @@ fn jumping_exit(_entity: Entity, _ctx: &mut GameCtx) {
 
 fn falling_update(entity: Entity, ctx: &mut GameCtx, _input: &InputState, _dt: f32) -> Option<String> {
     // Transition back to idle when landing (detected by some condition)
-    if let Ok(rb) = ctx.rigid_bodies.get(entity) {
-        if rb.velocity.y == 0.0 {
-            return Some("idle".to_string());
-        }
+    if let Ok(rb) = ctx.rigid_bodies.get(entity)
+        && rb.velocity.y == 0.0
+    {
+        return Some("idle".to_string());
     }
     None
 }
