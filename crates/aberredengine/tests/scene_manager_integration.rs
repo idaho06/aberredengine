@@ -524,12 +524,8 @@ fn scene_switch_poll_triggers_transition() {
     world.flush();
     clear_logs();
 
-    // Simulate what a scene callback would do: set scene + flag
-    {
-        let mut ws = world.resource_mut::<WorldSignals>();
-        ws.set_string("scene", "level1".to_string());
-        ws.set_flag("switch_scene");
-    }
+    // Simulate what a scene callback would do: request the switch
+    world.resource_mut::<WorldSignals>().request_scene("level1");
 
     // Run scene_switch_poll (what the schedule would do)
     world.run_system_once(scene_switch_poll).unwrap();

@@ -213,15 +213,12 @@ fn my_world_draw(
 ) { /* draw world overlays, read camera/screen/app state */ }
 ```
 
-To trigger a scene transition from within a scene callback, set the target scene name and flag in `WorldSignals`. The engine's `scene_switch_poll` system (registered automatically by `EngineBuilder::add_scene()`) picks up the flag each sim tick and triggers the transition. Use the `signal_keys` constants (`sk::SCENE`/`sk::SWITCH_SCENE`) instead of bare string literals — a typo in a hand-written key fails silently with no compiler error.
+To trigger a scene transition from within a scene callback, call `WorldSignals::request_scene(name)`. It sets the target scene name (`sk::SCENE`) and the `sk::SWITCH_SCENE` flag; the engine's `scene_switch_poll` system (registered automatically by `EngineBuilder::add_scene()`) picks up the flag each sim tick and triggers the transition.
 
 ```rust
-use aberredengine::core::resources::signal_keys as sk;
-
 fn update(ctx: &mut GameCtx, _dt: f32, _input: &InputState) {
     if some_condition() {
-        ctx.world_signals.set_string(sk::SCENE, "level01".to_string());
-        ctx.world_signals.set_flag(sk::SWITCH_SCENE);
+        ctx.world_signals.request_scene("level01");
     }
 }
 ```
@@ -412,7 +409,7 @@ Setup ──→ Playing ──→ Quitting
 1. **Setup** — The engine calls the `setup` hook once, on the logic thread. Load assets here (textures, fonts, sounds, shaders, animations) — see [Section 4](#4-loading-assets) for how texture/font/shader loading works. The hook must end with `next_state.set(GameStates::Playing)` (a `ResMut<NextGameState>` parameter): nothing else leaves `Setup`, so without it the game never starts.
 2. **Playing** — The engine transitions to playing, calls `enter_play` (or the initial scene's `on_enter`), then runs `update` (or `on_update`) once per sim tick.
 3. **Scene switches** — With the SceneManager, setting the `"switch_scene"` flag on `WorldSignals` runs the exit→enter sequence on the next sim tick. With raw hooks, only a `MenuAction::SetScene` menu item runs the `switch_scene` hook; nothing polls the flag in a pure-Rust game unless you register a poll system (see below).
-4. **Quitting** — When the game state becomes `GameStates::Quitting` (via `NextGameState::set(GameStates::Quitting)`, setting the `sk::QUIT_GAME` flag on `WorldSignals`, or a `MenuAction::QuitGame` menu item) or the window is closed, the engine shuts down. Setting the flag is how scene, timer, phase, collision and menu callbacks quit, since `GameCtx` has no `NextGameState`: `ctx.world_signals.set_flag(sk::QUIT_GAME)`.
+4. **Quitting** — When the game state becomes `GameStates::Quitting` (via `NextGameState::set(GameStates::Quitting)`, `ctx.world_signals.request_quit()`, or a `MenuAction::QuitGame` menu item) or the window is closed, the engine shuts down. Scene, timer, phase, collision and menu callbacks use `request_quit()`, since `GameCtx` has no `NextGameState`.
 
 > **With raw hooks, the `"switch_scene"` flag needs a poll system.** The SceneManager polls it for you; with `.on_switch_scene()` nothing does, so setting the flag from a callback has no effect. Run the hook yourself:
 >
@@ -1522,15 +1519,12 @@ Scene transitions work by running the `scene_switch_system` as a one-shot system
 
 **1. Menu-driven (recommended):** Use `MenuAction::SetScene("level01")` — the menu system calls `commands.run_system()` internally via `dispatch_menu_action`.
 
-**2. Flag-based from scene callbacks:** Set the target scene name and the `"switch_scene"` flag on `WorldSignals`. The engine's `scene_switch_poll` system (registered automatically by `EngineBuilder::add_scene()`) picks up the flag each sim tick and triggers the transition. Use the `signal_keys` constants (`sk::SCENE`/`sk::SWITCH_SCENE`) instead of bare string literals — a typo in a hand-written key fails silently with no compiler error:
+**2. Flag-based from scene callbacks:** Call `WorldSignals::request_scene(name)`, which sets the target scene name and the `sk::SWITCH_SCENE` flag. The engine's `scene_switch_poll` system (registered automatically by `EngineBuilder::add_scene()`) picks up the flag each sim tick and triggers the transition:
 
 ```rust
-use aberredengine::core::resources::signal_keys as sk;
-
 fn update(ctx: &mut GameCtx, _dt: f32, _input: &InputState) {
     if player_reached_exit(ctx) {
-        ctx.world_signals.set_string(sk::SCENE, "level02".to_string());
-        ctx.world_signals.set_flag(sk::SWITCH_SCENE);
+        ctx.world_signals.request_scene("level02");
     }
 }
 ```
@@ -1936,16 +1930,14 @@ ctx.commands.spawn((menu, actions));
 ```rust
 use aberredengine::core::components::menu::MenuRustCallback;
 use aberredengine::core::systems::GameCtx;
-use aberredengine::core::resources::signal_keys as sk;
 
 fn on_menu_select(menu_entity: Entity, item_id: &str, item_index: usize, ctx: &mut GameCtx) {
     match item_id {
         "start" => {
-            ctx.world_signals.set_string(sk::SCENE, "level01".to_string());
-            ctx.world_signals.set_flag(sk::SWITCH_SCENE);
+            ctx.world_signals.request_scene("level01");
         }
         "quit" => {
-            ctx.world_signals.set_flag(sk::QUIT_GAME);
+            ctx.world_signals.request_quit();
         }
         _ => {}
     }

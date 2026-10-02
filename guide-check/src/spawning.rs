@@ -190,12 +190,9 @@ mod triggering_scene_transitions {
     use aberredengine::core::systems::GameCtx; // GLUE
     fn player_reached_exit(_ctx: &mut GameCtx) -> bool { false } // GLUE
 
-    use aberredengine::core::resources::signal_keys as sk;
-
     fn update(ctx: &mut GameCtx, _dt: f32, _input: &InputState) {
         if player_reached_exit(ctx) {
-            ctx.world_signals.set_string(sk::SCENE, "level02".to_string());
-            ctx.world_signals.set_flag(sk::SWITCH_SCENE);
+            ctx.world_signals.request_scene("level02");
         }
     }
 }

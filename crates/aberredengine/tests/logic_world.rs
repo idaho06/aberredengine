@@ -423,9 +423,7 @@ fn rust_despawn_prunes_world_signals_registration_same_tick() {
 fn quit_game_flag_quits_a_rust_only_game_exactly_once() {
     let mut tw = TestWorld::new();
     tw.tick_to_play(DT, 8);
-    tw.world
-        .resource_mut::<WorldSignals>()
-        .set_flag(aberredengine::core::resources::signal_keys::QUIT_GAME);
+    tw.world.resource_mut::<WorldSignals>().request_quit();
 
     tw.tick(5, DT);
 
@@ -461,7 +459,6 @@ fn empty_scene() -> aberredengine::engine_app::SceneDescriptor {
 #[test]
 fn scene_switch_keeps_observers_of_persistent_entities() {
     use aberredengine::core::components::persistent::Persistent;
-    use aberredengine::core::resources::signal_keys as sk;
 
     let mut tw = TestWorld::builder()
         .add_scene("a", empty_scene())
@@ -477,11 +474,7 @@ fn scene_switch_keeps_observers_of_persistent_entities() {
     let observer_count = |world: &mut World| world.query::<&Observer>().iter(world).count();
     let observers_before = observer_count(&mut tw.world);
 
-    {
-        let mut signals = tw.world.resource_mut::<WorldSignals>();
-        signals.set_string(sk::SCENE, "b");
-        signals.set_flag(sk::SWITCH_SCENE);
-    }
+    tw.world.resource_mut::<WorldSignals>().request_scene("b");
     tw.tick(2, DT);
 
     assert_eq!(

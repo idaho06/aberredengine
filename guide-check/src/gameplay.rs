@@ -236,16 +236,14 @@ mod menus {
     fn spawn_with_callback(ctx: &mut GameCtx, menu: Menu) { // GLUE
     use aberredengine::core::components::menu::MenuRustCallback;
     use aberredengine::core::systems::GameCtx;
-    use aberredengine::core::resources::signal_keys as sk;
 
     fn on_menu_select(menu_entity: Entity, item_id: &str, item_index: usize, ctx: &mut GameCtx) {
         match item_id {
             "start" => {
-                ctx.world_signals.set_string(sk::SCENE, "level01".to_string());
-                ctx.world_signals.set_flag(sk::SWITCH_SCENE);
+                ctx.world_signals.request_scene("level01");
             }
             "quit" => {
-                ctx.world_signals.set_flag(sk::QUIT_GAME);
+                ctx.world_signals.request_quit();
             }
             _ => {}
         }

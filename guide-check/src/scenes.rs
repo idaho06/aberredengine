@@ -52,12 +52,9 @@ mod scene_callbacks {
     use super::*; // GLUE
     fn some_condition() -> bool { true } // GLUE
 
-    use aberredengine::core::resources::signal_keys as sk;
-
     fn update(ctx: &mut GameCtx, _dt: f32, _input: &InputState) {
         if some_condition() {
-            ctx.world_signals.set_string(sk::SCENE, "level01".to_string());
-            ctx.world_signals.set_flag(sk::SWITCH_SCENE);
+            ctx.world_signals.request_scene("level01");
         }
     }
     } // GLUE

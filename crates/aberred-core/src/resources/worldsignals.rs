@@ -334,6 +334,22 @@ impl WorldSignals {
         }
         self.flags_dirty = true;
     }
+
+    /// Request a switch to the scene `name`: sets [`sk::SCENE`] and the
+    /// [`sk::SWITCH_SCENE`] flag.
+    ///
+    /// The switch happens when the active scene driver polls the flag
+    /// ([`scene_switch_poll`](crate::systems::scene_dispatch::scene_switch_poll)
+    /// for `add_scene()` games, the Lua plugin's update for Lua games).
+    pub fn request_scene(&mut self, name: impl Into<String>) {
+        self.set_string(sk::SCENE, name);
+        self.set_flag(sk::SWITCH_SCENE);
+    }
+    /// Request that the game quit: sets the [`sk::QUIT_GAME`] flag, which the
+    /// engine turns into a `Quitting` state transition on the next poll.
+    pub fn request_quit(&mut self) {
+        self.set_flag(sk::QUIT_GAME);
+    }
     /// Read-only view of all flags.
     pub fn get_flags(&self) -> &FxHashSet<String> {
         &self.flags
@@ -636,6 +652,23 @@ mod tests {
         ws.snapshot(); // clear dirty
         ws.toggle_flag("x"); // absent → insert
         assert!(ws.flags_dirty && ws.has_flag("x"));
+    }
+
+    // --- Scene / quit requests ---
+
+    #[test]
+    fn request_scene_sets_the_target_and_the_switch_flag() {
+        let mut ws = WorldSignals::default();
+        ws.request_scene("lvl");
+        assert_eq!(ws.get_string(sk::SCENE).map(String::as_str), Some("lvl"));
+        assert!(ws.has_flag(sk::SWITCH_SCENE));
+    }
+
+    #[test]
+    fn request_quit_sets_the_quit_flag() {
+        let mut ws = WorldSignals::default();
+        ws.request_quit();
+        assert!(ws.has_flag(sk::QUIT_GAME));
     }
 
     // --- Entities ---
