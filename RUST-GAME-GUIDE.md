@@ -2160,6 +2160,64 @@ widget (analytics, a UI click sound), you can additionally observe `GuiInteracta
 register it once with `EngineBuilder::add_observer`; it fires for any `GuiInteractable`-carrying widget
 (`GuiButton` or `GuiImage`) on a press-then-release-inside.
 
+### 7.8 Particle Emitters
+
+**Source:** `aberred-core/src/components/particleemitter.rs`, `aberred-core/src/systems/particleemitter.rs`
+
+A `ParticleEmitter` on an entity with `MapPosition` spawns particles by cloning **template** entities. Each emission picks a random template, clones every component it has, then sets the clone's `MapPosition` (inside the emitter's `shape`, plus `offset`), `Rotation` (the emission angle), `RigidBody` velocity (angle × a speed from `speed_range`; the template's own `RigidBody` friction, max speed and forces carry over), an optional `Ttl`, and `EmittedParticle(emitter)`.
+
+```rust
+use aberredengine::bevy_ecs::prelude::*;
+use aberredengine::core::components::mapposition::MapPosition;
+use aberredengine::core::components::particleemitter::{EmitterShape, ParticleEmitter, TtlSpec};
+use aberredengine::core::components::rigidbody::RigidBody;
+use aberredengine::core::components::sprite::Sprite;
+use aberredengine::core::components::zindex::ZIndex;
+use aberredengine::core::math::Vec2;
+use std::sync::Arc;
+
+fn spawn_smoke(mut commands: Commands) {
+    // The template has no MapPosition, so it is never drawn, moved or collided
+    let smoke = commands
+        .spawn((
+            Sprite {
+                tex_key: Arc::from("smoke"),
+                width: 8.0,
+                height: 8.0,
+                offset: Vec2::ZERO,
+                origin: Vec2::new(4.0, 4.0),
+                flip_h: false,
+                flip_v: false,
+            },
+            ZIndex(5.0),
+            RigidBody::with_physics(2.0, None), // every particle keeps this friction
+        ))
+        .id();
+
+    commands.spawn((
+        MapPosition::new(100.0, 100.0),
+        ParticleEmitter {
+            templates: vec![smoke],
+            shape: EmitterShape::Rect { width: 16.0, height: 4.0 },
+            particles_per_emission: 3,
+            emissions_per_second: 10.0,
+            emissions_remaining: 100,
+            initial_emissions_remaining: 100,
+            arc_degrees: (-30.0, 30.0), // 0° is up, angles grow clockwise
+            speed_range: (50.0, 100.0),
+            ttl: TtlSpec::Range { min: 0.5, max: 1.0 },
+            ..Default::default()
+        },
+    ));
+}
+```
+
+- Leave `MapPosition` off a template: without it the template itself is never drawn, moved or collided, while its clones get a position. Give it a `ZIndex`, or the particles aren't drawn.
+- The emitter runs every sim tick in `SimSet::Movement`. It emits `emissions_per_second` times a second, `particles_per_emission` particles each time, until `emissions_remaining` reaches 0; set `emissions_remaining` again to restart it. `TtlSpec::None` keeps particles until you despawn them.
+- Random choices come from `SimRng`, so a `.deterministic(seed)` game emits the same particles every run.
+- Templates are regular entities: a scene switch despawns them (and the emitter) unless they're `Persistent`. An emitter skips templates that no longer exist.
+- `EmittedParticle(Entity)` names the emitter that spawned a particle, e.g. to despawn one emitter's particles.
+
 ---
 
 ## 8. Engine Resources Quick Reference
