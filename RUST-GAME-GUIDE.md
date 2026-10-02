@@ -651,6 +651,28 @@ EngineBuilder::new()
     .expect("engine startup failed");
 ```
 
+**Drawing random numbers.** `SimRng` (`aberredengine::core::resources::sim_rng::SimRng`) is pre-inserted in every game, deterministic or not. Its field is a `fastrand::Rng`: call its methods (`f32()`, `usize(range)`, `i32(range)`, `bool()`, `shuffle(..)`, …) through `ResMut<SimRng>` in a system or `ctx.sim_rng` in a callback. Calling methods needs no `fastrand` dependency; naming the `fastrand::Rng` type does.
+
+```rust
+use aberredengine::bevy_ecs::prelude::*;
+use aberredengine::core::resources::sim_rng::SimRng;
+use aberredengine::core::systems::GameCtx;
+
+// In a system
+fn pick_spawn_point(mut rng: ResMut<SimRng>) {
+    let x = rng.0.f32() * 640.0; // 0.0..640.0
+    let lane = rng.0.usize(0..4); // 0, 1, 2 or 3
+    let flip = rng.0.bool();
+}
+
+// In a GameCtx callback
+fn roll_damage(ctx: &mut GameCtx) -> i32 {
+    ctx.sim_rng.0.i32(5..=10)
+}
+```
+
+The engine's particle emitters draw from the same `SimRng`. A run reproduces only if the same draws happen in the same order, so draw from it only in sim-side code (systems and `GameCtx` callbacks), and keep any other RNG out of gameplay. Without `.deterministic()`, the engine logs the seed it picked at startup (`Non-deterministic mode: SimRng entropy-seeded with …`), so a surprising session's seed is in the log.
+
 Once deterministic mode is on, you can record or replay the input stream that drove a session:
 
 ```rust

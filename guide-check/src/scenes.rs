@@ -423,3 +423,22 @@ mod switch_on_flag {
         // …
     } // GLUE
 }
+
+// Determinism and replay: drawing random numbers
+mod sim_rng {
+    use aberredengine::bevy_ecs::prelude::*;
+    use aberredengine::core::resources::sim_rng::SimRng;
+    use aberredengine::core::systems::GameCtx;
+
+    // In a system
+    fn pick_spawn_point(mut rng: ResMut<SimRng>) {
+        let x = rng.0.f32() * 640.0; // 0.0..640.0
+        let lane = rng.0.usize(0..4); // 0, 1, 2 or 3
+        let flip = rng.0.bool();
+    }
+
+    // In a GameCtx callback
+    fn roll_damage(ctx: &mut GameCtx) -> i32 {
+        ctx.sim_rng.0.i32(5..=10)
+    }
+}
