@@ -318,11 +318,11 @@ fn no_exit_callback_does_not_panic_on_switch() {
 }
 
 // ---------------------------------------------------------------------------
-// Test 6: Switching to unregistered scene name → no panic
+// Test 6: Switching to unregistered scene name → current scene kept
 // ---------------------------------------------------------------------------
 
 #[test]
-fn unknown_scene_name_does_not_panic() {
+fn unknown_scene_name_keeps_the_current_scene() {
     clear_logs();
     let mut world = setup_world();
 
@@ -351,9 +351,9 @@ fn unknown_scene_name_does_not_panic() {
     world.run_system_once(scene_switch_system).unwrap();
     world.flush();
 
-    // on_exit for "menu" should still have been called
+    // The target is checked first, so "menu" is never exited
     EXIT_LOG.with(|v| {
-        assert_eq!(*v.borrow(), vec!["menu"]);
+        assert!(v.borrow().is_empty());
     });
     // on_enter should NOT have been called (no scene found)
     ENTER_LOG.with(|v| {

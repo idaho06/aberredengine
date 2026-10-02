@@ -118,14 +118,11 @@ pub struct SceneLogic {
 /// This system is registered into [`SystemsStore`] under `"switch_scene"` when
 /// the developer uses `aberredengine::EngineBuilder::add_scene`.
 ///
-/// Flow:
-/// 1. Despawn all non-[`Persistent`] entities
-/// 2. Clear tracked groups and group counts
-/// 3. Read `WorldSignals["scene"]` for the target scene name
-/// 4. Call `on_exit` on the previous scene (if any)
-/// 5. Write previous scene name to `WorldSignals["previous_scene"]` (if any)
-/// 6. Update `SceneManager.active_scene`
-/// 7. Call `on_enter` on the new scene
+/// Reads the target from `WorldSignals["scene"]` and checks it first: an
+/// unregistered name logs an error and leaves the current scene untouched.
+/// Otherwise it despawns non-[`Persistent`] entities, clears tracked groups,
+/// runs the old scene's `on_exit`, records `WorldSignals["previous_scene"]`,
+/// and enters the new scene.
 pub fn scene_switch_system(
     mut ctx: GameCtx,
     entities_to_clean: Query<Entity, CleanableEntity>,
@@ -135,7 +132,19 @@ pub fn scene_switch_system(
 ) {
     debug!("scene_switch_system: System called!");
 
-    let prev_scene = scene_manager.active_scene.clone();
+    let scene_name = ctx
+        .world_signals
+        .get_string(sk::SCENE)
+        .cloned()
+        .unwrap_or_else(|| sk::DEFAULT_SCENE.to_string());
+    let Some(on_enter) = scene_manager.get(&scene_name).map(|scene| scene.on_enter) else {
+        error!(
+            "scene_switch_system: No scene registered for '{}'; staying in the current scene. Registered scenes: {:?}",
+            scene_name,
+            scene_manager.scene_names()
+        );
+        return;
+    };
 
     for entity in entities_to_clean.iter() {
         ctx.commands.entity(entity).try_despawn();
@@ -149,37 +158,16 @@ pub fn scene_switch_system(
     tracked_groups.clear();
     ctx.world_signals.clear_group_counts();
 
-    let scene_name = ctx
-        .world_signals
-        .get_string(sk::SCENE)
-        .cloned()
-        .unwrap_or_else(|| sk::DEFAULT_SCENE.to_string());
-
-    // Call on_exit for the previous scene
-    if let Some(ref prev_name) = prev_scene
-        && let Some(descriptor) = scene_manager.get(prev_name)
-        && let Some(on_exit) = descriptor.on_exit
-    {
-        on_exit(&mut ctx);
-    }
-
-    // Look up and call on_enter for the new scene
-    if let Some(descriptor) = scene_manager.get(&scene_name) {
-        let on_enter = descriptor.on_enter;
-        if let Some(ref prev) = prev_scene {
-            ctx.world_signals
-                .set_string("previous_scene", prev.as_str());
+    if let Some(prev) = scene_manager.active_scene.take() {
+        if let Some(on_exit) = scene_manager.get(&prev).and_then(|scene| scene.on_exit) {
+            on_exit(&mut ctx);
         }
-        scene_manager.active_scene = Some(scene_name.clone());
-        on_enter(&mut ctx);
-        info!("scene_switch_system: Entered scene '{}'", scene_name);
-    } else {
-        error!(
-            "scene_switch_system: No scene registered for '{}'. Registered scenes: {:?}",
-            scene_name,
-            scene_manager.scene_names()
-        );
+        ctx.world_signals.set_string("previous_scene", prev);
     }
+
+    info!("scene_switch_system: Entering scene '{}'", scene_name);
+    scene_manager.active_scene = Some(scene_name);
+    on_enter(&mut ctx);
 }
 
 // ---------------------------------------------------------------------------
@@ -250,3 +238,77 @@ pub fn scene_enter_play(
 // ---------------------------------------------------------------------------
 // Unit tests
 // ---------------------------------------------------------------------------
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::testing::insert_game_ctx_resources;
+    use bevy_ecs::system::RunSystemOnce;
+
+    const EXITED: &str = "test_menu_exited";
+    const ENTERED: &str = "test_level_entered";
+
+    fn menu_exit(ctx: &mut GameCtx) {
+        ctx.world_signals.set_flag(EXITED);
+    }
+
+    fn level_enter(ctx: &mut GameCtx) {
+        ctx.world_signals.set_flag(ENTERED);
+    }
+
+    /// World with `menu` active (one scene entity, one tracked group) and
+    /// `WorldSignals[scene]` set to `target`.
+    fn world_in_menu_switching_to(target: &str) -> (World, Entity) {
+        let mut world = World::new();
+        insert_game_ctx_resources(&mut world);
+        let logic = |on_enter, on_exit| SceneLogic {
+            on_enter,
+            on_update: None,
+            on_exit,
+        };
+        let mut scene_manager = SceneManager::new();
+        scene_manager.insert("menu", logic(|_| {}, Some(menu_exit)));
+        scene_manager.insert("level", logic(level_enter, None));
+        scene_manager.active_scene = Some("menu".to_owned());
+        world.insert_resource(scene_manager);
+        let mut groups = TrackedGroups::default();
+        groups.add_group("enemies");
+        world.insert_resource(groups);
+        world
+            .resource_mut::<WorldSignals>()
+            .set_string(sk::SCENE, target);
+        let menu_entity = world.spawn_empty().id();
+        (world, menu_entity)
+    }
+
+    #[test]
+    fn switch_to_a_registered_scene_tears_down_and_enters() {
+        let (mut world, menu_entity) = world_in_menu_switching_to("level");
+        world.run_system_once(scene_switch_system).unwrap();
+
+        assert!(world.get_entity(menu_entity).is_err());
+        let signals = world.resource::<WorldSignals>();
+        assert!(signals.has_flag(EXITED) && signals.has_flag(ENTERED));
+        assert_eq!(
+            world.resource::<SceneManager>().active_scene.as_deref(),
+            Some("level")
+        );
+    }
+
+    #[test]
+    fn switch_to_an_unknown_scene_keeps_the_current_scene() {
+        let (mut world, menu_entity) = world_in_menu_switching_to("nope");
+        world.run_system_once(scene_switch_system).unwrap();
+
+        assert!(world.get_entity(menu_entity).is_ok(), "entities kept");
+        assert!(
+            !world.resource::<WorldSignals>().has_flag(EXITED),
+            "on_exit not called"
+        );
+        assert!(world.resource::<TrackedGroups>().has_group("enemies"));
+        assert_eq!(
+            world.resource::<SceneManager>().active_scene.as_deref(),
+            Some("menu")
+        );
+    }
+}

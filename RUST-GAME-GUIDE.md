@@ -1522,18 +1522,18 @@ Section 3 introduced `SceneManager` at the API level. This section covers intern
 
 When the `scene_switch_system` runs, it performs these steps in order:
 
-1. **Despawn non-persistent entities** — every entity *without* the `Persistent` component is despawned
-2. **Clear entity registrations** — non-persistent entity refs stored in `WorldSignals` are removed
-3. **Clear group tracking** — `TrackedGroups::clear()` and `WorldSignals` group counts are wiped
-4. **Read target scene** — reads `WorldSignals["scene"]` for the target scene name (defaults to `"menu"` if unset)
+1. **Read and check the target scene** — reads `WorldSignals["scene"]` for the target scene name (defaults to `"menu"` if unset). If no scene is registered under that name, the system logs "No scene registered" and returns: nothing below runs, and the current scene keeps running untouched
+2. **Despawn non-persistent entities** — every entity *without* the `Persistent` component is despawned
+3. **Clear entity registrations** — non-persistent entity refs stored in `WorldSignals` are removed
+4. **Clear group tracking** — `TrackedGroups::clear()` and `WorldSignals` group counts are wiped
 5. **Call `on_exit` on previous scene** — if there was an active scene with an `on_exit` callback, it fires
 6. **Write `previous_scene`** — the old active scene name is stored in `WorldSignals["previous_scene"]`
 7. **Set active scene** — updates `SceneManager.active_scene` to the new scene name
 8. **Call `on_enter` on new scene** — fires the new scene's `on_enter` callback, which typically spawns entities and sets up initial state
 
-When `on_exit` runs, the old scene's entities still exist (their despawn is queued, not applied yet), but steps 2 and 3 have already run: `WorldSignals` entity registrations of non-persistent entities, `TrackedGroups` and group counts are gone, so `get_entity()` and `get_group_count()` return `None` there. Read what you need from them in `on_update` before triggering the switch.
+When `on_exit` runs, the old scene's entities still exist (their despawn is queued, not applied yet), but steps 3 and 4 have already run: `WorldSignals` entity registrations of non-persistent entities, `TrackedGroups` and group counts are gone, so `get_entity()` and `get_group_count()` return `None` there. Read what you need from them in `on_update` before triggering the switch.
 
-> **Warning:** the target name is not validated up front. If no scene is registered under that name, steps 1–5 have already run (the old scene's entities are queued for despawn and its `on_exit` has fired) when the system logs "No scene registered" and returns. The game is left with an empty world and the active scene unchanged. Double-check scene names, and prefer constants over repeated string literals.
+> **Note:** a mistyped scene name only logs an error ("No scene registered for '…'", followed by the list of registered scenes), so it is easy to miss. Prefer constants over repeated string literals.
 
 ### 6.2 Triggering scene transitions
 
