@@ -2769,6 +2769,8 @@ The `test-support` feature adds `aberredengine::test_support::TestWorld`: the en
 aberredengine = { path = "../aberredengine/crates/aberredengine", default-features = false, features = ["test-support"] }
 ```
 
+Repeat the exact source of your `[dependencies]` entry (the same `path`, or the same `git` plus `branch`/`tag`/`rev`): Cargo rejects a crate whose dependency and dev-dependency point to different sources.
+
 `TestWorld::builder()` takes the same registration calls as `EngineBuilder` (`on_setup`, `on_enter_play`, `add_system`, `configure_schedule`, `add_observer`, `add_scene`/`initial_scene`, `deterministic`, plus `config(GameConfig)`). Its default setup hook enters `Playing` at once. `tick(n, dt)` runs `n` sim ticks with a fixed `dt`, and `tw.world` is a plain Bevy `World` to spawn into and inspect:
 
 ```rust
