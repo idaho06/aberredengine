@@ -191,6 +191,22 @@ mod per_entity_shaders {
     }
 }
 
+// Post-process shaders
+mod post_process_shaders {
+    use aberredengine::bevy_ecs::prelude::*;
+    use aberredengine::core::resources::postprocessshader::PostProcessShader;
+    use aberredengine::core::resources::uniformvalue::UniformValue;
+
+    fn enable_crt(mut post: ResMut<PostProcessShader>) {
+        post.set_shader_chain(Some(vec!["crt".to_string(), "vignette".to_string()]));
+        post.set_uniform("uCurvature", UniformValue::Float(0.1));
+    }
+
+    fn disable_post_processing(mut post: ResMut<PostProcessShader>) {
+        post.set_shader_chain(None);
+    }
+}
+
 // Animations
 mod animations {
     use aberredengine::bevy_ecs::prelude::*; // GLUE

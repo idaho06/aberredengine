@@ -938,6 +938,29 @@ fn pulse_glow(mut shaders: Query<&mut EntityShader>, time: Res<WorldTime>) {
 
 Your own uniforms are set last, so one with a reserved name overrides the engine's value.
 
+#### Post-process shaders
+
+The `PostProcessShader` resource (pre-inserted, logic-owned) applies a chain of loaded shaders to the whole frame when the render target is drawn to the window. Each shader reads the previous pass's output as its texture; the last pass draws into the letterboxed window area. An empty chain turns post-processing off.
+
+```rust
+use aberredengine::bevy_ecs::prelude::*;
+use aberredengine::core::resources::postprocessshader::PostProcessShader;
+use aberredengine::core::resources::uniformvalue::UniformValue;
+
+fn enable_crt(mut post: ResMut<PostProcessShader>) {
+    post.set_shader_chain(Some(vec!["crt".to_string(), "vignette".to_string()]));
+    post.set_uniform("uCurvature", UniformValue::Float(0.1));
+}
+
+fn disable_post_processing(mut post: ResMut<PostProcessShader>) {
+    post.set_shader_chain(None);
+}
+```
+
+- Every shader in the chain gets the same uniforms: the standard ones (`uTime`, `uDeltaTime`, `uFrame`, `uResolution`, `uWindowResolution`, `uLetterbox`, as in the table above; `uLetterbox` is the letterboxed window rectangle on the last pass and the full game-resolution rectangle on earlier passes), then yours from `set_uniform`. `set_uniform` returns `true` for a reserved name; don't use those. `clear_uniform(name)` and `clear_uniforms()` remove yours.
+- A key that isn't loaded, or failed to load, is skipped with a warning; the rest of the chain still runs.
+- The resource survives scene switches: reset the chain yourself when a scene shouldn't keep it.
+
 ### Animations
 
 Animations are pure data — no raylib calls needed. `AnimationStore` is pre-inserted by the engine. Request it as `ResMut<AnimationStore>` and populate it with `AnimationResource` entries:
