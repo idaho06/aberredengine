@@ -367,9 +367,23 @@ impl GameConfig {
 
     /// Save configuration to the INI file.
     ///
-    /// Creates the file if it doesn't exist.
+    /// Creates the file if it doesn't exist. An existing file is read first and
+    /// only the keys this struct owns are replaced, so unknown sections and keys
+    /// survive. Comments do not: the file is rewritten without them.
+    /// `[simulation] snapshot_skip` is written only when the file already has it,
+    /// so its derived default keeps following `hz`/`target_fps`; a runtime change
+    /// to `snapshot_skip` is not saved unless the file already sets the key.
     pub fn save_to_file(&self) -> Result<(), String> {
         let mut config = Ini::new();
+        match std::fs::read_to_string(&self.config_path) {
+            Ok(content) => {
+                config
+                    .read(content)
+                    .map_err(|e| format!("Failed to parse config file before saving: {}", e))?;
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) => return Err(format!("Failed to read config file before saving: {}", e)),
+        }
 
         // [render] section
         config.set("render", "width", Some(self.render_width.to_string()));
@@ -382,6 +396,16 @@ impl GameConfig {
                 self.background_color.r, self.background_color.g, self.background_color.b
             )),
         );
+        config.set(
+            "render",
+            "pixel_snap_camera",
+            Some(self.pixel_snap_camera.to_string()),
+        );
+        config.set(
+            "render",
+            "render_target_filter",
+            Some(self.render_target_filter.as_str().to_owned()),
+        );
 
         // [window] section
         config.set("window", "width", Some(self.window_width.to_string()));
@@ -390,6 +414,22 @@ impl GameConfig {
         config.set("window", "vsync", Some(self.vsync.to_string()));
         config.set("window", "fullscreen", Some(self.fullscreen.to_string()));
         config.set("window", "title", Some(self.window_title.clone()));
+
+        // [simulation] / [audio] / [input] sections
+        config.set("simulation", "hz", Some(self.sim_hz.to_string()));
+        if config.get("simulation", "snapshot_skip").is_some() {
+            config.set(
+                "simulation",
+                "snapshot_skip",
+                Some(self.snapshot_skip.to_string()),
+            );
+        }
+        config.set("audio", "hz", Some(self.audio_hz.to_string()));
+        config.set(
+            "input",
+            "gamepad_deadzone",
+            Some(self.gamepad_deadzone.to_string()),
+        );
 
         config
             .write(&self.config_path)
@@ -639,6 +679,71 @@ mod tests {
         assert_eq!(loaded.target_fps, 30);
         assert!(!loaded.vsync);
         assert!(loaded.fullscreen);
+
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn test_save_keeps_keys_it_does_not_own() {
+        let dir = std::env::temp_dir().join("aberred_test_config");
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("test_save_keeps_keys.ini");
+        std::fs::write(
+            &path,
+            "[render]\nwidth = 320\nrender_target_filter = bilinear\n\
+             [simulation]\nhz = 120\n\
+             [input]\ngamepad_deadzone = 0.3\n\
+             [game]\nfoo = 1\n",
+        )
+        .unwrap();
+
+        let mut config = GameConfig::with_path(&path);
+        config.load_from_file().unwrap();
+        config.set_render_size(640, 360);
+        config.save_to_file().unwrap();
+
+        let mut ini = Ini::new();
+        ini.load(&path).unwrap();
+        assert_eq!(ini.get("render", "width").as_deref(), Some("640"));
+        assert_eq!(
+            ini.get("render", "render_target_filter").as_deref(),
+            Some("bilinear")
+        );
+        assert_eq!(ini.getfloat("simulation", "hz").unwrap(), Some(120.0));
+        assert_eq!(
+            ini.getfloat("input", "gamepad_deadzone").unwrap(),
+            Some(0.3)
+        );
+        assert_eq!(ini.get("game", "foo").as_deref(), Some("1"));
+        // Not in the file before, so the derived default stays derived.
+        assert_eq!(ini.get("simulation", "snapshot_skip"), None);
+
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn test_save_and_reload_roundtrip_of_render_and_tick_keys() {
+        let dir = std::env::temp_dir().join("aberred_test_config");
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("test_roundtrip_render_tick.ini");
+        std::fs::remove_file(&path).ok();
+
+        let mut config = GameConfig::with_path(&path);
+        config.pixel_snap_camera = false;
+        config.render_target_filter = TextureFilter::Bilinear;
+        config.sim_hz = 120.0;
+        config.audio_hz = 50.0;
+        config.gamepad_deadzone = 0.25;
+        config.save_to_file().unwrap();
+
+        let mut loaded = GameConfig::with_path(&path);
+        loaded.load_from_file().unwrap();
+
+        assert!(!loaded.pixel_snap_camera);
+        assert_eq!(loaded.render_target_filter, TextureFilter::Bilinear);
+        assert_eq!(loaded.sim_hz, 120.0);
+        assert_eq!(loaded.audio_hz, 50.0);
+        assert_eq!(loaded.gamepad_deadzone, 0.25);
 
         std::fs::remove_file(&path).ok();
     }

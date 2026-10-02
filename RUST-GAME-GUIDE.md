@@ -2698,7 +2698,7 @@ fn my_system(mut config: ResMut<GameConfig>) {
 
 The engine detects changes and applies them — render size changes recreate the framebuffer, vsync/fps changes apply immediately. Call `config.save_to_file()` to persist runtime changes back to disk.
 
-> **Warning:** `save_to_file()` **overwrites** the config file with a fresh one holding only these keys: `[render]` `width`, `height`, `background_color` and `[window]` `width`, `height`, `target_fps`, `vsync`, `fullscreen`, `title`. Everything else in the file is lost: the `[simulation]`, `[audio]` and `[input]` sections, `[render]` `pixel_snap_camera` and `render_target_filter`, and all comments. The next startup then falls back to defaults for the lost keys. It writes to the `.config(path)` path (default `config.ini`), even when the config came from `.config_str()`. Keep your game's own settings in a separate file, and call `save_to_file()` only on a config file that uses none of the dropped keys.
+> **Note:** `save_to_file()` reads the existing file first and replaces only the keys `GameConfig` owns. Other sections and keys, including your game's own, are kept. Comments are not: the file is rewritten without them. `[simulation] snapshot_skip` is written only when the file already sets it, so its default keeps following `hz` and `target_fps`; a runtime change to `snapshot_skip` is saved only if the file already sets it. It writes to the `.config(path)` path (default `config.ini`), even when the config came from `.config_str()`.
 
 ---
 
