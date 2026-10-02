@@ -393,3 +393,33 @@ mod determinism_and_replay {
         .expect("engine startup failed");
     } // GLUE
 }
+
+// Game lifecycle: switch_scene poll with raw hooks
+mod switch_on_flag {
+    use aberredengine::engine_app::EngineBuilder; // GLUE
+    fn my_switch_scene() {} // GLUE
+
+    fn register() -> EngineBuilder { // GLUE
+    use aberredengine::bevy_ecs::prelude::*;
+    use aberredengine::core::resources::signal_keys as sk;
+    use aberredengine::core::resources::systemsstore::{self as hook_keys, SystemsStore};
+    use aberredengine::core::resources::worldsignals::WorldSignals;
+
+    fn switch_on_flag(
+        mut signals: ResMut<WorldSignals>,
+        systems: Res<SystemsStore>,
+        mut commands: Commands,
+    ) {
+        if signals.take_flag(sk::SWITCH_SCENE)
+            && let Some(switch_scene) = systems.get(hook_keys::SWITCH_SCENE)
+        {
+            commands.run_system(*switch_scene);
+        }
+    }
+
+    EngineBuilder::new()
+        .on_switch_scene(my_switch_scene)
+        .add_system(switch_on_flag)
+        // …
+    } // GLUE
+}

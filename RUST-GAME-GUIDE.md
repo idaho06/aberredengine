@@ -412,7 +412,7 @@ Setup ──→ Playing ──→ Quitting
 
 1. **Setup** — The engine calls the `setup` hook once, on the logic thread. Load assets here (textures, fonts, sounds, shaders, animations) — see [Section 4](#4-loading-assets) for how texture/font/shader loading works. The hook must end with `next_state.set(GameStates::Playing)` (a `ResMut<NextGameState>` parameter): nothing else leaves `Setup`, so without it the game never starts.
 2. **Playing** — The engine transitions to playing, calls `enter_play` (or the initial scene's `on_enter`), then runs `update` (or `on_update`) once per sim tick.
-3. **Scene switches** — When `WorldSignals` has the `"switch_scene"` flag set, the engine calls the `switch_scene` hook (or the SceneManager's exit→enter sequence).
+3. **Scene switches** — With the SceneManager, setting the `"switch_scene"` flag on `WorldSignals` runs the exit→enter sequence on the next sim tick. With raw hooks, only a `MenuAction::SetScene` menu item runs the `switch_scene` hook; nothing polls the flag in a pure-Rust game unless you register a poll system (see below).
 4. **Quitting** — When the game state becomes `GameStates::Quitting` (via `NextGameState::set(GameStates::Quitting)` or a `MenuAction::QuitGame` menu item) or the window is closed, the engine shuts down.
 
 > **The `"quit_game"` flag does not quit a Rust game on its own.** Only the Lua plugin polls `sk::QUIT_GAME`. In a pure-Rust game, `GameCtx` has no `NextGameState`, so scene, timer, phase, collision and menu callbacks cannot change the game state directly. To quit from one of them, set the flag and register a small poll system:
@@ -435,6 +435,32 @@ Setup ──→ Playing ──→ Quitting
 > ```
 >
 > Register it with `.add_system()`, not `.configure_schedule()`: `.add_system()` adds `run_if(state_is_playing)`. Entering `Quitting` sets the `"quit_game"` flag again, and the run condition keeps the poll from reacting to it.
+
+> **With raw hooks, the `"switch_scene"` flag needs a poll system too.** The SceneManager polls it for you; with `.on_switch_scene()` nothing does, so setting the flag from a callback has no effect. Run the hook yourself:
+>
+> ```rust
+> use aberredengine::bevy_ecs::prelude::*;
+> use aberredengine::core::resources::signal_keys as sk;
+> use aberredengine::core::resources::systemsstore::{self as hook_keys, SystemsStore};
+> use aberredengine::core::resources::worldsignals::WorldSignals;
+>
+> fn switch_on_flag(
+>     mut signals: ResMut<WorldSignals>,
+>     systems: Res<SystemsStore>,
+>     mut commands: Commands,
+> ) {
+>     if signals.take_flag(sk::SWITCH_SCENE)
+>         && let Some(switch_scene) = systems.get(hook_keys::SWITCH_SCENE)
+>     {
+>         commands.run_system(*switch_scene);
+>     }
+> }
+>
+> EngineBuilder::new()
+>     .on_switch_scene(my_switch_scene)
+>     .add_system(switch_on_flag)
+>     // …
+> ```
 
 ### Builder method reference
 
@@ -1290,6 +1316,8 @@ When the `scene_switch_system` runs, it performs these steps in order:
 6. **Write `previous_scene`** — the old active scene name is stored in `WorldSignals["previous_scene"]`
 7. **Set active scene** — updates `SceneManager.active_scene` to the new scene name
 8. **Call `on_enter` on new scene** — fires the new scene's `on_enter` callback, which typically spawns entities and sets up initial state
+
+When `on_exit` runs, the old scene's entities still exist (their despawn is queued, not applied yet), but steps 2 and 3 have already run: `WorldSignals` entity registrations of non-persistent entities, `TrackedGroups` and group counts are gone, so `get_entity()` and `get_group_count()` return `None` there. Read what you need from them in `on_update` before triggering the switch.
 
 > **Warning:** the target name is not validated up front. If no scene is registered under that name, steps 1–5 have already run (the old scene's entities are queued for despawn and its `on_exit` has fired) when the system logs "No scene registered" and returns. The game is left with an empty world and the active scene unchanged. Double-check scene names, and prefer constants over repeated string literals.
 
