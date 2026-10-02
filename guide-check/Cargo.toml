@@ -18,3 +18,6 @@ aberredengine = { path = "../crates/aberredengine", default-features = false }
 rustc-hash = "2.1"
 log = "0.4"
 env_logger = "0.11"
+
+[dev-dependencies]
+aberredengine = { path = "../crates/aberredengine", default-features = false, features = ["test-support"] }

@@ -24,15 +24,17 @@ doc-links $RUSTDOCFLAGS="-D warnings":
     cargo doc --workspace --no-deps --no-default-features
 
 # Compiles every RUST-GAME-GUIDE.md snippet (guide-check/, outside the workspace) as a
-# downstream game, without and with Lua. It reuses the workspace lockfile and target dir.
+# downstream game, without and with Lua, and runs its tests. It reuses the workspace lockfile
+# and target dir.
 # Clippy findings there are guide issues and don't fail the gate.
 check-guide:
     cargo fetch
     cp Cargo.lock guide-check/Cargo.lock
-    cargo check --manifest-path guide-check/Cargo.toml --target-dir target
-    cargo check --manifest-path guide-check/Cargo.toml --target-dir target --features lua
-    cargo clippy --manifest-path guide-check/Cargo.toml --target-dir target
-    cargo clippy --manifest-path guide-check/Cargo.toml --target-dir target --features lua
+    cargo check --manifest-path guide-check/Cargo.toml --target-dir target --all-targets
+    cargo check --manifest-path guide-check/Cargo.toml --target-dir target --all-targets --features lua
+    cargo test --manifest-path guide-check/Cargo.toml --target-dir target
+    cargo clippy --manifest-path guide-check/Cargo.toml --target-dir target --all-targets
+    cargo clippy --manifest-path guide-check/Cargo.toml --target-dir target --all-targets --features lua
 
 # Inner TDD loop: lua-on tests including the headless TestWorld harness.
 test-fast:

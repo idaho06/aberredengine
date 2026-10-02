@@ -13,5 +13,6 @@ mod resources;
 mod scene_manager;
 mod scenes;
 mod spawning;
+mod testing;
 
 fn main() {}

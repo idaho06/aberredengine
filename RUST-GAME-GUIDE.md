@@ -2751,7 +2751,7 @@ Working directory matters — `config.ini` and `assets/` are loaded relative to 
 |------|---------|--------|
 | `lua` | on | Lua scripting support (mlua + LuaJIT) |
 | `tracy` | off | Profiling via the Tracy client. Never enable in a normal build — build with `--profile release-tracy` instead when profiling. |
-| `test-support` | off | Enables the headless `TestWorld`/`TestWorldBuilder` harness (a real logic-thread `World` with no window/GL/audio thread), for `cargo test --features test-support` in your own game's test suite. Never in default. |
+| `test-support` | off | Enables the headless `TestWorld`/`TestWorldBuilder` harness (a real logic-thread `World` with no window/GL/audio thread), for your own game's tests; see [Testing your game](#testing-your-game). Never in default. |
 
 ```toml
 # Disable Lua (pure Rust)
@@ -2759,6 +2759,45 @@ aberredengine = { path = "../aberredengine/crates/aberredengine", default-featur
 ```
 
 Disabling Lua removes: mlua dependency, LuaJIT compilation, all Lua-specific systems. Faster builds, smaller binary.
+
+### Testing your game
+
+The `test-support` feature adds `aberredengine::test_support::TestWorld`: the engine's real logic-thread world and sim schedule, with no window, GL or audio thread. Enable it for tests only, as a dev-dependency alongside your normal dependency:
+
+```toml
+[dev-dependencies]
+aberredengine = { path = "../aberredengine/crates/aberredengine", default-features = false, features = ["test-support"] }
+```
+
+`TestWorld::builder()` takes the same registration calls as `EngineBuilder` (`on_setup`, `on_enter_play`, `add_system`, `configure_schedule`, `add_observer`, `add_scene`/`initial_scene`, `deterministic`, plus `config(GameConfig)`). Its default setup hook enters `Playing` at once. `tick(n, dt)` runs `n` sim ticks with a fixed `dt`, and `tw.world` is a plain Bevy `World` to spawn into and inspect:
+
+```rust
+#[cfg(test)]
+mod tests {
+    use super::{Health, remove_dead};
+    use aberredengine::test_support::TestWorld;
+
+    const DT: f32 = 1.0 / 60.0;
+
+    #[test]
+    fn dead_entities_are_removed() {
+        let mut tw = TestWorld::builder()
+            .add_system(remove_dead)
+            .build()
+            .expect("test world");
+        tw.tick_to_play(DT, 10);
+
+        let enemy = tw.world.spawn(Health(0)).id();
+        tw.tick(1, DT);
+
+        assert!(tw.world.get_entity(enemy).is_err());
+    }
+}
+```
+
+- No real assets load: `deliver_texture_dims(key, w, h)` and `deliver_font_metrics(key, metrics)` fake the render thread's load replies, and `sent_to_render` receives the `RenderMsg`s (asset commands, quit) the game would have sent.
+- `audio_cmds` receives the `AudioCmd`s your code writes; send fake replies through `audio_msgs_tx`.
+- `send_input(sample)` feeds one raw input sample: start from `RawDeviceSnapshot::default()` (`aberredengine::core::protocol::raw_input`) and press keys with `sample.set_key(Key::KEY_SPACE.as_u32())`. `present()` returns the `DrawableSnapshot` the render thread would draw.
 
 ### Optimization tip
 
