@@ -937,7 +937,7 @@ engine.spawn()
     :build()
 ```
 
-The texture is stored in `TextureStore` keyed by path stem and deduplicated — two `TileMap` entities pointing to the same directory share one GPU texture. Tile entities are in `Group("tiles")` and get `ZIndex` values automatically based on layer order (first layer most negative, last layer least negative).
+The atlas texture is stored in `TextureStore` under the directory's last path component (`"level01"` above) and loaded once per key, so two `TileMap` entities pointing to the same directory share one GPU texture. The key ignores the rest of the path: two tilemap directories with the same name (`world1/level01` and `world2/level01`) collide, and the second map draws with the first map's atlas. A texture your game loads under the same key collides the same way. Give each tilemap directory a unique name. Tile entities are in `Group("tiles")` and get `ZIndex` values automatically based on layer order (first layer most negative, last layer least negative).
 
 Tile entities carry only `Group`, `Sprite`, `MapPosition`, `ZIndex` and `ChildOf` — **no `BoxCollider`**. Collision detection needs a `BoxCollider` on both entities, so a `CollisionRule` on `"tiles"` never fires until your game adds colliders. One way is a system that gives every newly spawned tile a sprite-sized collider:
 
@@ -966,7 +966,7 @@ EngineBuilder::new()
     // …
 ```
 
-Filter further (by layer `ZIndex`, or by the tile's `Sprite.offset` in the atlas) if only some tiles should be solid.
+> **Warning:** every tile that gets a collider joins `collision_detector`'s all-pairs test (see [Collision Rules](#73-collision-rules)). A 100×50 map has 5,000 tiles: about 12.5 million pair tests every sim tick. Collide only the tiles that must be solid. Filter by layer `ZIndex` or by the tile's `Sprite.offset` in the atlas, or use a few large colliders on plain entities instead of one per tile.
 
 > **Note:** `load_tilemap_data` and `spawn_tiles` remain available as low-level utilities for advanced use cases where manual control of the load/spawn cycle is needed.
 
