@@ -7,7 +7,7 @@ mod cargo_toml {
 
 // config.ini
 mod config_ini {
-    use aberredengine::engine_app::EngineBuilder; // GLUE
+    use aberredengine::prelude::*; // GLUE
     fn builder() { // GLUE
     let _ = // GLUE
     EngineBuilder::new()
@@ -19,13 +19,7 @@ mod config_ini {
 
 // AppState API
 mod appstate_api {
-    use aberredengine::imgui;
-    use aberredengine::core::resources::appstate::AppState;
-    use aberredengine::render::resources::fontstore::FontStore;
-    use aberredengine::render::resources::texturestore::TextureStore;
-    use aberredengine::core::resources::worldsignals::SignalSnapshot;
-    use aberredengine::core::resources::signal_intents::SignalIntents;
-    use aberredengine::bevy_ecs::prelude::ResMut;
+    use aberredengine::prelude::*;
 
     #[derive(Clone)]
     struct InspectorSnapshot {
@@ -56,8 +50,7 @@ mod appstate_api {
 
 // Runtime modification
 mod runtime_modification {
-    use aberredengine::bevy_ecs::prelude::ResMut; // GLUE
-    use aberredengine::core::resources::gameconfig::GameConfig; // GLUE
+    use aberredengine::prelude::*; // GLUE
 
     fn my_system(mut config: ResMut<GameConfig>) {
         config.set_render_size(1280, 720);
@@ -68,8 +61,7 @@ mod runtime_modification {
 
 // InputBindings resource
 mod inputbindings_resource {
-    use aberredengine::bevy_ecs::prelude::*;
-    use aberredengine::core::events::input::InputAction;
+    use aberredengine::prelude::*;
     use aberredengine::core::resources::input_bindings::{
         AxisDirection, GamepadAxis, InputBinding, InputBindings, Key,
     };

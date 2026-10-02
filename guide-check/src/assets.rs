@@ -1,9 +1,6 @@
 // 4. Loading Assets
 mod loading_assets {
-    use aberredengine::core::protocol::render_assets::RenderAssetCmd;
-    use aberredengine::core::resources::animationstore::{AnimationStore, AnimationResource};
-    use aberredengine::bevy_ecs::prelude::*;
-    use aberredengine::core::protocol::audio::AudioCmd;
+    use aberredengine::prelude::*;
     use std::sync::Arc;
 
     fn setup(
@@ -17,12 +14,10 @@ mod loading_assets {
 
 // Textures
 mod textures {
-    use aberredengine::core::protocol::render_assets::RenderAssetCmd; // GLUE
-    use aberredengine::core::resources::texturefilter::TextureFilter; // GLUE
+    use aberredengine::prelude::*; // GLUE
 
     fn queue_textures(mut asset_cmds: MessageWriter<RenderAssetCmd>) { // GLUE
-    use aberredengine::core::protocol::render_assets::RenderAssetCmd;
-    use aberredengine::core::resources::texturefilter::TextureFilter;
+    use aberredengine::prelude::*;
 
     asset_cmds.write(RenderAssetCmd::Texture {
         id: "player".to_string(),
@@ -36,13 +31,8 @@ mod textures {
     });
     } // GLUE
 
-    use aberredengine::bevy_ecs::prelude::*;
-    use aberredengine::core::components::mapposition::MapPosition;
-    use aberredengine::core::components::sprite::Sprite;
-    use aberredengine::core::components::zindex::ZIndex;
-    use aberredengine::core::math::Vec2;
+    use aberredengine::prelude::*;
     use aberredengine::core::resources::texturedims::TextureDimsStore;
-    use aberredengine::core::resources::worldsignals::WorldSignals;
     use std::sync::Arc;
 
     fn spawn_player_once_texture_ready(
@@ -88,8 +78,7 @@ mod textures {
 
 // Fonts
 mod fonts {
-    use aberredengine::bevy_ecs::prelude::*; // GLUE
-    use aberredengine::core::protocol::render_assets::RenderAssetCmd; // GLUE
+    use aberredengine::prelude::*; // GLUE
 
     fn queue_font(mut asset_cmds: MessageWriter<RenderAssetCmd>) { // GLUE
     asset_cmds.write(RenderAssetCmd::Font {
@@ -110,7 +99,7 @@ mod fonts {
     }
 
     fn queue_label(mut asset_cmds: MessageWriter<RenderAssetCmd>) { // GLUE
-    use aberredengine::core::math::Color;
+    use aberredengine::prelude::*;
 
     asset_cmds.write(RenderAssetCmd::RasterizeText {
         key: "title_label".to_string(),
@@ -125,8 +114,7 @@ mod fonts {
 
 // Audio (sounds and music)
 mod audio_sounds_and_music {
-    use aberredengine::bevy_ecs::prelude::*; // GLUE
-    use aberredengine::core::protocol::audio::AudioCmd; // GLUE
+    use aberredengine::prelude::*; // GLUE
 
     fn queue_audio(mut audio: MessageWriter<AudioCmd>) { // GLUE
     // Load a sound effect
@@ -145,12 +133,11 @@ mod audio_sounds_and_music {
 
 // Audio replies
 mod audio_replies {
-    use aberredengine::engine_app::EngineBuilder; // GLUE
+    use aberredengine::prelude::*; // GLUE
 
     fn register() -> EngineBuilder { // GLUE
-    use aberredengine::bevy_ecs::prelude::*;
-    use aberredengine::core::protocol::audio::{AudioCmd, AudioMessage};
-    use aberredengine::engine_app::SimSet;
+    use aberredengine::prelude::*;
+    use aberredengine::core::protocol::audio::AudioMessage;
 
     fn on_audio_replies(mut replies: MessageReader<AudioMessage>, mut audio: MessageWriter<AudioCmd>) {
         for reply in replies.read() {
@@ -178,8 +165,7 @@ mod audio_replies {
 
 // Shaders
 mod shaders {
-    use aberredengine::bevy_ecs::prelude::*; // GLUE
-    use aberredengine::core::protocol::render_assets::RenderAssetCmd; // GLUE
+    use aberredengine::prelude::*; // GLUE
 
     fn queue_shader(mut asset_cmds: MessageWriter<RenderAssetCmd>) { // GLUE
     asset_cmds.write(RenderAssetCmd::Shader {
@@ -200,10 +186,7 @@ mod shaders {
 
 // Per-entity shaders
 mod per_entity_shaders {
-    use aberredengine::bevy_ecs::prelude::*;
-    use aberredengine::core::components::entityshader::EntityShader;
-    use aberredengine::core::resources::uniformvalue::UniformValue;
-    use aberredengine::core::resources::worldtime::WorldTime;
+    use aberredengine::prelude::*;
 
     fn spawn_glowing(mut commands: Commands) {
         let mut shader = EntityShader::new("glow");
@@ -224,9 +207,7 @@ mod per_entity_shaders {
 
 // Post-process shaders
 mod post_process_shaders {
-    use aberredengine::bevy_ecs::prelude::*;
-    use aberredengine::core::resources::postprocessshader::PostProcessShader;
-    use aberredengine::core::resources::uniformvalue::UniformValue;
+    use aberredengine::prelude::*;
 
     fn enable_crt(mut post: ResMut<PostProcessShader>) {
         post.set_shader_chain(Some(vec!["crt".to_string(), "vignette".to_string()]));
@@ -240,12 +221,11 @@ mod post_process_shaders {
 
 // Animations
 mod animations {
-    use aberredengine::bevy_ecs::prelude::*; // GLUE
-    use aberredengine::core::resources::animationstore::{AnimationStore, AnimationResource}; // GLUE
+    use aberredengine::prelude::*; // GLUE
     use std::sync::Arc; // GLUE
 
     fn register_animations(mut anim_store: ResMut<AnimationStore>) { // GLUE
-    use aberredengine::core::math::Vec2;
+    use aberredengine::prelude::*;
 
     anim_store.animations.insert("player_idle".to_string(), AnimationResource {
         tex_key: Arc::from("player"),              // must match a TextureStore key
@@ -271,14 +251,10 @@ mod animations {
 
 // Tilemaps
 mod tilemaps {
-    use aberredengine::bevy_ecs::prelude::*; // GLUE
-    use aberredengine::core::components::mapposition::MapPosition; // GLUE
-    use aberredengine::engine_app::EngineBuilder; // GLUE
+    use aberredengine::prelude::*; // GLUE
 
     fn spawn_tilemaps(mut commands: Commands) { // GLUE
-    use aberredengine::core::components::tilemap::TileMap;
-    use aberredengine::core::components::mapposition::MapPosition;
-    use aberredengine::core::components::scale::Scale;
+    use aberredengine::prelude::*;
 
     // Minimal — tiles appear at world origin (default MapPosition inserted automatically)
     commands.spawn(TileMap::new("assets/tilemaps/level01"));
@@ -296,10 +272,7 @@ mod tilemaps {
     } // GLUE
 
     fn register() -> EngineBuilder { // GLUE
-    use aberredengine::bevy_ecs::prelude::*;
-    use aberredengine::core::components::boxcollider::BoxCollider;
-    use aberredengine::core::components::group::Group;
-    use aberredengine::core::components::sprite::Sprite;
+    use aberredengine::prelude::*;
     use aberredengine::core::systems::tilemap::TILES_GROUP;
 
     type NewUncollidedTiles = (Added<Group>, Without<BoxCollider>);
@@ -325,11 +298,8 @@ mod tilemaps {
 
 // Camera
 mod camera {
-    use aberredengine::bevy_ecs::prelude::*; // GLUE
 
-    use aberredengine::core::resources::camera2d::{Camera2D, Camera2DRes};
-    use aberredengine::core::resources::screensize::ScreenSize;
-    use aberredengine::core::math::Vec2;
+    use aberredengine::prelude::*;
 
     fn setup_camera(mut camera: ResMut<Camera2DRes>, screen: Res<ScreenSize>) {
         camera.0 = Camera2D {
@@ -343,11 +313,7 @@ mod camera {
 
 // Following an entity
 mod following_an_entity {
-    use aberredengine::bevy_ecs::prelude::*;
-    use aberredengine::core::components::cameratarget::CameraTarget;
-    use aberredengine::core::components::mapposition::MapPosition;
-    use aberredengine::core::math::Rect;
-    use aberredengine::core::resources::camerafollowconfig::{CameraFollowConfig, FollowMode};
+    use aberredengine::prelude::*;
 
     fn follow_player(mut commands: Commands, mut follow: ResMut<CameraFollowConfig>) {
         commands.spawn((
@@ -365,12 +331,7 @@ mod following_an_entity {
 
 // Complete setup example
 mod complete_setup_example {
-    use aberredengine::bevy_ecs::prelude::*; // GLUE
-    use aberredengine::core::math::Vec2; // GLUE
-    use aberredengine::core::protocol::audio::AudioCmd; // GLUE
-    use aberredengine::core::protocol::render_assets::RenderAssetCmd; // GLUE
-    use aberredengine::core::resources::animationstore::{AnimationStore, AnimationResource}; // GLUE
-    use aberredengine::core::resources::texturefilter::TextureFilter; // GLUE
+    use aberredengine::prelude::*; // GLUE
     use std::sync::Arc; // GLUE
 
     fn setup(

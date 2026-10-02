@@ -1,6 +1,5 @@
 // GLUE: the scene module the guide's SceneManager `main` declares.
-use aberredengine::core::resources::input::InputState;
-use aberredengine::core::systems::GameCtx;
+use aberredengine::prelude::*;
 
 pub fn load_assets() {}
 

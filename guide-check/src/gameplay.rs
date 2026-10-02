@@ -1,18 +1,14 @@
 // 7.1 Timers
 mod timers {
-    use aberredengine::bevy_ecs::prelude::*; // GLUE
-    use aberredengine::core::components::mapposition::MapPosition; // GLUE
-    use aberredengine::core::protocol::audio::AudioCmd; // GLUE
 
-    use aberredengine::core::systems::GameCtx;
-    use aberredengine::core::resources::input::InputState;
+    use aberredengine::prelude::*;
 
     type TimerCallback = fn(Entity, &mut GameCtx, &InputState);
 
     fn same_as_engine(f: TimerCallback) -> aberredengine::core::components::timer::TimerCallback { f } // GLUE
 
     fn spawn_repeating(ctx: &mut GameCtx) { // GLUE
-    use aberredengine::core::components::timer::Timer;
+    use aberredengine::prelude::*;
 
     // Spawn an entity with a 2-second repeating timer
     ctx.commands.spawn((
@@ -27,7 +23,6 @@ mod timers {
     } // GLUE
 
     fn spawn_one_shot(ctx: &mut GameCtx) { // GLUE
-    use aberredengine::core::components::timer::Timer; // GLUE
     ctx.commands.spawn((
         MapPosition::new(0.0, 0.0),
         Timer::rust(5.0, one_shot_callback),
@@ -44,14 +39,9 @@ mod timers {
 
 // 7.2 Phase State Machines
 mod phase_state_machines {
-    use aberredengine::bevy_ecs::prelude::*; // GLUE
-    use aberredengine::core::components::mapposition::MapPosition; // GLUE
-    use aberredengine::core::components::phase::PhaseCallbackFns; // GLUE
-    use aberredengine::core::protocol::audio::AudioCmd; // GLUE
-    use aberredengine::core::resources::input::InputState; // GLUE
     use rustc_hash::FxHashMap; // GLUE
 
-    use aberredengine::core::systems::GameCtx;
+    use aberredengine::prelude::*;
 
     // Called when entering a phase. Return Some("phase") to immediately chain-transition.
     type PhaseEnterFn = fn(Entity, &mut GameCtx, &InputState) -> Option<String>;
@@ -69,7 +59,7 @@ mod phase_state_machines {
     } // GLUE
 
     fn spawn_player(ctx: &mut GameCtx) { // GLUE
-    use aberredengine::core::components::phase::{Phase, PhaseCallbackFns};
+    use aberredengine::prelude::*;
     use rustc_hash::FxHashMap;
 
     let mut phases = FxHashMap::default();
@@ -108,7 +98,7 @@ mod phase_state_machines {
     });
     } // GLUE
 
-    use aberredengine::core::events::input::InputAction;
+    use aberredengine::prelude::*;
 
     fn idle_enter(_entity: Entity, _ctx: &mut GameCtx, _input: &InputState) -> Option<String> {
         None // stay in idle
@@ -156,10 +146,8 @@ mod phase_state_machines {
 
 // 7.3 Collision Rules
 mod collision_rules {
-    use aberredengine::bevy_ecs::prelude::*; // GLUE
 
-    use aberredengine::core::components::collision::BoxSides;
-    use aberredengine::core::systems::GameCtx;
+    use aberredengine::prelude::*;
 
     type CollisionCallback = fn(Entity, Entity, &BoxSides, &BoxSides, &mut GameCtx);
 
@@ -167,12 +155,9 @@ mod collision_rules {
 
     mod usage { // GLUE
     use super::*; // GLUE
-    use aberredengine::core::components::collision::BoxSide; // GLUE
-    use aberredengine::core::protocol::audio::AudioCmd; // GLUE
 
     fn spawn_rule(ctx: &mut GameCtx) { // GLUE
-    use aberredengine::core::components::collision::{CollisionRule, BoxSide};
-    use aberredengine::core::components::persistent::Persistent;
+    use aberredengine::prelude::*;
 
     ctx.commands.spawn((
         CollisionRule::rust("ball", "brick", ball_brick_collision),
@@ -180,7 +165,7 @@ mod collision_rules {
     ));
     } // GLUE
 
-    use aberredengine::core::components::collision::BoxSides;
+    use aberredengine::prelude::*;
 
     fn ball_brick_collision(
         ball: Entity,
@@ -208,13 +193,10 @@ mod collision_rules {
 
 // 7.4 Menus
 mod menus {
-    use aberredengine::bevy_ecs::prelude::*; // GLUE
-    use aberredengine::core::components::menu::{Menu, MenuActions, MenuAction}; // GLUE
-    use aberredengine::core::systems::GameCtx; // GLUE
+    use aberredengine::prelude::*; // GLUE
 
     fn spawn_with_actions(ctx: &mut GameCtx) { // GLUE
-    use aberredengine::core::math::Vec2;
-    use aberredengine::core::components::menu::{Menu, MenuActions, MenuAction};
+    use aberredengine::prelude::*;
 
     let menu = Menu::new(
         &[("start", "Start Game"), ("options", "Options"), ("quit", "Quit")],
@@ -235,7 +217,7 @@ mod menus {
 
     fn spawn_with_callback(ctx: &mut GameCtx, menu: Menu) { // GLUE
     use aberredengine::core::components::menu::MenuRustCallback;
-    use aberredengine::core::systems::GameCtx;
+    use aberredengine::prelude::*;
 
     fn on_menu_select(menu_entity: Entity, item_id: &str, item_index: usize, ctx: &mut GameCtx) {
         match item_id {
@@ -254,7 +236,7 @@ mod menus {
     ));
     } // GLUE
 
-    use aberredengine::core::math::{Color, Vec2};
+    use aberredengine::prelude::*;
 
     fn enter(ctx: &mut GameCtx) {
         let menu = Menu::new(
@@ -278,12 +260,10 @@ mod menus {
 
 // 7.5 Animation Finished Event
 mod animation_finished_event {
-    use aberredengine::engine_app::EngineBuilder; // GLUE
+    use aberredengine::prelude::*; // GLUE
 
     fn register() -> EngineBuilder { // GLUE
-    use aberredengine::bevy_ecs::prelude::*;
-    use aberredengine::bevy_ecs::observer::On;
-    use aberredengine::core::events::animation::AnimationFinishedEvent;
+    use aberredengine::prelude::*;
 
     fn on_anim_done(
         trigger: On<AnimationFinishedEvent>,
@@ -302,13 +282,10 @@ mod animation_finished_event {
 
 // 7.6 Tween Finished Event
 mod tween_finished_event {
-    use aberredengine::engine_app::EngineBuilder; // GLUE
+    use aberredengine::prelude::*; // GLUE
 
     fn register() -> EngineBuilder { // GLUE
-    use aberredengine::bevy_ecs::prelude::*;
-    use aberredengine::bevy_ecs::observer::On;
-    use aberredengine::core::components::mapposition::MapPosition;
-    use aberredengine::core::events::tween::TweenFinishedEvent;
+    use aberredengine::prelude::*;
 
     fn on_move_tween_done(
         trigger: On<TweenFinishedEvent<MapPosition>>,

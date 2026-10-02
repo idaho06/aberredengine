@@ -1,8 +1,6 @@
 // 7.7 GUI Widgets
 mod gui_widgets {
-    use aberredengine::bevy_ecs::prelude::ResMut;
-    use aberredengine::core::math::{Color, Rect};
-    use aberredengine::core::resources::guitheme::{GuiButtonSkin, GuiNinePatch, GuiThemeStore};
+    use aberredengine::prelude::*;
     use std::sync::Arc;
 
     fn setup_gui_theme(mut theme_store: ResMut<GuiThemeStore>) {
@@ -49,15 +47,7 @@ mod gui_widgets {
     ));
     } // GLUE
 
-    use aberredengine::bevy_ecs::prelude::*;
-    use aberredengine::core::math::Vec2;
-    use aberredengine::core::components::guibutton::GuiButton;
-    use aberredengine::core::components::guiinteractable::GuiInteractable;
-    use aberredengine::core::components::guioffset::GuiOffset;
-    use aberredengine::core::components::guiwindow::GuiWindow;
-    use aberredengine::core::components::screenposition::ScreenPosition;
-    use aberredengine::core::components::zindex::ZIndex;
-    use aberredengine::core::systems::GameCtx;
+    use aberredengine::prelude::*;
 
     fn on_start_clicked(_entity: Entity, ctx: &mut GameCtx) {
         ctx.world_signals.set_flag("start_pressed");
@@ -85,13 +75,7 @@ mod gui_widgets {
 
 // 7.8 Particle Emitters
 mod particle_emitters {
-    use aberredengine::bevy_ecs::prelude::*;
-    use aberredengine::core::components::mapposition::MapPosition;
-    use aberredengine::core::components::particleemitter::{EmitterShape, ParticleEmitter, TtlSpec};
-    use aberredengine::core::components::rigidbody::RigidBody;
-    use aberredengine::core::components::sprite::Sprite;
-    use aberredengine::core::components::zindex::ZIndex;
-    use aberredengine::core::math::Vec2;
+    use aberredengine::prelude::*;
     use std::sync::Arc;
 
     fn spawn_smoke(mut commands: Commands) {
@@ -132,12 +116,7 @@ mod particle_emitters {
 
 // 7.9 Attaching Entities (StuckTo)
 mod stuck_to {
-    use aberredengine::bevy_ecs::prelude::*;
-    use aberredengine::core::components::rigidbody::RigidBody;
-    use aberredengine::core::components::stuckto::StuckTo;
-    use aberredengine::core::events::input::InputAction;
-    use aberredengine::core::math::Vec2;
-    use aberredengine::core::resources::input::InputState;
+    use aberredengine::prelude::*;
 
     fn stick_ball_to_paddle(commands: &mut Commands, ball: Entity, paddle: Entity) {
         commands.entity(ball).insert(

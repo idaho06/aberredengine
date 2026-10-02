@@ -26,6 +26,7 @@ pub use aberred_render as render;
 pub use aberred_lua as lua;
 
 pub mod engine_app;
+pub mod prelude;
 pub mod systems;
 #[cfg(any(test, feature = "test-support"))]
 pub mod test_support;

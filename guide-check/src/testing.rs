@@ -1,6 +1,5 @@
 // Testing your game
-use aberredengine::bevy_ecs; // GLUE
-use aberredengine::bevy_ecs::prelude::*; // GLUE
+use aberredengine::prelude::*; // GLUE
 #[derive(Component)] // GLUE
 struct Health(i32); // GLUE
 fn remove_dead(mut commands: Commands, query: Query<(Entity, &Health)>) { // GLUE

@@ -1,13 +1,9 @@
 // Example 1: Sprite entity
 mod example_1_sprite_entity {
-    use aberredengine::core::systems::GameCtx; // GLUE
+    use aberredengine::prelude::*; // GLUE
 
     fn enter(ctx: &mut GameCtx) { // GLUE
-    use aberredengine::core::components::mapposition::MapPosition;
-    use aberredengine::core::components::sprite::Sprite;
-    use aberredengine::core::components::zindex::ZIndex;
-    use aberredengine::core::components::group::Group;
-    use aberredengine::core::math::Vec2;
+    use aberredengine::prelude::*;
     use std::sync::Arc;
 
     ctx.commands.spawn((
@@ -29,18 +25,11 @@ mod example_1_sprite_entity {
 
 // Example 2: Physics entity
 mod example_2_physics_entity {
-    use aberredengine::core::components::group::Group; // GLUE
-    use aberredengine::core::components::mapposition::MapPosition; // GLUE
-    use aberredengine::core::components::sprite::Sprite; // GLUE
-    use aberredengine::core::components::zindex::ZIndex; // GLUE
-    use aberredengine::core::systems::GameCtx; // GLUE
+    use aberredengine::prelude::*; // GLUE
     use std::sync::Arc; // GLUE
 
     fn enter(ctx: &mut GameCtx) { // GLUE
-    use aberredengine::core::components::rigidbody::RigidBody;
-    use aberredengine::core::components::boxcollider::BoxCollider;
-    use aberredengine::core::components::inputcontrolled::AccelerationControlled;
-    use aberredengine::core::math::Vec2;
+    use aberredengine::prelude::*;
 
     ctx.commands.spawn((
         MapPosition::new(100.0, 200.0),
@@ -66,14 +55,10 @@ mod example_2_physics_entity {
 
 // Example 3: UI text with signal binding
 mod example_3_ui_text_with_signal_binding {
-    use aberredengine::core::components::zindex::ZIndex; // GLUE
-    use aberredengine::core::systems::GameCtx; // GLUE
+    use aberredengine::prelude::*; // GLUE
 
     fn enter(ctx: &mut GameCtx) { // GLUE
-    use aberredengine::core::components::screenposition::ScreenPosition;
-    use aberredengine::core::components::dynamictext::DynamicText;
-    use aberredengine::core::components::signalbinding::SignalBinding;
-    use aberredengine::core::math::Color;
+    use aberredengine::prelude::*;
 
     ctx.commands.spawn((
         ScreenPosition::new(10.0, 10.0),
@@ -86,11 +71,11 @@ mod example_3_ui_text_with_signal_binding {
 
 // Component constructor quick reference: animation controller rules
 mod animation_controller_rules {
-    use aberredengine::core::systems::GameCtx; // GLUE
+    use aberredengine::prelude::*; // GLUE
 
     fn enter(ctx: &mut GameCtx) { // GLUE
-    use aberredengine::core::components::animation::{Animation, AnimationController, CmpOp, Condition};
-    use aberredengine::core::components::signals::Signals;
+    use aberredengine::prelude::*;
+    use aberredengine::core::components::animation::{CmpOp, Condition};
 
     ctx.commands.spawn((
         Animation::new("player_idle"),
@@ -107,12 +92,10 @@ mod animation_controller_rules {
 
 // Tween components in Rust
 mod tween_components_in_rust {
-    use aberredengine::core::systems::GameCtx; // GLUE
+    use aberredengine::prelude::*; // GLUE
 
     fn map_position(ctx: &mut GameCtx) { // GLUE
-    use aberredengine::core::components::mapposition::MapPosition;
-    use aberredengine::core::components::tween::{Easing, LoopMode, Tween};
-    use aberredengine::core::math::Vec2;
+    use aberredengine::prelude::*;
 
     ctx.commands.spawn((
         MapPosition::new(0.0, 0.0),
@@ -127,8 +110,7 @@ mod tween_components_in_rust {
     } // GLUE
 
     fn rotation(ctx: &mut GameCtx) { // GLUE
-    use aberredengine::core::components::rotation::Rotation;
-    use aberredengine::core::components::tween::Tween;
+    use aberredengine::prelude::*;
 
     ctx.commands.spawn((
         Rotation { degrees: 0.0 },
@@ -141,8 +123,7 @@ mod tween_components_in_rust {
     } // GLUE
 
     fn scale(ctx: &mut GameCtx) { // GLUE
-    use aberredengine::core::components::scale::Scale;
-    use aberredengine::core::components::tween::Tween;
+    use aberredengine::prelude::*;
 
     ctx.commands.spawn((
         Scale::new(1.0, 1.0),
@@ -156,8 +137,7 @@ mod tween_components_in_rust {
     } // GLUE
 
     fn screen_position(ctx: &mut GameCtx) { // GLUE
-    use aberredengine::core::components::screenposition::ScreenPosition;
-    use aberredengine::core::components::tween::Tween;
+    use aberredengine::prelude::*;
 
     ctx.commands.spawn((
         ScreenPosition::new(-200.0, 50.0),
@@ -172,8 +152,7 @@ mod tween_components_in_rust {
 
 // Spawning context: GameCtx vs. raw hooks
 mod spawning_context_gamectx_vs_raw_hooks {
-    use aberredengine::bevy_ecs::prelude::*; // GLUE
-    use aberredengine::core::systems::GameCtx; // GLUE
+    use aberredengine::prelude::*; // GLUE
 
     fn enter(ctx: &mut GameCtx) {
         ctx.commands.spawn(( /* ... */ ));
@@ -186,8 +165,7 @@ mod spawning_context_gamectx_vs_raw_hooks {
 
 // 6.2 Triggering scene transitions
 mod triggering_scene_transitions {
-    use aberredengine::core::resources::input::InputState; // GLUE
-    use aberredengine::core::systems::GameCtx; // GLUE
+    use aberredengine::prelude::*; // GLUE
     fn player_reached_exit(_ctx: &mut GameCtx) -> bool { false } // GLUE
 
     fn update(ctx: &mut GameCtx, _dt: f32, _input: &InputState) {
@@ -199,16 +177,10 @@ mod triggering_scene_transitions {
 
 // 6.3 Persistent entities
 mod persistent_entities {
-    use aberredengine::bevy_ecs::prelude::*; // GLUE
-    use aberredengine::core::components::dynamictext::DynamicText; // GLUE
-    use aberredengine::core::components::persistent::Persistent; // GLUE
-    use aberredengine::core::components::screenposition::ScreenPosition; // GLUE
-    use aberredengine::core::components::signalbinding::SignalBinding; // GLUE
-    use aberredengine::core::components::zindex::ZIndex; // GLUE
-    use aberredengine::core::systems::GameCtx; // GLUE
+    use aberredengine::prelude::*; // GLUE
 
     fn enter(ctx: &mut GameCtx) { // GLUE
-    use aberredengine::core::math::Color;
+    use aberredengine::prelude::*;
 
     ctx.commands.spawn((
         ScreenPosition::new(10.0, 10.0),
@@ -228,7 +200,7 @@ mod persistent_entities {
 
 // 6.4 Group tracking across scenes
 mod group_tracking_across_scenes {
-    use aberredengine::engine_app::EngineBuilder; // GLUE
+    use aberredengine::prelude::*; // GLUE
 
     fn register() -> EngineBuilder { // GLUE
     EngineBuilder::new()
@@ -240,8 +212,7 @@ mod group_tracking_across_scenes {
 
 // 6.5 Per-sim-tick scene updates
 mod per_sim_tick_scene_updates {
-    use aberredengine::core::resources::input::InputState; // GLUE
-    use aberredengine::core::systems::GameCtx; // GLUE
+    use aberredengine::prelude::*; // GLUE
 
     fn update(ctx: &mut GameCtx, dt: f32, input: &InputState) {
         // dt = world_time.delta (the fixed sim period, 1.0 / hz, scaled by time_scale)
@@ -252,11 +223,10 @@ mod per_sim_tick_scene_updates {
 
 // Your own components and resources
 mod own_components_and_resources {
-    use aberredengine::engine_app::EngineBuilder; // GLUE
+    use aberredengine::prelude::*; // GLUE
 
     fn register() -> EngineBuilder { // GLUE
-    use aberredengine::bevy_ecs;
-    use aberredengine::bevy_ecs::prelude::*;
+    use aberredengine::prelude::*;
 
     #[derive(Component)]
     struct Health(i32);

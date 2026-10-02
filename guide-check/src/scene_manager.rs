@@ -1,10 +1,9 @@
 // Approach A — SceneManager (recommended for multi-scene games)
-use aberredengine::engine_app::EngineBuilder;
-use aberredengine::engine_app::SceneDescriptor;
+use aberredengine::prelude::*;
 
 mod scenes;
 
-fn main() -> Result<(), aberredengine::EngineError> {
+fn main() -> Result<(), EngineError> {
     EngineBuilder::new()
         .config("config.ini")
         .title("My Game")

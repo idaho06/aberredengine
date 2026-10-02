@@ -1,15 +1,6 @@
 // Approach A — SceneManager: scene callback signatures and scene switch
 mod scene_callbacks {
-    use aberredengine::core::systems::GameCtx;
-    use aberredengine::core::systems::scene_dispatch::WorldDraw;
-    use aberredengine::core::resources::appstate::AppState;
-    use aberredengine::render::resources::fontstore::FontStore;
-    use aberredengine::core::resources::input::InputState;
-    use aberredengine::core::resources::screensize::ScreenSize;
-    use aberredengine::render::resources::texturestore::TextureStore;
-    use aberredengine::core::resources::worldsignals::SignalSnapshot;
-    use aberredengine::core::resources::signal_intents::SignalIntents;
-    use aberredengine::core::resources::camera2d::Camera2D;
+    use aberredengine::prelude::*;
 
     // Called once when the scene becomes active (logic thread)
     fn enter(ctx: &mut GameCtx) { /* spawn entities, set signals */ }
@@ -23,7 +14,7 @@ mod scene_callbacks {
     // Called every render frame to draw ImGui widgets — Rust-only, optional, RENDER thread
     // Signature must match: fn(&Ui, &SignalSnapshot, &mut SignalIntents, &TextureStore, &FontStore, &AppState)
     fn my_gui(
-        ui: &aberredengine::imgui::Ui,
+        ui: &imgui::Ui,
         signals: &SignalSnapshot,
         intents: &mut SignalIntents,
         textures: &TextureStore,
@@ -62,16 +53,8 @@ mod scene_callbacks {
 
 // ImGui GUI callback (Rust-only)
 mod imgui_gui_callback {
-    use aberredengine::core::resources::input::InputState; // GLUE
-    use aberredengine::core::systems::GameCtx; // GLUE
-    use aberredengine::engine_app::{EngineBuilder, SceneDescriptor}; // GLUE
 
-    use aberredengine::imgui;
-    use aberredengine::core::resources::appstate::AppState;
-    use aberredengine::render::resources::fontstore::FontStore;
-    use aberredengine::render::resources::texturestore::TextureStore;
-    use aberredengine::core::resources::worldsignals::SignalSnapshot;
-    use aberredengine::core::resources::signal_intents::SignalIntents;
+    use aberredengine::prelude::*;
 
     #[derive(Clone)]
     struct EditorPanelState {
@@ -130,21 +113,11 @@ mod imgui_gui_callback {
 
 // World-space draw callback (Rust-only)
 mod world_space_draw_callback {
-    use aberredengine::core::resources::input::InputState; // GLUE
-    use aberredengine::core::resources::signal_intents::SignalIntents; // GLUE
-    use aberredengine::core::systems::GameCtx; // GLUE
-    use aberredengine::engine_app::{EngineBuilder, SceneDescriptor}; // GLUE
-    use aberredengine::render::resources::{fontstore::FontStore, texturestore::TextureStore}; // GLUE
     fn editor_enter(_: &mut GameCtx) {} // GLUE
     fn editor_update(_: &mut GameCtx, _: f32, _: &InputState) {} // GLUE
-    fn editor_gui(_: &aberredengine::imgui::Ui, _: &SignalSnapshot, _: &mut SignalIntents, _: &TextureStore, _: &FontStore, _: &AppState) {} // GLUE
+    fn editor_gui(_: &imgui::Ui, _: &SignalSnapshot, _: &mut SignalIntents, _: &TextureStore, _: &FontStore, _: &AppState) {} // GLUE
 
-    use aberredengine::core::resources::appstate::AppState;
-    use aberredengine::core::resources::screensize::ScreenSize;
-    use aberredengine::core::resources::worldsignals::SignalSnapshot;
-    use aberredengine::core::systems::scene_dispatch::WorldDraw;
-    use aberredengine::core::resources::camera2d::Camera2D;
-    use aberredengine::core::math::{Color, Vec2};
+    use aberredengine::prelude::*;
 
     fn editor_world_draw(
         draw: &mut dyn WorldDraw,
@@ -179,9 +152,9 @@ mod approach_b_raw_hooks {
     fn my_enter_play() {} // GLUE
     fn my_switch_scene() {} // GLUE
 
-    use aberredengine::engine_app::EngineBuilder;
+    use aberredengine::prelude::*;
 
-    fn main() -> Result<(), aberredengine::EngineError> {
+    fn main() -> Result<(), EngineError> {
         EngineBuilder::new()
             .config("config.ini")
             .title("My Game")
@@ -192,10 +165,7 @@ mod approach_b_raw_hooks {
             .try_run()
     }
 
-    use aberredengine::bevy_ecs::prelude::*;
-    use aberredengine::core::resources::worldsignals::WorldSignals;
-    use aberredengine::core::events::input::InputAction;
-    use aberredengine::core::resources::input::InputState;
+    use aberredengine::prelude::*;
 
     fn my_update(signals: ResMut<WorldSignals>, input: Res<InputState>) {
         if input.action(InputAction::Action1).just_pressed {
@@ -206,7 +176,7 @@ mod approach_b_raw_hooks {
 
 // `.add_system(system)` — multiple per-sim-tick systems
 mod add_system {
-    use aberredengine::engine_app::{EngineBuilder, SceneDescriptor}; // GLUE
+    use aberredengine::prelude::*; // GLUE
     fn load_assets() {} // GLUE
     fn tilemap_save_system() {} // GLUE
     fn editor_scene() -> SceneDescriptor { unimplemented!() } // GLUE
@@ -223,10 +193,7 @@ mod add_system {
         .expect("engine startup failed");
     } // GLUE
 
-    use aberredengine::bevy_ecs::prelude::*;
-    use aberredengine::core::protocol::render_assets::RenderAssetCmd;
-    use aberredengine::core::resources::worldsignals::WorldSignals;
-    use aberredengine::core::resources::texturefilter::TextureFilter;
+    use aberredengine::prelude::*;
 
     fn tilemap_load_system(
         mut world_signals: ResMut<WorldSignals>,
@@ -246,14 +213,13 @@ mod add_system {
 
 // `.configure_schedule(closure)` — full ordering control
 mod configure_schedule {
-    use aberredengine::bevy_ecs::prelude::*; // GLUE
-    use aberredengine::engine_app::EngineBuilder; // GLUE
+    use aberredengine::prelude::*; // GLUE
     fn undo_system() {} // GLUE
 
     fn main() { // GLUE
     use aberredengine::core::systems::movement::movement;
     use aberredengine::core::systems::camera_follow::camera_follow_system;
-    use aberredengine::core::systems::gamestate::state_is_playing;
+    use aberredengine::prelude::*;
 
     EngineBuilder::new()
         .configure_schedule(|schedule| {
@@ -272,20 +238,15 @@ mod configure_schedule {
 
 // `.add_observer(observer_fn)` — persistent event observers
 mod add_observer {
-    use aberredengine::core::resources::worldsignals::WorldSignals; // GLUE
-    use aberredengine::core::systems::GameCtx; // GLUE
-    use aberredengine::engine_app::EngineBuilder; // GLUE
 
-    use aberredengine::bevy_ecs;
-    use aberredengine::bevy_ecs::prelude::Event;
+    use aberredengine::prelude::*;
 
     #[derive(Event)]
     struct TilemapLoaded {
         pub path: String,
     }
 
-    use aberredengine::bevy_ecs::prelude::*;
-    use aberredengine::bevy_ecs::observer::On;
+    use aberredengine::prelude::*;
 
     fn on_tilemap_loaded(
         trigger: On<TilemapLoaded>,
@@ -317,13 +278,10 @@ mod add_observer {
 
 // Scene-scoped (transient) observers
 mod scene_scoped_observers {
-    use aberredengine::bevy_ecs; // GLUE
-    use aberredengine::bevy_ecs::prelude::*; // GLUE
-    use aberredengine::core::systems::GameCtx; // GLUE
     #[derive(Event)] // GLUE
     struct TileSelectedEvent; // GLUE
 
-    use aberredengine::bevy_ecs::observer::Observer;
+    use aberredengine::prelude::*;
 
     fn editor_enter(ctx: &mut GameCtx) {
         // This observer lives only until the next scene switch.
@@ -338,7 +296,7 @@ mod scene_scoped_observers {
 
 // Determinism and replay
 mod determinism_and_replay {
-    use aberredengine::engine_app::EngineBuilder; // GLUE
+    use aberredengine::prelude::*; // GLUE
 
     fn seeded() { // GLUE
     EngineBuilder::new()
@@ -370,14 +328,12 @@ mod determinism_and_replay {
 
 // Game lifecycle: switch_scene poll with raw hooks
 mod switch_on_flag {
-    use aberredengine::engine_app::EngineBuilder; // GLUE
+    use aberredengine::prelude::*; // GLUE
     fn my_switch_scene() {} // GLUE
 
     fn register() -> EngineBuilder { // GLUE
-    use aberredengine::bevy_ecs::prelude::*;
-    use aberredengine::core::resources::signal_keys as sk;
+    use aberredengine::prelude::*;
     use aberredengine::core::resources::systemsstore::{self as hook_keys, SystemsStore};
-    use aberredengine::core::resources::worldsignals::WorldSignals;
 
     fn switch_on_flag(
         mut signals: ResMut<WorldSignals>,
@@ -400,9 +356,7 @@ mod switch_on_flag {
 
 // Determinism and replay: drawing random numbers
 mod sim_rng {
-    use aberredengine::bevy_ecs::prelude::*;
-    use aberredengine::core::resources::sim_rng::SimRng;
-    use aberredengine::core::systems::GameCtx;
+    use aberredengine::prelude::*;
 
     // In a system
     fn pick_spawn_point(mut rng: ResMut<SimRng>) {
