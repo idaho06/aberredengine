@@ -293,12 +293,7 @@ mod camera {
     use aberredengine::prelude::*;
 
     fn setup_camera(mut camera: ResMut<Camera2DRes>, screen: Res<ScreenSize>) {
-        camera.0 = Camera2D {
-            target: Vec2::new(0.0, 0.0),
-            offset: Vec2::new(screen.w as f32 * 0.5, screen.h as f32 * 0.5),
-            rotation: 0.0,
-            zoom: 1.0,
-        };
+        camera.0 = Camera2D::new(Vec2::ZERO, Vec2::new(screen.w as f32 * 0.5, screen.h as f32 * 0.5));
     }
 }
 

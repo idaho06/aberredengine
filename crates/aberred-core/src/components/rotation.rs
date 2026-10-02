@@ -14,3 +14,10 @@ use bevy_ecs::prelude::Component;
 pub struct Rotation {
     pub degrees: f32,
 }
+
+impl Rotation {
+    /// A rotation of `degrees` (positive is clockwise).
+    pub fn new(degrees: f32) -> Self {
+        Self { degrees }
+    }
+}

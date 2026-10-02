@@ -31,6 +31,19 @@ pub struct InputControlled {
     pub right_velocity: Vec2,
 }
 
+impl InputControlled {
+    /// Moves at `speed` world units per second in each of the four directions
+    /// (up is negative Y).
+    pub fn symmetric(speed: f32) -> Self {
+        Self {
+            up_velocity: Vec2::new(0.0, -speed),
+            down_velocity: Vec2::new(0.0, speed),
+            left_velocity: Vec2::new(-speed, 0.0),
+            right_velocity: Vec2::new(speed, 0.0),
+        }
+    }
+}
+
 /// Movement controlled by mouse position.
 ///
 /// When attached to an entity, systems will update the entity's position
@@ -79,3 +92,17 @@ impl AccelerationControlled {
 }
 
 // TODO: MouseDeltaControlled component for relative mouse movement (e.g., for camera control)
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn symmetric_input_points_each_direction_with_the_given_speed() {
+        let c = InputControlled::symmetric(100.0);
+        assert_eq!(c.up_velocity, Vec2::new(0.0, -100.0));
+        assert_eq!(c.down_velocity, Vec2::new(0.0, 100.0));
+        assert_eq!(c.left_velocity, Vec2::new(-100.0, 0.0));
+        assert_eq!(c.right_velocity, Vec2::new(100.0, 0.0));
+    }
+}

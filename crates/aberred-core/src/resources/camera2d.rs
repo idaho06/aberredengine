@@ -13,12 +13,44 @@ use crate::resources::screensize::ScreenSize;
 
 /// 2D camera parameters: world position (`target`), screen anchor
 /// (`offset`), rotation in degrees, and zoom.
-#[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Camera2D {
     pub target: Vec2,
     pub offset: Vec2,
     pub rotation: f32,
     pub zoom: f32,
+}
+
+/// Same as [`Camera2D::new`] at the origin: zoom 1, no rotation.
+impl Default for Camera2D {
+    fn default() -> Self {
+        Self::new(Vec2::ZERO, Vec2::ZERO)
+    }
+}
+
+impl Camera2D {
+    /// A camera looking at world point `target` through screen point `offset`, with zoom
+    /// 1 and no rotation.
+    pub fn new(target: Vec2, offset: Vec2) -> Self {
+        Self {
+            target,
+            offset,
+            rotation: 0.0,
+            zoom: 1.0,
+        }
+    }
+
+    /// Sets the zoom factor (1 is unscaled).
+    pub fn with_zoom(mut self, zoom: f32) -> Self {
+        self.zoom = zoom;
+        self
+    }
+
+    /// Sets the rotation in degrees.
+    pub fn with_rotation(mut self, rotation: f32) -> Self {
+        self.rotation = rotation;
+        self
+    }
 }
 
 /// ECS resource that holds the active 2D camera parameters.
@@ -78,6 +110,18 @@ impl Camera2DRes {
 mod tests {
     use super::*;
     use crate::testing::approx_eq;
+
+    #[test]
+    fn new_camera_has_unit_zoom_and_no_rotation() {
+        let c = Camera2D::new(Vec2::new(1.0, 2.0), Vec2::new(320.0, 180.0));
+        assert_eq!(c.zoom, 1.0);
+        assert_eq!(c.rotation, 0.0);
+    }
+
+    #[test]
+    fn default_camera_has_unit_zoom() {
+        assert_eq!(Camera2D::default(), Camera2D::new(Vec2::ZERO, Vec2::ZERO));
+    }
 
     fn make_camera(target: Vec2, offset: Vec2, zoom: f32) -> Camera2DRes {
         Camera2DRes(Camera2D {

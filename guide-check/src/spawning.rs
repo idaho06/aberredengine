@@ -95,10 +95,10 @@ mod tween_components_in_rust {
     use aberredengine::prelude::*;
 
     ctx.commands.spawn((
-        Rotation { degrees: 0.0 },
+        Rotation::new(0.0),
         Tween::new(
-            Rotation { degrees: 0.0 },
-            Rotation { degrees: 360.0 },
+            Rotation::new(0.0),
+            Rotation::new(360.0),
             2.0,
         ),
     ));

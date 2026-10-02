@@ -1056,16 +1056,11 @@ EngineBuilder::new()
 use aberredengine::prelude::*;
 
 fn setup_camera(mut camera: ResMut<Camera2DRes>, screen: Res<ScreenSize>) {
-    camera.0 = Camera2D {
-        target: Vec2::new(0.0, 0.0),
-        offset: Vec2::new(screen.w as f32 * 0.5, screen.h as f32 * 0.5),
-        rotation: 0.0,
-        zoom: 1.0,
-    };
+    camera.0 = Camera2D::new(Vec2::ZERO, Vec2::new(screen.w as f32 * 0.5, screen.h as f32 * 0.5));
 }
 ```
 
-`offset` is the screen point the camera looks through. `target` is the world position it looks at.
+`offset` is the screen point the camera looks through. `target` is the world position it looks at. `Camera2D::new` starts at zoom 1 with no rotation; chain `.with_zoom(z)` or `.with_rotation(degrees)` to change them.
 
 #### Following an entity
 
@@ -1213,7 +1208,7 @@ When `WorldSignals` has a value for key `"score"`, the text automatically update
 | `AnimationController` | `AnimationController::new("fallback_key").with_rule(condition, "key")`, `condition` a `Condition` (see below) |
 | `Group` | `Group::new("name")` |
 | `ZIndex` | `ZIndex(f32)` |
-| `Rotation` | `Rotation { degrees: f32 }` |
+| `Rotation` | `Rotation::new(degrees)` |
 | `Scale` | `Scale::new(sx, sy)` |
 | `Tint` | `Tint::new(r, g, b, a)` — values are `u8` (0–255) |
 | `Persistent` | `Persistent` — tag, survives scene transitions |
@@ -1221,14 +1216,14 @@ When `WorldSignals` has a value for key `"score"`, the text automatically update
 | `DynamicText` | `DynamicText::new(text, font_key, size, color)` |
 | `SignalBinding` | `SignalBinding::new("key").with_format("Score: {}")` |
 | `Signals` | `Signals::default()` — per-entity signal bag |
-| `InputControlled` | `InputControlled { up_velocity, down_velocity, left_velocity, right_velocity }` |
+| `InputControlled` | `InputControlled::symmetric(speed)` (fields `up_velocity`, `down_velocity`, `left_velocity`, `right_velocity` for per-direction speeds) |
 | `AccelerationControlled` | `AccelerationControlled::symmetric(accel)` |
 | `MouseControlled` | `MouseControlled { follow_x: true, follow_y: true }` |
 | `Timer` | `Timer::rust(duration_secs, callback)` — use `::rust()` for Rust callbacks; see §7.1 |
 | `Phase` | `Phase::new("initial_phase", phases)` where `phases: FxHashMap<String, PhaseCallbackFns>` |
 | `CollisionRule` | `CollisionRule::rust("group_a", "group_b", callback)` — use `::rust()` for Rust callbacks; see §7.3 |
 | `Tween<MapPosition>` | `Tween::new(MapPosition::from_vec(from), MapPosition::from_vec(to), duration)` |
-| `Tween<Rotation>` | `Tween::new(Rotation { degrees: from }, Rotation { degrees: to }, duration)` |
+| `Tween<Rotation>` | `Tween::new(Rotation::new(from), Rotation::new(to), duration)` |
 | `Tween<Scale>` | `Tween::new(Scale::new(from_x, from_y), Scale::new(to_x, to_y), duration)` |
 | `Tween<ScreenPosition>` | `Tween::new(ScreenPosition::new(from_x, from_y), ScreenPosition::new(to_x, to_y), duration)` |
 | `GuiWindow` | `GuiWindow::new(w, h)` — `theme_key` defaults to `"default"`; override with `.with_theme_key("my_theme")` |
@@ -1294,10 +1289,10 @@ ctx.commands.spawn((
 use aberredengine::prelude::*;
 
 ctx.commands.spawn((
-    Rotation { degrees: 0.0 },
+    Rotation::new(0.0),
     Tween::new(
-        Rotation { degrees: 0.0 },
-        Rotation { degrees: 360.0 },
+        Rotation::new(0.0),
+        Rotation::new(360.0),
         2.0,
     ),
 ));
