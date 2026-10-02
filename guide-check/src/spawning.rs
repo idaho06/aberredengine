@@ -4,19 +4,10 @@ mod example_1_sprite_entity {
 
     fn enter(ctx: &mut GameCtx) { // GLUE
     use aberredengine::prelude::*;
-    use std::sync::Arc;
 
     ctx.commands.spawn((
         MapPosition::new(100.0, 200.0),
-        Sprite {
-            tex_key: Arc::from("player"),
-            width: 32.0,
-            height: 32.0,
-            offset: Vec2::ZERO,
-            origin: Vec2::new(16.0, 16.0), // center pivot
-            flip_h: false,
-            flip_v: false,
-        },
+        Sprite::new("player", 32.0, 32.0).centered(),
         ZIndex(1.0),
         Group::new("player"),
     ));
@@ -26,22 +17,13 @@ mod example_1_sprite_entity {
 // Example 2: Physics entity
 mod example_2_physics_entity {
     use aberredengine::prelude::*; // GLUE
-    use std::sync::Arc; // GLUE
 
     fn enter(ctx: &mut GameCtx) { // GLUE
     use aberredengine::prelude::*;
 
     ctx.commands.spawn((
         MapPosition::new(100.0, 200.0),
-        Sprite {
-            tex_key: Arc::from("player"),
-            width: 32.0,
-            height: 32.0,
-            offset: Vec2::ZERO,
-            origin: Vec2::new(16.0, 16.0),
-            flip_h: false,
-            flip_v: false,
-        },
+        Sprite::new("player", 32.0, 32.0).centered(),
         ZIndex(1.0),
         Group::new("player"),
         RigidBody::with_physics(5.0, Some(300.0)),  // friction=5.0, max_speed=300

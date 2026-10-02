@@ -710,7 +710,6 @@ Keys (`id`) are arbitrary strings you'll reference later in `Sprite` components 
 ```rust
 use aberredengine::prelude::*;
 use aberredengine::core::resources::texturedims::TextureDimsStore;
-use std::sync::Arc;
 
 fn spawn_player_once_texture_ready(
     dims: Res<TextureDimsStore>,
@@ -729,15 +728,7 @@ fn spawn_player_once_texture_ready(
 
     commands.spawn((
         MapPosition::new(100.0, 200.0),
-        Sprite {
-            tex_key: Arc::from("player"),
-            width: width as f32,
-            height: height as f32,
-            offset: Vec2::ZERO,
-            origin: Vec2::new(width as f32 * 0.5, height as f32 * 0.5),
-            flip_h: false,
-            flip_v: false,
-        },
+        Sprite::new("player", width as f32, height as f32).centered(),
         ZIndex(1.0),
     ));
     world_signals.set_flag("player_spawned");
@@ -1163,19 +1154,10 @@ A minimal visible entity needs a position, a sprite, a draw order, and optionall
 
 ```rust
 use aberredengine::prelude::*;
-use std::sync::Arc;
 
 ctx.commands.spawn((
     MapPosition::new(100.0, 200.0),
-    Sprite {
-        tex_key: Arc::from("player"),
-        width: 32.0,
-        height: 32.0,
-        offset: Vec2::ZERO,
-        origin: Vec2::new(16.0, 16.0), // center pivot
-        flip_h: false,
-        flip_v: false,
-    },
+    Sprite::new("player", 32.0, 32.0).centered(),
     ZIndex(1.0),
     Group::new("player"),
 ));
@@ -1190,15 +1172,7 @@ use aberredengine::prelude::*;
 
 ctx.commands.spawn((
     MapPosition::new(100.0, 200.0),
-    Sprite {
-        tex_key: Arc::from("player"),
-        width: 32.0,
-        height: 32.0,
-        offset: Vec2::ZERO,
-        origin: Vec2::new(16.0, 16.0),
-        flip_h: false,
-        flip_v: false,
-    },
+    Sprite::new("player", 32.0, 32.0).centered(),
     ZIndex(1.0),
     Group::new("player"),
     RigidBody::with_physics(5.0, Some(300.0)),  // friction=5.0, max_speed=300
@@ -1232,7 +1206,7 @@ When `WorldSignals` has a value for key `"score"`, the text automatically update
 |-----------|-------------|
 | `MapPosition` | `MapPosition::new(x, y)` |
 | `ScreenPosition` | `ScreenPosition::new(x, y)` |
-| `Sprite` | `Sprite { tex_key: Arc::from("key"), width, height, offset, origin, flip_h, flip_v }` |
+| `Sprite` | `Sprite::new("key", w, h)` (origin top-left) then `.centered()` or `.with_origin(v)`, `.with_offset(v)` (spritesheet frame), `.with_flip(h, v)` |
 | `RigidBody` | `RigidBody::new()` or `RigidBody::with_physics(friction, max_speed)` |
 | `BoxCollider` | `BoxCollider::new(w, h).with_origin(v).with_offset(v)` |
 | `Animation` | `Animation::new("anim_key")` |
@@ -2121,21 +2095,12 @@ A `ParticleEmitter` on an entity with `MapPosition` spawns particles by cloning 
 
 ```rust
 use aberredengine::prelude::*;
-use std::sync::Arc;
 
 fn spawn_smoke(mut commands: Commands) {
     // The template has no MapPosition, so it is never drawn, moved or collided
     let smoke = commands
         .spawn((
-            Sprite {
-                tex_key: Arc::from("smoke"),
-                width: 8.0,
-                height: 8.0,
-                offset: Vec2::ZERO,
-                origin: Vec2::new(4.0, 4.0),
-                flip_h: false,
-                flip_v: false,
-            },
+            Sprite::new("smoke", 8.0, 8.0).centered(),
             ZIndex(5.0),
             RigidBody::with_physics(2.0, None), // every particle keeps this friction
         ))

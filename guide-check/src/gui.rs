@@ -76,21 +76,12 @@ mod gui_widgets {
 // 7.8 Particle Emitters
 mod particle_emitters {
     use aberredengine::prelude::*;
-    use std::sync::Arc;
 
     fn spawn_smoke(mut commands: Commands) {
         // The template has no MapPosition, so it is never drawn, moved or collided
         let smoke = commands
             .spawn((
-                Sprite {
-                    tex_key: Arc::from("smoke"),
-                    width: 8.0,
-                    height: 8.0,
-                    offset: Vec2::ZERO,
-                    origin: Vec2::new(4.0, 4.0),
-                    flip_h: false,
-                    flip_v: false,
-                },
+                Sprite::new("smoke", 8.0, 8.0).centered(),
                 ZIndex(5.0),
                 RigidBody::with_physics(2.0, None), // every particle keeps this friction
             ))

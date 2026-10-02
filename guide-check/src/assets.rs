@@ -33,7 +33,6 @@ mod textures {
 
     use aberredengine::prelude::*;
     use aberredengine::core::resources::texturedims::TextureDimsStore;
-    use std::sync::Arc;
 
     fn spawn_player_once_texture_ready(
         dims: Res<TextureDimsStore>,
@@ -52,15 +51,7 @@ mod textures {
 
         commands.spawn((
             MapPosition::new(100.0, 200.0),
-            Sprite {
-                tex_key: Arc::from("player"),
-                width: width as f32,
-                height: height as f32,
-                offset: Vec2::ZERO,
-                origin: Vec2::new(width as f32 * 0.5, height as f32 * 0.5),
-                flip_h: false,
-                flip_v: false,
-            },
+            Sprite::new("player", width as f32, height as f32).centered(),
             ZIndex(1.0),
         ));
         world_signals.set_flag("player_spawned");
