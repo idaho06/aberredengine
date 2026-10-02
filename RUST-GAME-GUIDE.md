@@ -1316,6 +1316,45 @@ fn my_enter_play(mut commands: Commands) {
 
 Both are standard Bevy `Commands` — the API is identical.
 
+### Your own components and resources
+
+Game state that the engine's components don't cover goes in your own Bevy types. Derive them as usual, after bringing the re-exported crate into scope as `bevy_ecs`: the derive macros expand to `bevy_ecs::...` paths, so importing only from `aberredengine::bevy_ecs::prelude` is not enough.
+
+```rust
+use aberredengine::bevy_ecs;
+use aberredengine::bevy_ecs::prelude::*;
+use aberredengine::core::resources::gamestate::{GameStates, NextGameState};
+
+#[derive(Component)]
+struct Health(i32);
+
+#[derive(Resource, Default)]
+struct Score(u32);
+
+fn setup(mut commands: Commands, mut next_state: ResMut<NextGameState>) {
+    commands.insert_resource(Score::default());
+    next_state.set(GameStates::Playing);
+}
+
+fn remove_dead(mut commands: Commands, mut score: ResMut<Score>, query: Query<(Entity, &Health)>) {
+    for (entity, health) in &query {
+        if health.0 <= 0 {
+            commands.entity(entity).despawn();
+            score.0 += 100;
+        }
+    }
+}
+
+EngineBuilder::new()
+    .on_setup(setup)
+    .add_system(remove_dead)
+    // …
+```
+
+- `EngineBuilder` has no `insert_resource`. Insert your resources from the setup hook (as above) or any other system with `commands.insert_resource(...)`. A system that takes `Res<Score>` panics the first time it runs while the resource is missing; take `Option<Res<Score>>` if it may run earlier.
+- Resources survive scene switches. Entities carrying your components are despawned on a scene switch like any other entity, unless they also have `Persistent`.
+- `gui_callback` and `world_draw_callback` run on the render thread and can't read your resources. Copy what they need into `AppState` (see [AppState API](#appstate-api)).
+
 ---
 
 ## 6. Scene Management Deep Dive
