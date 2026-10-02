@@ -5238,7 +5238,7 @@ The engine automatically provides these uniforms to all post-process shaders:
 | `uWindowResolution` | vec2 | Window resolution |
 | `uLetterbox` | vec4 | Letterbox rectangle (x, y, width, height) |
 
-**Note:** These uniform names are reserved. Setting them via Lua will log a warning and the value will be overwritten by the engine each frame.
+**Note:** These uniform names are reserved. Setting one via Lua logs a warning, and your value then overrides the engine's for that name (user uniforms are applied after the standard ones).
 
 ### Example: Time-Based Wave Effect
 

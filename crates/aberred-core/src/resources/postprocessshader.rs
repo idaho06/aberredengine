@@ -10,8 +10,9 @@ use std::sync::Arc;
 
 use crate::resources::uniformvalue::UniformValue;
 
-/// Reserved uniform names that are set automatically by the render system.
-/// Attempting to set these from Lua will log a warning.
+/// Uniform names the render system sets on every post-process pass.
+/// User uniforms are applied after them, so a user value under one of these
+/// names overrides the engine's; setting one from Lua logs a warning.
 pub const RESERVED_UNIFORMS: &[&str] = &[
     "uTime",
     "uDeltaTime",
@@ -57,8 +58,9 @@ impl PostProcessShader {
 
     /// Sets a user uniform value.
     ///
-    /// Returns `true` if the name is reserved (value is still stored but will
-    /// be overwritten by the render system).
+    /// Returns `true` if the name is reserved (see [`RESERVED_UNIFORMS`]). The
+    /// value is still stored and, since user uniforms are applied after the
+    /// standard ones, overrides the engine's value for that name.
     pub fn set_uniform(&mut self, name: &str, value: UniformValue) -> bool {
         let is_reserved = RESERVED_UNIFORMS.contains(&name);
         self.uniforms.insert(Arc::from(name), value);

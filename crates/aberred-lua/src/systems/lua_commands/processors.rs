@@ -311,7 +311,7 @@ pub fn process_render_command(
             let is_reserved = post_process.set_uniform(&name, value);
             if is_reserved {
                 warn!(
-                    "'{}' is a reserved uniform name and will be overwritten by the engine",
+                    "'{}' is a reserved uniform name; this value overrides the engine's",
                     name
                 );
             }
