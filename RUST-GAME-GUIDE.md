@@ -351,7 +351,7 @@ Register it on the descriptor:
 
 ### Approach B — Raw hooks (single-scene or full manual control)
 
-For single-scene games or when you need full control over scene transitions, use the four hook methods directly:
+For single-scene games or when you need full control over scene transitions, use the four hook methods directly. `.on_setup()` and `.on_enter_play()` are required; `.on_update()` and `.on_switch_scene()` are optional:
 
 ```rust
 use aberredengine::engine_app::EngineBuilder;
@@ -370,7 +370,7 @@ fn main() -> Result<(), aberredengine::EngineError> {
 
 ### Startup error handling
 
-Prefer `EngineBuilder::try_run()` in Rust applications. It returns `Result<(), aberredengine::EngineError>` for startup failures such as invalid builder configuration, missing `config.ini`, render-target creation failures, Lua runtime creation failures, and missing required built-in system registrations.
+Prefer `EngineBuilder::try_run()` in Rust applications. It returns `Result<(), aberredengine::EngineError>` for startup failures such as invalid builder configuration, missing `config.ini`, render-target creation failures, Lua runtime creation failures, and a missing required hook (`EngineError::MissingSystems`: no `.on_setup()`, or no `.on_enter_play()` with raw hooks).
 
 `EngineBuilder::run()` is still available as a convenience wrapper around `.try_run()`, but on startup failure it logs the error, prints it to stderr, and exits the process with status 1 instead of returning it to your `main` function.
 
@@ -401,7 +401,7 @@ Setup ──→ Playing ──→ Quitting
           scene switches
 ```
 
-1. **Setup** — The engine calls the `setup` hook once, on the logic thread. Load assets here (textures, fonts, sounds, shaders, animations) — see [Section 4](#4-loading-assets) for how texture/font/shader loading works.
+1. **Setup** — The engine calls the `setup` hook once, on the logic thread. Load assets here (textures, fonts, sounds, shaders, animations) — see [Section 4](#4-loading-assets) for how texture/font/shader loading works. The hook must end with `next_state.set(GameStates::Playing)` (a `ResMut<NextGameState>` parameter): nothing else leaves `Setup`, so without it the game never starts.
 2. **Playing** — The engine transitions to playing, calls `enter_play` (or the initial scene's `on_enter`), then runs `update` (or `on_update`) once per sim tick.
 3. **Scene switches** — When `WorldSignals` has the `"switch_scene"` flag set, the engine calls the `switch_scene` hook (or the SceneManager's exit→enter sequence).
 4. **Quitting** — When the game state becomes `GameStates::Quitting` (via `NextGameState::set(GameStates::Quitting)` or a `MenuAction::QuitGame` menu item) or the window is closed, the engine shuts down.
@@ -434,8 +434,8 @@ Setup ──→ Playing ──→ Quitting
 | `.config(path)` | Path to `config.ini` (default: `"config.ini"`) |
 | `.config_str(content)` | Load INI config from an embedded `&'static str` instead of a file. Takes precedence over `.config(path)`. Useful for tests or games that ship with bundled defaults. |
 | `.title(name)` | Window title (overrides config) |
-| `.on_setup(system)` | Asset loading hook (called during `Setup` state, on the logic thread) |
-| `.on_enter_play(system)` | Called once when transitioning to `Playing` |
+| `.on_setup(system)` | Asset loading hook (called during `Setup` state, on the logic thread). **Required** in both approaches; it must set `GameStates::Playing`. |
+| `.on_enter_play(system)` | Called once when transitioning to `Playing`. **Required** with raw hooks; the SceneManager supplies its own. |
 | `.on_update(system)` | Runs once per sim tick while `Playing` — single system only. A sim tick is not the same as a render frame; see [Threading Model](#threading-model-what-your-code-can-access). |
 | `.on_switch_scene(system)` | Called when a scene transition is requested |
 | `.add_scene(name, descriptor)` | Register a named scene (SceneManager path) |
