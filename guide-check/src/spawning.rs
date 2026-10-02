@@ -222,12 +222,10 @@ mod persistent_entities {
     ));
     } // GLUE
 
-    use aberredengine::core::components::persistent::CleanableEntity;
+    use aberredengine::core::components::persistent::SceneCleanup;
 
-    fn my_cleanup(query: Query<Entity, CleanableEntity>, mut commands: Commands) {
-        for entity in &query {
-            commands.entity(entity).despawn();
-        }
+    fn my_cleanup(scene_cleanup: SceneCleanup, mut commands: Commands) {
+        scene_cleanup.despawn_all(&mut commands);
     }
 }
 

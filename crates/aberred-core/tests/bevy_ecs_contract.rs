@@ -398,7 +398,7 @@ fn cascade_despawn_removes_children() {
 }
 
 // =============================================================================
-// Scene cleanup (`clean_all_entities` / `CleanableEntity`)
+// Scene cleanup (`clean_all_entities` / `SceneCleanup`)
 // =============================================================================
 // Observers, registered systems and resources are all entities in bevy_ecs
 // 0.18+/0.19, so the scene-switch cleanup query would despawn them unless
@@ -428,6 +428,47 @@ fn cleanup_despawns_non_persistent_observers_only() {
     assert_eq!(*persistent_hits.lock().unwrap(), 1);
     assert_eq!(*transient_hits.lock().unwrap(), 0);
     assert_eq!(world.query::<&Position>().iter(&world).count(), 0);
+}
+
+// `EntityCommands::observe` spawns its observer as a separate entity
+// without `Persistent`; cleanup must keep it while the watched entity is
+// `Persistent` (`SceneCleanup`), and bevy drops it with a watched scene entity.
+#[derive(EntityEvent)]
+struct Ping {
+    entity: Entity,
+}
+
+fn count_ping(_trigger: On<Ping>, mut counter: ResMut<Counter>) {
+    counter.0 += 1;
+}
+
+fn observer_count(world: &mut World) -> usize {
+    world.query::<&Observer>().iter(world).count()
+}
+
+#[test]
+fn cleanup_keeps_entity_observers_of_persistent_entities() {
+    let mut world = World::new();
+    world.insert_resource(Counter(0));
+    let kept = world.spawn(Persistent).observe(count_ping).id();
+    world.flush();
+
+    run_scene_cleanup(&mut world);
+    world.trigger(Ping { entity: kept });
+
+    assert_eq!(world.resource::<Counter>().0, 1);
+}
+
+#[test]
+fn cleanup_despawns_scene_entities_with_their_observers() {
+    let mut world = World::new();
+    let gone = world.spawn_empty().observe(count_ping).id();
+    world.flush();
+
+    run_scene_cleanup(&mut world);
+
+    assert!(world.get_entity(gone).is_err());
+    assert_eq!(observer_count(&mut world), 0);
 }
 
 #[test]

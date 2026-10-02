@@ -9,9 +9,9 @@
 //!   signal flag into a `Quitting` request.
 //! - [`quit_game`] asks the render thread to exit the main loop.
 //! - [`clean_all_entities`] despawns all entities that are not marked
-//!   [`Persistent`](crate::components::persistent::Persistent).
+//!   [`Persistent`](crate::components::persistent::Persistent), keeping their observers.
 
-use crate::components::persistent::CleanableEntity;
+use crate::components::persistent::SceneCleanup;
 use crate::events::gamestate::GameStateChangedEvent;
 use crate::protocol::endpoints::RenderTx;
 use crate::protocol::render_logic::RenderMsg;
@@ -70,11 +70,10 @@ pub fn quit_game(render_tx: Res<RenderTx>) {
     let _ = render_tx.0.send(RenderMsg::Quit);
 }
 
-/// Despawn all entities that are not marked [`Persistent`](crate::components::persistent::Persistent).
-pub fn clean_all_entities(mut commands: Commands, query: Query<Entity, CleanableEntity>) {
-    for entity in query.iter() {
-        commands.entity(entity).try_despawn();
-    }
+/// Despawn all entities that are not marked [`Persistent`](crate::components::persistent::Persistent),
+/// keeping the observers of persistent entities (see [`SceneCleanup`]).
+pub fn clean_all_entities(mut commands: Commands, scene_cleanup: SceneCleanup) {
+    scene_cleanup.despawn_all(&mut commands);
 }
 
 #[cfg(test)]

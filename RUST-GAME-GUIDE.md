@@ -1557,20 +1557,15 @@ ctx.commands.spawn((
 ));
 ```
 
-> **Bevy 0.19 gotcha:** Bevy backs each `Resource` with an internal entity carrying an `IsResource` marker
-> component. If you write a custom system (via `.add_system()` or `.configure_schedule()`) that scans for
-> "all entities without `Persistent`" — e.g. your own cleanup/reset logic — a bare
-> `Query<Entity, Without<Persistent>>` will also match these internal resource entities and despawn them.
-> Use `aberredengine::core::components::persistent::CleanableEntity` instead, the same query filter the engine's
-> own scene-switch cleanup uses internally:
+A per-entity observer added with `.observe(...)` on a `Persistent` entity survives scene switches too: the engine keeps the observers of persistent entities. Observers of scene entities go away with the entity they watch. A global observer (`EngineBuilder::add_observer` or a spawned `Observer`) is an entity of its own, so it survives only if it carries `Persistent` itself.
+
+> **Custom cleanup:** to despawn "everything a scene switch would" from your own system (e.g. a reset), use `aberredengine::core::components::persistent::SceneCleanup`, the system parameter the engine's own scene-switch cleanup uses. A bare `Query<Entity, Without<Persistent>>` also matches the internal entities Bevy 0.19 backs each `Resource` with, and the observer entities of persistent entities, and would despawn both:
 >
 > ```rust
-> use aberredengine::core::components::persistent::CleanableEntity;
+> use aberredengine::core::components::persistent::SceneCleanup;
 >
-> fn my_cleanup(query: Query<Entity, CleanableEntity>, mut commands: Commands) {
->     for entity in &query {
->         commands.entity(entity).despawn();
->     }
+> fn my_cleanup(scene_cleanup: SceneCleanup, mut commands: Commands) {
+>     scene_cleanup.despawn_all(&mut commands);
 > }
 > ```
 

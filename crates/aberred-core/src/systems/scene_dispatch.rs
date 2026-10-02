@@ -29,9 +29,8 @@
 
 use bevy_ecs::prelude::*;
 use log::{debug, error, info};
-use rustc_hash::FxHashSet;
 
-use crate::components::persistent::{CleanableEntity, Persistent};
+use crate::components::persistent::SceneCleanup;
 use crate::math::{Color, Vec2};
 use crate::resources::appstate::AppState;
 use crate::resources::camera2d::Camera2D;
@@ -120,13 +119,12 @@ pub struct SceneLogic {
 ///
 /// Reads the target from `WorldSignals["scene"]` and checks it first: an
 /// unregistered name logs an error and leaves the current scene untouched.
-/// Otherwise it despawns non-[`Persistent`] entities, clears tracked groups,
+/// Otherwise it despawns non-[`Persistent`](crate::components::persistent::Persistent) entities, clears tracked groups,
 /// runs the old scene's `on_exit`, records `WorldSignals["previous_scene"]`,
 /// and enters the new scene.
 pub fn scene_switch_system(
     mut ctx: GameCtx,
-    entities_to_clean: Query<Entity, CleanableEntity>,
-    persistent_entities: Query<Entity, With<Persistent>>,
+    scene_cleanup: SceneCleanup,
     mut tracked_groups: ResMut<TrackedGroups>,
     mut scene_manager: ResMut<SceneManager>,
 ) {
@@ -146,12 +144,10 @@ pub fn scene_switch_system(
         return;
     };
 
-    for entity in entities_to_clean.iter() {
-        ctx.commands.entity(entity).try_despawn();
-    }
+    scene_cleanup.despawn_all(&mut ctx.commands);
 
     // Clear entity registrations for despawned (non-persistent) entities
-    let persistent_set: FxHashSet<Entity> = persistent_entities.iter().collect();
+    let persistent_set = scene_cleanup.persistent_set();
     ctx.world_signals
         .clear_non_persistent_entities(&persistent_set);
 

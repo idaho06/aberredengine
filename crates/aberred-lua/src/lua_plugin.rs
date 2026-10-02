@@ -18,7 +18,7 @@ use crate::resources::lua_runtime::{
     AnimationCmd, AssetCmd, CameraFollowCmd, GameConfigCmd, GroupCmd, InputCmd, LuaRuntime,
     PhaseCmd, RenderCmd,
 };
-use aberred_core::components::persistent::{CleanableEntity, Persistent};
+use aberred_core::components::persistent::SceneCleanup;
 use aberred_core::protocol::audio::AudioCmd;
 use aberred_core::protocol::render_assets::RenderAssetCmd;
 use aberred_core::resources::animationstore::AnimationStore;
@@ -51,7 +51,6 @@ use bevy_ecs::prelude::*;
 use bevy_ecs::system::SystemParam;
 use log::{debug, error, info};
 use mlua::prelude::LuaTable;
-use rustc_hash::FxHashSet;
 
 /// Bundled Lua runtime + audio command writer for scripting systems.
 #[derive(SystemParam)]
@@ -476,8 +475,7 @@ pub fn switch_scene(
     mut commands: Commands,
     mut scripting: ScriptingContext,
     mut scene_state: GameSceneState,
-    entities_to_clean: Query<Entity, CleanableEntity>,
-    persistent_entities: Query<Entity, With<Persistent>>,
+    scene_cleanup: SceneCleanup,
     mut tracked_groups: ResMut<TrackedGroups>,
     mut entities: EntityProcessing,
     mut bindings: ResMut<InputBindings>,
@@ -497,12 +495,10 @@ pub fn switch_scene(
     // the new scene's definitions are resolved fresh.
     lua_runtime.clear_function_cache();
 
-    for entity in entities_to_clean.iter() {
-        commands.entity(entity).try_despawn();
-    }
+    scene_cleanup.despawn_all(&mut commands);
 
     // Clear entity registrations for despawned (non-persistent) entities
-    let persistent_set: FxHashSet<Entity> = persistent_entities.iter().collect();
+    let persistent_set = scene_cleanup.persistent_set();
     scene_state
         .world_signals
         .clear_non_persistent_entities(&persistent_set);

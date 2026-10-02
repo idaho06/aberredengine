@@ -440,3 +440,53 @@ fn quit_game_flag_quits_a_rust_only_game_exactly_once() {
         .count();
     assert_eq!(quits, 1, "quit_game runs exactly once");
 }
+
+#[derive(EntityEvent)]
+struct Ping {
+    entity: Entity,
+}
+
+fn empty_scene() -> aberredengine::engine_app::SceneDescriptor {
+    aberredengine::engine_app::SceneDescriptor {
+        on_enter: |_| {},
+        on_update: None,
+        on_exit: None,
+        gui_callback: None,
+        world_draw_callback: None,
+    }
+}
+
+/// The SceneManager switch cleans up through `SceneCleanup`: the observer
+/// of a `Persistent` entity survives, a scene entity's observer does not.
+#[test]
+fn scene_switch_keeps_observers_of_persistent_entities() {
+    use aberredengine::core::components::persistent::Persistent;
+    use aberredengine::core::resources::signal_keys as sk;
+
+    let mut tw = TestWorld::builder()
+        .add_scene("a", empty_scene())
+        .add_scene("b", empty_scene())
+        .initial_scene("a")
+        .build()
+        .expect("build should succeed");
+    tw.tick_to_play(DT, 8);
+
+    tw.world.spawn(Persistent).observe(|_: On<Ping>| {});
+    tw.world.spawn_empty().observe(|_: On<Ping>| {});
+    tw.world.flush();
+    let observer_count = |world: &mut World| world.query::<&Observer>().iter(world).count();
+    let observers_before = observer_count(&mut tw.world);
+
+    {
+        let mut signals = tw.world.resource_mut::<WorldSignals>();
+        signals.set_string(sk::SCENE, "b");
+        signals.set_flag(sk::SWITCH_SCENE);
+    }
+    tw.tick(2, DT);
+
+    assert_eq!(
+        observer_count(&mut tw.world),
+        observers_before - 1,
+        "only the scene entity's observer goes"
+    );
+}

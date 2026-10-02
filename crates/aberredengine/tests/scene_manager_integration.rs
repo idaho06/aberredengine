@@ -24,7 +24,7 @@ use bevy_ecs::prelude::*;
 use bevy_ecs::system::RunSystemOnce;
 use bevy_ecs::system::SystemState;
 
-use aberredengine::core::components::persistent::Persistent;
+use aberredengine::core::components::persistent::{CleanableEntity, Persistent};
 use aberredengine::core::protocol::audio::AudioCmd;
 use aberredengine::core::resources::gamestate::{GameState, NextGameState};
 
@@ -406,7 +406,7 @@ fn non_persistent_entities_despawned() {
 
     // Only persistent entities should remain
     let non_persistent: Vec<Entity> = world
-        .query_filtered::<Entity, (Without<Persistent>, Without<bevy_ecs::resource::IsResource>)>()
+        .query_filtered::<Entity, CleanableEntity>()
         .iter(&world)
         .collect();
     assert!(
