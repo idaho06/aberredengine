@@ -259,15 +259,29 @@ impl GameConfig {
 
     /// Load configuration from the INI file.
     ///
-    /// Missing values retain their current (default) values.
-    /// Returns an error if the file cannot be read or parsed.
-    pub fn load_from_file(&mut self) -> Result<(), String> {
-        let mut config = Ini::new();
-        config
-            .load(&self.config_path)
-            .map_err(|e| format!("Failed to load config file: {}", e))?;
-        self.apply_ini(&config);
-        Ok(())
+    /// Missing values retain their current (default) values, and so does a
+    /// missing file: returns `Ok(false)` when there is no file, `Ok(true)` when
+    /// one was loaded. Returns an error if the file exists but cannot be read
+    /// or parsed.
+    pub fn load_from_file(&mut self) -> Result<bool, String> {
+        let Some(ini) = self.read_file_if_present()? else {
+            return Ok(false);
+        };
+        self.apply_ini(&ini);
+        Ok(true)
+    }
+
+    /// Parses the config file into an [`Ini`], or `None` when it doesn't exist.
+    fn read_file_if_present(&self) -> Result<Option<Ini>, String> {
+        let content = match std::fs::read_to_string(&self.config_path) {
+            Ok(content) => content,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+            Err(e) => return Err(format!("Failed to read config file: {}", e)),
+        };
+        let mut ini = Ini::new();
+        ini.read(content)
+            .map_err(|e| format!("Failed to parse config file: {}", e))?;
+        Ok(Some(ini))
     }
 
     /// Load configuration from an INI string.
@@ -374,16 +388,7 @@ impl GameConfig {
     /// so its derived default keeps following `hz`/`target_fps`; a runtime change
     /// to `snapshot_skip` is not saved unless the file already sets the key.
     pub fn save_to_file(&self) -> Result<(), String> {
-        let mut config = Ini::new();
-        match std::fs::read_to_string(&self.config_path) {
-            Ok(content) => {
-                config
-                    .read(content)
-                    .map_err(|e| format!("Failed to parse config file before saving: {}", e))?;
-            }
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
-            Err(e) => return Err(format!("Failed to read config file before saving: {}", e)),
-        }
+        let mut config = self.read_file_if_present()?.unwrap_or_default();
 
         // [render] section
         config.set("render", "width", Some(self.render_width.to_string()));
@@ -520,9 +525,21 @@ mod tests {
     }
 
     #[test]
-    fn test_load_from_file_nonexistent() {
-        let config_result = GameConfig::with_path("/tmp/nonexistent_aberred.ini").load_from_file();
-        assert!(config_result.is_err());
+    fn test_load_from_file_nonexistent_keeps_defaults() {
+        let path = std::path::Path::new("/tmp/nonexistent_aberred.ini");
+        let mut config = GameConfig::with_path(path);
+        assert_eq!(config.load_from_file(), Ok(false));
+        assert_eq!(config, GameConfig::with_path(path));
+    }
+
+    #[test]
+    fn test_load_from_file_reports_a_read_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("present.ini");
+        std::fs::write(&path, "[render]\nwidth = 320\n").unwrap();
+        let mut config = GameConfig::with_path(&path);
+        assert_eq!(config.load_from_file(), Ok(true));
+        assert_eq!(config.render_width, 320);
     }
 
     #[test]

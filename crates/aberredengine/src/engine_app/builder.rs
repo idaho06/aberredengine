@@ -81,6 +81,8 @@ impl EngineBuilder {
     }
 
     /// Set a custom path for the config file (default: `"config.ini"`).
+    ///
+    /// The file is optional: a missing file means all defaults.
     pub fn config(mut self, path: impl Into<PathBuf>) -> Self {
         self.config_path = path.into();
         self

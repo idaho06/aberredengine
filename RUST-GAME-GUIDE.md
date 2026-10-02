@@ -67,7 +67,7 @@ env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info
 ```
 my_game/
 ├── Cargo.toml
-├── config.ini                 # Engine configuration (required at startup; missing keys use defaults)
+├── config.ini                 # Engine configuration (optional; missing keys use defaults)
 ├── src/
 │   ├── main.rs                # EngineBuilder entry point
 │   └── scenes/
@@ -83,7 +83,7 @@ my_game/
 
 ### config.ini
 
-The engine reads `config.ini` at startup for window and rendering settings. The file must exist at startup, but individual missing keys fall back to safe defaults. Out-of-range numbers are clamped with a warning; values that fail to parse (e.g. `hz = abc`, `vsync = no`) silently keep their defaults, with no warning.
+The engine reads `config.ini` at startup for window and rendering settings. The file is optional: if it is missing, the engine logs a warning and starts with all defaults, and individual missing keys fall back to safe defaults too. A file that exists but cannot be read or parsed is a startup error. Out-of-range numbers are clamped with a warning; values that fail to parse (e.g. `hz = abc`, `vsync = no`) silently keep their defaults, with no warning.
 
 > **Alternative:** Use `EngineBuilder::config_str(content)` to supply the INI content as a `&'static str` instead of a file. This is useful for tests or games that embed their configuration. When `.config_str()` is called, the file at `.config()` path is not read.
 
@@ -378,7 +378,7 @@ fn main() -> Result<(), aberredengine::EngineError> {
 
 ### Startup error handling
 
-Prefer `EngineBuilder::try_run()` in Rust applications. It returns `Result<(), aberredengine::EngineError>` for startup failures such as invalid builder configuration, missing `config.ini`, render-target creation failures, Lua runtime creation failures, and a missing required hook (`EngineError::MissingSystems`: no `.on_setup()`, or no `.on_enter_play()` with raw hooks).
+Prefer `EngineBuilder::try_run()` in Rust applications. It returns `Result<(), aberredengine::EngineError>` for startup failures such as invalid builder configuration, an unreadable or unparsable `config.ini`, render-target creation failures, Lua runtime creation failures, and a missing required hook (`EngineError::MissingSystems`: no `.on_setup()`, or no `.on_enter_play()` with raw hooks).
 
 `EngineBuilder::run()` is still available as a convenience wrapper around `.try_run()`, but on startup failure it logs the error, prints it to stderr, and exits the process with status 1 instead of returning it to your `main` function.
 
@@ -2682,7 +2682,7 @@ Section 2 showed the basics. This is the complete reference.
 - **Booleans** — only `true`/`false`, case-insensitive (`TRUE`, `False`). `yes`/`no`, `on`/`off` and `1`/`0` do not parse, so the key keeps its default
 - **`background_color`** — comma-separated `R,G,B` integers (e.g., `80,80,80`)
 
-If you want the engine defaults with no custom settings, commit an otherwise empty `config.ini` file and only add keys you want to override.
+If you want the engine defaults, you can leave `config.ini` out entirely. To override some settings, create the file with only those keys.
 
 ### Runtime modification
 

@@ -18,6 +18,7 @@ use aberred_core::protocol::raw_input::RawDeviceSnapshot;
 use aberred_core::protocol::render_logic::{LogicMsg, RenderMsg};
 use aberred_core::protocol::snapshot::SnapshotPublisher;
 use aberred_core::resources::drawable_snapshot::DrawableSnapshot;
+use aberred_core::resources::gameconfig::GameConfig;
 use aberred_core::resources::gamestate::{GameState, GameStates};
 use aberred_core::resources::input::InputState;
 use aberred_core::resources::systemsstore::SystemsStore;
@@ -956,13 +957,25 @@ fn load_config_prefers_the_inline_string_over_the_file() {
 }
 
 #[test]
-fn load_config_reports_a_missing_file_with_its_path() {
-    let err = EngineBuilder::new()
+fn load_config_uses_defaults_when_the_file_is_missing() {
+    let config = EngineBuilder::new()
         .config("does/not/exist.ini")
+        .load_config()
+        .unwrap();
+    assert_eq!(config, GameConfig::with_path("does/not/exist.ini"));
+}
+
+#[test]
+fn load_config_reports_an_unparsable_file_with_its_path() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("broken.ini");
+    std::fs::write(&path, "[window\ntitle = x\n").unwrap();
+    let err = EngineBuilder::new()
+        .config(&path)
         .load_config()
         .unwrap_err();
     assert!(
-        matches!(&err, EngineError::ConfigFile { path, .. } if path == &PathBuf::from("does/not/exist.ini")),
+        matches!(&err, EngineError::ConfigFile { path: p, .. } if p == &path),
         "{err}"
     );
 }
