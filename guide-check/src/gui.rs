@@ -129,3 +129,38 @@ mod particle_emitters {
         ));
     }
 }
+
+// 7.9 Attaching Entities (StuckTo)
+mod stuck_to {
+    use aberredengine::bevy_ecs::prelude::*;
+    use aberredengine::core::components::rigidbody::RigidBody;
+    use aberredengine::core::components::stuckto::StuckTo;
+    use aberredengine::core::events::input::InputAction;
+    use aberredengine::core::math::Vec2;
+    use aberredengine::core::resources::input::InputState;
+
+    fn stick_ball_to_paddle(commands: &mut Commands, ball: Entity, paddle: Entity) {
+        commands.entity(ball).insert(
+            StuckTo::follow_x_only(paddle)
+                .with_offset(Vec2::new(0.0, -12.0))
+                .with_stored_velocity(Vec2::new(150.0, -300.0)),
+        );
+    }
+
+    fn launch_ball(
+        mut commands: Commands,
+        input: Res<InputState>,
+        mut stuck: Query<(Entity, &StuckTo, &mut RigidBody)>,
+    ) {
+        if !input.action(InputAction::Action1).just_pressed {
+            return;
+        }
+        for (ball, stuck_to, mut rb) in &mut stuck {
+            // Removing StuckTo doesn't apply stored_velocity; do it here
+            if let Some(velocity) = stuck_to.stored_velocity {
+                rb.velocity = velocity;
+            }
+            commands.entity(ball).remove::<StuckTo>();
+        }
+    }
+}

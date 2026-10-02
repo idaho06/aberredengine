@@ -2248,6 +2248,51 @@ fn spawn_smoke(mut commands: Commands) {
 - Templates are regular entities: a scene switch despawns them (and the emitter) unless they're `Persistent`. An emitter skips templates that no longer exist.
 - `EmittedParticle(Entity)` names the emitter that spawned a particle, e.g. to despawn one emitter's particles.
 
+### 7.9 Attaching Entities (StuckTo)
+
+**Source:** `aberred-core/src/components/stuckto.rs`, `aberred-core/src/systems/stuckto.rs`
+
+`StuckTo` makes an entity's `MapPosition` follow another entity's, plus an offset, on both axes (`StuckTo::new`) or one (`follow_x_only`, `follow_y_only`). The classic use is a ball resting on a paddle until launch:
+
+```rust
+use aberredengine::bevy_ecs::prelude::*;
+use aberredengine::core::components::rigidbody::RigidBody;
+use aberredengine::core::components::stuckto::StuckTo;
+use aberredengine::core::events::input::InputAction;
+use aberredengine::core::math::Vec2;
+use aberredengine::core::resources::input::InputState;
+
+fn stick_ball_to_paddle(commands: &mut Commands, ball: Entity, paddle: Entity) {
+    commands.entity(ball).insert(
+        StuckTo::follow_x_only(paddle)
+            .with_offset(Vec2::new(0.0, -12.0))
+            .with_stored_velocity(Vec2::new(150.0, -300.0)),
+    );
+}
+
+fn launch_ball(
+    mut commands: Commands,
+    input: Res<InputState>,
+    mut stuck: Query<(Entity, &StuckTo, &mut RigidBody)>,
+) {
+    if !input.action(InputAction::Action1).just_pressed {
+        return;
+    }
+    for (ball, stuck_to, mut rb) in &mut stuck {
+        // Removing StuckTo doesn't apply stored_velocity; do it here
+        if let Some(velocity) = stuck_to.stored_velocity {
+            rb.velocity = velocity;
+        }
+        commands.entity(ball).remove::<StuckTo>();
+    }
+}
+```
+
+- `stuck_to_entity_system` runs every sim tick in `SimSet::Collision`, after movement and collision detection, and overwrites only the followed axes. Keep a stuck entity's velocity at zero, or it drifts along any axis it doesn't follow.
+- `stored_velocity` is only data: removing `StuckTo` from Rust doesn't apply it. Apply it yourself when you release the entity, as `launch_ball` does. (Lua's `engine.release_stuckto` does it for you.)
+- The follower copies the target's `MapPosition` field, which is the target's local position if the target is a `ChildOf` child. A target that is itself `StuckTo` isn't followed (no chains), and a follower with `ChildOf` is skipped. For permanent parent-relative placement, use `ChildOf` instead.
+- If the target is despawned, the follower stays where it is and keeps its `StuckTo` until you remove it.
+
 ---
 
 ## 8. Engine Resources Quick Reference
