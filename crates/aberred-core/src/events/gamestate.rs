@@ -88,17 +88,30 @@ fn on_state_enter(state: &GameStates, commands: &mut Commands, systems_store: &S
     match state {
         GameStates::None => debug!("Entered None state"),
         GameStates::Setup => {
-            commands.run_system(*systems_store.get(hook_keys::SETUP).expect(
-                "'setup' system not registered; validate_required_systems should have caught this",
-            ));
+            if let Some(setup) = systems_store.get(hook_keys::SETUP) {
+                commands.run_system(*setup);
+            }
+            // Queued after the hook, so a state the hook requested wins.
+            commands.queue(request_playing_if_unchanged);
         }
         GameStates::Playing => {
-            commands.run_system(*systems_store.get(hook_keys::ENTER_PLAY).expect("'enter_play' system not registered; validate_required_systems should have caught this"));
+            if let Some(enter_play) = systems_store.get(hook_keys::ENTER_PLAY) {
+                commands.run_system(*enter_play);
+            }
         }
         // GameStates::Paused => eprintln!("Entered Paused state"),
         GameStates::Quitting => {
             commands.run_system(*systems_store.get(hook_keys::QUIT_GAME).expect("'quit_game' system not registered; validate_required_systems should have caught this"));
         }
+    }
+}
+
+/// Internal: the automatic `Setup` → `Playing` transition. Leaves
+/// [`NextGameState`] alone when the setup hook already requested a state.
+fn request_playing_if_unchanged(world: &mut World) {
+    let mut next = world.resource_mut::<NextGameState>();
+    if *next.get() == Unchanged {
+        next.set(GameStates::Playing);
     }
 }
 
@@ -110,5 +123,73 @@ fn on_state_exit(state: &GameStates, _commands: &mut Commands, _systems_store: &
         GameStates::Playing => debug!("Exited Playing state"),
         // GameStates::Paused => debug!("Exited Paused state"),
         GameStates::Quitting => debug!("Exited Quitting state"),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::resources::gamestate::NextGameStates;
+
+    /// A world with the state resources, the observer, and (if given) a
+    /// `setup` hook registered in its [`SystemsStore`].
+    fn world_with_setup(setup: Option<fn(ResMut<NextGameState>)>) -> World {
+        let mut world = World::new();
+        world.insert_resource(GameState::new());
+        world.insert_resource(NextGameState::new());
+        world.add_observer(observe_gamestate_change_event);
+        let mut store = SystemsStore::new();
+        if let Some(setup) = setup {
+            store.insert(hook_keys::SETUP, world.register_system(setup));
+        }
+        world.insert_resource(store);
+        world
+    }
+
+    fn enter(world: &mut World, state: GameStates) {
+        world.resource_mut::<NextGameState>().set(state);
+        world.trigger(GameStateChangedEvent {});
+        world.flush();
+    }
+
+    fn next(world: &World) -> NextGameStates {
+        world.resource::<NextGameState>().get().clone()
+    }
+
+    #[test]
+    fn setup_without_a_hook_requests_playing() {
+        let mut world = world_with_setup(None);
+        enter(&mut world, GameStates::Setup);
+        assert_eq!(world.resource::<GameState>().get(), &GameStates::Setup);
+        assert_eq!(next(&world), Pending(GameStates::Playing));
+    }
+
+    #[test]
+    fn setup_hook_that_sets_nothing_requests_playing() {
+        let mut world = world_with_setup(Some(|_| {}));
+        enter(&mut world, GameStates::Setup);
+        assert_eq!(next(&world), Pending(GameStates::Playing));
+    }
+
+    #[test]
+    fn setup_hook_that_requests_another_state_wins() {
+        let mut world = world_with_setup(Some(|mut next| next.set(GameStates::Quitting)));
+        enter(&mut world, GameStates::Setup);
+        assert_eq!(next(&world), Pending(GameStates::Quitting));
+    }
+
+    #[test]
+    fn setup_hook_that_requests_playing_itself_is_unaffected() {
+        let mut world = world_with_setup(Some(|mut next| next.set(GameStates::Playing)));
+        enter(&mut world, GameStates::Setup);
+        assert_eq!(next(&world), Pending(GameStates::Playing));
+    }
+
+    #[test]
+    fn entering_playing_without_an_enter_play_hook_is_a_no_op() {
+        let mut world = world_with_setup(None);
+        enter(&mut world, GameStates::Playing);
+        assert_eq!(world.resource::<GameState>().get(), &GameStates::Playing);
+        assert_eq!(next(&world), Unchanged);
     }
 }

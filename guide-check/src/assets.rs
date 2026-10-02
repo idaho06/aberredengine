@@ -4,11 +4,9 @@ mod loading_assets {
     use aberredengine::core::resources::animationstore::{AnimationStore, AnimationResource};
     use aberredengine::bevy_ecs::prelude::*;
     use aberredengine::core::protocol::audio::AudioCmd;
-    use aberredengine::core::resources::gamestate::{GameStates, NextGameState};
     use std::sync::Arc;
 
     fn setup(
-        mut next_state: ResMut<NextGameState>,
         mut anim_store: ResMut<AnimationStore>,
         mut asset_cmds: MessageWriter<RenderAssetCmd>,
         mut audio: MessageWriter<AudioCmd>,
@@ -372,12 +370,10 @@ mod complete_setup_example {
     use aberredengine::core::protocol::audio::AudioCmd; // GLUE
     use aberredengine::core::protocol::render_assets::RenderAssetCmd; // GLUE
     use aberredengine::core::resources::animationstore::{AnimationStore, AnimationResource}; // GLUE
-    use aberredengine::core::resources::gamestate::{GameStates, NextGameState}; // GLUE
     use aberredengine::core::resources::texturefilter::TextureFilter; // GLUE
     use std::sync::Arc; // GLUE
 
     fn setup(
-        mut next_state: ResMut<NextGameState>,
         mut anim_store: ResMut<AnimationStore>,
         mut asset_cmds: MessageWriter<RenderAssetCmd>,
         mut audio: MessageWriter<AudioCmd>,
@@ -418,8 +414,5 @@ mod complete_setup_example {
             fps: 8.0,
             looped: true,
         });
-
-        // Transition to Playing state — required, or the game stays in Setup forever
-        next_state.set(GameStates::Playing);
     }
 }

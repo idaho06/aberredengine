@@ -103,7 +103,11 @@ impl EngineBuilder {
         self
     }
 
-    /// Register the `setup` hook (called during the `Setup` game state).
+    /// Register the `setup` hook (called once when entering the `Setup` game state).
+    ///
+    /// Optional: omit it when there is nothing to load. After the hook runs, the
+    /// engine moves to `Playing` on its own unless the hook requested another
+    /// state through `NextGameState` (e.g. `Quitting`), which then wins.
     ///
     /// The system is registered into [`SystemsStore`](aberred_core::resources::systemsstore::SystemsStore)
     /// under the key `"setup"`.
@@ -114,6 +118,8 @@ impl EngineBuilder {
     }
 
     /// Register the `enter_play` hook (called when transitioning to `Playing`).
+    ///
+    /// Optional. With `.add_scene()` the SceneManager supplies its own.
     ///
     /// The system is registered into [`SystemsStore`](aberred_core::resources::systemsstore::SystemsStore)
     /// under the key `"enter_play"`.

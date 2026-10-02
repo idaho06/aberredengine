@@ -356,7 +356,7 @@ Register it on the descriptor:
 
 ### Approach B — Raw hooks (single-scene or full manual control)
 
-For single-scene games or when you need full control over scene transitions, use the four hook methods directly. `.on_setup()` and `.on_enter_play()` are required; `.on_update()` and `.on_switch_scene()` are optional:
+For single-scene games or when you need full control over scene transitions, use the four hook methods directly. All four are optional; register the ones your game needs:
 
 ```rust
 use aberredengine::engine_app::EngineBuilder;
@@ -375,7 +375,7 @@ fn main() -> Result<(), aberredengine::EngineError> {
 
 ### Startup error handling
 
-Prefer `EngineBuilder::try_run()` in Rust applications. It returns `Result<(), aberredengine::EngineError>` for startup failures such as invalid builder configuration, an unreadable or unparsable `config.ini`, render-target creation failures, Lua runtime creation failures, and a missing required hook (`EngineError::MissingSystems`: no `.on_setup()`, or no `.on_enter_play()` with raw hooks).
+Prefer `EngineBuilder::try_run()` in Rust applications. It returns `Result<(), aberredengine::EngineError>` for startup failures such as invalid builder configuration, an unreadable or unparsable `config.ini`, render-target creation failures, and Lua runtime creation failures.
 
 `EngineBuilder::run()` is still available as a convenience wrapper around `.try_run()`, but on startup failure it logs the error, prints it to stderr, and exits the process with status 1 instead of returning it to your `main` function.
 
@@ -406,7 +406,7 @@ Setup ──→ Playing ──→ Quitting
           scene switches
 ```
 
-1. **Setup** — The engine calls the `setup` hook once, on the logic thread. Load assets here (textures, fonts, sounds, shaders, animations) — see [Section 4](#4-loading-assets) for how texture/font/shader loading works. The hook must end with `next_state.set(GameStates::Playing)` (a `ResMut<NextGameState>` parameter): nothing else leaves `Setup`, so without it the game never starts.
+1. **Setup** — The engine calls the `setup` hook once, on the logic thread. Load assets here (textures, fonts, sounds, shaders, animations) — see [Section 4](#4-loading-assets) for how texture/font/shader loading works. Omit `.on_setup()` if you have nothing to load. Once the hook has run, the engine moves to `Playing` on its own; a hook that requests another state through `ResMut<NextGameState>` (e.g. `GameStates::Quitting`) overrides that.
 2. **Playing** — The engine transitions to playing, calls `enter_play` (or the initial scene's `on_enter`), then runs `update` (or `on_update`) once per sim tick.
 3. **Scene switches** — With the SceneManager, setting the `"switch_scene"` flag on `WorldSignals` runs the exit→enter sequence on the next sim tick. With raw hooks, only a `MenuAction::SetScene` menu item runs the `switch_scene` hook; nothing polls the flag in a pure-Rust game unless you register a poll system (see below).
 4. **Quitting** — When the game state becomes `GameStates::Quitting` (via `NextGameState::set(GameStates::Quitting)`, `ctx.world_signals.request_quit()`, or a `MenuAction::QuitGame` menu item) or the window is closed, the engine shuts down. Scene, timer, phase, collision and menu callbacks use `request_quit()`, since `GameCtx` has no `NextGameState`.
@@ -444,8 +444,8 @@ Setup ──→ Playing ──→ Quitting
 | `.config(path)` | Path to `config.ini` (default: `"config.ini"`) |
 | `.config_str(content)` | Load INI config from an embedded `&'static str` instead of a file. Takes precedence over `.config(path)`. Useful for tests or games that ship with bundled defaults. |
 | `.title(name)` | Window title (overrides config) |
-| `.on_setup(system)` | Asset loading hook (called during `Setup` state, on the logic thread). **Required** in both approaches; it must set `GameStates::Playing`. |
-| `.on_enter_play(system)` | Called once when transitioning to `Playing`. **Required** with raw hooks; the SceneManager supplies its own. |
+| `.on_setup(system)` | Asset loading hook (called once in the `Setup` state, on the logic thread). Optional; the engine moves to `Playing` after it runs. |
+| `.on_enter_play(system)` | Called once when transitioning to `Playing`. Optional with raw hooks; the SceneManager supplies its own. |
 | `.on_update(system)` | Runs once per sim tick while `Playing` — single system only. A sim tick is not the same as a render frame; see [Threading Model](#threading-model-what-your-code-can-access). |
 | `.on_switch_scene(system)` | Called when a scene transition is requested |
 | `.add_scene(name, descriptor)` | Register a named scene (SceneManager path) |
@@ -685,11 +685,9 @@ use aberredengine::core::protocol::render_assets::RenderAssetCmd;
 use aberredengine::core::resources::animationstore::{AnimationStore, AnimationResource};
 use aberredengine::bevy_ecs::prelude::*;
 use aberredengine::core::protocol::audio::AudioCmd;
-use aberredengine::core::resources::gamestate::{GameStates, NextGameState};
 use std::sync::Arc;
 
 fn setup(
-    mut next_state: ResMut<NextGameState>,
     mut anim_store: ResMut<AnimationStore>,
     mut asset_cmds: MessageWriter<RenderAssetCmd>,
     mut audio: MessageWriter<AudioCmd>,
@@ -1154,7 +1152,6 @@ fn follow_player(mut commands: Commands, mut follow: ResMut<CameraFollowConfig>)
 
 ```rust
 fn setup(
-    mut next_state: ResMut<NextGameState>,
     mut anim_store: ResMut<AnimationStore>,
     mut asset_cmds: MessageWriter<RenderAssetCmd>,
     mut audio: MessageWriter<AudioCmd>,
@@ -1195,9 +1192,6 @@ fn setup(
         fps: 8.0,
         looped: true,
     });
-
-    // Transition to Playing state — required, or the game stays in Setup forever
-    next_state.set(GameStates::Playing);
 }
 ```
 
@@ -1456,7 +1450,6 @@ Game state that the engine's components don't cover goes in your own Bevy types.
 ```rust
 use aberredengine::bevy_ecs;
 use aberredengine::bevy_ecs::prelude::*;
-use aberredengine::core::resources::gamestate::{GameStates, NextGameState};
 
 #[derive(Component)]
 struct Health(i32);
@@ -1464,9 +1457,8 @@ struct Health(i32);
 #[derive(Resource, Default)]
 struct Score(u32);
 
-fn setup(mut commands: Commands, mut next_state: ResMut<NextGameState>) {
+fn setup(mut commands: Commands) {
     commands.insert_resource(Score::default());
-    next_state.set(GameStates::Playing);
 }
 
 fn remove_dead(mut commands: Commands, mut score: ResMut<Score>, query: Query<(Entity, &Health)>) {
@@ -2338,7 +2330,7 @@ All resources are accessed as Bevy ECS system parameters. Use `Res<T>` / `ResMut
 | `InputState` | `Res` | Input state — bound actions via `input.action(InputAction::X)` and the raw `mouse_left_button` are `BoolState { active, just_pressed, just_released }`; analog fields (`scroll_y`, `mouse_x/y`, `mouse_world_x/y`) are `f32`; pad 0 is `gamepad_connected` / `gamepad_axes` |
 | `InputBindings` | `ResMut` | Runtime key/mouse binding map (`InputAction` → `Vec<InputBinding>`). Modify to rebind actions at runtime — takes effect the very next sim tick. |
 | `GameState` | `Res` | Current state: `None → Setup → Playing → Quitting` |
-| `NextGameState` | `ResMut` | Request state transitions with `.set(GameStates::Playing)` |
+| `NextGameState` | `ResMut` | Request state transitions, e.g. `.set(GameStates::Quitting)` |
 | `PostProcessShader` | `ResMut` | Shader chain + uniforms (reserved: `uTime`, `uDeltaTime`, `uResolution`, `uFrame`, `uWindowResolution`, `uLetterbox`) |
 | `CameraFollowConfig` | `ResMut` | Camera-follow behavior (mode, easing, zoom speed, bounds, offsets); see [Following an entity](#following-an-entity) |
 | `DebugOverlayConfig` | `ResMut` | F11 debug overlay toggles for colliders, signals, bounds, and crosshairs |
@@ -2736,7 +2728,7 @@ aberredengine = { path = "../aberredengine/crates/aberredengine", default-featur
 
 Repeat the exact source of your `[dependencies]` entry (the same `path`, or the same `git` plus `branch`/`tag`/`rev`): Cargo rejects a crate whose dependency and dev-dependency point to different sources.
 
-`TestWorld::builder()` takes the same registration calls as `EngineBuilder` (`on_setup`, `on_enter_play`, `add_system`, `configure_schedule`, `add_observer`, `add_scene`/`initial_scene`, `deterministic`, plus `config(GameConfig)`). Its default setup hook enters `Playing` at once. `tick(n, dt)` runs `n` sim ticks with a fixed `dt`, and `tw.world` is a plain Bevy `World` to spawn into and inspect:
+`TestWorld::builder()` takes the same registration calls as `EngineBuilder` (`on_setup`, `on_enter_play`, `add_system`, `configure_schedule`, `add_observer`, `add_scene`/`initial_scene`, `deterministic`, plus `config(GameConfig)`). Like a real game, it moves from `Setup` to `Playing` on its own. `tick(n, dt)` runs `n` sim ticks with a fixed `dt`, and `tw.world` is a plain Bevy `World` to spawn into and inspect:
 
 ```rust
 #[cfg(test)]

@@ -1006,8 +1006,10 @@ fn test_validate_required_systems_reports_missing_entries() {
         .expect_err("missing required systems should fail validation");
     let err_str = err.to_string();
 
-    assert!(err_str.contains("setup"));
-    assert!(err_str.contains("enter_play"));
     assert!(err_str.contains("quit_game"));
     assert!(err_str.contains("switch_scene"));
+    assert!(
+        !err_str.contains("setup") && !err_str.contains("enter_play"),
+        "setup and enter_play hooks are optional: {err_str}"
+    );
 }

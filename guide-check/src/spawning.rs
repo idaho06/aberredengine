@@ -267,7 +267,6 @@ mod own_components_and_resources {
     fn register() -> EngineBuilder { // GLUE
     use aberredengine::bevy_ecs;
     use aberredengine::bevy_ecs::prelude::*;
-    use aberredengine::core::resources::gamestate::{GameStates, NextGameState};
 
     #[derive(Component)]
     struct Health(i32);
@@ -275,9 +274,8 @@ mod own_components_and_resources {
     #[derive(Resource, Default)]
     struct Score(u32);
 
-    fn setup(mut commands: Commands, mut next_state: ResMut<NextGameState>) {
+    fn setup(mut commands: Commands) {
         commands.insert_resource(Score::default());
-        next_state.set(GameStates::Playing);
     }
 
     fn remove_dead(mut commands: Commands, mut score: ResMut<Score>, query: Query<(Entity, &Health)>) {

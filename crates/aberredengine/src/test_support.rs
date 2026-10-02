@@ -54,7 +54,7 @@ use aberred_core::protocol::tick_input::TickInput;
 use aberred_core::resources::drawable_snapshot::DrawableSnapshot;
 use aberred_core::resources::fontmetrics::{FontMetrics, FontMetricsStore};
 use aberred_core::resources::gameconfig::GameConfig;
-use aberred_core::resources::gamestate::{GameState, GameStates, NextGameState};
+use aberred_core::resources::gamestate::{GameState, GameStates};
 use aberred_core::resources::systemsstore as hook_keys;
 use aberred_core::resources::texturedims::TextureDimsStore;
 use aberred_core::systems::input::resolve_input_backlog;
@@ -77,18 +77,6 @@ pub struct TestWorld {
     pub audio_msgs_tx: Sender<AudioMessage>,
     snapshot_out: triple_buffer::Output<DrawableSnapshot>,
 }
-
-/// Default `setup` hook: immediately requests a transition to
-/// [`GameStates::Playing`], so a default-built [`TestWorld`] reaches
-/// `Playing` after its first [`TestWorld::tick`] with no game-specific setup
-/// required. Override via [`TestWorldBuilder::on_setup`] for tests that need
-/// their own setup behavior (and their own state transition).
-fn default_test_setup(mut next_state: ResMut<NextGameState>) {
-    next_state.set(GameStates::Playing);
-}
-
-/// Default `enter_play` hook: no-op.
-fn default_test_enter_play() {}
 
 /// Builder for [`TestWorld`], mirroring [`EngineBuilder`]'s registrar
 /// surface (`on_setup`/`on_enter_play`/`on_update`/scenes/Lua) minus
@@ -117,19 +105,15 @@ impl Default for TestWorldBuilder {
 }
 
 impl TestWorldBuilder {
-    /// Defaults: `GameConfig::new()`, a `setup` hook that immediately
-    /// requests `Playing` (see [`default_test_setup`]), a no-op `enter_play`
-    /// hook, no scenes, no Lua, an 800x600 nominal window size (the harness
-    /// never opens a real window; this only seeds the logic world's
-    /// `WindowSize` mirror).
+    /// Defaults: `GameConfig::new()`, no hooks (like [`EngineBuilder`], the
+    /// engine moves from `Setup` to `Playing` on its own), no scenes, no Lua,
+    /// an 800x600 nominal window size (the harness never opens a real window;
+    /// this only seeds the logic world's `WindowSize` mirror).
     pub fn new() -> Self {
         Self {
             config: GameConfig::new(),
-            setup_hook: Some(hook_registrar(hook_keys::SETUP, default_test_setup)),
-            enter_play_hook: Some(hook_registrar(
-                hook_keys::ENTER_PLAY,
-                default_test_enter_play,
-            )),
+            setup_hook: None,
+            enter_play_hook: None,
             switch_scene_hook: None,
             update_hook: None,
             extra_systems: Vec::new(),
@@ -150,16 +134,14 @@ impl TestWorldBuilder {
         self
     }
 
-    /// Replace the `setup` hook. Overriding this drops the default
-    /// auto-transition-to-`Playing` behavior -- call
-    /// `next_state.set(GameStates::Playing)` yourself (or drive the
-    /// transition manually) if the test still needs to reach `Playing`.
+    /// Register the `setup` hook. As with [`EngineBuilder::on_setup`], the
+    /// engine moves to `Playing` after it runs unless it requested another state.
     pub fn on_setup<M>(mut self, system: impl IntoSystem<(), (), M> + Send + 'static) -> Self {
         self.setup_hook = Some(hook_registrar(hook_keys::SETUP, system));
         self
     }
 
-    /// Replace the `enter_play` hook.
+    /// Register the `enter_play` hook.
     pub fn on_enter_play<M>(mut self, system: impl IntoSystem<(), (), M> + Send + 'static) -> Self {
         self.enter_play_hook = Some(hook_registrar(hook_keys::ENTER_PLAY, system));
         self

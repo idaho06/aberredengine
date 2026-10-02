@@ -654,7 +654,7 @@ fn golden_replay_rust_scene_matches_checked_in_trail() {
     // system in the deterministic single-threaded executor's per-tick
     // sequence changes this hash, even for a scenario (like this one) that
     // spawns no `CollisionRule` entity for that system to act on.
-    const GOLDEN_HASH: u64 = 0x9f71_4dc6_36ff_e0a3;
+    const GOLDEN_HASH: u64 = 0x0644_3e0e_d74f_96d6;
     let actual = golden_scenario_final_hash(42);
     assert_eq!(
         actual, GOLDEN_HASH,

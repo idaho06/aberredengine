@@ -25,7 +25,7 @@ use aberred_core::resources::animationstore::AnimationStore;
 use aberred_core::resources::camera2d::Camera2DRes;
 use aberred_core::resources::camerafollowconfig::CameraFollowConfig;
 use aberred_core::resources::gameconfig::GameConfig;
-use aberred_core::resources::gamestate::{GameStates, NextGameState};
+use aberred_core::resources::gamestate::NextGameState;
 use aberred_core::resources::group::TrackedGroups;
 use aberred_core::resources::guitheme::{GuiThemeStore, GuiThemeWarnCache};
 use aberred_core::resources::input::InputState;
@@ -104,7 +104,6 @@ pub struct CommonCmdBufs {
 // (dynamictext/menu measurement retries each frame until they land).
 pub fn setup(
     mut commands: Commands,
-    mut next_state: ResMut<NextGameState>,
     screen_size: Res<ScreenSize>,
     mut render_asset_writer: MessageWriter<RenderAssetCmd>,
     mut scripting: ScriptingContext,
@@ -158,10 +157,7 @@ pub fn setup(
         process_animation_command(&mut anim_store, cmd);
     }
     commands.insert_resource(anim_store);
-
-    // Change GameState to Playing
-    next_state.set(GameStates::Playing);
-    info!("Game setup() done, next state set to Playing");
+    info!("Game setup() done");
 }
 
 pub use aberred_core::systems::gamestate::quit_game;

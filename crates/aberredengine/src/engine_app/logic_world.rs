@@ -210,14 +210,8 @@ impl EngineBuilder {
     ) -> Result<(), EngineError> {
         let mut missing = Vec::new();
 
-        for name in [
-            hook_keys::SETUP,
-            hook_keys::ENTER_PLAY,
-            hook_keys::QUIT_GAME,
-        ] {
-            if systems_store.get(name).is_none() {
-                missing.push(name);
-            }
+        if systems_store.get(hook_keys::QUIT_GAME).is_none() {
+            missing.push(hook_keys::QUIT_GAME);
         }
 
         if requires_switch_scene && systems_store.get(hook_keys::SWITCH_SCENE).is_none() {

@@ -218,46 +218,56 @@ fn increment_counter(mut counter: ResMut<Counter>) {
     counter.0 += 1;
 }
 
-/// A `setup` hook that does NOT auto-transition to `Playing` (unlike
-/// [`TestWorld`]'s default), so the test controls exactly when `Playing` is
-/// reached instead of guessing at the default hook's transition timing.
-fn setup_without_auto_play() {}
+/// A `setup` hook that requests no state: the engine moves to `Playing` on
+/// its own once it has run.
+fn setup_that_requests_nothing() {}
+
+/// `.on_setup()` with a hook that never touches `NextGameState` still
+/// reaches `Playing`, through the automatic Setup -> Playing transition.
+#[test]
+fn setup_hook_that_requests_nothing_reaches_playing() {
+    let mut tw = TestWorld::builder()
+        .on_setup(setup_that_requests_nothing)
+        .build()
+        .expect("build should succeed");
+    tw.tick_to_play(DT, 8);
+}
 
 /// (e) `TestWorldBuilder::add_system`: the registered system must be gated
 /// by `run_if(state_is_playing)` through the harness, exactly like
-/// production's `EngineBuilder::add_system` -- it must not run before
-/// `Playing`, and must run exactly once per tick once `Playing` is reached.
+/// production's `EngineBuilder::add_system` -- it runs exactly once per tick
+/// while `Playing`, and stops once the game leaves `Playing`.
 #[test]
 fn add_system_runs_once_per_tick_only_while_playing() {
     let mut tw = TestWorld::builder()
-        .on_setup(setup_without_auto_play)
         .add_system(increment_counter)
         .build()
         .expect("build should succeed");
     tw.world.insert_resource(Counter::default());
 
-    tw.tick(3, DT);
-    assert!(
-        !matches!(tw.world.resource::<GameState>().get(), GameStates::Playing),
-        "setup_without_auto_play must never request a transition to Playing"
-    );
-    assert_eq!(
-        tw.world.resource::<Counter>().0,
-        0,
-        "add_system's run_if(state_is_playing) must suppress the system before Playing"
-    );
-
-    tw.world
-        .resource_mut::<NextGameState>()
-        .set(GameStates::Playing);
     tw.tick_to_play(DT, 8);
     let count_at_play = tw.world.resource::<Counter>().0;
-
     tw.tick(1, DT);
     assert_eq!(
         tw.world.resource::<Counter>().0,
         count_at_play + 1,
         "system must run exactly once per tick once Playing"
+    );
+
+    tw.world
+        .resource_mut::<NextGameState>()
+        .set(GameStates::Quitting);
+    tw.tick(1, DT);
+    let count_at_quit = tw.world.resource::<Counter>().0;
+    tw.tick(3, DT);
+    assert!(matches!(
+        tw.world.resource::<GameState>().get(),
+        GameStates::Quitting
+    ));
+    assert_eq!(
+        tw.world.resource::<Counter>().0,
+        count_at_quit,
+        "add_system's run_if(state_is_playing) must suppress the system outside Playing"
     );
 }
 
