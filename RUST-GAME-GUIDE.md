@@ -888,6 +888,41 @@ audio.write(AudioCmd::LoadMusic {
 
 Sounds and music are played later via the same channel (e.g., `AudioCmd::PlayFx { id: "jump".into() }`). See the `AudioCmd` enum for the full command set: `PlayMusic`, `StopMusic`, `PauseMusic`, `ResumeMusic`, `VolumeMusic`, `PlayFxPitched`, etc.
 
+#### Audio replies
+
+The audio thread answers with `AudioMessage`s (`aberredengine::core::protocol::audio::AudioMessage`): `FxLoaded`/`FxLoadFailed { id, error }`, `MusicLoaded`/`MusicLoadFailed { id, error }`, `MusicPlayStarted`, `MusicStopped`, `MusicFinished` (non-looping music reached its end), `MusicVolumeChanged`, and the unload acknowledgements. There is no reply when a sound effect finishes. Read them with a `MessageReader<AudioMessage>`:
+
+```rust
+use aberredengine::bevy_ecs::prelude::*;
+use aberredengine::core::protocol::audio::{AudioCmd, AudioMessage};
+use aberredengine::engine_app::SimSet;
+
+fn on_audio_replies(mut replies: MessageReader<AudioMessage>, mut audio: MessageWriter<AudioCmd>) {
+    for reply in replies.read() {
+        match reply {
+            AudioMessage::MusicLoaded { id } if id == "bgm" => {
+                audio.write(AudioCmd::PlayMusic { id: id.clone(), looped: true });
+            }
+            AudioMessage::FxLoadFailed { id, error }
+            | AudioMessage::MusicLoadFailed { id, error } => {
+                log::error!("audio '{id}' failed to load: {error}");
+            }
+            AudioMessage::MusicFinished { id } => log::info!("music '{id}' ended"),
+            _ => {}
+        }
+    }
+}
+
+EngineBuilder::new()
+    .configure_schedule(|schedule| {
+        schedule.add_systems(on_audio_replies.in_set(SimSet::ScriptUpdate));
+    })
+    // …
+```
+
+- A reader in `SimSet::ScriptUpdate` or later sees a reply only during the sim tick it arrives in; after that it's dropped. Register the reader with `.configure_schedule()` as above, so it runs in every game state. An `.add_system()` reader runs only while `Playing` and misses the replies to loads queued during `Setup`.
+- Replies arrive whenever the audio thread gets to them, not on a fixed tick, and replays don't record them. In a `.deterministic()` game, use them for logging and presentation only; don't let gameplay state depend on them.
+
 ### Shaders
 
 Queue a load with `RenderAssetCmd::Shader`. `vs_path`/`fs_path` mirror raylib's `load_shader(vertex, fragment)` — pass `None` for a path to use raylib's default for that stage:

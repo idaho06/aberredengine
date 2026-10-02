@@ -145,6 +145,39 @@ mod audio_sounds_and_music {
     } // GLUE
 }
 
+// Audio replies
+mod audio_replies {
+    use aberredengine::engine_app::EngineBuilder; // GLUE
+
+    fn register() -> EngineBuilder { // GLUE
+    use aberredengine::bevy_ecs::prelude::*;
+    use aberredengine::core::protocol::audio::{AudioCmd, AudioMessage};
+    use aberredengine::engine_app::SimSet;
+
+    fn on_audio_replies(mut replies: MessageReader<AudioMessage>, mut audio: MessageWriter<AudioCmd>) {
+        for reply in replies.read() {
+            match reply {
+                AudioMessage::MusicLoaded { id } if id == "bgm" => {
+                    audio.write(AudioCmd::PlayMusic { id: id.clone(), looped: true });
+                }
+                AudioMessage::FxLoadFailed { id, error }
+                | AudioMessage::MusicLoadFailed { id, error } => {
+                    log::error!("audio '{id}' failed to load: {error}");
+                }
+                AudioMessage::MusicFinished { id } => log::info!("music '{id}' ended"),
+                _ => {}
+            }
+        }
+    }
+
+    EngineBuilder::new()
+        .configure_schedule(|schedule| {
+            schedule.add_systems(on_audio_replies.in_set(SimSet::ScriptUpdate));
+        })
+        // …
+    } // GLUE
+}
+
 // Shaders
 mod shaders {
     use aberredengine::bevy_ecs::prelude::*; // GLUE
