@@ -5,8 +5,8 @@ set windows-shell := ["powershell.exe", "-NoLogo", "-Command"]
 
 default: check
 
-# Full gate: rustfmt, every test feature combination, clippy (incl. tracy), then doc links; stops on first failure.
-check: && doc-links
+# Full gate: rustfmt, every test feature combination, clippy (incl. tracy), guide snippets, then doc links; stops on first failure.
+check: && check-guide doc-links
     cargo fmt --all --check
     cargo test
     cargo test --features test-support
@@ -22,6 +22,17 @@ check: && doc-links
 doc-links $RUSTDOCFLAGS="-D warnings":
     cargo doc --workspace --no-deps
     cargo doc --workspace --no-deps --no-default-features
+
+# Compiles every RUST-GAME-GUIDE.md snippet (guide-check/, outside the workspace) as a
+# downstream game, without and with Lua. It reuses the workspace lockfile and target dir.
+# Clippy findings there are guide issues and don't fail the gate.
+check-guide:
+    cargo fetch
+    cp Cargo.lock guide-check/Cargo.lock
+    cargo check --manifest-path guide-check/Cargo.toml --target-dir target
+    cargo check --manifest-path guide-check/Cargo.toml --target-dir target --features lua
+    cargo clippy --manifest-path guide-check/Cargo.toml --target-dir target
+    cargo clippy --manifest-path guide-check/Cargo.toml --target-dir target --features lua
 
 # Inner TDD loop: lua-on tests including the headless TestWorld harness.
 test-fast:

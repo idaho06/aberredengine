@@ -466,7 +466,7 @@ EngineBuilder::new()
     .on_setup(load_assets)
     .add_system(tilemap_load_system)   // checks a signal each tick, then queues a load
     .add_system(tilemap_save_system)   // independent second system
-    .add_scene("editor", /* … */)
+    .add_scene("editor", editor_scene())
     .initial_scene("editor")
     .try_run()
     .expect("engine startup failed");
@@ -1770,7 +1770,7 @@ fn enter(ctx: &mut GameCtx) {
 
 **Event struct:**
 
-```rust
+```rust,ignore
 pub struct AnimationFinishedEvent {
     pub entity: Entity,
 }
@@ -1807,7 +1807,7 @@ EngineBuilder::new()
 
 **Event struct (generic over the tweened component type):**
 
-```rust
+```rust,ignore
 pub struct TweenFinishedEvent<T: TweenValue> {
     pub entity: Entity,
 }
@@ -1931,7 +1931,7 @@ spawns, it just renders no visible glyphs.
 
 ```rust
 let hud_theme = theme_store.themes.entry(Arc::from("hud")).or_default();
-hud_theme.panel = GuiNinePatch { tex_key: "hud_panel".into(), /* … */ };
+hud_theme.panel = GuiNinePatch { tex_key: "hud_panel".into(), /* source, borders, … */ ..Default::default() };
 hud_theme.font = "hud_font".into();
 
 // Spawn a widget using the "hud" theme
@@ -2221,7 +2221,7 @@ Each bound action is a `BoolState { active, just_pressed, just_released }`, read
 
 `InputBindings` (`aberred-core/src/resources/input_bindings.rs`) maps logical `InputAction` variants to a `Vec<InputBinding>`, supporting multiple hardware bindings per action (e.g. W and Up arrow both trigger `main_up`).
 
-```rust
+```rust,ignore
 use aberredengine::core::events::input::InputAction;
 use aberredengine::core::resources::input_bindings::{InputBindings, InputBinding};
 

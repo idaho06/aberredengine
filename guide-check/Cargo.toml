@@ -1,0 +1,19 @@
+# Compiles every ```rust fence of RUST-GAME-GUIDE.md as a downstream game would:
+# outside the engine workspace, depending only on what the guide tells a game to add.
+# `crates/aberredengine/tests/guide_snippets.rs` checks the fences appear here verbatim.
+# Run with `just check-guide`.
+[package]
+name = "guide-check"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[features]
+lua = ["aberredengine/lua"]
+
+[dependencies]
+aberredengine = { path = "../crates/aberredengine", default-features = false }
+rustc-hash = "2"
+log = "0.4"
