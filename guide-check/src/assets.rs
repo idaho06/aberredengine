@@ -308,6 +308,28 @@ mod camera {
     }
 }
 
+// Following an entity
+mod following_an_entity {
+    use aberredengine::bevy_ecs::prelude::*;
+    use aberredengine::core::components::cameratarget::CameraTarget;
+    use aberredengine::core::components::mapposition::MapPosition;
+    use aberredengine::core::math::Rect;
+    use aberredengine::core::resources::camerafollowconfig::{CameraFollowConfig, FollowMode};
+
+    fn follow_player(mut commands: Commands, mut follow: ResMut<CameraFollowConfig>) {
+        commands.spawn((
+            MapPosition::new(100.0, 200.0),
+            // … sprite, physics, etc. …
+            CameraTarget::new(1).with_zoom(2.0),
+        ));
+
+        follow.enabled = true;
+        follow.mode = FollowMode::Deadzone { half_w: 32.0, half_h: 24.0 };
+        follow.lerp_speed = 6.0;
+        follow.bounds = Some(Rect::new(0.0, 0.0, 2048.0, 1024.0)); // the level's extent
+    }
+}
+
 // Complete setup example
 mod complete_setup_example {
     use aberredengine::bevy_ecs::prelude::*; // GLUE

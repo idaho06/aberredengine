@@ -1086,6 +1086,36 @@ fn setup_camera(mut camera: ResMut<Camera2DRes>, screen: Res<ScreenSize>) {
 
 `offset` is the screen point the camera looks through. `target` is the world position it looks at.
 
+#### Following an entity
+
+To make the camera track an entity, give it a `CameraTarget` and enable the pre-inserted `CameraFollowConfig` resource (it starts disabled):
+
+```rust
+use aberredengine::bevy_ecs::prelude::*;
+use aberredengine::core::components::cameratarget::CameraTarget;
+use aberredengine::core::components::mapposition::MapPosition;
+use aberredengine::core::math::Rect;
+use aberredengine::core::resources::camerafollowconfig::{CameraFollowConfig, FollowMode};
+
+fn follow_player(mut commands: Commands, mut follow: ResMut<CameraFollowConfig>) {
+    commands.spawn((
+        MapPosition::new(100.0, 200.0),
+        // … sprite, physics, etc. …
+        CameraTarget::new(1).with_zoom(2.0),
+    ));
+
+    follow.enabled = true;
+    follow.mode = FollowMode::Deadzone { half_w: 32.0, half_h: 24.0 };
+    follow.lerp_speed = 6.0;
+    follow.bounds = Some(Rect::new(0.0, 0.0, 2048.0, 1024.0)); // the level's extent
+}
+```
+
+- Every sim tick, `camera_follow_system` picks the `CameraTarget` with the highest `priority` (ties go to the lower `Entity`), and moves `Camera2DRes.target` toward its world position plus `follow.offset`. With no `CameraTarget` entity, the camera stays where it is.
+- `mode`: `Instant` snaps; `Lerp` eases by `easing` (`EasingCurve::EaseOut` by default) at `lerp_speed`; `SmoothDamp` is a spring tuned by `spring_stiffness`/`spring_damping` (call `reset_velocity()` when you switch targets or modes); `Deadzone { half_w, half_h }` holds still until the target leaves that box around the camera, then catches up at `lerp_speed`.
+- While following, the camera's zoom eases toward the winning target's `zoom` at `zoom_lerp_speed`, so setting `Camera2DRes.zoom` yourself has no lasting effect; change the target's `zoom` instead.
+- `bounds` (a world-space `Rect`, `x`/`y` top-left) clamps the camera so the view stays inside it. The clamp assumes the default centered `offset`.
+
 ### Complete setup example
 
 ```rust
@@ -2243,7 +2273,7 @@ All resources are accessed as Bevy ECS system parameters. Use `Res<T>` / `ResMut
 | `GameState` | `Res` | Current state: `None → Setup → Playing → Quitting` |
 | `NextGameState` | `ResMut` | Request state transitions with `.set(GameStates::Playing)` |
 | `PostProcessShader` | `ResMut` | Shader chain + uniforms (reserved: `uTime`, `uDeltaTime`, `uResolution`, `uFrame`, `uWindowResolution`, `uLetterbox`) |
-| `CameraFollowConfig` | `ResMut` | Camera-follow behavior (mode, easing, zoom speed, bounds, offsets) |
+| `CameraFollowConfig` | `ResMut` | Camera-follow behavior (mode, easing, zoom speed, bounds, offsets); see [Following an entity](#following-an-entity) |
 | `DebugOverlayConfig` | `ResMut` | F11 debug overlay toggles for colliders, signals, bounds, and crosshairs |
 | `SystemsStore` | `Res` | Named system registry for `commands.run_system()` |
 | `SceneManager` | `Res` | Scene registry (only present with `.add_scene()`) |
