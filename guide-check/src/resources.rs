@@ -65,3 +65,32 @@ mod runtime_modification {
         config.save_to_file().expect("Failed to save config");
     }
 }
+
+// InputBindings resource
+mod inputbindings_resource {
+    use aberredengine::bevy_ecs::prelude::*;
+    use aberredengine::core::events::input::InputAction;
+    use aberredengine::core::resources::input_bindings::{
+        AxisDirection, GamepadAxis, InputBinding, InputBindings, Key,
+    };
+
+    fn setup_controls(mut bindings: ResMut<InputBindings>) {
+        // J becomes the only Action1 binding
+        bindings.rebind(InputAction::Action1, InputBinding::Keyboard(Key::KEY_J));
+
+        // Backspace also means Back; Escape still works
+        bindings.add_binding(InputAction::Back, InputBinding::Keyboard(Key::KEY_BACKSPACE));
+
+        // Pad 1's left stick also drives MainDirectionRight
+        bindings.add_binding(
+            InputAction::MainDirectionRight,
+            InputBinding::GamepadAxis {
+                pad: 1,
+                axis: GamepadAxis::GAMEPAD_AXIS_LEFT_X,
+                direction: AxisDirection::Positive,
+            },
+        );
+
+        let current: &[InputBinding] = bindings.get_bindings(InputAction::Action1);
+    }
+}

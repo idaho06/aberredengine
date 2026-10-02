@@ -2263,22 +2263,48 @@ Each bound action is a `BoolState { active, just_pressed, just_released }`, read
 
 ### InputBindings resource
 
-`InputBindings` (`aberred-core/src/resources/input_bindings.rs`) maps logical `InputAction` variants to a `Vec<InputBinding>`, supporting multiple hardware bindings per action (e.g. W and Up arrow both trigger `main_up`).
+`InputBindings` (`aberred-core/src/resources/input_bindings.rs`) maps logical `InputAction` variants to a `Vec<InputBinding>`, supporting multiple hardware bindings per action (e.g. both W and the Up arrow can trigger `MainDirectionUp`).
 
-```rust,ignore
+Each `InputBinding` is one of:
+
+| Variant | Values |
+|---------|--------|
+| `InputBinding::Keyboard(Key)` | `Key::KEY_*` constants (`Key::KEY_SPACE`, `Key::KEY_A`, `Key::KEY_UP`, …) |
+| `InputBinding::MouseButton(MouseButton)` | `MouseButton::MOUSE_BUTTON_LEFT`/`_RIGHT`/`_MIDDLE`, … |
+| `InputBinding::GamepadButton { pad, button }` | `pad` is `0..4`; `GamepadButton::GAMEPAD_BUTTON_*` |
+| `InputBinding::GamepadAxis { pad, axis, direction }` | `GamepadAxis::GAMEPAD_AXIS_*` and `AxisDirection::Positive`/`Negative`; the action is active while the axis is past the engine's fixed threshold in that direction |
+
+`InputBindings::default()` binds every action to its keyboard/mouse default (see the table above) **and** additively binds the equivalent pad-0 gamepad button/axis/d-pad input to the same action, so a game gets working gamepad input with zero configuration.
+
+Change bindings from any logic-side system through `ResMut<InputBindings>`. `rebind` replaces all of an action's bindings (its gamepad defaults included); `add_binding` appends one and keeps the rest. A change takes effect on the next sim tick.
+
+```rust
+use aberredengine::bevy_ecs::prelude::*;
 use aberredengine::core::events::input::InputAction;
-use aberredengine::core::resources::input_bindings::{InputBindings, InputBinding};
+use aberredengine::core::resources::input_bindings::{
+    AxisDirection, GamepadAxis, InputBinding, InputBindings, Key,
+};
 
-// InputBinding variants:
-InputBinding::Keyboard(Key)                                              // a keyboard key
-InputBinding::MouseButton(MouseButton)                                   // a mouse button
-InputBinding::GamepadButton { pad: u8, button: GamepadButton }           // a gamepad button, on pad index `pad`
-InputBinding::GamepadAxis { pad: u8, axis: GamepadAxis, direction: AxisDirection } // an analog axis crossing a digital threshold
+fn setup_controls(mut bindings: ResMut<InputBindings>) {
+    // J becomes the only Action1 binding
+    bindings.rebind(InputAction::Action1, InputBinding::Keyboard(Key::KEY_J));
+
+    // Backspace also means Back; Escape still works
+    bindings.add_binding(InputAction::Back, InputBinding::Keyboard(Key::KEY_BACKSPACE));
+
+    // Pad 1's left stick also drives MainDirectionRight
+    bindings.add_binding(
+        InputAction::MainDirectionRight,
+        InputBinding::GamepadAxis {
+            pad: 1,
+            axis: GamepadAxis::GAMEPAD_AXIS_LEFT_X,
+            direction: AxisDirection::Positive,
+        },
+    );
+
+    let current: &[InputBinding] = bindings.get_bindings(InputAction::Action1);
+}
 ```
-
-`InputBindings::default()` binds every action to its keyboard/mouse default (below) **and** additively binds the equivalent pad-0 gamepad button/axis/d-pad input to the same action — a game gets working gamepad input with zero configuration.
-
-Key binding strings accepted by the Lua API (also useful as reference): `a`–`z`, `0`–`9`, `space`, `enter`/`return`, `escape`/`esc`, `up`/`down`/`left`/`right`, `lshift`/`rshift`/`lctrl`/`rctrl`/`lalt`/`ralt`, `f1`–`f12`, `mouse_left`, `mouse_right`, `mouse_middle`.
 
 ---
 
