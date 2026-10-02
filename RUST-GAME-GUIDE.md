@@ -878,7 +878,7 @@ asset_cmds.write(RenderAssetCmd::Shader {
 });
 ```
 
-There's no synchronous "did it load, is it valid" result available to logic-side code — the render thread's loader logs an error and simply doesn't register the shader if the file is missing or fails validation. Reference the shader by its `id` key from an `EntityShader` component as usual; a failed load just means nothing renders through that shader key.
+There's no synchronous "did it load, is it valid" result available to logic-side code — the render thread's loader logs an error and simply doesn't register the shader if the file is missing or fails validation. Reference the shader by its `id` key from an `EntityShader` component (see [Per-entity shaders](#per-entity-shaders)); after a failed load, entities using that key draw without it.
 
 To load a shader from in-memory source strings instead of file paths (e.g. shaders embedded via `include_str!`), use `RenderAssetCmd::ShaderFromMemory`:
 
@@ -891,6 +891,52 @@ asset_cmds.write(RenderAssetCmd::ShaderFromMemory {
 ```
 
 Same `None`-per-stage convention as `RenderAssetCmd::Shader`, and the same "no synchronous success/failure signal" caveat applies — a failed compile just logs an error and the shader key stays unregistered.
+
+#### Per-entity shaders
+
+Attach an `EntityShader` naming a loaded shader key to draw one entity through that shader. It applies to world-space sprites and `DynamicText` (entities with `MapPosition`); screen-space entities ignore it. If the key isn't loaded (yet, or because the load failed), the entity draws without the shader and the render thread logs a warning each frame.
+
+```rust
+use aberredengine::bevy_ecs::prelude::*;
+use aberredengine::core::components::entityshader::EntityShader;
+use aberredengine::core::resources::uniformvalue::UniformValue;
+use aberredengine::core::resources::worldtime::WorldTime;
+
+fn spawn_glowing(mut commands: Commands) {
+    let mut shader = EntityShader::new("glow");
+    shader.set_uniform("uIntensity", UniformValue::Float(0.8));
+    commands.spawn((
+        // MapPosition, Sprite, ZIndex, … as in Section 5
+        shader,
+    ));
+}
+
+fn pulse_glow(mut shaders: Query<&mut EntityShader>, time: Res<WorldTime>) {
+    for mut shader in &mut shaders {
+        let intensity = 0.5 + 0.5 * time.elapsed.sin();
+        shader.set_uniform("uIntensity", UniformValue::Float(intensity));
+    }
+}
+```
+
+`UniformValue` has `Float`, `Int`, `Vec2 { x, y }` and `Vec4 { x, y, z, w }`. Uniforms the shader doesn't declare are skipped. Before each draw, the engine also sets these uniforms when the shader declares them:
+
+| Uniform | Type | Value |
+|---------|------|-------|
+| `uTime` | `float` | `WorldTime.elapsed` |
+| `uDeltaTime` | `float` | `WorldTime.delta` |
+| `uFrame` | `int` | `WorldTime.frame_count` |
+| `uResolution` | `vec2` | Game (render) resolution |
+| `uWindowResolution` | `vec2` | OS window size |
+| `uLetterbox` | `vec4` | The entity's destination rectangle `(x, y, w, h)` |
+| `uEntityId` | `int` | The entity's id bits (lower 32) |
+| `uEntityPos` | `vec2` | World position |
+| `uSpriteSize` | `vec2` | Sprite size, or the text's bounding box |
+| `uRotation` | `float` | Rotation in degrees (sprites with `Rotation` only) |
+| `uScale` | `vec2` | Scale (sprites with `Scale` only) |
+| `uVelocity` | `vec2` | Velocity (only with `RigidBody`) |
+
+Your own uniforms are set last, so one with a reserved name overrides the engine's value.
 
 ### Animations
 

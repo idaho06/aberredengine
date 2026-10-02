@@ -167,6 +167,30 @@ mod shaders {
     } // GLUE
 }
 
+// Per-entity shaders
+mod per_entity_shaders {
+    use aberredengine::bevy_ecs::prelude::*;
+    use aberredengine::core::components::entityshader::EntityShader;
+    use aberredengine::core::resources::uniformvalue::UniformValue;
+    use aberredengine::core::resources::worldtime::WorldTime;
+
+    fn spawn_glowing(mut commands: Commands) {
+        let mut shader = EntityShader::new("glow");
+        shader.set_uniform("uIntensity", UniformValue::Float(0.8));
+        commands.spawn((
+            // MapPosition, Sprite, ZIndex, … as in Section 5
+            shader,
+        ));
+    }
+
+    fn pulse_glow(mut shaders: Query<&mut EntityShader>, time: Res<WorldTime>) {
+        for mut shader in &mut shaders {
+            let intensity = 0.5 + 0.5 * time.elapsed.sin();
+            shader.set_uniform("uIntensity", UniformValue::Float(intensity));
+        }
+    }
+}
+
 // Animations
 mod animations {
     use aberredengine::bevy_ecs::prelude::*; // GLUE
