@@ -166,6 +166,7 @@ pub fn setup(
 }
 
 pub use aberred_core::systems::gamestate::quit_game;
+use aberred_core::systems::gamestate::take_quit_request;
 
 // Create initial state of the game and observers
 pub fn enter_play(
@@ -456,8 +457,7 @@ pub fn update(
     );
 
     // Check for quit flag (set by Lua)
-    if scene_state.world_signals.take_flag(sk::QUIT_GAME) {
-        next_game_state.set(GameStates::Quitting);
+    if take_quit_request(&mut scene_state.world_signals, &mut next_game_state) {
         return;
     }
 

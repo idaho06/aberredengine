@@ -412,30 +412,9 @@ Setup ──→ Playing ──→ Quitting
 1. **Setup** — The engine calls the `setup` hook once, on the logic thread. Load assets here (textures, fonts, sounds, shaders, animations) — see [Section 4](#4-loading-assets) for how texture/font/shader loading works. The hook must end with `next_state.set(GameStates::Playing)` (a `ResMut<NextGameState>` parameter): nothing else leaves `Setup`, so without it the game never starts.
 2. **Playing** — The engine transitions to playing, calls `enter_play` (or the initial scene's `on_enter`), then runs `update` (or `on_update`) once per sim tick.
 3. **Scene switches** — With the SceneManager, setting the `"switch_scene"` flag on `WorldSignals` runs the exit→enter sequence on the next sim tick. With raw hooks, only a `MenuAction::SetScene` menu item runs the `switch_scene` hook; nothing polls the flag in a pure-Rust game unless you register a poll system (see below).
-4. **Quitting** — When the game state becomes `GameStates::Quitting` (via `NextGameState::set(GameStates::Quitting)` or a `MenuAction::QuitGame` menu item) or the window is closed, the engine shuts down.
+4. **Quitting** — When the game state becomes `GameStates::Quitting` (via `NextGameState::set(GameStates::Quitting)`, setting the `sk::QUIT_GAME` flag on `WorldSignals`, or a `MenuAction::QuitGame` menu item) or the window is closed, the engine shuts down. Setting the flag is how scene, timer, phase, collision and menu callbacks quit, since `GameCtx` has no `NextGameState`: `ctx.world_signals.set_flag(sk::QUIT_GAME)`.
 
-> **The `"quit_game"` flag does not quit a Rust game on its own.** Only the Lua plugin polls `sk::QUIT_GAME`. In a pure-Rust game, `GameCtx` has no `NextGameState`, so scene, timer, phase, collision and menu callbacks cannot change the game state directly. To quit from one of them, set the flag and register a small poll system:
->
-> ```rust
-> use aberredengine::bevy_ecs::prelude::*;
-> use aberredengine::core::resources::gamestate::{GameStates, NextGameState};
-> use aberredengine::core::resources::signal_keys as sk;
-> use aberredengine::core::resources::worldsignals::WorldSignals;
->
-> fn quit_on_flag(mut signals: ResMut<WorldSignals>, mut next_state: ResMut<NextGameState>) {
->     if signals.take_flag(sk::QUIT_GAME) {
->         next_state.set(GameStates::Quitting);
->     }
-> }
->
-> EngineBuilder::new()
->     .add_system(quit_on_flag)
->     // …
-> ```
->
-> Register it with `.add_system()`, not `.configure_schedule()`: `.add_system()` adds `run_if(state_is_playing)`. Entering `Quitting` sets the `"quit_game"` flag again, and the run condition keeps the poll from reacting to it.
-
-> **With raw hooks, the `"switch_scene"` flag needs a poll system too.** The SceneManager polls it for you; with `.on_switch_scene()` nothing does, so setting the flag from a callback has no effect. Run the hook yourself:
+> **With raw hooks, the `"switch_scene"` flag needs a poll system.** The SceneManager polls it for you; with `.on_switch_scene()` nothing does, so setting the flag from a callback has no effect. Run the hook yourself:
 >
 > ```rust
 > use aberredengine::bevy_ecs::prelude::*;
@@ -1971,8 +1950,6 @@ fn on_menu_select(menu_entity: Entity, item_id: &str, item_index: usize, ctx: &m
             ctx.world_signals.set_flag(sk::SWITCH_SCENE);
         }
         "quit" => {
-            // Quits only with a flag-poll system registered — see "Game lifecycle" in §3.
-            // A plain `MenuAction::QuitGame` item quits without one.
             ctx.world_signals.set_flag(sk::QUIT_GAME);
         }
         _ => {}

@@ -207,28 +207,6 @@ mod approach_b_raw_hooks {
     }
 }
 
-// Game lifecycle
-mod game_lifecycle {
-    use aberredengine::engine_app::EngineBuilder; // GLUE
-
-    fn register() -> EngineBuilder { // GLUE
-    use aberredengine::bevy_ecs::prelude::*;
-    use aberredengine::core::resources::gamestate::{GameStates, NextGameState};
-    use aberredengine::core::resources::signal_keys as sk;
-    use aberredengine::core::resources::worldsignals::WorldSignals;
-
-    fn quit_on_flag(mut signals: ResMut<WorldSignals>, mut next_state: ResMut<NextGameState>) {
-        if signals.take_flag(sk::QUIT_GAME) {
-            next_state.set(GameStates::Quitting);
-        }
-    }
-
-    EngineBuilder::new()
-        .add_system(quit_on_flag)
-        // …
-    } // GLUE
-}
-
 // `.add_system(system)` — multiple per-sim-tick systems
 mod add_system {
     use aberredengine::engine_app::{EngineBuilder, SceneDescriptor}; // GLUE

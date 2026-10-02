@@ -415,3 +415,28 @@ fn rust_despawn_prunes_world_signals_registration_same_tick() {
     );
     assert_eq!(signals.get_entity("test:survivor"), Some(&survivor));
 }
+
+/// The `quit_game` flag quits a Rust-only game (no Lua): set while
+/// `Playing`, the next tick reaches `Quitting`, and `quit_game` runs exactly
+/// once even though entering `Quitting` sets the flag again.
+#[test]
+fn quit_game_flag_quits_a_rust_only_game_exactly_once() {
+    let mut tw = TestWorld::new();
+    tw.tick_to_play(DT, 8);
+    tw.world
+        .resource_mut::<WorldSignals>()
+        .set_flag(aberredengine::core::resources::signal_keys::QUIT_GAME);
+
+    tw.tick(5, DT);
+
+    assert!(matches!(
+        tw.world.resource::<GameState>().get(),
+        GameStates::Quitting
+    ));
+    let quits = tw
+        .sent_to_render
+        .try_iter()
+        .filter(|msg| matches!(msg, RenderMsg::Quit))
+        .count();
+    assert_eq!(quits, 1, "quit_game runs exactly once");
+}

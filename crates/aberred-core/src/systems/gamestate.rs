@@ -5,7 +5,9 @@
 //!   when a transition is requested.
 //! - [`state_is_playing`] helper for run conditions that returns true when the
 //!   current state is [`GameStates::Playing`].
-//! - [`quit_game`] sets the `quit_game` world signal flag to exit the main loop.
+//! - [`take_quit_request`] / [`quit_flag_poll`] turn the `quit_game` world
+//!   signal flag into a `Quitting` request.
+//! - [`quit_game`] asks the render thread to exit the main loop.
 //! - [`clean_all_entities`] despawns all entities that are not marked
 //!   [`Persistent`](crate::components::persistent::Persistent).
 
@@ -37,14 +39,34 @@ pub fn state_is_playing(state: Res<GameState>) -> bool {
     matches!(state.get(), GameStates::Playing)
 }
 
-/// Set the `quit_game` world signal flag and ask the render thread to exit.
+/// Turns a set `quit_game` world signal flag into a [`GameStates::Quitting`]
+/// request, consuming the flag. Returns whether it did. Shared by
+/// [`quit_flag_poll`] and the Lua plugin's update, so a quit request means
+/// the same thing with and without Lua.
+pub fn take_quit_request(world_signals: &mut WorldSignals, next_state: &mut NextGameState) -> bool {
+    let requested = world_signals.take_flag(sk::QUIT_GAME);
+    if requested {
+        next_state.set(GameStates::Quitting);
+    }
+    requested
+}
+
+/// Polls the `quit_game` flag via [`take_quit_request`] in games without
+/// Lua (the Lua plugin's update polls it itself).
+pub fn quit_flag_poll(
+    mut world_signals: ResMut<WorldSignals>,
+    mut next_state: ResMut<NextGameState>,
+) {
+    take_quit_request(&mut world_signals, &mut next_state);
+}
+
+/// Ask the render thread to exit; runs on entering [`GameStates::Quitting`].
 ///
 /// Runs on the logic thread (no raylib handle exists there);
 /// `RenderMsg::Quit` makes the render loop break, which then sends
 /// `LogicMsg::Shutdown` back — same teardown path as a window close.
-pub fn quit_game(mut world_signals: ResMut<WorldSignals>, render_tx: Res<RenderTx>) {
+pub fn quit_game(render_tx: Res<RenderTx>) {
     info!("Quitting game...");
-    world_signals.set_flag(sk::QUIT_GAME);
     let _ = render_tx.0.send(RenderMsg::Quit);
 }
 
@@ -99,6 +121,22 @@ mod tests {
         // Clearing the pending value is the observer's job, not this system's.
         let ns = world.resource::<NextGameState>();
         assert_eq!(*ns.get(), NextGameStates::Pending(GameStates::Playing));
+    }
+
+    #[test]
+    fn take_quit_request_consumes_the_flag_and_requests_quitting() {
+        let mut signals = WorldSignals::default();
+        let mut next = NextGameState::new();
+        assert!(
+            !take_quit_request(&mut signals, &mut next),
+            "no flag, no request"
+        );
+        assert_eq!(*next.get(), NextGameStates::Unchanged);
+
+        signals.set_flag(sk::QUIT_GAME);
+        assert!(take_quit_request(&mut signals, &mut next));
+        assert_eq!(*next.get(), NextGameStates::Pending(GameStates::Quitting));
+        assert!(!signals.has_flag(sk::QUIT_GAME), "flag consumed");
     }
 
     #[test]

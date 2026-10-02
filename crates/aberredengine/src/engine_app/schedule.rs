@@ -21,7 +21,7 @@ use aberred_core::systems::camera_follow::camera_follow_system;
 use aberred_core::systems::collision_detector::collision_detector;
 use aberred_core::systems::dynamictext_size::dynamictext_size_system;
 use aberred_core::systems::entity_registrations::prune_dead_entity_registrations;
-use aberred_core::systems::gamestate::{check_pending_state, state_is_playing};
+use aberred_core::systems::gamestate::{check_pending_state, quit_flag_poll, state_is_playing};
 use aberred_core::systems::gridlayout::gridlayout_spawn_system;
 use aberred_core::systems::group::update_group_counts_system;
 use aberred_core::systems::gui_hit_test::gui_hit_test_system;
@@ -112,18 +112,19 @@ pub enum SimSet {
 }
 
 impl EngineBuilder {
-    /// Registers the non-Lua `PostCollision` pair
-    /// (`update_group_counts_system` + `animation_controller`, with no
-    /// intra-pair ordering edge, unlike the Lua branch's
-    /// `update_group_counts_system.before(lua_phase_system)`/
-    /// `animation_controller.after(lua_phase_system)`). Shared by both the
-    /// `#[cfg(feature = "lua")] if has_lua {} else {}` else-arm and the
-    /// standalone `#[cfg(not(feature = "lua"))]` block in
-    /// `build_logic_schedules` -- neither system is Lua-specific, so this
-    /// helper compiles unconditionally in both feature configs.
-    fn add_non_lua_post_collision(sim: &mut Schedule) {
+    /// Registers the systems a game without Lua needs in place of the Lua
+    /// plugin's: the `PostCollision` pair (`update_group_counts_system` +
+    /// `animation_controller`, with no `lua_phase_system` edges) and
+    /// `quit_flag_poll`. Called from both the `has_lua` else-arm and the
+    /// `#[cfg(not(feature = "lua"))]` block in `build_logic_schedules`.
+    fn add_non_lua_systems(sim: &mut Schedule) {
         sim.add_systems(update_group_counts_system.in_set(SimSet::PostCollision));
         sim.add_systems(animation_controller.in_set(SimSet::PostCollision));
+        sim.add_systems(
+            quit_flag_poll
+                .run_if(state_is_playing)
+                .in_set(SimSet::Drain),
+        );
     }
 
     /// Registers `animation` (`SimSet::Drain`) exactly once, regardless of
@@ -454,7 +455,7 @@ impl EngineBuilder {
                     .in_set(SimSet::Drain),
             );
         } else {
-            Self::add_non_lua_post_collision(sim);
+            Self::add_non_lua_systems(sim);
         }
 
         #[cfg(not(feature = "lua"))]
@@ -462,7 +463,7 @@ impl EngineBuilder {
             // `has_lua` only exists to keep the build_schedules signature uniform
             // across feature combinations.
             let _ = has_lua;
-            Self::add_non_lua_post_collision(sim);
+            Self::add_non_lua_systems(sim);
         }
 
         Self::add_animation_system(sim, has_lua);

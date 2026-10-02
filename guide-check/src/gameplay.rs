@@ -245,8 +245,6 @@ mod menus {
                 ctx.world_signals.set_flag(sk::SWITCH_SCENE);
             }
             "quit" => {
-                // Quits only with a flag-poll system registered — see "Game lifecycle" in §3.
-                // A plain `MenuAction::QuitGame` item quits without one.
                 ctx.world_signals.set_flag(sk::QUIT_GAME);
             }
             _ => {}
