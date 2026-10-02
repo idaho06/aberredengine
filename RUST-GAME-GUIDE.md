@@ -1611,6 +1611,12 @@ type CollisionCallback = fn(Entity, Entity, &BoxSides, &BoxSides, &mut GameCtx);
 
 **Bidirectional matching:** A rule for `("ball", "brick")` matches regardless of which entity is `ball` vs `brick`. The observer reorders entities so the first argument always corresponds to `group_a` and the second to `group_b`.
 
+**Timing and cost:**
+
+- The callback runs **every sim tick** while the two boxes overlap (240 times a second at the default `[simulation] hz`). There are no enter/exit events. To react once, remember the pair yourself (a flag, a `Signals` entry, or despawning one side, as the example below does).
+- Only **one rule** runs per overlapping pair. If several rules cover the same two groups, the one on the lowest `Entity` wins and the others never fire for that pair.
+- `collision_detector` tests **every pair** of entities with `MapPosition` + `BoxCollider` (O(n²)), whether or not any rule names their groups. Keep the number of colliders small; give a `BoxCollider` only to entities that need one.
+
 **Creating a collision rule:**
 
 ```rust
