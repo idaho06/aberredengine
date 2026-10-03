@@ -161,24 +161,6 @@ pub(super) fn register<M: LuaUserDataMethods<LuaEntityBuilder>>(
     builder_method!(
         methods,
         meta,
-        "with_menu_action_show_submenu",
-        "Set submenu action for menu item",
-        [("item_id", "string"), ("submenu", "string")],
-        |_, this: &mut LuaEntityBuilder, (item_id, submenu): (String, String)| {
-            let Some(ref mut menu) = this.cmd.menu else {
-                return Err(LuaError::runtime(
-                    "with_menu_action_show_submenu() requires with_menu() first",
-                ));
-            };
-            menu.actions
-                .push((item_id, MenuActionData::ShowSubMenu { menu: submenu }));
-            Ok(())
-        }
-    );
-
-    builder_method!(
-        methods,
-        meta,
         "with_menu_action_quit",
         "Set quit action for menu item",
         [("item_id", "string")],
@@ -285,10 +267,6 @@ mod tests {
                 "with_menu_action_set_scene('i', 's')",
                 "with_menu_action_set_scene",
             ),
-            (
-                "with_menu_action_show_submenu('i', 'm')",
-                "with_menu_action_show_submenu",
-            ),
             ("with_menu_action_quit('i')", "with_menu_action_quit"),
             ("with_menu_callback('cb')", "with_menu_callback"),
             ("with_menu_visible_count(3)", "with_menu_visible_count"),
@@ -298,6 +276,14 @@ mod tests {
                 &format!("{name}() requires with_menu() first"),
             );
         }
+    }
+
+    #[test]
+    fn show_submenu_action_is_not_a_builder_method() {
+        assert_runtime_error(
+            &format!("{MENU}:with_menu_action_show_submenu('options', 'options_menu')"),
+            "with_menu_action_show_submenu",
+        );
     }
 
     #[test]
@@ -313,15 +299,14 @@ mod tests {
     fn menu_actions_accumulate_in_call_order() {
         let menu = built_menu(
             ":with_menu_action_set_scene('play', 'level01')\
-             :with_menu_action_show_submenu('options', 'options_menu')\
-             :with_menu_action_quit('quit')",
+             :with_menu_action_quit('quit')\
+             :with_menu_action_set_scene('options', 'options_scene')",
         );
         let actions: Vec<String> = menu
             .actions
             .iter()
             .map(|(id, action)| match action {
                 MenuActionData::SetScene { scene } => format!("{id}:scene:{scene}"),
-                MenuActionData::ShowSubMenu { menu } => format!("{id}:submenu:{menu}"),
                 MenuActionData::QuitGame => format!("{id}:quit"),
             })
             .collect();
@@ -329,8 +314,8 @@ mod tests {
             actions,
             [
                 "play:scene:level01",
-                "options:submenu:options_menu",
-                "quit:quit"
+                "quit:quit",
+                "options:scene:options_scene"
             ]
         );
     }

@@ -542,7 +542,6 @@ fn apply_ui_components(
         for (item_id, action_data) in menu_data.actions {
             let action = match action_data {
                 MenuActionData::SetScene { scene } => MenuAction::SetScene(scene),
-                MenuActionData::ShowSubMenu { menu } => MenuAction::ShowSubMenu(menu),
                 MenuActionData::QuitGame => MenuAction::QuitGame,
             };
             actions = actions.with(item_id, action);
@@ -1314,7 +1313,7 @@ mod tests {
              :with_menu_selection_sound('blip'):with_menu_callback('on_menu')\
              :with_menu_visible_count(2)\
              :with_menu_action_set_scene('play', 'level01')\
-             :with_menu_action_show_submenu('opts', 'options')\
+             :with_menu_action_set_scene('opts', 'options')\
              :with_menu_action_quit('quit'):build()",
         );
 
@@ -1341,7 +1340,7 @@ mod tests {
 
         let actions = world.get::<MenuActions>(e).unwrap();
         assert!(matches!(actions.get("play"), MenuAction::SetScene(s) if s == "level01"));
-        assert!(matches!(actions.get("opts"), MenuAction::ShowSubMenu(m) if m == "options"));
+        assert!(matches!(actions.get("opts"), MenuAction::SetScene(s) if s == "options"));
         assert!(matches!(actions.get("quit"), MenuAction::QuitGame));
     }
 

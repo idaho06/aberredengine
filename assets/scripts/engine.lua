@@ -1817,12 +1817,6 @@ function EntityBuilder:with_menu_action_quit(item_id) end
 ---@return EntityBuilder
 function EntityBuilder:with_menu_action_set_scene(item_id, scene) end
 
----Set submenu action for menu item
----@param item_id string
----@param submenu string
----@return EntityBuilder
-function EntityBuilder:with_menu_action_show_submenu(item_id, submenu) end
-
 ---Set Lua callback for menu selection
 ---@param callback string
 ---@return EntityBuilder
@@ -2391,12 +2385,6 @@ function CollisionEntityBuilder:with_menu_action_quit(item_id) end
 ---@param scene string
 ---@return CollisionEntityBuilder
 function CollisionEntityBuilder:with_menu_action_set_scene(item_id, scene) end
-
----Set submenu action for menu item
----@param item_id string
----@param submenu string
----@return CollisionEntityBuilder
-function CollisionEntityBuilder:with_menu_action_show_submenu(item_id, submenu) end
 
 ---Set Lua callback for menu selection
 ---@param callback string

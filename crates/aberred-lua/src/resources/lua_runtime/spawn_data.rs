@@ -266,7 +266,6 @@ pub struct ColorData {
 #[derive(Debug, Clone)]
 pub enum MenuActionData {
     SetScene { scene: String },
-    ShowSubMenu { menu: String },
     QuitGame,
 }
 

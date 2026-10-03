@@ -542,7 +542,6 @@ fn reposition_menu_items(commands: &mut Commands, menu: &Menu) {
 /// Otherwise, looks up the [`MenuAction`] for the selected item and performs it:
 /// - [`MenuAction::SetScene`] – triggers scene switch
 /// - [`MenuAction::QuitGame`] – transitions to quitting state
-/// - [`MenuAction::ShowSubMenu`] – displays a sub-menu (TODO)
 /// - [`MenuAction::Noop`] – does nothing
 ///
 /// The facade's `aberredengine::systems::menu` module shadows this with a
@@ -629,11 +628,6 @@ pub fn dispatch_menu_action(
                      (use Lua, the scene manager, or EngineBuilder::on_switch_scene); ignoring"
                 ),
             }
-        }
-        MenuAction::ShowSubMenu(submenu_name) => {
-            ctx.world_signals
-                .set_string("show_submenu", submenu_name.clone());
-            // TODO: trigger submenu display system
         }
         MenuAction::QuitGame => {
             next_game_state.set(Quitting);
@@ -1043,7 +1037,7 @@ mod tests {
     fn actions() -> MenuActions {
         MenuActions::new()
             .with("play", MenuAction::SetScene("level01".into()))
-            .with("options", MenuAction::ShowSubMenu("options_menu".into()))
+            .with("options", MenuAction::Noop)
             .with("quit", MenuAction::QuitGame)
     }
 
@@ -1067,14 +1061,11 @@ mod tests {
                 actions(),
             ))
             .id();
-        select(&mut world, menu, "options");
+        select(&mut world, menu, "play");
         let ws = world.resource::<WorldSignals>();
-        assert_eq!(
-            ws.get_string("rust_cb").map(String::as_str),
-            Some("options:1")
-        );
+        assert_eq!(ws.get_string("rust_cb").map(String::as_str), Some("play:0"));
         assert!(
-            ws.get_string("show_submenu").is_none(),
+            ws.get_string(sk::SCENE).is_none(),
             "MenuActions not consulted"
         );
     }
@@ -1091,15 +1082,6 @@ mod tests {
             Some("level01")
         );
         assert!(ws.has_flag("switch_hook_ran"), "switch_scene hook was run");
-
-        select(&mut world, menu, "options");
-        assert_eq!(
-            world
-                .resource::<WorldSignals>()
-                .get_string("show_submenu")
-                .map(String::as_str),
-            Some("options_menu")
-        );
 
         assert_eq!(
             world.resource::<NextGameState>().get(),

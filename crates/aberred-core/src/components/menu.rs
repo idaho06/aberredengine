@@ -170,8 +170,6 @@ pub enum MenuAction {
     SetScene(String),
     /// Quit the game.
     QuitGame,
-    /// Show a sub-menu by name.
-    ShowSubMenu(String),
     /// Do nothing (placeholder or disabled item).
     Noop,
 }

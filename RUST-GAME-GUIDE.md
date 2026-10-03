@@ -1760,7 +1760,6 @@ ctx.commands.spawn((menu, actions));
 |---------|--------|
 | `SetScene(String)` | Triggers a scene switch (calls `commands.run_system()` internally) |
 | `QuitGame` | Transitions to quitting state |
-| `ShowSubMenu(String)` | Sets a signal for sub-menu display (TODO) |
 | `Noop` | Does nothing |
 
 **2. Rust callback:** For custom logic, use `.with_on_rust_callback()`:

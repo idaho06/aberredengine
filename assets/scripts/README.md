@@ -1484,18 +1484,6 @@ Define scene switch action (requires `:with_menu()`).
 :with_menu_action_set_scene("start", "level01")
 ```
 
-#### `:with_menu_action_show_submenu(item_id, submenu)`
-
-Requires `:with_menu()`. **Not yet fully implemented**: selecting this item sets the
-`"show_submenu"` world signal to `submenu`'s value, but no system currently consumes that
-signal — no submenu is actually displayed. Read the signal yourself
-(`engine.get_string("show_submenu")`) and implement the display logic in your own scene code if
-you need this today.
-
-```lua
-:with_menu_action_show_submenu("options", "options_menu")
-```
-
 #### `:with_menu_action_quit(item_id)`
 
 Define quit game action (requires `:with_menu()`).
