@@ -4,13 +4,14 @@ use bevy_ecs::prelude::*;
 use bevy_ecs::system::IntoObserverSystem;
 
 use super::registrar::{
-    HookRegistrar, ObserverRegistrar, UpdateRegistrar, conditional_system_registrar,
-    hook_registrar, observer_registrar, scene_observer_registrar, system_registrar,
+    HookRegistrar, ObserverRegistrar, UpdateRegistrar, hook_registrar, observer_registrar,
+    scene_observer_registrar, system_registrar,
 };
 #[cfg(doc)] // doc links
 use super::schedule::SimSet;
 use aberred_core::events::scene::{SceneEntered, SceneExited};
 use aberred_core::resources::systemsstore as hook_keys;
+use aberred_core::systems::gamestate::{state_is_playing, state_runs_scenes};
 use aberred_core::systems::scene_dispatch::{WorldDrawCallback, in_scene};
 use aberred_render::resources::scene_table::{GuiCallback, RenderSceneTable, SceneRender};
 use rustc_hash::FxHashMap;
@@ -145,7 +146,8 @@ impl EngineBuilder {
     /// }
     /// ```
     pub fn add_system<M>(mut self, system: impl IntoSystem<(), (), M> + Send + 'static) -> Self {
-        self.extra_systems.push(system_registrar(system));
+        self.extra_systems
+            .push(system_registrar(system, state_is_playing));
         self
     }
 
@@ -154,7 +156,9 @@ impl EngineBuilder {
     /// Like [`add_system`](Self::add_system) (once per sim tick, in
     /// [`SimSet::ScriptUpdate`], while `Playing`), plus `.run_if(condition)`.
     /// The condition is passed separately because a `.run_if(..)`-configured
-    /// system can't be carried to the logic thread.
+    /// system can't be carried to the logic thread. It runs only while
+    /// `Playing`; for a system tied to a scene, which also runs during `Setup`
+    /// when that scene is active, use [`add_scene_system`](Self::add_scene_system).
     ///
     /// ```rust,ignore
     /// EngineBuilder::new()
@@ -166,23 +170,24 @@ impl EngineBuilder {
         system: impl IntoSystem<(), (), M> + Send + 'static,
         condition: impl SystemCondition<MC> + Send + 'static,
     ) -> Self {
-        self.extra_systems
-            .push(conditional_system_registrar(system, condition));
+        self.extra_systems.push(system_registrar(
+            system,
+            state_is_playing.and_then(condition),
+        ));
         self
     }
 
     /// Add a system that runs only while the scene `scene` is active.
     ///
-    /// Short for [`add_system_if`](Self::add_system_if)`(system,`
-    /// [`in_scene`](aberred_core::systems::scene_dispatch::in_scene)`(scene))`:
-    /// once per sim tick, in [`SimSet::ScriptUpdate`], while `Playing`.
-    /// `ScriptUpdate` runs before movement and collision, so the system sees
-    /// the state the previous tick left. Can be called multiple times, also
-    /// for the same scene.
+    /// Runs once per sim tick, in [`SimSet::ScriptUpdate`], whenever `scene`
+    /// is active ([`in_scene`](aberred_core::systems::scene_dispatch::in_scene)):
+    /// during `Playing`, and during `Setup` for a loading scene. `ScriptUpdate`
+    /// runs before movement and collision, so the system sees the state the
+    /// previous tick left. Can be called multiple times, also for the same scene.
     ///
     /// ```rust,ignore
     /// EngineBuilder::new()
-    ///     .add_scene("level01", level01())
+    ///     .add_scene("level01")
     ///     .add_scene_system("level01", enemy_waves)
     /// ```
     ///
@@ -196,7 +201,11 @@ impl EngineBuilder {
         system: impl IntoSystem<(), (), M> + Send + 'static,
     ) -> Self {
         self.scene_refs.push(("add_scene_system", scene));
-        self.add_system_if(system, in_scene(scene))
+        self.extra_systems.push(system_registrar(
+            system,
+            state_runs_scenes.and_then(in_scene(scene)),
+        ));
+        self
     }
 
     /// Observe [`SceneEntered`] for the scene `scene` only.

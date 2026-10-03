@@ -382,7 +382,7 @@ Setup ──→ Playing ──→ Quitting
 | `.add_system(system)` | Add a per-sim-tick system, run only while `Playing` (`run_if(state_is_playing)`, ordered alongside script-update systems). Can be called multiple times. A sim tick is not the same as a render frame; see [Threading Model](#threading-model-what-your-code-can-access). |
 | `.configure_schedule(closure)` | Add systems to the same schedule `.add_system()` targets, with full ordering control — no auto-constraints applied. Use this for custom ordering relative to the engine's own systems (via `SimSet` or `.after()`/`.before()`). |
 | `.add_system_if(system, condition)` | `.add_system()` plus a run condition, e.g. `in_scene("level01")`. The condition is a separate argument because a `.run_if(..)`-configured system can't be passed to the builder. |
-| `.add_scene_system(scene, system)` | Short for `.add_system_if(system, in_scene(scene))`: a per-sim-tick system that runs only while `scene` is active. |
+| `.add_scene_system(scene, system)` | A per-sim-tick system that runs whenever `scene` is active (like `.add_system_if(system, in_scene(scene))`, and also during `Setup` if `scene` is active then). |
 | `.add_observer(observer_fn)` | Register a persistent observer for a custom or engine event. |
 | `.on_scene_enter(scene, observer_fn)` / `.on_scene_exit(scene, observer_fn)` | Observe `SceneEntered`/`SceneExited` for one scene only. See [Scene-scoped systems and observers](#scene-scoped-systems-and-observers). |
 | `.with_lua(path)` | **Lua builds only** (`lua` feature). Run a Lua game from the `main.lua` at `path`. Listed here because the conflict rules below refer to it; a pure-Rust game never calls it. |

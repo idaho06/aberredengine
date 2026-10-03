@@ -4,7 +4,8 @@
 //!   [`GameStateChangedEvent`]
 //!   when a transition is requested.
 //! - [`state_is_playing`] helper for run conditions that returns true when the
-//!   current state is [`GameStates::Playing`].
+//!   current state is [`GameStates::Playing`]; [`state_runs_scenes`] also
+//!   holds during `Setup`, for scene systems.
 //! - [`take_quit_request`] / [`quit_flag_poll`] turn the `quit_game` world
 //!   signal flag into a `Quitting` request.
 //! - [`quit_game`] asks the render thread to exit the main loop.
@@ -63,6 +64,12 @@ pub fn state_is_playing(state: Res<GameState>) -> bool {
     matches!(state.get(), GameStates::Playing)
 }
 
+/// Returns true in the states a scene can be active in: `Setup` (the loading
+/// scene) and `Playing`. Scene systems run under this plus `in_scene`.
+pub fn state_runs_scenes(state: Res<GameState>) -> bool {
+    matches!(state.get(), GameStates::Setup | GameStates::Playing)
+}
+
 /// Turns a set `quit_game` world signal flag into a [`GameStates::Quitting`]
 /// request, consuming the flag. Returns whether it did. Shared by
 /// [`quit_flag_poll`] and the Lua plugin's update, so a quit request means
@@ -105,6 +112,22 @@ mod tests {
     use super::*;
     use crate::protocol::asset_kind::AssetKind;
     use bevy_ecs::system::RunSystemOnce;
+
+    /// Scene systems run while a scene can be active: during `Setup` (the
+    /// loading scene) and `Playing`, never before `Setup` or while quitting.
+    #[test]
+    fn state_runs_scenes_holds_in_setup_and_playing_only() {
+        let mut world = World::new();
+        world.init_resource::<GameState>();
+        let mut runs_in = |state| {
+            world.resource_mut::<GameState>().set(state);
+            world.run_system_once(state_runs_scenes).unwrap()
+        };
+        assert!(!runs_in(GameStates::None));
+        assert!(runs_in(GameStates::Setup));
+        assert!(runs_in(GameStates::Playing));
+        assert!(!runs_in(GameStates::Quitting));
+    }
 
     /// Number of `GameStateChangedEvent`s observed.
     #[derive(Resource, Default)]

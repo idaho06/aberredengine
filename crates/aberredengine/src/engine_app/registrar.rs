@@ -6,7 +6,6 @@ use super::schedule::SimSet;
 use aberred_core::components::persistent::Persistent;
 use aberred_core::resources::scenemanager::SceneManager;
 use aberred_core::resources::systemsstore::SystemsStore;
-use aberred_core::systems::gamestate::state_is_playing;
 
 /// Closure that registers a system into the world and inserts its ID into
 /// [`SystemsStore`]. Deferred until `run()` when the [`World`] exists.
@@ -32,29 +31,16 @@ pub(crate) fn hook_registrar<M>(
     Box::new(move |world, store| register_persistent_system(world, store, name, system))
 }
 
-/// Build the [`UpdateRegistrar`] behind `add_system`: `system` runs in
-/// [`SimSet::ScriptUpdate`] while the game is `Playing`.
-pub(crate) fn system_registrar<M>(
+/// Build the [`UpdateRegistrar`] behind `add_system`, `add_system_if` and
+/// `add_scene_system`: `system` runs in [`SimSet::ScriptUpdate`] while `gate`
+/// holds. Each builder method composes its gate from a state condition
+/// (`state_is_playing`, or `state_runs_scenes` for scene systems).
+pub(crate) fn system_registrar<M, MG>(
     system: impl IntoSystem<(), (), M> + Send + 'static,
+    gate: impl SystemCondition<MG> + Send + 'static,
 ) -> UpdateRegistrar {
     Box::new(move |schedule| {
-        schedule.add_systems(system.run_if(state_is_playing).in_set(SimSet::ScriptUpdate));
-    })
-}
-
-/// Build the [`UpdateRegistrar`] behind `add_system_if`: as
-/// [`system_registrar`], and only while `condition` holds.
-pub(crate) fn conditional_system_registrar<M, MC>(
-    system: impl IntoSystem<(), (), M> + Send + 'static,
-    condition: impl SystemCondition<MC> + Send + 'static,
-) -> UpdateRegistrar {
-    Box::new(move |schedule| {
-        schedule.add_systems(
-            system
-                .run_if(state_is_playing)
-                .run_if(condition)
-                .in_set(SimSet::ScriptUpdate),
-        );
+        schedule.add_systems(system.run_if(gate).in_set(SimSet::ScriptUpdate));
     })
 }
 
