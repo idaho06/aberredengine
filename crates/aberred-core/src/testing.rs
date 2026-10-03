@@ -10,6 +10,7 @@ use bevy_ecs::message::Messages;
 use bevy_ecs::world::World;
 use glam::Vec2;
 
+use crate::components::sprite::Sprite;
 use crate::protocol::audio::AudioCmd;
 use crate::resources::appstate::AppState;
 use crate::resources::camerafollowconfig::CameraFollowConfig;
@@ -40,6 +41,11 @@ pub fn approx_eq(a: f32, b: f32) -> bool {
 /// [`approx_eq`] on both axes.
 pub fn vec2_approx_eq(a: Vec2, b: Vec2) -> bool {
     approx_eq(a.x, b.x) && approx_eq(a.y, b.y)
+}
+
+/// A `w`×`h` sprite (texture key `"test"`) with its pivot at `(origin_x, origin_y)`.
+pub fn sprite_with_origin(w: f32, h: f32, origin_x: f32, origin_y: f32) -> Sprite {
+    Sprite::new("test", w, h).with_origin(Vec2::new(origin_x, origin_y))
 }
 
 /// Insert the resources a `GameCtx` system param reads, with default values

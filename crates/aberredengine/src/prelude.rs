@@ -73,8 +73,6 @@ pub use aberred_core::systems::GameCtx;
 pub use aberred_core::systems::gamestate::state_is_playing;
 pub use aberred_core::systems::scene_dispatch::{WorldDraw, WorldDrawCtx};
 
-pub use aberred_render::resources::fontstore::FontStore;
-pub use aberred_render::resources::scene_table::{GuiCallback, GuiCtx};
-pub use aberred_render::resources::texturestore::TextureStore;
+pub use crate::render::*;
 
 pub use crate::engine_app::{EngineBuilder, SceneDescriptor, SimSet};

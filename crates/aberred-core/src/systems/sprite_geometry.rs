@@ -1,8 +1,8 @@
-//! Pure sprite geometry shared by the render thread's draw path and logic-side
-//! world-space hit testing (e.g. mouse picking).
+//! Pure sprite geometry: where a sprite is drawn, in world space.
 //!
-//! Everything here uses core math types only, so logic-side code can compute
-//! exactly where a sprite is drawn without touching the render crate.
+//! The render thread's draw path uses it, and because it needs only core math
+//! types, logic-side game code can use it too, e.g. to hit-test the mouse
+//! against what is actually drawn, without touching the render crate.
 
 use crate::components::globaltransform2d::GlobalTransform2D;
 use crate::components::mapposition::MapPosition;
@@ -28,29 +28,9 @@ pub struct SpriteRenderGeometry {
     pub rotation: f32,
 }
 
-#[cfg(test)]
-impl SpriteRenderGeometry {
-    /// World-space position of the anchor/pivot (always `(dest.x, dest.y)`).
-    fn anchor_world_pos(&self) -> Vec2 {
-        Vec2::new(self.dest.x, self.dest.y)
-    }
-
-    /// Visual top-left corner (ignoring rotation).
-    fn visual_top_left(&self) -> Vec2 {
-        Vec2::new(self.dest.x - self.origin.x, self.dest.y - self.origin.y)
-    }
-
-    /// Visual bottom-right corner (ignoring rotation).
-    fn visual_bottom_right(&self) -> Vec2 {
-        Vec2::new(
-            self.dest.x - self.origin.x + self.dest.width,
-            self.dest.y - self.origin.y + self.dest.height,
-        )
-    }
-}
-
 /// Compute where a sprite is drawn: the destination rectangle, scaled pivot
 /// and rotation for a sprite at `pos` with optional `scale` and `rot`.
+#[inline]
 pub fn compute_sprite_geometry(
     pos: &MapPosition,
     sprite: &Sprite,
@@ -95,11 +75,21 @@ pub fn resolve_world_transform(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::math::Vec2;
-    use crate::testing::approx_eq;
+    use crate::testing::{approx_eq, sprite_with_origin};
 
-    fn make_sprite(w: f32, h: f32, origin_x: f32, origin_y: f32) -> Sprite {
-        Sprite::new("test", w, h).with_origin(Vec2::new(origin_x, origin_y))
+    /// World-space position of the anchor/pivot (always `(dest.x, dest.y)`).
+    fn anchor_pos(g: &SpriteRenderGeometry) -> Vec2 {
+        Vec2::new(g.dest.x, g.dest.y)
+    }
+
+    /// Visual top-left corner (ignoring rotation).
+    fn visual_top_left(g: &SpriteRenderGeometry) -> Vec2 {
+        Vec2::new(g.dest.x - g.origin.x, g.dest.y - g.origin.y)
+    }
+
+    /// Visual bottom-right corner (ignoring rotation).
+    fn visual_bottom_right(g: &SpriteRenderGeometry) -> Vec2 {
+        visual_top_left(g) + Vec2::new(g.dest.width, g.dest.height)
     }
 
     // --- Anchor preservation tests ---
@@ -107,12 +97,12 @@ mod tests {
     #[test]
     fn anchor_preserved_with_center_origin() {
         let pos = MapPosition::new(100.0, 100.0);
-        let sprite = make_sprite(32.0, 32.0, 16.0, 16.0);
+        let sprite = sprite_with_origin(32.0, 32.0, 16.0, 16.0);
 
         for scale_factor in [0.5_f32, 1.0, 2.0, 3.0, 10.0] {
             let scale = Scale::new(scale_factor, scale_factor);
             let geom = compute_sprite_geometry(&pos, &sprite, Some(&scale), None);
-            let anchor = geom.anchor_world_pos();
+            let anchor = anchor_pos(&geom);
             assert!(
                 approx_eq(anchor.x, 100.0) && approx_eq(anchor.y, 100.0),
                 "Center origin: anchor drifted to ({}, {}) at scale {}",
@@ -126,12 +116,12 @@ mod tests {
     #[test]
     fn anchor_preserved_with_topleft_origin() {
         let pos = MapPosition::new(50.0, 75.0);
-        let sprite = make_sprite(64.0, 48.0, 0.0, 0.0);
+        let sprite = sprite_with_origin(64.0, 48.0, 0.0, 0.0);
 
         for scale_factor in [0.25_f32, 1.0, 4.0] {
             let scale = Scale::new(scale_factor, scale_factor);
             let geom = compute_sprite_geometry(&pos, &sprite, Some(&scale), None);
-            let anchor = geom.anchor_world_pos();
+            let anchor = anchor_pos(&geom);
             assert!(
                 approx_eq(anchor.x, 50.0) && approx_eq(anchor.y, 75.0),
                 "Top-left origin: anchor drifted to ({}, {}) at scale {}",
@@ -145,12 +135,12 @@ mod tests {
     #[test]
     fn anchor_preserved_with_arbitrary_origin() {
         let pos = MapPosition::new(200.0, 150.0);
-        let sprite = make_sprite(32.0, 48.0, 10.0, 20.0);
+        let sprite = sprite_with_origin(32.0, 48.0, 10.0, 20.0);
 
         for (sx, sy) in [(1.0, 1.0), (2.0, 2.0), (0.5, 0.5), (3.0, 1.5)] {
             let scale = Scale::new(sx, sy);
             let geom = compute_sprite_geometry(&pos, &sprite, Some(&scale), None);
-            let anchor = geom.anchor_world_pos();
+            let anchor = anchor_pos(&geom);
             assert!(
                 approx_eq(anchor.x, 200.0) && approx_eq(anchor.y, 150.0),
                 "Arbitrary origin: anchor drifted to ({}, {}) at scale ({}, {})",
@@ -167,17 +157,17 @@ mod tests {
     #[test]
     fn visual_bounds_scale_proportionally() {
         let pos = MapPosition::new(100.0, 100.0);
-        let sprite = make_sprite(32.0, 32.0, 10.0, 10.0);
+        let sprite = sprite_with_origin(32.0, 32.0, 10.0, 10.0);
 
         let geom_1x = compute_sprite_geometry(&pos, &sprite, None, None);
-        let tl_1x = geom_1x.visual_top_left();
-        let br_1x = geom_1x.visual_bottom_right();
+        let tl_1x = visual_top_left(&geom_1x);
+        let br_1x = visual_bottom_right(&geom_1x);
 
         // At 2x scale, distances from anchor to each edge should double
         let scale = Scale::new(2.0, 2.0);
         let geom_2x = compute_sprite_geometry(&pos, &sprite, Some(&scale), None);
-        let tl_2x = geom_2x.visual_top_left();
-        let br_2x = geom_2x.visual_bottom_right();
+        let tl_2x = visual_top_left(&geom_2x);
+        let br_2x = visual_bottom_right(&geom_2x);
 
         // Distance from anchor (100,100) to left edge
         let dist_left_1x = 100.0 - tl_1x.x;
@@ -229,13 +219,13 @@ mod tests {
     #[test]
     fn non_uniform_scale_preserves_anchor() {
         let pos = MapPosition::new(100.0, 100.0);
-        let sprite = make_sprite(32.0, 32.0, 16.0, 16.0);
+        let sprite = sprite_with_origin(32.0, 32.0, 16.0, 16.0);
         let scale = Scale::new(2.0, 0.5);
 
         let geom = compute_sprite_geometry(&pos, &sprite, Some(&scale), None);
 
         // Anchor must stay at entity position
-        let anchor = geom.anchor_world_pos();
+        let anchor = anchor_pos(&geom);
         assert!(approx_eq(anchor.x, 100.0) && approx_eq(anchor.y, 100.0));
 
         // Width doubled, height halved
@@ -252,7 +242,7 @@ mod tests {
     #[test]
     fn unit_scale_matches_no_scale() {
         let pos = MapPosition::new(42.0, 77.0);
-        let sprite = make_sprite(24.0, 36.0, 8.0, 12.0);
+        let sprite = sprite_with_origin(24.0, 36.0, 8.0, 12.0);
         let unit = Scale::new(1.0, 1.0);
 
         let geom_none = compute_sprite_geometry(&pos, &sprite, None, None);
@@ -272,7 +262,7 @@ mod tests {
     #[test]
     fn default_rotation_is_zero() {
         let pos = MapPosition::new(0.0, 0.0);
-        let sprite = make_sprite(32.0, 32.0, 0.0, 0.0);
+        let sprite = sprite_with_origin(32.0, 32.0, 0.0, 0.0);
         let geom = compute_sprite_geometry(&pos, &sprite, None, None);
         assert!(approx_eq(geom.rotation, 0.0));
     }
@@ -280,7 +270,7 @@ mod tests {
     #[test]
     fn rotation_passes_through() {
         let pos = MapPosition::new(0.0, 0.0);
-        let sprite = make_sprite(32.0, 32.0, 16.0, 16.0);
+        let sprite = sprite_with_origin(32.0, 32.0, 16.0, 16.0);
         let rot = Rotation { degrees: 45.0 };
         let geom = compute_sprite_geometry(&pos, &sprite, None, Some(&rot));
         assert!(approx_eq(geom.rotation, 45.0));

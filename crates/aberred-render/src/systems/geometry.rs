@@ -170,12 +170,7 @@ pub(super) fn draw_rotated_rect_lines(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use aberred_core::math::Vec2;
-    use aberred_core::testing::approx_eq;
-
-    fn make_sprite(w: f32, h: f32, origin_x: f32, origin_y: f32) -> Sprite {
-        Sprite::new("test", w, h).with_origin(Vec2::new(origin_x, origin_y))
-    }
+    use aberred_core::testing::{approx_eq, sprite_with_origin};
 
     // --- View bounds tests ---
 
@@ -303,7 +298,7 @@ mod tests {
     #[test]
     fn sprite_cull_bounds_no_scale_no_rot() {
         let pos = MapPosition::new(100.0, 200.0);
-        let sprite = make_sprite(32.0, 48.0, 16.0, 24.0);
+        let sprite = sprite_with_origin(32.0, 48.0, 16.0, 24.0);
         let (min, max) = compute_sprite_cull_bounds(&pos, &sprite, None, None);
 
         // min = pos - origin, max = min + size
@@ -316,7 +311,7 @@ mod tests {
     #[test]
     fn sprite_cull_bounds_with_scale() {
         let pos = MapPosition::new(100.0, 200.0);
-        let sprite = make_sprite(32.0, 48.0, 16.0, 24.0);
+        let sprite = sprite_with_origin(32.0, 48.0, 16.0, 24.0);
         let scale = Scale::new(2.0, 2.0);
         let (min, max) = compute_sprite_cull_bounds(&pos, &sprite, Some(&scale), None);
 
@@ -330,7 +325,7 @@ mod tests {
     #[test]
     fn sprite_cull_bounds_with_rotation() {
         let pos = MapPosition::new(100.0, 100.0);
-        let sprite = make_sprite(32.0, 32.0, 16.0, 16.0);
+        let sprite = sprite_with_origin(32.0, 32.0, 16.0, 16.0);
         let rot = Rotation { degrees: 45.0 };
         let (min, max) = compute_sprite_cull_bounds(&pos, &sprite, None, Some(&rot));
 
@@ -363,7 +358,7 @@ mod tests {
         // Sprite at the right edge of view, rotated 45°. Its AABB center is just
         // outside the unscaled bounds but the bounding circle overlaps.
         let pos = MapPosition::new(410.0, 0.0);
-        let sprite = make_sprite(64.0, 64.0, 32.0, 32.0);
+        let sprite = sprite_with_origin(64.0, 64.0, 32.0, 32.0);
         let rot = Rotation { degrees: 45.0 };
         let (min, max) = compute_sprite_cull_bounds(&pos, &sprite, None, Some(&rot));
 
