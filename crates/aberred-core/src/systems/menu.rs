@@ -415,7 +415,7 @@ pub fn menu_controller_observer(
                         "menu_controller_observer: Selection confirmed! item_id={}, triggering MenuSelectionEvent",
                         selected_id
                     );
-                    signals.clear_flag("waiting_selection");
+                    signals.remove_flag("waiting_selection");
                     menu.active = false;
                     signals.set_string("selected_item", selected_id.clone());
                     commands.trigger(MenuSelectionEvent {
@@ -910,10 +910,7 @@ mod tests {
         assert_eq!(world.resource::<Selections>().0, [(menu, "b".to_string())]);
         let signals = world.get::<Signals>(menu).unwrap();
         assert!(!signals.has_flag("waiting_selection"));
-        assert_eq!(
-            signals.get_string("selected_item").map(String::as_str),
-            Some("b")
-        );
+        assert_eq!(signals.get_string("selected_item"), Some("b"));
         assert!(!world.get::<Menu>(menu).unwrap().active);
 
         press(&mut world, InputAction::Action2);

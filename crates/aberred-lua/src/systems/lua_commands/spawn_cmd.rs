@@ -1220,7 +1220,7 @@ mod tests {
             (Some(1.5), Some(3))
         );
         assert!(s.has_flag("f"));
-        assert_eq!(s.get_string("n").map(String::as_str), Some("bob"));
+        assert_eq!(s.get_string("n"), Some("bob"));
         let binding = world.get::<SignalBinding>(e).unwrap();
         assert_eq!(binding.signal_key, "score");
         assert_eq!(binding.format.as_deref(), Some("Score: {}"));

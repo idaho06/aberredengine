@@ -62,7 +62,7 @@ pub fn animation(
                 && anim_comp.frame_index == 0
                 && let Some(signals) = maybe_signals.as_mut()
             {
-                signals.clear_flag(sk::ANIMATION_ENDED);
+                signals.remove_flag(sk::ANIMATION_ENDED);
             }
             if anim_comp.finished {
                 continue;
@@ -88,7 +88,7 @@ pub fn animation(
                         }
                     }
                 } else if let Some(signals) = maybe_signals.as_mut() {
-                    signals.clear_flag(sk::ANIMATION_ENDED);
+                    signals.remove_flag(sk::ANIMATION_ENDED);
                 }
             }
 

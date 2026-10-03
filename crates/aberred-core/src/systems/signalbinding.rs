@@ -126,7 +126,7 @@ fn get_entity_signal_as_str<'a>(signals: &'a Signals, signal_key: &str) -> Optio
         return Some(SignalStr::Stack(buf));
     }
     if let Some(s) = signals.get_string(signal_key) {
-        return Some(SignalStr::Borrowed(s.as_str()));
+        return Some(SignalStr::Borrowed(s));
     }
     if signals.has_flag(signal_key) {
         return Some(SignalStr::Borrowed("true"));

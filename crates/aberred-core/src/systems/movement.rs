@@ -45,7 +45,7 @@ pub fn movement(
         if rigidbody.frozen {
             // Still update signals for frozen entities (they might still be "moving" via external control)
             if let Some(signals) = maybe_signals.as_mut() {
-                signals.clear_flag(sk::MOVING);
+                signals.remove_flag(sk::MOVING);
                 signals.update_scalar(sk::SPEED_SQ, 0.0);
             }
             continue;
@@ -91,7 +91,7 @@ pub fn movement(
             if speed_sq > 0.0 {
                 signals.ensure_flag(sk::MOVING);
             } else {
-                signals.clear_flag(sk::MOVING);
+                signals.remove_flag(sk::MOVING);
             }
             signals.update_scalar(sk::SPEED_SQ, speed_sq);
         }

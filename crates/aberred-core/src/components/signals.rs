@@ -82,7 +82,7 @@ impl Signals {
         self.scalars.get(key).copied()
     }
     /// Remove a scalar signal by key.
-    pub fn clear_scalar(&mut self, key: &str) -> Option<f32> {
+    pub fn remove_scalar(&mut self, key: &str) -> Option<f32> {
         self.scalars.remove(key)
     }
     /// Read-only view of all scalar signals.
@@ -98,7 +98,7 @@ impl Signals {
         self.integers.get(key).copied()
     }
     /// Remove an integer signal by key.
-    pub fn clear_integer(&mut self, key: &str) -> Option<i32> {
+    pub fn remove_integer(&mut self, key: &str) -> Option<i32> {
         self.integers.remove(key)
     }
     /// Read-only view of all integer signals.
@@ -123,17 +123,20 @@ impl Signals {
             self.flags.insert(key.to_string());
         }
     }
-    /// Remove a flag (make it false/absent).
-    pub fn clear_flag(&mut self, key: &str) {
-        self.flags.remove(key);
+    /// Remove a flag (make it false/absent). Returns whether it was present.
+    pub fn remove_flag(&mut self, key: &str) -> bool {
+        self.flags.remove(key)
     }
     /// Check whether a flag is present/true.
     pub fn has_flag(&self, key: &str) -> bool {
         self.flags.contains(key)
     }
-    /// Remove a flag and return whether it was present.
+    /// Consume a one-shot event flag: returns whether it was set, and clears it.
+    ///
+    /// The same operation as [`remove_flag`](Self::remove_flag), named for
+    /// the `if signals.take_flag("event") { ... }` idiom.
     pub fn take_flag(&mut self, key: &str) -> bool {
-        self.flags.remove(key)
+        self.remove_flag(key)
     }
     /// Toggle a flag: remove it if present, add it if absent.
     pub fn toggle_flag(&mut self, key: &str) {
@@ -150,8 +153,8 @@ impl Signals {
         self.strings.insert(key.into(), value.into());
     }
     /// Get a string signal by key.
-    pub fn get_string(&self, key: &str) -> Option<&String> {
-        self.strings.get(key)
+    pub fn get_string(&self, key: &str) -> Option<&str> {
+        self.strings.get(key).map(String::as_str)
     }
     /// Remove a string signal by key.
     pub fn remove_string(&mut self, key: &str) -> Option<String> {
@@ -211,6 +214,26 @@ mod tests {
         assert!(s.take_flag("is_running"));
         assert!(!s.has_flag("is_running"));
         assert!(!s.take_flag("is_running"));
+    }
+
+    #[test]
+    fn removals_return_what_was_present() {
+        let mut s = Signals::default();
+        s.set_scalar("s", 1.5);
+        s.set_integer("i", 7);
+        s.set_string("t", "hi");
+        s.set_flag("f");
+        assert_eq!(s.get_string("t"), Some("hi"));
+
+        assert_eq!(s.remove_scalar("s"), Some(1.5));
+        assert_eq!(s.remove_integer("i"), Some(7));
+        assert_eq!(s.remove_string("t").as_deref(), Some("hi"));
+        assert!(s.remove_flag("f"));
+
+        assert_eq!(s.remove_scalar("s"), None);
+        assert_eq!(s.remove_integer("i"), None);
+        assert_eq!(s.remove_string("t"), None);
+        assert!(!s.remove_flag("f"));
     }
 
     #[test]

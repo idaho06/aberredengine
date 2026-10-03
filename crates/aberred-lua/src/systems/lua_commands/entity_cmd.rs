@@ -327,7 +327,7 @@ fn process_signal_cmd(cmd: EntityCmd, queries: &mut EntityCmdQueries) {
                 return;
             };
             if let Ok(mut signals) = queries.signals.get_mut(entity) {
-                signals.clear_flag(&flag);
+                signals.remove_flag(&flag);
             }
         }
         EntityCmd::SignalToggleFlag { entity_id, flag } => {
@@ -355,7 +355,7 @@ fn process_signal_cmd(cmd: EntityCmd, queries: &mut EntityCmdQueries) {
                 return;
             };
             if let Ok(mut signals) = queries.signals.get_mut(entity) {
-                signals.clear_scalar(&key);
+                signals.remove_scalar(&key);
             }
         }
         EntityCmd::SignalSetString {
@@ -395,7 +395,7 @@ fn process_signal_cmd(cmd: EntityCmd, queries: &mut EntityCmdQueries) {
                 return;
             };
             if let Ok(mut signals) = queries.signals.get_mut(entity) {
-                signals.clear_integer(&key);
+                signals.remove_integer(&key);
             }
         }
         _ => unreachable!(),
@@ -1449,7 +1449,7 @@ mod tests {
             (s.get_integer("i"), s.get_integer("i_gone")),
             (Some(7), None)
         );
-        assert_eq!(s.get_string("name").map(String::as_str), Some("bob"));
+        assert_eq!(s.get_string("name"), Some("bob"));
         assert!(s.get_string("n_gone").is_none());
 
         run_entity_cmd(

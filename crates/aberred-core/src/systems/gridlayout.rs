@@ -211,7 +211,7 @@ mod tests {
         let (_, red) = q.iter(&world).find(|(s, _)| &*s.tex_key == "red").unwrap();
         assert_eq!(red.get_integer("hp"), Some(2));
         assert_eq!(red.get_scalar("speed"), Some(1.5));
-        assert_eq!(red.get_string("kind").map(String::as_str), Some("brick"));
+        assert_eq!(red.get_string("kind"), Some("brick"));
         assert!(red.has_flag("solid"));
         assert!(!red.has_flag("hidden"), "a false bool sets no flag");
         let (_, green) = q
