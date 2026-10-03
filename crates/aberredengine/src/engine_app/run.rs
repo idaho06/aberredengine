@@ -19,7 +19,6 @@ use aberred_core::resources::drawable_snapshot::DrawableSnapshot;
 use aberred_core::resources::gameconfig::default_render_fps;
 use aberred_render::resources::mirrors::RenderGameConfig;
 use aberred_render::resources::quit_requested::QuitRequested;
-use aberred_render::resources::scene_table::{RenderSceneTable, SceneRender};
 use aberred_render::resources::thread_stats::RenderStats;
 
 impl EngineBuilder {
@@ -133,24 +132,9 @@ impl EngineBuilder {
         let (snap_in, snap_out) =
             triple_buffer::TripleBuffer::new(&DrawableSnapshot::default()).split();
 
-        // Render-side clone of the scene-descriptor table (fn pointers, cheap)
-        // for gui/world-draw callback resolution against RenderActiveScene.
-        let render_scene_table = use_scene_manager.then(|| {
-            RenderSceneTable(
-                self.scenes
-                    .iter()
-                    .map(|(name, desc)| {
-                        (
-                            name.clone(),
-                            SceneRender {
-                                gui_callback: desc.gui_callback,
-                                world_draw_callback: desc.world_draw_callback,
-                            },
-                        )
-                    })
-                    .collect(),
-            )
-        });
+        // Render-side table of per-scene gui/world-draw callbacks (fn pointers,
+        // cheap) for resolution against RenderActiveScene.
+        let render_scene_table = use_scene_manager.then(|| self.render_scene_table());
 
         let init = LogicInit {
             config: config.clone(),

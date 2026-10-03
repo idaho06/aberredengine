@@ -4,9 +4,8 @@
 //! pattern — an optional higher-level alternative to the raw `.on_switch_scene()` hook.
 //!
 //! - [`SceneLogic`] — per-scene logic callbacks (`on_enter`, `on_update`, `on_exit`);
-//!   the render-side half (`gui_callback`/`world_draw_callback`) lives in
-//!   `aberred-render`'s `SceneRender`, joined by scene name in the facade's
-//!   combined `SceneDescriptor`.
+//!   a scene's render callbacks live in `aberred-render`'s `SceneRender`, keyed by
+//!   the same scene name.
 //! - [`scene_switch_system`] — engine-owned scene transition: [`SceneExited`] → despawn →
 //!   on_exit → on_enter → [`SceneEntered`]
 //! - [`spawn_scene_entities`] — spawns the persistent [`SceneName`] entity the scene events target
@@ -165,8 +164,8 @@ impl<'a> WorldDrawCtx<'a> {
 // SceneLogic
 // ---------------------------------------------------------------------------
 
-/// Logic-side callbacks for a single scene (core-only half of the combined
-/// `SceneDescriptor` the facade exposes via `EngineBuilder::add_scene`).
+/// Logic-side callbacks for a single scene, from the facade's
+/// `SceneDescriptor` (`EngineBuilder::add_scene`).
 #[derive(Clone)]
 pub struct SceneLogic {
     /// Called once when the scene becomes active.

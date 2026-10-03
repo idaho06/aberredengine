@@ -460,8 +460,6 @@ fn empty_scene() -> aberredengine::engine_app::SceneDescriptor {
         on_enter: |_| {},
         on_update: None,
         on_exit: None,
-        gui_callback: None,
-        world_draw_callback: None,
     }
 }
 

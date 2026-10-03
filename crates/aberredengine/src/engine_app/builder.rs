@@ -16,6 +16,8 @@ use aberred_core::events::scene::{SceneEntered, SceneExited};
 use aberred_core::resources::systemsstore as hook_keys;
 #[cfg(feature = "lua")]
 use aberred_core::systems::gamestate::state_is_playing;
+use aberred_core::systems::scene_dispatch::WorldDrawCallback;
+use aberred_render::resources::scene_table::{GuiCallback, RenderSceneTable, SceneRender};
 
 /// Builder for bootstrapping the engine.
 ///
@@ -37,6 +39,10 @@ pub struct EngineBuilder {
     pub(super) update_hook: Option<UpdateRegistrar>,
     pub(super) switch_scene_hook: Option<HookRegistrar>,
     pub(super) scenes: Vec<(String, SceneDescriptor)>,
+    /// `.add_scene_gui()` registrations, joined into the render table by scene name.
+    pub(super) scene_guis: Vec<(&'static str, GuiCallback)>,
+    /// `.add_scene_world_draw()` registrations, joined into the render table by scene name.
+    pub(super) scene_world_draws: Vec<(&'static str, WorldDrawCallback)>,
     pub(super) initial_scene: Option<String>,
     /// Group names from `.track_group()`, tracked across scene switches.
     pub(super) tracked_groups: Vec<String>,
@@ -79,6 +85,8 @@ impl EngineBuilder {
             update_hook: None,
             switch_scene_hook: None,
             scenes: Vec::new(),
+            scene_guis: Vec::new(),
+            scene_world_draws: Vec::new(),
             initial_scene: None,
             tracked_groups: Vec::new(),
             extra_systems: Vec::new(),
@@ -369,6 +377,56 @@ impl EngineBuilder {
     pub fn add_scene(mut self, name: impl Into<String>, descriptor: SceneDescriptor) -> Self {
         self.scenes.push((name.into(), descriptor));
         self
+    }
+
+    /// Draw ImGui widgets every render frame while the scene `scene` is active.
+    ///
+    /// Runs on the render thread; see [`GuiCallback`] for what it can read and
+    /// write. Calling it again for the same scene replaces the callback.
+    ///
+    /// # Errors (at `.run()`/`.try_run()`)
+    ///
+    /// As [`add_scene_system`](Self::add_scene_system).
+    pub fn add_scene_gui(mut self, scene: &'static str, gui: GuiCallback) -> Self {
+        self.scene_refs.push(("add_scene_gui", scene));
+        self.scene_guis.push((scene, gui));
+        self
+    }
+
+    /// Draw world-space overlays every render frame while the scene `scene` is
+    /// active, inside the camera transform.
+    ///
+    /// Runs on the render thread; see
+    /// [`WorldDrawCallback`] for what it can read. Calling it again for the same
+    /// scene replaces the callback.
+    ///
+    /// # Errors (at `.run()`/`.try_run()`)
+    ///
+    /// As [`add_scene_system`](Self::add_scene_system).
+    pub fn add_scene_world_draw(mut self, scene: &'static str, draw: WorldDrawCallback) -> Self {
+        self.scene_refs.push(("add_scene_world_draw", scene));
+        self.scene_world_draws.push((scene, draw));
+        self
+    }
+
+    /// The render thread's per-scene callback table: one entry per scene with
+    /// a `.add_scene_gui()` or `.add_scene_world_draw()` callback.
+    pub(super) fn render_scene_table(&self) -> RenderSceneTable {
+        let mut table = RenderSceneTable::default();
+        let guis = self
+            .scene_guis
+            .iter()
+            .map(|&(scene, gui)| (scene, Some(gui), None));
+        let draws = (self.scene_world_draws.iter()).map(|&(scene, draw)| (scene, None, Some(draw)));
+        for (scene, gui, draw) in guis.chain(draws) {
+            let render = table.0.entry(scene.to_owned()).or_insert(SceneRender {
+                gui_callback: None,
+                world_draw_callback: None,
+            });
+            render.gui_callback = gui.or(render.gui_callback);
+            render.world_draw_callback = draw.or(render.world_draw_callback);
+        }
+        table
     }
 
     /// Set the initial scene for [`SceneManager`](aberred_core::resources::scenemanager::SceneManager)-based games.

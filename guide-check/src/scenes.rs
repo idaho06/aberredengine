@@ -20,7 +20,6 @@ mod scene_callbacks {
     fn descriptor() -> aberredengine::engine_app::SceneDescriptor { // GLUE
         aberredengine::engine_app::SceneDescriptor { // GLUE
             on_enter: enter, on_update: Some(update), on_exit: Some(exit), // GLUE
-            gui_callback: Some(my_gui), world_draw_callback: Some(my_world_draw), // GLUE
         } // GLUE
     } // GLUE
 
@@ -77,24 +76,15 @@ mod imgui_gui_callback {
         }
     }
 
-    fn editor_enter(_ctx: &mut GameCtx) {} // GLUE
 
     fn register() -> EngineBuilder { // GLUE
     EngineBuilder::new() // GLUE
-    .add_scene("editor", SceneDescriptor {
-        on_enter:     editor_enter,
-        on_update:    Some(editor_update),
-        on_exit:      None,
-        gui_callback: Some(editor_gui),
-        world_draw_callback: None,
-    })
+    .add_scene_gui("editor", editor_gui)
     } // GLUE
 }
 
 // World-space draw callback (Rust-only)
 mod world_space_draw_callback {
-    fn editor_enter(_: &mut GameCtx) {} // GLUE
-    fn editor_update(_: &mut GameCtx, _: f32, _: &InputState) {} // GLUE
     fn editor_gui(_: &mut GuiCtx) {} // GLUE
 
     use aberredengine::prelude::*;
@@ -116,13 +106,8 @@ mod world_space_draw_callback {
 
     fn register() -> EngineBuilder { // GLUE
     EngineBuilder::new() // GLUE
-    .add_scene("editor", SceneDescriptor {
-        on_enter:            editor_enter,
-        on_update:           Some(editor_update),
-        on_exit:             None,
-        gui_callback:        Some(editor_gui),
-        world_draw_callback: Some(editor_world_draw),
-    })
+    .add_scene_gui("editor", editor_gui)
+    .add_scene_world_draw("editor", editor_world_draw)
     } // GLUE
 }
 

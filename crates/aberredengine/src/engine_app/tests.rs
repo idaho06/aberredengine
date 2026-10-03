@@ -22,6 +22,8 @@ use aberred_core::resources::gameconfig::GameConfig;
 use aberred_core::resources::gamestate::{GameState, GameStates};
 use aberred_core::resources::input::InputState;
 use aberred_core::resources::systemsstore::SystemsStore;
+use aberred_core::systems::scene_dispatch::WorldDrawCtx;
+use aberred_render::resources::scene_table::GuiCtx;
 
 #[cfg(feature = "lua")]
 use aberred_core::systems::animation::animation_controller;
@@ -510,8 +512,6 @@ fn make_descriptor() -> SceneDescriptor {
         on_enter: dummy_scene_enter,
         on_update: Some(dummy_scene_update),
         on_exit: None,
-        gui_callback: None,
-        world_draw_callback: None,
     }
 }
 
@@ -720,6 +720,28 @@ fn initial_scene_not_registered_lists_every_registered_scene() {
 fn scene_tick() {}
 fn on_level_entered(_: On<SceneEntered>) {}
 fn on_level_exited(_: On<SceneExited>) {}
+fn level_gui(_: &mut GuiCtx) {}
+fn level_world_draw(_: &mut WorldDrawCtx) {}
+
+/// `add_scene_gui`/`add_scene_world_draw` land on their scene's render-table
+/// entry, whatever the call order relative to `add_scene`; a scene without
+/// render callbacks needs no entry (`render_system` skips a missing key).
+#[test]
+fn scene_render_callbacks_land_on_their_scene() {
+    let builder = EngineBuilder::new()
+        .add_scene_gui("level", level_gui)
+        .add_scene("menu", make_descriptor())
+        .add_scene("level", make_descriptor())
+        .add_scene_world_draw("level", level_world_draw)
+        .initial_scene("menu");
+    validate(&builder).unwrap();
+
+    let table = builder.render_scene_table();
+    let level = table.0.get("level").expect("level has render callbacks");
+    assert!(level.gui_callback.is_some());
+    assert!(level.world_draw_callback.is_some());
+    assert!(!table.0.contains_key("menu"));
+}
 
 #[test]
 fn scene_scoped_methods_reject_an_unregistered_scene() {
@@ -740,6 +762,11 @@ fn scene_scoped_methods_reject_an_unregistered_scene() {
         (
             base().on_scene_exit("level", on_level_exited),
             "on_scene_exit",
+        ),
+        (base().add_scene_gui("level", level_gui), "add_scene_gui"),
+        (
+            base().add_scene_world_draw("level", level_world_draw),
+            "add_scene_world_draw",
         ),
     ];
     for (builder, expected_method) in cases {

@@ -66,9 +66,8 @@ impl<'a> GuiCtx<'a> {
     }
 }
 
-/// Render-side half of a scene's callbacks — the counterpart to core's
-/// `SceneLogic`, joined by scene name in the facade's combined
-/// `SceneDescriptor`.
+/// A scene's render-thread callbacks, registered with the facade's
+/// `EngineBuilder::add_scene_gui`/`EngineBuilder::add_scene_world_draw`.
 #[derive(Clone)]
 pub struct SceneRender {
     /// Called every frame to draw ImGui GUI widgets (optional). Rust-only.
@@ -77,10 +76,11 @@ pub struct SceneRender {
     pub world_draw_callback: Option<WorldDrawCallback>,
 }
 
-/// Render-side clone of the scene-descriptor table.
+/// Per-scene render callbacks, keyed by scene name. A scene without any has no
+/// entry.
 ///
-/// `render_system` resolves the active scene's `gui_callback`/
-/// `world_draw_callback` against this table using
+/// `render_system` resolves the active scene's GUI/world-draw callbacks
+/// against this table using
 /// `DrawableSnapshot.active_scene`, since the live
 /// [`SceneManager`](aberred_core::resources::scenemanager::SceneManager) (with its
 /// mutable `active_scene` tracking) is logic-world-only. `SceneRender` is

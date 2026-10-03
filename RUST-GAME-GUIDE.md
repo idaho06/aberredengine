@@ -70,7 +70,7 @@ Start every game module with the prelude:
 use aberredengine::prelude::*;
 ```
 
-It brings in the `bevy_ecs` prelude (`Commands`, `Query`, `Res`, `On`, …) and the `bevy_ecs` crate itself, so `#[derive(Component)]`, `#[derive(Resource)]` and `#[derive(Event)]` work; the math types (`Vec2`, `Color`, `Rect`); the common components, resources, events and commands; and `EngineBuilder`, `SceneDescriptor`, `SimSet` and `EngineError`. Less common items keep their full path under `aberredengine::core::...`, and the examples below import those explicitly. The render-thread types a `gui_callback` receives (`TextureStore`, `FontStore`, `GuiCtx`, `GuiCallback`) are in the prelude and in `aberredengine::render`; the rest of the render thread is out of reach of game code.
+It brings in the `bevy_ecs` prelude (`Commands`, `Query`, `Res`, `On`, …) and the `bevy_ecs` crate itself, so `#[derive(Component)]`, `#[derive(Resource)]` and `#[derive(Event)]` work; the math types (`Vec2`, `Color`, `Rect`); the common components, resources, events and commands; and `EngineBuilder`, `SceneDescriptor`, `SimSet` and `EngineError`. Less common items keep their full path under `aberredengine::core::...`, and the examples below import those explicitly. The render-thread types a GUI callback receives (`TextureStore`, `FontStore`, `GuiCtx`, `GuiCallback`) are in the prelude and in `aberredengine::render`; the rest of the render thread is out of reach of game code.
 
 The `bevy_ecs` prelude has its own `Result` (`Result<T = (), E = BevyError>`) and a lifecycle event named `Add`, so in a module that glob-imports the prelude they shadow `std::result::Result` and `std::ops::Add`. `Result<T, E>` with an explicit error type is still the standard `Result`; write `std::ops::Add` in full when implementing it.
 
@@ -142,12 +142,12 @@ The engine owns the main loop. You configure it through `EngineBuilder` and supp
 The engine runs **three separate ECS worlds on three threads**: render (the main thread — owns the raylib window and GPU resources), logic/sim (a spawned thread — this is where **all your game code runs**), and audio (a spawned thread, talked to via message queues you already use for sound/music). Understanding this is required to use the rest of this guide correctly.
 
 - **Every hook and callback you write — `on_setup`, `on_enter_play`, scene `on_enter`/`on_update`/`on_exit`, systems added via `.add_system()`/`.configure_schedule()`, `Timer`/`Phase`/`CollisionRule` callbacks, and `.add_observer()` observers — runs on the LOGIC thread**, once per **sim tick**. Sim ticks happen at a configurable rate (`[simulation] hz` in `config.ini`, default 240) **decoupled from your render frame rate** — a sim tick is not the same thing as a rendered frame. `dt` is always the fixed constant `1.0 / hz` (scaled by `WorldTime.time_scale`), never a measured wall-clock value — a render stall does not spike `dt` or replay missed ticks, it simply dilates game time until the stall clears, and sim ticks keep running throughout.
-- **`gui_callback` and `world_draw_callback` are the one exception** — they run on the RENDER thread, inside the render pass itself. This is why they take a context struct (`GuiCtx`/`WorldDrawCtx`) of read-only snapshots instead of live, mutable `WorldSignals` — see below.
+- **Scene GUI and world-draw callbacks (`.add_scene_gui()`/`.add_scene_world_draw()`) are the one exception** — they run on the RENDER thread, inside the render pass itself. This is why they take a context struct (`GuiCtx`/`WorldDrawCtx`) of read-only snapshots instead of live, mutable `WorldSignals` — see below.
 - **A direct consequence**: logic-thread code (everything in the first bullet) can **never** take `RaylibAccess`, `NonSend<FontStore>`, `NonSend<ShaderStore>`, or `Res<TextureStore>` as a system parameter — those resources only exist in the render world. A logic-side system that requests one panics the first time it runs: Bevy checks a system's resources when the system runs, not when the schedule is built. There is no escape hatch to register a custom system on the render thread. This is why asset loading (Section 4) goes through a message queue instead of calling `rl.load_texture(...)` directly inside `setup()`.
 
 ### Approach A — SceneManager (recommended for multi-scene games)
 
-Register named scenes with enter/update/exit callbacks plus optional GUI and world-space draw callbacks. The engine handles despawning non-persistent entities on scene transitions and dispatching to the correct scene's callbacks.
+Register named scenes with enter/update/exit callbacks. A scene's optional GUI and world-space draw callbacks are registered with `.add_scene_gui()`/`.add_scene_world_draw()`. The engine handles despawning non-persistent entities on scene transitions and dispatching to the correct scene's callbacks.
 
 ```rust
 use aberredengine::prelude::*;
@@ -163,15 +163,11 @@ fn main() -> Result<(), EngineError> {
             on_enter:     scenes::menu::enter,
             on_update:    Some(scenes::menu::update),
             on_exit:      None,
-            gui_callback: None,
-            world_draw_callback: None,
         })
         .add_scene("level01", SceneDescriptor {
             on_enter:     scenes::level01::enter,
             on_update:    Some(scenes::level01::update),
             on_exit:      Some(scenes::level01::exit),
-            gui_callback: None,
-            world_draw_callback: None,
         })
         .initial_scene("menu")
         .try_run()
@@ -214,7 +210,7 @@ fn update(ctx: &mut GameCtx, _dt: f32, _input: &InputState) {
 
 ### ImGui GUI callback (Rust-only)
 
-`gui_callback` lets a scene draw an ImGui overlay every frame — useful for editors, debug tools, and dev GUIs. It runs whether or not F11 debug mode is active, inside the same ImGui frame as the debug panels.
+A scene's GUI callback, registered with `.add_scene_gui(scene, callback)`, draws an ImGui overlay every frame while that scene is active — useful for editors, debug tools, and dev GUIs. It runs whether or not F11 debug mode is active, inside the same ImGui frame as the debug panels.
 
 **This callback runs on the render thread** (see [Threading Model](#threading-model-what-your-code-can-access) above) — unlike every other hook in this guide, which runs on the logic thread. That's why it can't reach a live `&mut WorldSignals`: the render thread never holds one. Instead it takes a `&mut GuiCtx`, whose fields are a read-only snapshot and a write-queue:
 
@@ -267,25 +263,19 @@ fn editor_update(ctx: &mut GameCtx, _dt: f32, _input: &InputState) {
 }
 ```
 
-Register it on the descriptor:
+Register it for its scene:
 
 ```rust
-.add_scene("editor", SceneDescriptor {
-    on_enter:     editor_enter,
-    on_update:    Some(editor_update),
-    on_exit:      None,
-    gui_callback: Some(editor_gui),
-    world_draw_callback: None,
-})
+.add_scene_gui("editor", editor_gui)
 ```
 
 > **Convention:** prefix all GUI signal keys with `"gui:"` to avoid collisions with game signals. Use `"gui:action:<verb>"` for flags set by the GUI and consumed by `on_update`, and `"gui:state:<name>"` for values set by `on_update` and read by the GUI.
 
 ### World-space draw callback (Rust-only)
 
-`world_draw_callback` lets a scene draw world-space overlays every frame inside the render pass's `begin_mode2D` block. Use it for things like debug paths, editor gizmos, selection boxes, or navigation links that should follow the active camera transform.
+A scene's world-draw callback, registered with `.add_scene_world_draw(scene, callback)`, draws world-space overlays every frame while that scene is active, inside the render pass's `begin_mode2D` block. Use it for things like debug paths, editor gizmos, selection boxes, or navigation links that should follow the active camera transform.
 
-**Like `gui_callback`, this runs on the render thread** (see [Threading Model](#threading-model-what-your-code-can-access)) — its signals are a read-only `&SignalSnapshot`, not a live `&WorldSignals`.
+**Like the GUI callback, this runs on the render thread** (see [Threading Model](#threading-model-what-your-code-can-access)) — its signals are a read-only `&SignalSnapshot`, not a live `&WorldSignals`.
 
 The callback takes a `&mut WorldDrawCtx` with these fields:
 
@@ -293,7 +283,7 @@ The callback takes a `&mut WorldDrawCtx` with these fields:
 - `camera: &Camera2D` for the active render camera
 - `screen: &ScreenSize` for the internal game resolution
 - `app_state: &AppState` for typed Rust-only snapshots
-- `signals: &SignalSnapshot` for read-only signal access (the `SignalsRead` getters — `ctx.signals.has_flag("key")`; there's no write side here, `world_draw_callback` only draws)
+- `signals: &SignalSnapshot` for read-only signal access (the `SignalsRead` getters — `ctx.signals.has_flag("key")`; there's no write side here, a world-draw callback only draws)
 
 Use the fields through `ctx`, or unpack them with `let WorldDrawCtx { draw, camera, .. } = ctx;`. Either `ctx.draw` or the unpacked `draw` passes straight to your own helpers that take `&mut dyn WorldDraw`, as below.
 
@@ -316,16 +306,11 @@ fn draw_origin_cross(draw: &mut dyn WorldDraw) {
 }
 ```
 
-Register it on the descriptor:
+Register both render callbacks for the scene:
 
 ```rust
-.add_scene("editor", SceneDescriptor {
-    on_enter:            editor_enter,
-    on_update:           Some(editor_update),
-    on_exit:             None,
-    gui_callback:        Some(editor_gui),
-    world_draw_callback: Some(editor_world_draw),
-})
+.add_scene_gui("editor", editor_gui)
+.add_scene_world_draw("editor", editor_world_draw)
 ```
 
 ### Approach B — Raw hooks (single-scene or full manual control)
@@ -417,6 +402,8 @@ Setup ──→ Playing ──→ Quitting
 | `.on_enter_play(system)` | Called once when transitioning to `Playing`. Optional with raw hooks; the SceneManager supplies its own. |
 | `.on_switch_scene(system)` | Called when a scene transition is requested |
 | `.add_scene(name, descriptor)` | Register a named scene (SceneManager path) |
+| `.add_scene_gui(scene, callback)` | Draw ImGui widgets every render frame while `scene` is active (render thread). See [ImGui GUI callback](#imgui-gui-callback-rust-only). |
+| `.add_scene_world_draw(scene, callback)` | Draw world-space overlays every render frame while `scene` is active (render thread). See [World-space draw callback](#world-space-draw-callback-rust-only). |
 | `.initial_scene(name)` | Which scene starts first (required with `.add_scene()`) |
 | `.track_group(name)` | Count group `name`'s entities for the whole game (published as `"group_count:<name>"`, kept across scene switches). Can be called multiple times. See [Group tracking across scenes](#64-group-tracking-across-scenes). |
 | `.add_system(system)` | Add a per-sim-tick system, run only while `Playing` (`run_if(state_is_playing)`, ordered alongside script-update systems). Can be called multiple times. A sim tick is not the same as a render frame; see [Threading Model](#threading-model-what-your-code-can-access). |
@@ -1434,7 +1421,7 @@ EngineBuilder::new()
 
 - `EngineBuilder` has no `insert_resource`. Insert your resources from the setup hook (as above) or any other system with `commands.insert_resource(...)`. A system that takes `Res<Score>` panics the first time it runs while the resource is missing; take `Option<Res<Score>>` if it may run earlier.
 - Resources survive scene switches. Entities carrying your components are despawned on a scene switch like any other entity, unless they also have `Persistent`.
-- `gui_callback` and `world_draw_callback` run on the render thread and can't read your resources. Copy what they need into `AppState` (see [AppState API](#appstate-api)).
+- GUI and world-draw callbacks run on the render thread and can't read your resources. Copy what they need into `AppState` (see [AppState API](#appstate-api)).
 
 ---
 
@@ -1998,7 +1985,7 @@ clickable images. It is plain ECS components and systems, fully usable from pure
 `gui_hit_test_system`, `gui_interactable_click_observer`) are registered automatically by `EngineBuilder`
 regardless of the `lua` feature — there's nothing extra to wire up.
 
-This is distinct from the `gui_callback` ImGui overlay covered in Section 3 — ImGui is for editor/debug
+This is distinct from the ImGui GUI callback covered in Section 3 — ImGui is for editor/debug
 tooling rendered every frame via a callback; this widget system is for in-game UI made of regular entities
 that participate in the normal render/collision/hierarchy pipeline (positioned with `ScreenPosition`,
 parented with `ChildOf`, hidden by removing `ScreenPosition`, etc.).
@@ -2249,7 +2236,7 @@ These exist only in the render world. `RaylibAccess`/`NonSend<FontStore>`/`NonSe
 | `TextureStore` | `Res` / `ResMut` | Loaded textures by key (GPU-bound) |
 | `RenderTarget` | `NonSendMut` | Internal framebuffer |
 
-### Render-thread-only resources used by `gui_callback`/`world_draw_callback`
+### Render-thread-only resources used by GUI and world-draw callbacks
 
 Since those two callbacks are the one exception that runs render-side (see [Threading Model](#threading-model-what-your-code-can-access) and [Section 3](#imgui-gui-callback-rust-only)), they're handed these as fields of their `GuiCtx`/`WorldDrawCtx` instead of fetched as `Res<T>`/`ResMut<T>` — and instead of the live `WorldSignals`:
 
@@ -2342,7 +2329,7 @@ The engine's own reserved signal keys (`"scene"`, `"switch_scene"`, `"quit_game"
 
 Use `AppState` for richer GUI/editor snapshots and view-models that do not belong in the Lua-visible signal bus. If you need two values of the same underlying type, wrap them in newtypes.
 
-**How render-side callbacks see it:** the live `AppState` exists only in the logic world. Render-thread callbacks (`gui_callback`, `world_draw_callback`) receive a cloned, read-only copy carried in the snapshot. A `generation` counter decides when that copy is refreshed:
+**How render-side callbacks see it:** the live `AppState` exists only in the logic world. Render-thread callbacks (GUI and world-draw callbacks) receive a cloned, read-only copy carried in the snapshot. A `generation` counter decides when that copy is refreshed:
 
 - `insert` and `get_mut` always bump `generation` (`get_mut` even if you don't end up writing); `remove` bumps it only when a value was removed; `get` never does.
 - The snapshot clones `AppState` again only when `generation` has changed since the last publish. Inserting every tick (as the §3 editor example does for brevity) therefore forces a full clone on every snapshot — insert or `get_mut` only when the value actually changes.

@@ -1,18 +1,12 @@
-//! Combined per-scene callback descriptor — the facade-level type that
-//! joins core's `SceneLogic` and render's `SceneRender` back together for
-//! `EngineBuilder::add_scene`'s public API.
+//! Per-scene logic callback descriptor for `EngineBuilder::add_scene`.
 //!
-//! Core cannot host this struct: `gui_callback` names `ImguiUi`/
-//! `TextureStore`/`FontStore`, none of which `aberred-core` can see. Splits
-//! into its two halves at [`EngineBuilder::add_scene`](super::EngineBuilder::add_scene)
-//! registration time, joined again by scene name.
+//! Converted into core's `SceneLogic` at registration time. A scene's render
+//! callbacks are registered separately, with `EngineBuilder::add_scene_gui` /
+//! `EngineBuilder::add_scene_world_draw`.
 
-use aberred_core::systems::scene_dispatch::{
-    SceneEnterFn, SceneExitFn, SceneUpdateFn, WorldDrawCallback,
-};
-use aberred_render::resources::scene_table::GuiCallback;
+use aberred_core::systems::scene_dispatch::{SceneEnterFn, SceneExitFn, SceneUpdateFn};
 
-/// Describes the callbacks for a single scene.
+/// Describes the logic callbacks for a single scene.
 ///
 /// Register one per scene name via [`EngineBuilder::add_scene`](super::EngineBuilder::add_scene).
 ///
@@ -20,11 +14,9 @@ use aberred_render::resources::scene_table::GuiCallback;
 ///
 /// ```ignore
 /// SceneDescriptor {
-///     on_enter:     menu::setup,
-///     on_update:    Some(menu::update),
-///     on_exit:      None,
-///     gui_callback: None,
-///     world_draw_callback: None,
+///     on_enter:  menu::setup,
+///     on_update: Some(menu::update),
+///     on_exit:   None,
 /// }
 /// ```
 #[derive(Clone)]
@@ -35,12 +27,6 @@ pub struct SceneDescriptor {
     pub on_update: Option<SceneUpdateFn>,
     /// Called once when leaving the scene (optional).
     pub on_exit: Option<SceneExitFn>,
-    /// Called every frame to draw ImGui GUI widgets (optional). Rust-only.
-    ///
-    /// See [`GuiCallback`] for the full contract.
-    pub gui_callback: Option<GuiCallback>,
-    /// Called every frame inside `begin_mode2D` to draw world-space overlays.
-    pub world_draw_callback: Option<WorldDrawCallback>,
 }
 
 // ---------------------------------------------------------------------------

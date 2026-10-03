@@ -29,7 +29,7 @@ pub use core::EngineError;
 
 /// The render-thread types that game callbacks receive.
 ///
-/// A `gui_callback` gets a [`GuiCtx`](render::GuiCtx) whose `textures` and
+/// A GUI callback (`EngineBuilder::add_scene_gui`) gets a [`GuiCtx`](render::GuiCtx) whose `textures` and
 /// `fonts` fields are a read-only [`TextureStore`](render::TextureStore) and
 /// [`FontStore`](render::FontStore). Everything else in the render crate
 /// belongs to the render world, which game code never touches: logic-side
