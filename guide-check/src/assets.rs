@@ -23,6 +23,31 @@ mod asset_loader_passthroughs {
     }
 }
 
+// Waiting for loads
+mod waiting_for_loads {
+    use aberredengine::prelude::*; // GLUE
+
+    fn register() -> EngineBuilder { // GLUE
+    use aberredengine::prelude::*;
+
+    fn on_asset_loaded(ev: On<AssetLoaded>) {
+        log::info!("{:?} '{}' is ready", ev.kind, ev.key);
+    }
+
+    fn on_asset_failed(ev: On<AssetLoadFailed>, mut signals: ResMut<WorldSignals>) {
+        // The engine has already logged the error.
+        if ev.kind == AssetKind::Texture && ev.key == "player" {
+            signals.request_quit();
+        }
+    }
+
+    EngineBuilder::new()
+        .add_observer(on_asset_loaded)
+        .add_observer(on_asset_failed)
+        // …
+    } // GLUE
+}
+
 // Textures
 mod textures {
     use aberredengine::prelude::*; // GLUE

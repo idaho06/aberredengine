@@ -33,6 +33,7 @@ use aberred_core::resources::texturedims::TextureDimsStore;
 use aberred_core::resources::thread_stats::SimStats;
 use aberred_core::resources::windowsize::WindowSize;
 use aberred_core::resources::worldtime::WorldTime;
+use aberred_core::systems::asset_tracking::settle_load;
 use aberred_core::systems::input::resolve_input_backlog;
 use aberred_core::systems::signal_intents::apply_signal_intents;
 use aberred_core::systems::state_hash::hash_world_state;
@@ -200,7 +201,7 @@ fn collect_tick_input_live(
 
 /// What one [`drain_logic_messages`] pass saw on `rx_logic`.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
-struct DrainOutcome {
+pub(crate) struct DrainOutcome {
     /// `LogicMsg::Shutdown` was in the batch.
     shutdown: bool,
     /// Every sender is gone and nothing is left queued. Detected by the
@@ -227,7 +228,7 @@ struct DrainOutcome {
 ///
 /// Returns whether `LogicMsg::Shutdown` was seen and whether the channel is
 /// disconnected.
-fn drain_logic_messages(
+pub(crate) fn drain_logic_messages(
     mut out: Option<&mut TickInput>,
     rx_logic: &Receiver<LogicMsg>,
     world: &mut World,
@@ -237,6 +238,9 @@ fn drain_logic_messages(
     // did the waiting).
     let mut shutdown = false;
     let disconnected = aberred_core::pacing::drain_channel(rx_logic, |msg| {
+        // Settled after the match, so observers of the load event see the
+        // reply's data already stored.
+        let settled = msg.load_reply();
         match msg {
             LogicMsg::ScreenSize { w, h } => {
                 if let Some(out) = out.as_deref_mut() {
@@ -256,7 +260,7 @@ fn drain_logic_messages(
                     .insert(key, width, height);
             }
             // No logic-side store mirrors shaders, and a failed load leaves
-            // the stores untouched.
+            // the stores untouched; both only settle their pending load.
             LogicMsg::ShaderLoaded { .. } | LogicMsg::AssetLoadFailed { .. } => {}
             LogicMsg::TextureRemoved { key } => {
                 world.resource_mut::<TextureDimsStore>().remove(&key);
@@ -296,6 +300,9 @@ fn drain_logic_messages(
             LogicMsg::ReplayControl(ReplayControl::FastForward(on)) => {
                 world.resource_mut::<ReplayRuntimeState>().fast_forward = on;
             }
+        }
+        if let Some(outcome) = settled {
+            settle_load(world, outcome);
         }
     });
     DrainOutcome {
@@ -633,6 +640,7 @@ mod tests {
     use aberred_core::protocol::replay::{
         REPLAY_FORMAT_VERSION, REPLAY_MAGIC, ReplayEntry, ReplayHeader,
     };
+    use aberred_core::resources::pending_assets::PendingAssets;
     use aberred_core::resources::signal_intents::SignalIntent;
     use aberred_core::resources::sim_rng::SimRng;
     use aberred_core::resources::worldsignals::WorldSignals;
@@ -761,6 +769,7 @@ mod tests {
         let (tx_logic, rx_logic) = crossbeam_channel::unbounded::<LogicMsg>();
         let mut world = World::new();
         world.init_resource::<FontMetricsStore>();
+        world.init_resource::<PendingAssets>();
 
         let first = drain_logic_messages(None, &rx_logic, &mut world, false);
         assert_eq!(first, DrainOutcome::default());
@@ -789,6 +798,7 @@ mod tests {
     fn drain_world() -> World {
         let mut world = World::new();
         world.init_resource::<FontMetricsStore>();
+        world.init_resource::<PendingAssets>();
         world.init_resource::<TextureDimsStore>();
         world.init_resource::<DebugOverlayConfig>();
         world.init_resource::<ReplayRuntimeState>();
@@ -1088,6 +1098,7 @@ mod tests {
         game_state.set(state);
         world.insert_resource(game_state);
         world.insert_resource(TextureDimsStore::default());
+        world.insert_resource(PendingAssets::default());
         world.insert_resource(DeterminismTaint::default());
         world
     }

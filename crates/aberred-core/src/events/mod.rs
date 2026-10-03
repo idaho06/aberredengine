@@ -6,6 +6,7 @@
 //! dependencies.
 //!
 //! Submodules:
+//! - [`asset`] – asset load completion (`AssetLoaded`/`AssetLoadFailed`)
 //! - [`collision`] – collision notifications emitted by the physics/collision system
 //! - [`gamestate`] – state transition notifications for the high-level game flow
 //! - [`gui_interactable`] – GUI interactable (button/image) click events
@@ -19,6 +20,7 @@
 //! See each submodule for concrete event data, semantics, and example usage.
 
 pub mod animation;
+pub mod asset;
 pub mod collision;
 pub mod gamestate;
 pub mod gui_interactable;

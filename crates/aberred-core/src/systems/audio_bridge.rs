@@ -18,6 +18,7 @@
 
 use crate::protocol::audio::{AudioCmd, AudioMessage};
 use crate::protocol::endpoints::AudioBridge;
+use crate::resources::pending_assets::PendingAssets;
 use crate::resources::thread_stats::AudioStats;
 use bevy_ecs::prelude::Messages;
 use bevy_ecs::{
@@ -48,13 +49,18 @@ pub fn update_bevy_audio_messages(mut msgs: ResMut<Messages<AudioMessage>>) {
     msgs.update();
 }
 
-/// Forward ECS AudioCmd messages to the audio thread via the AudioBridge sender.
+/// Forward ECS AudioCmd messages to the audio thread via the AudioBridge
+/// sender, recording each load in [`PendingAssets`] until its reply arrives.
 pub fn forward_audio_cmds(
     bridge: Res<AudioBridge>,
     mut reader: bevy_ecs::prelude::MessageReader<AudioCmd>,
+    mut pending: ResMut<PendingAssets>,
 ) {
     crate::tracy::tracy_span!("forward_audio_cmds");
     for cmd in reader.read() {
+        if let Some((kind, key)) = cmd.load_target() {
+            pending.queue(kind, key);
+        }
         // Forward clone to crossbeam channel; ignore send error on shutdown
         let _ = bridge.tx_cmd.send(cmd.clone());
     }

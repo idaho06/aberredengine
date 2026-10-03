@@ -46,9 +46,11 @@ pub use aberred_core::components::tween::{Easing, LoopMode, Tween};
 pub use aberred_core::components::zindex::ZIndex;
 
 pub use aberred_core::events::animation::AnimationFinishedEvent;
+pub use aberred_core::events::asset::{AssetLoadFailed, AssetLoaded};
 pub use aberred_core::events::input::InputAction;
 pub use aberred_core::events::tween::TweenFinishedEvent;
 
+pub use aberred_core::protocol::asset_kind::AssetKind;
 pub use aberred_core::protocol::audio::AudioCmd;
 pub use aberred_core::protocol::render_assets::RenderAssetCmd;
 
@@ -59,6 +61,7 @@ pub use aberred_core::resources::camerafollowconfig::{CameraFollowConfig, Follow
 pub use aberred_core::resources::gameconfig::GameConfig;
 pub use aberred_core::resources::guitheme::{GuiButtonSkin, GuiNinePatch, GuiThemeStore};
 pub use aberred_core::resources::input::InputState;
+pub use aberred_core::resources::pending_assets::PendingAssets;
 pub use aberred_core::resources::postprocessshader::PostProcessShader;
 pub use aberred_core::resources::screensize::ScreenSize;
 pub use aberred_core::resources::signal_intents::SignalIntents;

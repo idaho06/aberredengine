@@ -15,3 +15,141 @@ pub enum AssetKind {
     /// A music stream, loaded on the audio thread.
     Music,
 }
+
+/// What one load reply settles: the asset's kind and key, and the error text
+/// when the load failed. Returned by `LogicMsg::load_reply` and
+/// `AudioMessage::load_reply`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LoadOutcome {
+    /// The kind of the asset the load was for.
+    pub kind: AssetKind,
+    /// The key the asset is (or was to be) stored under.
+    pub key: String,
+    /// `None` when the load succeeded.
+    pub error: Option<String>,
+}
+
+impl LoadOutcome {
+    /// A successful load of `key`.
+    pub fn loaded(kind: AssetKind, key: &str) -> Self {
+        Self {
+            kind,
+            key: key.to_owned(),
+            error: None,
+        }
+    }
+
+    /// A failed load of `key`.
+    pub fn failed(kind: AssetKind, key: &str, error: &str) -> Self {
+        Self {
+            kind,
+            key: key.to_owned(),
+            error: Some(error.to_owned()),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::protocol::audio::{AudioCmd, AudioMessage};
+    use crate::protocol::render_assets::RenderAssetCmd;
+    use crate::protocol::render_logic::LogicMsg;
+    use crate::resources::texturefilter::TextureFilter;
+
+    fn k() -> String {
+        "k".to_owned()
+    }
+
+    /// Each load command's kind matches the kind of the reply that settles it.
+    #[test]
+    fn every_load_command_is_settled_by_a_reply_of_the_same_kind() {
+        let render = [
+            (
+                RenderAssetCmd::Texture {
+                    key: k(),
+                    path: k(),
+                    filter: TextureFilter::Nearest,
+                },
+                LogicMsg::TextureLoaded {
+                    key: k(),
+                    width: 1,
+                    height: 1,
+                },
+            ),
+            (
+                RenderAssetCmd::Font {
+                    key: k(),
+                    path: k(),
+                    size: 8,
+                    skip_if_loaded: false,
+                },
+                LogicMsg::FontLoaded {
+                    key: k(),
+                    metrics: Default::default(),
+                },
+            ),
+            (
+                RenderAssetCmd::Shader {
+                    key: k(),
+                    vs_path: None,
+                    fs_path: None,
+                },
+                LogicMsg::ShaderLoaded { key: k() },
+            ),
+        ];
+        for (cmd, reply) in &render {
+            let (kind, key) = cmd.load_target().unwrap();
+            assert_eq!(
+                reply.load_reply(),
+                Some(LoadOutcome::loaded(kind, key)),
+                "{cmd:?}"
+            );
+        }
+
+        let audio = [
+            (
+                AudioCmd::LoadFx { id: k(), path: k() },
+                AudioMessage::FxLoaded { id: k() },
+                AudioMessage::FxLoadFailed {
+                    id: k(),
+                    error: "e".into(),
+                },
+            ),
+            (
+                AudioCmd::LoadMusic { id: k(), path: k() },
+                AudioMessage::MusicLoaded { id: k() },
+                AudioMessage::MusicLoadFailed {
+                    id: k(),
+                    error: "e".into(),
+                },
+            ),
+        ];
+        for (cmd, ok, failed) in &audio {
+            let (kind, key) = cmd.load_target().unwrap();
+            assert_eq!(
+                ok.load_reply(),
+                Some(LoadOutcome::loaded(kind, key)),
+                "{cmd:?}"
+            );
+            assert_eq!(
+                failed.load_reply(),
+                Some(LoadOutcome::failed(kind, key, "e")),
+                "{cmd:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_render_failure_settles_the_kind_it_names() {
+        let failed = LogicMsg::AssetLoadFailed {
+            kind: AssetKind::Shader,
+            key: k(),
+            error: "bad".into(),
+        };
+        assert_eq!(
+            failed.load_reply(),
+            Some(LoadOutcome::failed(AssetKind::Shader, "k", "bad"))
+        );
+    }
+}

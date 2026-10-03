@@ -9,7 +9,7 @@
 //! See `src/protocol/endpoints.rs` for the bridge resources holding the
 //! endpoints.
 
-use crate::protocol::asset_kind::AssetKind;
+use crate::protocol::asset_kind::{AssetKind, LoadOutcome};
 use crate::protocol::render_assets::RenderAssetCmd;
 use crate::resources::debugoverlayconfig::DebugOverlayConfig;
 use crate::resources::fontmetrics::FontMetrics;
@@ -83,6 +83,23 @@ pub enum LogicMsg {
     /// `logic_thread_main`'s message drain -- a meta/control message, never
     /// folded into `TickInput` (it doesn't affect recorded sim state).
     ReplayControl(ReplayControl),
+}
+
+impl LogicMsg {
+    /// The render load this message settles, or `None` for a message that
+    /// isn't a load reply. The reply-side mirror of
+    /// [`RenderAssetCmd::load_target`].
+    pub fn load_reply(&self) -> Option<LoadOutcome> {
+        match self {
+            Self::TextureLoaded { key, .. } => Some(LoadOutcome::loaded(AssetKind::Texture, key)),
+            Self::FontLoaded { key, .. } => Some(LoadOutcome::loaded(AssetKind::Font, key)),
+            Self::ShaderLoaded { key } => Some(LoadOutcome::loaded(AssetKind::Shader, key)),
+            Self::AssetLoadFailed { kind, key, error } => {
+                Some(LoadOutcome::failed(*kind, key, error))
+            }
+            _ => None,
+        }
+    }
 }
 
 /// One control message for a running replay playback session. See

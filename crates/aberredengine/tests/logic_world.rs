@@ -15,18 +15,23 @@ use aberredengine::core::components::group::Group;
 use aberredengine::core::components::mapposition::MapPosition;
 use aberredengine::core::components::sprite::Sprite;
 use aberredengine::core::components::zindex::ZIndex;
+use aberredengine::core::events::asset::{AssetLoadFailed, AssetLoaded};
 use aberredengine::core::events::input::InputAction;
 use aberredengine::core::math::Color;
+use aberredengine::core::protocol::asset_kind::AssetKind;
+use aberredengine::core::protocol::audio::AudioMessage;
 use aberredengine::core::protocol::raw_input::RawDeviceSnapshot;
 use aberredengine::core::protocol::render_assets::RenderAssetCmd;
-use aberredengine::core::protocol::render_logic::RenderMsg;
+use aberredengine::core::protocol::render_logic::{LogicMsg, RenderMsg};
 use aberredengine::core::protocol::tick_input::TickInput;
 use aberredengine::core::resources::fontmetrics::{FontMetrics, GlyphMetrics};
 use aberredengine::core::resources::gamestate::{GameState, GameStates, NextGameState};
 use aberredengine::core::resources::input::InputState;
+use aberredengine::core::resources::pending_assets::PendingAssets;
 use aberredengine::core::resources::signal_intents::SignalIntent;
 use aberredengine::core::resources::worldsignals::WorldSignals;
 use aberredengine::core::systems::GameCtx;
+use aberredengine::core::systems::asset_loader::AssetLoader;
 use aberredengine::engine_app::SimSet;
 use aberredengine::raylib::ffi::KeyboardKey;
 use aberredengine::test_support::TestWorld;
@@ -517,4 +522,92 @@ fn track_group_survives_a_scene_switch() {
         Some(1),
         "count is published again after the switch"
     );
+}
+
+#[derive(Resource, Default)]
+struct LoadLog(Vec<String>);
+
+fn log_loaded(ev: On<AssetLoaded>, mut log: ResMut<LoadLog>) {
+    log.0.push(format!("loaded {:?} {}", ev.kind, ev.key));
+}
+
+fn log_failed(ev: On<AssetLoadFailed>, mut log: ResMut<LoadLog>) {
+    log.0
+        .push(format!("failed {:?} {}: {}", ev.kind, ev.key, ev.error));
+}
+
+/// Loads queued through `AssetLoader` stay in `PendingAssets` until the
+/// render or audio reply arrives; each reply settles one load and triggers
+/// one `AssetLoaded`/`AssetLoadFailed`.
+#[test]
+fn load_replies_settle_pending_assets_and_trigger_events_once() {
+    let mut tw = TestWorld::builder()
+        .on_setup(|mut assets: AssetLoader| {
+            assets.load_texture("player", "player.png");
+            assets.load_font("arcade", "arcade.ttf", 8);
+            assets.load_sound("jump", "jump.wav");
+        })
+        .add_observer(log_loaded)
+        .add_observer(log_failed)
+        .build()
+        .unwrap();
+    tw.world.init_resource::<LoadLog>();
+
+    tw.tick(2, DT);
+    let pending = tw.world.resource::<PendingAssets>();
+    assert_eq!(pending.len(), 3);
+    assert!(pending.contains(AssetKind::Texture, "player"));
+    assert!(pending.contains(AssetKind::Font, "arcade"));
+    assert!(pending.contains(AssetKind::Sound, "jump"));
+
+    tw.deliver_logic_msg(LogicMsg::TextureLoaded {
+        key: "player".into(),
+        width: 16,
+        height: 16,
+    });
+    tw.deliver_logic_msg(LogicMsg::AssetLoadFailed {
+        kind: AssetKind::Font,
+        key: "arcade".into(),
+        error: "missing".into(),
+    });
+    tw.audio_msgs_tx
+        .send(AudioMessage::FxLoaded { id: "jump".into() })
+        .unwrap();
+    tw.tick(1, DT);
+
+    assert!(tw.world.resource::<PendingAssets>().is_empty());
+    let expected = [
+        "loaded Texture player",
+        "failed Font arcade: missing",
+        "loaded Sound jump",
+    ];
+    assert_eq!(tw.world.resource::<LoadLog>().0, expected);
+
+    tw.tick(3, DT);
+    assert_eq!(
+        tw.world.resource::<LoadLog>().0,
+        expected,
+        "events fire once"
+    );
+}
+
+/// An `AssetLoaded` observer sees the reply's data already applied.
+#[test]
+fn asset_loaded_observers_see_the_texture_dims() {
+    let mut tw = TestWorld::builder()
+        .add_observer(
+            |ev: On<AssetLoaded>, assets: AssetLoader, mut log: ResMut<LoadLog>| {
+                log.0.push(format!("{:?}", assets.texture_size(&ev.key)));
+            },
+        )
+        .build()
+        .unwrap();
+    tw.world.init_resource::<LoadLog>();
+
+    tw.deliver_logic_msg(LogicMsg::TextureLoaded {
+        key: "player".into(),
+        width: 16,
+        height: 24,
+    });
+    assert_eq!(tw.world.resource::<LoadLog>().0, ["Some((16, 24))"]);
 }

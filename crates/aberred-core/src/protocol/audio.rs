@@ -48,6 +48,8 @@
 //! - `aberred-audio`: audio thread implementation; `crate::systems::audio_bridge`: event polling
 use bevy_ecs::message::Message;
 
+use crate::protocol::asset_kind::{AssetKind, LoadOutcome};
+
 /// Commands sent *to* the audio thread
 #[derive(Message, Debug, Clone)]
 pub enum AudioCmd {
@@ -120,4 +122,35 @@ pub enum AudioMessage {
     Stats {
         stats: crate::protocol::stats::ThreadStats,
     },
+}
+
+impl AudioCmd {
+    /// The kind and key of the asset this command loads, or `None` for
+    /// playback and unload commands. The audio thread answers each load with
+    /// exactly one reply (see [`AudioMessage::load_reply`]).
+    pub fn load_target(&self) -> Option<(AssetKind, &str)> {
+        match self {
+            Self::LoadFx { id, .. } => Some((AssetKind::Sound, id)),
+            Self::LoadMusic { id, .. } => Some((AssetKind::Music, id)),
+            _ => None,
+        }
+    }
+}
+
+impl AudioMessage {
+    /// The audio load this message settles, or `None` for a message that
+    /// isn't a load reply.
+    pub fn load_reply(&self) -> Option<LoadOutcome> {
+        match self {
+            Self::FxLoaded { id } => Some(LoadOutcome::loaded(AssetKind::Sound, id)),
+            Self::FxLoadFailed { id, error } => {
+                Some(LoadOutcome::failed(AssetKind::Sound, id, error))
+            }
+            Self::MusicLoaded { id } => Some(LoadOutcome::loaded(AssetKind::Music, id)),
+            Self::MusicLoadFailed { id, error } => {
+                Some(LoadOutcome::failed(AssetKind::Music, id, error))
+            }
+            _ => None,
+        }
+    }
 }

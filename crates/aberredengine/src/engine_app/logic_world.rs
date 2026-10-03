@@ -41,6 +41,7 @@ use aberred_core::resources::guiinputstate::GuiInputState;
 use aberred_core::resources::guitheme::{GuiThemeStore, GuiThemeWarnCache};
 use aberred_core::resources::input::InputState;
 use aberred_core::resources::input_bindings::InputBindings;
+use aberred_core::resources::pending_assets::PendingAssets;
 use aberred_core::resources::postprocessshader::PostProcessShader;
 use aberred_core::resources::rawinput::{ImguiCaptureMirror, PrevRawSnapshot};
 use aberred_core::resources::scenemanager::SceneManager;
@@ -164,6 +165,7 @@ impl EngineBuilder {
         world.insert_resource(FontMetricsStore::default());
         world.insert_resource(FontMetricsWarnCache::default());
         world.insert_resource(TextureDimsStore::default());
+        world.insert_resource(PendingAssets::default());
         world.insert_resource(Messages::<RenderAssetCmd>::default());
         world.insert_resource(Camera2DRes(Camera2D::screen_centered(&screen)));
         world.insert_resource(AnimationStore::default());

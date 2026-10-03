@@ -22,11 +22,20 @@ use crate::protocol::render_assets::RenderAssetCmd;
 use crate::protocol::render_logic::RenderMsg;
 use crate::protocol::snapshot::SnapshotPublisher;
 use crate::resources::drawable_snapshot::DrawableSnapshot;
+use crate::resources::pending_assets::PendingAssets;
 
-/// Forward queued [`RenderAssetCmd`]s to the render thread. Send errors are
+/// Forward queued [`RenderAssetCmd`]s to the render thread, recording each
+/// load in [`PendingAssets`] until its reply arrives. Send errors are
 /// ignored (they only occur during shutdown, when the render side is gone).
-pub fn forward_render_asset_cmds(tx: Res<RenderTx>, mut reader: MessageReader<RenderAssetCmd>) {
+pub fn forward_render_asset_cmds(
+    tx: Res<RenderTx>,
+    mut reader: MessageReader<RenderAssetCmd>,
+    mut pending: ResMut<PendingAssets>,
+) {
     for cmd in reader.read() {
+        if let Some((kind, key)) = cmd.load_target() {
+            pending.queue(kind, key);
+        }
         let _ = tx.0.send(RenderMsg::Asset(cmd.clone()));
     }
 }

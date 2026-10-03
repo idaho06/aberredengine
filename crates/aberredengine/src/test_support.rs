@@ -43,7 +43,7 @@ use std::path::PathBuf;
 use crate::engine_app::SceneDescriptor;
 use crate::engine_app::{
     EngineBuilder, HookRegistrar, LogicInit, ObserverRegistrar, UpdateRegistrar, apply_tick_input,
-    hook_registrar, run_sim_tick,
+    drain_logic_messages, hook_registrar, run_sim_tick,
 };
 use aberred_core::components::persistent::Persistent;
 use aberred_core::protocol::audio::{AudioCmd, AudioMessage};
@@ -52,11 +52,10 @@ use aberred_core::protocol::render_logic::{LogicMsg, RenderMsg};
 use aberred_core::protocol::snapshot::SnapshotPublisher;
 use aberred_core::protocol::tick_input::TickInput;
 use aberred_core::resources::drawable_snapshot::DrawableSnapshot;
-use aberred_core::resources::fontmetrics::{FontMetrics, FontMetricsStore};
+use aberred_core::resources::fontmetrics::FontMetrics;
 use aberred_core::resources::gameconfig::GameConfig;
 use aberred_core::resources::gamestate::{GameState, GameStates};
 use aberred_core::resources::systemsstore as hook_keys;
-use aberred_core::resources::texturedims::TextureDimsStore;
 use aberred_core::systems::input::resolve_input_backlog;
 use aberred_core::systems::time::update_world_time;
 
@@ -75,6 +74,7 @@ pub struct TestWorld {
     /// Inject a fake `AudioMessage` as if the (nonexistent) audio thread
     /// replied.
     pub audio_msgs_tx: Sender<AudioMessage>,
+    deterministic: bool,
     snapshot_out: triple_buffer::Output<DrawableSnapshot>,
 }
 
@@ -315,6 +315,7 @@ impl TestWorldBuilder {
             sent_to_render: rx_render,
             audio_cmds,
             audio_msgs_tx,
+            deterministic: self.deterministic_seed.is_some(),
             snapshot_out: snap_out,
         })
     }
@@ -396,23 +397,34 @@ impl TestWorld {
         self.snapshot_out.output_buffer().clone()
     }
 
-    /// Fake a render-side font-metrics reply
-    /// (mirrors `LogicMsg::FontLoaded`), for testing consumers of
-    /// [`FontMetricsStore`] without a real font/GL load.
-    pub fn deliver_font_metrics(&mut self, key: &str, metrics: FontMetrics) {
-        self.world
-            .resource_mut::<FontMetricsStore>()
-            .0
-            .insert(key.to_string(), metrics);
+    /// Deliver one render-thread message through the logic thread's real
+    /// message drain, as if the render thread had sent it. Load replies
+    /// (`TextureLoaded`, `AssetLoadFailed`, ...) settle `PendingAssets` and
+    /// trigger their load event before this returns.
+    pub fn deliver_logic_msg(&mut self, msg: LogicMsg) {
+        let (tx, rx) = unbounded();
+        tx.send(msg).expect("receiver is alive");
+        drain_logic_messages(None, &rx, &mut self.world, self.deterministic);
     }
 
-    /// Fake a render-side texture-dims reply (mirrors
-    /// `LogicMsg::TextureLoaded`), for testing consumers of
-    /// [`TextureDimsStore`] without a real texture/GL load.
+    /// Fake a render-side font load reply (`LogicMsg::FontLoaded`), for
+    /// testing consumers of `FontMetricsStore` without a real font/GL load.
+    pub fn deliver_font_metrics(&mut self, key: &str, metrics: FontMetrics) {
+        self.deliver_logic_msg(LogicMsg::FontLoaded {
+            key: key.to_owned(),
+            metrics,
+        });
+    }
+
+    /// Fake a render-side texture load reply (`LogicMsg::TextureLoaded`), for
+    /// testing consumers of `TextureDimsStore` without a real texture/GL
+    /// load.
     pub fn deliver_texture_dims(&mut self, key: &str, w: i32, h: i32) {
-        self.world
-            .resource_mut::<TextureDimsStore>()
-            .insert(key.to_string(), w, h);
+        self.deliver_logic_msg(LogicMsg::TextureLoaded {
+            key: key.to_owned(),
+            width: w,
+            height: h,
+        });
     }
 }
 

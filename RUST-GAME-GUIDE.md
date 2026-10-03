@@ -669,6 +669,32 @@ fn play_jump(mut assets: AssetLoader, input: Res<InputState>) {
 }
 ```
 
+#### Waiting for loads
+
+Every queued load stays in the `PendingAssets` resource until the render or audio thread answers it, whether it succeeded or failed. `PendingAssets::is_empty()` says every load has been answered; `len()` counts the loads still in flight and `contains(AssetKind::Texture, "player")` checks one. Each answer also triggers one global event, after the reply's data (texture size, font metrics) is stored:
+
+```rust
+use aberredengine::prelude::*;
+
+fn on_asset_loaded(ev: On<AssetLoaded>) {
+    log::info!("{:?} '{}' is ready", ev.kind, ev.key);
+}
+
+fn on_asset_failed(ev: On<AssetLoadFailed>, mut signals: ResMut<WorldSignals>) {
+    // The engine has already logged the error.
+    if ev.kind == AssetKind::Texture && ev.key == "player" {
+        signals.request_quit();
+    }
+}
+
+EngineBuilder::new()
+    .add_observer(on_asset_loaded)
+    .add_observer(on_asset_failed)
+    // …
+```
+
+Loads count no matter how they were queued: through `AssetLoader`, a raw `MessageWriter<RenderAssetCmd>`/`MessageWriter<AudioCmd>`, a map spawn or a tilemap. Loading the same key twice counts twice and is answered twice.
+
 The subsections below show the underlying `RenderAssetCmd`/`AudioCmd` variants; write any that `AssetLoader` has no helper for through `assets.render()`/`assets.audio()`.
 
 ### What's pre-inserted vs. what you must create
@@ -865,7 +891,7 @@ asset_cmds.write(RenderAssetCmd::Shader {
 });
 ```
 
-There's no synchronous "did it load, is it valid" result available to logic-side code — the render thread's loader logs an error and simply doesn't register the shader if the file is missing or fails validation. Reference the shader by its `key` from an `EntityShader` component (see [Per-entity shaders](#per-entity-shaders)); after a failed load, entities using that key draw without it.
+There's no synchronous "did it load, is it valid" result: if the file is missing or fails validation, the render thread logs an error, doesn't register the shader and triggers `AssetLoadFailed` (see [Waiting for loads](#waiting-for-loads)). Reference the shader by its `key` from an `EntityShader` component (see [Per-entity shaders](#per-entity-shaders)); after a failed load, entities using that key draw without it.
 
 To load a shader from in-memory source strings instead of file paths (e.g. shaders embedded via `include_str!`), use `RenderAssetCmd::ShaderFromMemory`:
 

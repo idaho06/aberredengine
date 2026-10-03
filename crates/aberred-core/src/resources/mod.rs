@@ -50,6 +50,7 @@ pub mod guitheme;
 pub mod input;
 pub mod input_bindings;
 pub mod mapdata;
+pub mod pending_assets;
 pub mod postprocessshader;
 pub mod rawinput;
 pub mod scenemanager;

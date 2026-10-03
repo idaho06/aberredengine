@@ -13,6 +13,7 @@ use aberred_core::error::EngineError;
 use aberred_core::resources::drawable_snapshot::build_drawable_snapshot;
 use aberred_core::systems::animation::animation;
 use aberred_core::systems::animation::animation_controller;
+use aberred_core::systems::asset_tracking::settle_audio_loads;
 use aberred_core::systems::audio_bridge::{
     forward_audio_cmds, land_audio_stats, poll_audio_messages, update_bevy_audio_cmds,
     update_bevy_audio_messages,
@@ -277,7 +278,7 @@ impl EngineBuilder {
                 forward_audio_cmds,
                 poll_audio_messages,
                 update_bevy_audio_messages,
-                land_audio_stats,
+                (land_audio_stats, settle_audio_loads),
             )
                 .chain()
                 .in_set(SimSet::AudioPump),
