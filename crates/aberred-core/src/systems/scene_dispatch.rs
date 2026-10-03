@@ -420,30 +420,19 @@ mod tests {
         assert_eq!(lines.0, [(Vec2::ZERO, Vec2::X)]);
     }
 
-    const EXITED: &str = "test_menu_exited";
-    const ENTERED: &str = "test_level_entered";
-
-    fn menu_exit(ctx: &mut GameCtx) {
-        ctx.world_signals.set_flag(EXITED);
-    }
-
-    fn level_enter(ctx: &mut GameCtx) {
-        ctx.world_signals.set_flag(ENTERED);
-    }
-
     /// World with `menu` active (one scene entity, one tracked group) and
     /// `WorldSignals[scene]` set to `target`.
     fn world_in_menu_switching_to(target: &str) -> (World, Entity) {
         let mut world = World::new();
         insert_game_ctx_resources(&mut world);
-        let logic = |on_enter, on_exit| SceneLogic {
-            on_enter,
+        let no_callbacks = || SceneLogic {
+            on_enter: |_| {},
             on_update: None,
-            on_exit,
+            on_exit: None,
         };
         let mut scene_manager = SceneManager::new();
-        scene_manager.insert("menu", logic(|_| {}, Some(menu_exit)));
-        scene_manager.insert("level", logic(level_enter, None));
+        scene_manager.insert("menu", no_callbacks());
+        scene_manager.insert("level", no_callbacks());
         scene_manager.active_scene = Some("menu".to_owned());
         world.insert_resource(scene_manager);
         let mut groups = TrackedGroups::default();
@@ -620,8 +609,7 @@ mod tests {
         world.run_system_once(scene_switch_system).unwrap();
 
         assert!(world.get_entity(menu_entity).is_err());
-        let signals = world.resource::<WorldSignals>();
-        assert!(signals.has_flag(EXITED) && signals.has_flag(ENTERED));
+        assert!(!world.resource::<TrackedGroups>().has_group("enemies"));
         assert_eq!(
             world.resource::<SceneManager>().active_scene.as_deref(),
             Some("level")
@@ -634,10 +622,6 @@ mod tests {
         world.run_system_once(scene_switch_system).unwrap();
 
         assert!(world.get_entity(menu_entity).is_ok(), "entities kept");
-        assert!(
-            !world.resource::<WorldSignals>().has_flag(EXITED),
-            "on_exit not called"
-        );
         assert!(world.resource::<TrackedGroups>().has_group("enemies"));
         assert_eq!(
             world.resource::<SceneManager>().active_scene.as_deref(),

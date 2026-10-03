@@ -1,19 +1,19 @@
-//! Integration tests for the `SceneManager` / scene plugin pattern.
+//! Integration tests for the `SceneManager` scene-switch path.
 //!
-//! Validates that `SceneManager`-based games correctly dispatch `on_enter`,
-//! `on_update`, and `on_exit` callbacks, and that conflict checks in
-//! `EngineBuilder` fire as expected.
+//! Validates that `SceneManager`-based games trigger `SceneEntered`/`SceneExited`
+//! in order, track the active scene, and tear down the old scene's entities
+//! and entity registrations on every switch.
 
 use aberred_render::resources::scene_table::{GuiCallback, GuiCtx, RenderSceneTable, SceneRender};
+use aberredengine::core::events::scene::{SceneEntered, SceneExited};
 use aberredengine::core::resources::group::TrackedGroups;
 use aberredengine::core::resources::input::InputState;
 use aberredengine::core::resources::scenemanager::SceneManager;
 use aberredengine::core::resources::systemsstore::SystemsStore;
 use aberredengine::core::resources::worldsignals::WorldSignals;
 use aberredengine::core::resources::worldtime::WorldTime;
-use aberredengine::core::systems::GameCtx;
 use aberredengine::core::systems::scene_dispatch::{
-    SceneLogic, scene_enter_play, scene_switch_poll, scene_switch_system, scene_update_system,
+    SceneLogic, scene_enter_play, scene_switch_poll, scene_switch_system, spawn_scene_entities,
 };
 use bevy_ecs::message::MessageReader;
 use bevy_ecs::prelude::*;
@@ -24,13 +24,33 @@ use aberredengine::core::components::persistent::{CleanableEntity, Persistent};
 use aberredengine::core::protocol::audio::AudioCmd;
 use aberredengine::core::resources::gamestate::{GameState, NextGameState};
 
-use aberredengine::core::testing::{approx_eq, insert_game_ctx_resources};
+use aberredengine::core::testing::insert_game_ctx_resources;
 
 mod common;
 
-/// Set up a minimal world with all resources needed by `GameCtx`,
-/// `scene_switch_system`, and `scene_update_system`.
-fn setup_world() -> World {
+/// Scene events in trigger order: `"enter <name>"` / `"exit <name>"`.
+#[derive(Resource, Default)]
+struct SceneLog(Vec<String>);
+
+impl SceneLog {
+    fn take(world: &mut World) -> Vec<String> {
+        std::mem::take(&mut world.resource_mut::<SceneLog>().0)
+    }
+}
+
+/// A scene with no logic callbacks; its behavior comes from observers.
+fn no_callbacks() -> SceneLogic {
+    SceneLogic {
+        on_enter: |_| {},
+        on_update: None,
+        on_exit: None,
+    }
+}
+
+/// A world with `scenes` registered, their scene entities spawned, the
+/// `switch_scene` system registered, and persistent global observers logging
+/// every scene event into [`SceneLog`]. No scene is active yet.
+fn scene_world(scenes: &[&str]) -> World {
     let mut world = World::new();
     insert_game_ctx_resources(&mut world);
     world.insert_resource(WorldTime::default().with_time_scale(1.0));
@@ -39,368 +59,120 @@ fn setup_world() -> World {
     world.insert_resource(GameState::new());
     world.insert_resource(NextGameState::new());
     world.insert_resource(InputState::default());
+    world.init_resource::<SceneLog>();
+
+    let mut scene_manager = SceneManager::new();
+    scene_manager.initial_scene = scenes.first().map(|name| name.to_string());
+    for name in scenes {
+        scene_manager.insert(*name, no_callbacks());
+    }
+    world.insert_resource(scene_manager);
+    spawn_scene_entities(&mut world);
+
+    let switch = world.register_system(scene_switch_system);
+    world.entity_mut(switch.entity()).insert(Persistent);
+    world
+        .resource_mut::<SystemsStore>()
+        .insert("switch_scene", switch);
+
+    world.spawn((
+        Observer::new(|ev: On<SceneEntered>, mut log: ResMut<SceneLog>| {
+            log.0.push(format!("enter {}", ev.name));
+        }),
+        Persistent,
+    ));
+    world.spawn((
+        Observer::new(|ev: On<SceneExited>, mut log: ResMut<SceneLog>| {
+            log.0.push(format!("exit {}", ev.name));
+        }),
+        Persistent,
+    ));
     world
 }
 
-/// Helper to register scene_switch_system in SystemsStore.
-fn register_switch_system(world: &mut World) {
-    let sys_id = world.register_system(scene_switch_system);
-    world.entity_mut(sys_id.entity()).insert(Persistent);
-    let mut store = world.resource_mut::<SystemsStore>();
-    store.insert("switch_scene", sys_id);
-}
-
-// ---------------------------------------------------------------------------
-// Thread-local tracking for callback invocations
-// ---------------------------------------------------------------------------
-
-thread_local! {
-    static ENTER_LOG: std::cell::RefCell<Vec<String>> = const { std::cell::RefCell::new(Vec::new()) };
-    static UPDATE_LOG: std::cell::RefCell<Vec<(String, f32)>> = const { std::cell::RefCell::new(Vec::new()) };
-    static EXIT_LOG: std::cell::RefCell<Vec<String>> = const { std::cell::RefCell::new(Vec::new()) };
-}
-
-fn clear_logs() {
-    ENTER_LOG.with(|v| v.borrow_mut().clear());
-    UPDATE_LOG.with(|v| v.borrow_mut().clear());
-    EXIT_LOG.with(|v| v.borrow_mut().clear());
-}
-
-// -- Menu scene callbacks --
-
-fn menu_enter(ctx: &mut GameCtx) {
-    ENTER_LOG.with(|v| v.borrow_mut().push("menu".to_string()));
-    ctx.world_signals.set_flag("menu_entered");
-}
-
-fn menu_update(_ctx: &mut GameCtx, dt: f32, _input: &InputState) {
-    UPDATE_LOG.with(|v| v.borrow_mut().push(("menu".to_string(), dt)));
-}
-
-fn menu_exit(ctx: &mut GameCtx) {
-    EXIT_LOG.with(|v| v.borrow_mut().push("menu".to_string()));
-    ctx.world_signals.set_flag("menu_exited");
-}
-
-// -- Level1 scene callbacks --
-
-fn level1_enter(ctx: &mut GameCtx) {
-    ENTER_LOG.with(|v| v.borrow_mut().push("level1".to_string()));
-    ctx.world_signals.set_flag("level1_entered");
-}
-
-fn level1_update(_ctx: &mut GameCtx, dt: f32, _input: &InputState) {
-    UPDATE_LOG.with(|v| v.borrow_mut().push(("level1".to_string(), dt)));
-}
-
-// -- Minimal scene (no update, no exit) --
-
-fn minimal_enter(_ctx: &mut GameCtx) {
-    ENTER_LOG.with(|v| v.borrow_mut().push("minimal".to_string()));
-}
-
-// ---------------------------------------------------------------------------
-// Test 1: on_enter called for initial scene on enter_play
-// ---------------------------------------------------------------------------
-
-#[test]
-fn initial_scene_on_enter_called() {
-    clear_logs();
-    let mut world = setup_world();
-
-    let mut sm = SceneManager::new();
-    sm.initial_scene = Some("menu".to_string());
-    sm.insert(
-        "menu",
-        SceneLogic {
-            on_enter: menu_enter,
-            on_update: Some(menu_update),
-            on_exit: Some(menu_exit),
-        },
-    );
-    world.insert_resource(sm);
-
-    register_switch_system(&mut world);
-
-    // Run scene_enter_play — it sets WorldSignals["scene"] and runs switch_scene
+/// Enters the initial scene the way the engine does on `Playing`.
+fn enter_play(world: &mut World) {
     world.run_system_once(scene_enter_play).unwrap();
     world.flush();
-
-    // on_enter should have been called for "menu"
-    ENTER_LOG.with(|v| {
-        let log = v.borrow();
-        assert_eq!(*log, vec!["menu"]);
-    });
-    assert!(world.resource::<WorldSignals>().has_flag("menu_entered"));
-
-    // SceneManager should track "menu" as active
-    let sm = world.resource::<SceneManager>();
-    assert_eq!(sm.active_scene.as_deref(), Some("menu"));
 }
 
-// ---------------------------------------------------------------------------
-// Test 2: on_exit called before on_enter on scene switch
-// ---------------------------------------------------------------------------
-
-#[test]
-fn exit_called_before_enter_on_switch() {
-    clear_logs();
-    let mut world = setup_world();
-
-    let mut sm = SceneManager::new();
-    sm.initial_scene = Some("menu".to_string());
-    sm.insert(
-        "menu",
-        SceneLogic {
-            on_enter: menu_enter,
-            on_update: None,
-            on_exit: Some(menu_exit),
-        },
-    );
-    sm.insert(
-        "level1",
-        SceneLogic {
-            on_enter: level1_enter,
-            on_update: Some(level1_update),
-            on_exit: None,
-        },
-    );
-    world.insert_resource(sm);
-
-    register_switch_system(&mut world);
-
-    // Enter initial scene
-    world.run_system_once(scene_enter_play).unwrap();
-    world.flush();
-    clear_logs();
-
-    // Request scene switch to level1
-    {
-        let mut ws = world.resource_mut::<WorldSignals>();
-        ws.set_string("scene", "level1".to_string());
-    }
+/// Switches straight to `target` through `scene_switch_system`.
+fn switch_to(world: &mut World, target: &str) {
+    world
+        .resource_mut::<WorldSignals>()
+        .set_string("scene", target);
     world.run_system_once(scene_switch_system).unwrap();
     world.flush();
+}
 
-    // on_exit("menu") should have been called BEFORE on_enter("level1")
-    EXIT_LOG.with(|v| {
-        assert_eq!(*v.borrow(), vec!["menu"]);
-    });
-    ENTER_LOG.with(|v| {
-        assert_eq!(*v.borrow(), vec!["level1"]);
-    });
-
-    assert!(world.resource::<WorldSignals>().has_flag("menu_exited"));
-    assert!(world.resource::<WorldSignals>().has_flag("level1_entered"));
-
-    let sm = world.resource::<SceneManager>();
-    assert_eq!(sm.active_scene.as_deref(), Some("level1"));
+fn active_scene(world: &World) -> Option<&str> {
+    world.resource::<SceneManager>().active_scene.as_deref()
 }
 
 // ---------------------------------------------------------------------------
-// Test 3: on_update called with correct dt
+// Test 1: SceneEntered fires for the initial scene on enter_play
 // ---------------------------------------------------------------------------
 
 #[test]
-fn on_update_called_with_dt() {
-    clear_logs();
-    let mut world = setup_world();
+fn initial_scene_entered_on_enter_play() {
+    let mut world = scene_world(&["menu"]);
 
-    let mut sm = SceneManager::new();
-    sm.initial_scene = Some("menu".to_string());
-    sm.active_scene = Some("menu".to_string());
-    sm.insert(
-        "menu",
-        SceneLogic {
-            on_enter: menu_enter,
-            on_update: Some(menu_update),
-            on_exit: None,
-        },
-    );
-    world.insert_resource(sm);
+    enter_play(&mut world);
 
-    // Set delta time
-    {
-        let mut wt = world.resource_mut::<WorldTime>();
-        wt.delta = 0.016;
-    }
-
-    world.run_system_once(scene_update_system).unwrap();
-
-    UPDATE_LOG.with(|v| {
-        let log = v.borrow();
-        assert_eq!(log.len(), 1);
-        assert_eq!(log[0].0, "menu");
-        assert!(approx_eq(log[0].1, 0.016));
-    });
+    assert_eq!(SceneLog::take(&mut world), ["enter menu"]);
+    assert_eq!(active_scene(&world), Some("menu"));
 }
 
 // ---------------------------------------------------------------------------
-// Test 4: on_update: None scenes don't panic
+// Test 2: SceneExited fires before SceneEntered on a scene switch
 // ---------------------------------------------------------------------------
 
 #[test]
-fn no_update_callback_does_not_panic() {
-    let mut world = setup_world();
+fn exit_triggered_before_enter_on_switch() {
+    let mut world = scene_world(&["menu", "level1"]);
+    enter_play(&mut world);
+    SceneLog::take(&mut world);
 
-    let mut sm = SceneManager::new();
-    sm.active_scene = Some("minimal".to_string());
-    sm.insert(
-        "minimal",
-        SceneLogic {
-            on_enter: minimal_enter,
-            on_update: None,
-            on_exit: None,
-        },
-    );
-    world.insert_resource(sm);
+    switch_to(&mut world, "level1");
 
-    // Should not panic
-    world.run_system_once(scene_update_system).unwrap();
+    assert_eq!(SceneLog::take(&mut world), ["exit menu", "enter level1"]);
+    assert_eq!(active_scene(&world), Some("level1"));
 }
 
 // ---------------------------------------------------------------------------
-// Test 5: on_exit: None scenes don't panic on transition
-// ---------------------------------------------------------------------------
-
-#[test]
-fn no_exit_callback_does_not_panic_on_switch() {
-    clear_logs();
-    let mut world = setup_world();
-
-    let mut sm = SceneManager::new();
-    sm.initial_scene = Some("minimal".to_string());
-    sm.insert(
-        "minimal",
-        SceneLogic {
-            on_enter: minimal_enter,
-            on_update: None,
-            on_exit: None, // no exit callback
-        },
-    );
-    sm.insert(
-        "menu",
-        SceneLogic {
-            on_enter: menu_enter,
-            on_update: None,
-            on_exit: None,
-        },
-    );
-    world.insert_resource(sm);
-
-    register_switch_system(&mut world);
-
-    // Enter initial scene
-    world.run_system_once(scene_enter_play).unwrap();
-    world.flush();
-    clear_logs();
-
-    // Switch to menu — should not panic even though minimal has no on_exit
-    {
-        let mut ws = world.resource_mut::<WorldSignals>();
-        ws.set_string("scene", "menu".to_string());
-    }
-    world.run_system_once(scene_switch_system).unwrap();
-    world.flush();
-
-    // No exit should have been logged
-    EXIT_LOG.with(|v| {
-        assert!(v.borrow().is_empty());
-    });
-    // Enter should have been called for menu
-    ENTER_LOG.with(|v| {
-        assert_eq!(*v.borrow(), vec!["menu"]);
-    });
-}
-
-// ---------------------------------------------------------------------------
-// Test 6: Switching to unregistered scene name → current scene kept
+// Test 3: Switching to an unregistered scene name keeps the current scene
 // ---------------------------------------------------------------------------
 
 #[test]
 fn unknown_scene_name_keeps_the_current_scene() {
-    clear_logs();
-    let mut world = setup_world();
-
-    let mut sm = SceneManager::new();
-    sm.active_scene = Some("menu".to_string());
-    sm.insert(
-        "menu",
-        SceneLogic {
-            on_enter: menu_enter,
-            on_update: None,
-            on_exit: Some(menu_exit),
-        },
-    );
-    world.insert_resource(sm);
-    world.insert_resource(TrackedGroups::default());
-
-    register_switch_system(&mut world);
-
-    // Request switch to a scene that doesn't exist
-    {
-        let mut ws = world.resource_mut::<WorldSignals>();
-        ws.set_string("scene", "nonexistent".to_string());
-    }
+    let mut world = scene_world(&["menu"]);
+    enter_play(&mut world);
+    SceneLog::take(&mut world);
 
     // Should NOT panic — logs an error
-    world.run_system_once(scene_switch_system).unwrap();
-    world.flush();
+    switch_to(&mut world, "nonexistent");
 
     // The target is checked first, so "menu" is never exited
-    EXIT_LOG.with(|v| {
-        assert!(v.borrow().is_empty());
-    });
-    // on_enter should NOT have been called (no scene found)
-    ENTER_LOG.with(|v| {
-        assert!(v.borrow().is_empty());
-    });
+    assert!(SceneLog::take(&mut world).is_empty());
+    assert_eq!(active_scene(&world), Some("menu"));
 }
 
 // ---------------------------------------------------------------------------
-// Test 7: Non-persistent entities are despawned on scene switch
+// Test 4: Non-persistent entities are despawned on scene switch
 // ---------------------------------------------------------------------------
 
 #[test]
 fn non_persistent_entities_despawned() {
-    let mut world = setup_world();
+    let mut world = scene_world(&["menu"]);
+    enter_play(&mut world);
 
-    let mut sm = SceneManager::new();
-    sm.active_scene = Some("menu".to_string());
-    sm.insert(
-        "menu",
-        SceneLogic {
-            on_enter: menu_enter,
-            on_update: None,
-            on_exit: None,
-        },
-    );
-    world.insert_resource(sm);
-
-    register_switch_system(&mut world);
-
-    // Spawn some entities — one persistent, two not
     world.spawn(Persistent);
     world.spawn(());
     world.spawn(());
 
-    // 3 spawned + 1 system entity (switch_scene)
-    let count_before: usize = world
-        .query::<Entity>()
-        .iter(&world)
-        .filter(|_| true)
-        .count();
-    assert!(count_before >= 3);
+    // Re-enter "menu"
+    switch_to(&mut world, "menu");
 
-    // Switch scene (stays on "menu" since that's the default)
-    {
-        let mut ws = world.resource_mut::<WorldSignals>();
-        ws.set_string("scene", "menu".to_string());
-    }
-    world.run_system_once(scene_switch_system).unwrap();
-    world.flush();
-
-    // Only persistent entities should remain
     let non_persistent: Vec<Entity> = world
         .query_filtered::<Entity, CleanableEntity>()
         .iter(&world)
@@ -413,208 +185,84 @@ fn non_persistent_entities_despawned() {
 }
 
 // ---------------------------------------------------------------------------
-// Test 8: SceneManager tracks active scene correctly through multiple switches
+// Test 5: SceneManager tracks the active scene through multiple switches
 // ---------------------------------------------------------------------------
 
 #[test]
 fn active_scene_tracked_through_multiple_switches() {
-    clear_logs();
-    let mut world = setup_world();
+    let mut world = scene_world(&["menu", "level1"]);
 
-    let mut sm = SceneManager::new();
-    sm.initial_scene = Some("menu".to_string());
-    sm.insert(
-        "menu",
-        SceneLogic {
-            on_enter: menu_enter,
-            on_update: None,
-            on_exit: Some(menu_exit),
-        },
-    );
-    sm.insert(
-        "level1",
-        SceneLogic {
-            on_enter: level1_enter,
-            on_update: None,
-            on_exit: None,
-        },
-    );
-    world.insert_resource(sm);
+    enter_play(&mut world);
+    assert_eq!(active_scene(&world), Some("menu"));
+    switch_to(&mut world, "level1");
+    assert_eq!(active_scene(&world), Some("level1"));
+    switch_to(&mut world, "menu");
+    assert_eq!(active_scene(&world), Some("menu"));
 
-    register_switch_system(&mut world);
-
-    // Enter initial scene
-    world.run_system_once(scene_enter_play).unwrap();
-    world.flush();
     assert_eq!(
-        world.resource::<SceneManager>().active_scene.as_deref(),
-        Some("menu")
+        SceneLog::take(&mut world),
+        [
+            "enter menu",
+            "exit menu",
+            "enter level1",
+            "exit level1",
+            "enter menu"
+        ]
     );
-
-    // Switch to level1
-    {
-        let mut ws = world.resource_mut::<WorldSignals>();
-        ws.set_string("scene", "level1".to_string());
-    }
-    world.run_system_once(scene_switch_system).unwrap();
-    world.flush();
-    assert_eq!(
-        world.resource::<SceneManager>().active_scene.as_deref(),
-        Some("level1")
-    );
-
-    // Switch back to menu
-    {
-        let mut ws = world.resource_mut::<WorldSignals>();
-        ws.set_string("scene", "menu".to_string());
-    }
-    world.run_system_once(scene_switch_system).unwrap();
-    world.flush();
-    assert_eq!(
-        world.resource::<SceneManager>().active_scene.as_deref(),
-        Some("menu")
-    );
-
-    // Verify full enter/exit sequence
-    ENTER_LOG.with(|v| {
-        assert_eq!(*v.borrow(), vec!["menu", "level1", "menu"]);
-    });
-    // level1 has no on_exit, so only menu's exit is logged (first switch only)
-    EXIT_LOG.with(|v| {
-        assert_eq!(*v.borrow(), vec!["menu"]);
-    });
 }
 
 // ---------------------------------------------------------------------------
-// Test 9: scene_switch_poll triggers transition when flag is set
+// Test 6: scene_switch_poll triggers the transition when the flag is set
 // ---------------------------------------------------------------------------
 
 #[test]
 fn scene_switch_poll_triggers_transition() {
-    clear_logs();
-    let mut world = setup_world();
+    let mut world = scene_world(&["menu", "level1"]);
+    enter_play(&mut world);
+    SceneLog::take(&mut world);
 
-    let mut sm = SceneManager::new();
-    sm.initial_scene = Some("menu".to_string());
-    sm.insert(
-        "menu",
-        SceneLogic {
-            on_enter: menu_enter,
-            on_update: Some(menu_update),
-            on_exit: Some(menu_exit),
-        },
-    );
-    sm.insert(
-        "level1",
-        SceneLogic {
-            on_enter: level1_enter,
-            on_update: Some(level1_update),
-            on_exit: None,
-        },
-    );
-    world.insert_resource(sm);
-    register_switch_system(&mut world);
-
-    // Enter initial scene
-    world.run_system_once(scene_enter_play).unwrap();
-    world.flush();
-    clear_logs();
-
-    // Simulate what a scene callback would do: request the switch
+    // What a scene system does: request the switch
     world.resource_mut::<WorldSignals>().request_scene("level1");
-
-    // Run scene_switch_poll (what the schedule would do)
     world.run_system_once(scene_switch_poll).unwrap();
     world.flush();
 
-    // Flag should be cleared
     assert!(!world.resource::<WorldSignals>().has_flag("switch_scene"));
-
-    // Scene transition should have been queued and executed
-    assert_eq!(
-        world.resource::<SceneManager>().active_scene.as_deref(),
-        Some("level1")
-    );
-    EXIT_LOG.with(|v| assert_eq!(*v.borrow(), vec!["menu"]));
-    ENTER_LOG.with(|v| assert_eq!(*v.borrow(), vec!["level1"]));
+    assert_eq!(active_scene(&world), Some("level1"));
+    assert_eq!(SceneLog::take(&mut world), ["exit menu", "enter level1"]);
 }
 
 // ---------------------------------------------------------------------------
-// Test 10: scene_switch_poll is a no-op when flag is absent
+// Test 7: scene_switch_poll is a no-op when the flag is absent
 // ---------------------------------------------------------------------------
 
 #[test]
 fn scene_switch_poll_noop_without_flag() {
-    clear_logs();
-    let mut world = setup_world();
+    let mut world = scene_world(&["menu"]);
+    enter_play(&mut world);
+    SceneLog::take(&mut world);
 
-    let mut sm = SceneManager::new();
-    sm.initial_scene = Some("menu".to_string());
-    sm.active_scene = Some("menu".to_string());
-    sm.insert(
-        "menu",
-        SceneLogic {
-            on_enter: menu_enter,
-            on_update: None,
-            on_exit: None,
-        },
-    );
-    world.insert_resource(sm);
-    register_switch_system(&mut world);
-
-    // No flag set — should not panic or trigger anything
     world.run_system_once(scene_switch_poll).unwrap();
     world.flush();
 
-    // Nothing should have changed
-    assert_eq!(
-        world.resource::<SceneManager>().active_scene.as_deref(),
-        Some("menu")
-    );
-    ENTER_LOG.with(|v| assert!(v.borrow().is_empty()));
+    assert_eq!(active_scene(&world), Some("menu"));
+    assert!(SceneLog::take(&mut world).is_empty());
 }
 
 // ---------------------------------------------------------------------------
-// Test 11: Non-persistent registered entity is cleared on scene switch
+// Test 8: Non-persistent registered entity is cleared on scene switch
 // ---------------------------------------------------------------------------
 
 #[test]
 fn non_persistent_entity_registration_cleared_on_scene_switch() {
-    let mut world = setup_world();
+    let mut world = scene_world(&["menu"]);
+    enter_play(&mut world);
 
-    let mut sm = SceneManager::new();
-    sm.active_scene = Some("menu".to_string());
-    sm.insert(
-        "menu",
-        SceneLogic {
-            on_enter: menu_enter,
-            on_update: None,
-            on_exit: None,
-        },
-    );
-    world.insert_resource(sm);
-    register_switch_system(&mut world);
-
-    // Spawn a non-persistent entity and register it
     let player = world.spawn(()).id();
-    {
-        let mut ws = world.resource_mut::<WorldSignals>();
-        ws.set_entity("player", player);
-    }
-    assert!(
-        world
-            .resource::<WorldSignals>()
-            .get_entity("player")
-            .is_some()
-    );
+    world
+        .resource_mut::<WorldSignals>()
+        .set_entity("player", player);
 
-    // Switch scene
-    {
-        let mut ws = world.resource_mut::<WorldSignals>();
-        ws.set_string("scene", "menu".to_string());
-    }
-    world.run_system_once(scene_switch_system).unwrap();
-    world.flush();
+    switch_to(&mut world, "menu");
 
     assert!(
         world
@@ -626,40 +274,20 @@ fn non_persistent_entity_registration_cleared_on_scene_switch() {
 }
 
 // ---------------------------------------------------------------------------
-// Test 12: Persistent registered entity survives scene switch
+// Test 9: Persistent registered entity survives scene switch
 // ---------------------------------------------------------------------------
 
 #[test]
 fn persistent_entity_registration_survives_scene_switch() {
-    let mut world = setup_world();
+    let mut world = scene_world(&["menu"]);
+    enter_play(&mut world);
 
-    let mut sm = SceneManager::new();
-    sm.active_scene = Some("menu".to_string());
-    sm.insert(
-        "menu",
-        SceneLogic {
-            on_enter: menu_enter,
-            on_update: None,
-            on_exit: None,
-        },
-    );
-    world.insert_resource(sm);
-    register_switch_system(&mut world);
-
-    // Spawn a persistent entity and register it
     let cursor = world.spawn(Persistent).id();
-    {
-        let mut ws = world.resource_mut::<WorldSignals>();
-        ws.set_entity("cursor", cursor);
-    }
+    world
+        .resource_mut::<WorldSignals>()
+        .set_entity("cursor", cursor);
 
-    // Switch scene
-    {
-        let mut ws = world.resource_mut::<WorldSignals>();
-        ws.set_string("scene", "menu".to_string());
-    }
-    world.run_system_once(scene_switch_system).unwrap();
-    world.flush();
+    switch_to(&mut world, "menu");
 
     assert_eq!(
         world.resource::<WorldSignals>().get_entity("cursor"),
@@ -669,27 +297,14 @@ fn persistent_entity_registration_survives_scene_switch() {
 }
 
 // ---------------------------------------------------------------------------
-// Test 13: Mixed registrations — only non-persistent entries are cleared
+// Test 10: Mixed registrations — only non-persistent entries are cleared
 // ---------------------------------------------------------------------------
 
 #[test]
 fn mixed_registrations_only_non_persistent_cleared_on_scene_switch() {
-    let mut world = setup_world();
+    let mut world = scene_world(&["menu"]);
+    enter_play(&mut world);
 
-    let mut sm = SceneManager::new();
-    sm.active_scene = Some("menu".to_string());
-    sm.insert(
-        "menu",
-        SceneLogic {
-            on_enter: menu_enter,
-            on_update: None,
-            on_exit: None,
-        },
-    );
-    world.insert_resource(sm);
-    register_switch_system(&mut world);
-
-    // Spawn one persistent and two non-persistent entities; register all three
     let cursor = world.spawn(Persistent).id();
     let player = world.spawn(()).id();
     let enemy = world.spawn(()).id();
@@ -700,13 +315,7 @@ fn mixed_registrations_only_non_persistent_cleared_on_scene_switch() {
         ws.set_entity("enemy", enemy);
     }
 
-    // Switch scene
-    {
-        let mut ws = world.resource_mut::<WorldSignals>();
-        ws.set_string("scene", "menu".to_string());
-    }
-    world.run_system_once(scene_switch_system).unwrap();
-    world.flush();
+    switch_to(&mut world, "menu");
 
     let ws = world.resource::<WorldSignals>();
     assert_eq!(
@@ -725,40 +334,15 @@ fn mixed_registrations_only_non_persistent_cleared_on_scene_switch() {
 }
 
 // ---------------------------------------------------------------------------
-// Test 14: Scene switching does not emit automatic StopAllMusic
+// Test 11: Scene switching does not emit automatic StopAllMusic
 // ---------------------------------------------------------------------------
 
 #[test]
 fn scene_switch_does_not_emit_stop_all_music() {
-    let mut world = setup_world();
+    let mut world = scene_world(&["menu", "level1"]);
+    enter_play(&mut world);
 
-    let mut sm = SceneManager::new();
-    sm.active_scene = Some("menu".to_string());
-    sm.insert(
-        "menu",
-        SceneLogic {
-            on_enter: menu_enter,
-            on_update: None,
-            on_exit: Some(menu_exit),
-        },
-    );
-    sm.insert(
-        "level1",
-        SceneLogic {
-            on_enter: level1_enter,
-            on_update: Some(level1_update),
-            on_exit: None,
-        },
-    );
-    world.insert_resource(sm);
-    register_switch_system(&mut world);
-
-    {
-        let mut ws = world.resource_mut::<WorldSignals>();
-        ws.set_string("scene", "level1".to_string());
-    }
-    world.run_system_once(scene_switch_system).unwrap();
-    world.flush();
+    switch_to(&mut world, "level1");
 
     world.resource_mut::<Messages<AudioCmd>>().update();
     let mut reader_state = SystemState::<MessageReader<AudioCmd>>::new(&mut world);
@@ -775,11 +359,7 @@ fn scene_switch_does_not_emit_stop_all_music() {
 }
 
 // ---------------------------------------------------------------------------
-// Test 15: gui_callback fn pointer roundtrips through RenderSceneTable unchanged
-//
-// gui_callback lives on the render-side SceneRender/RenderSceneTable now
-// (SceneManager only holds SceneLogic — see the aberred-core/aberred-render
-// split), so this test exercises RenderSceneTable directly instead.
+// Test 12: gui_callback fn pointer roundtrips through RenderSceneTable unchanged
 // ---------------------------------------------------------------------------
 
 #[test]
@@ -804,31 +384,16 @@ fn gui_callback_stored_and_retrieved_via_render_scene_table() {
 }
 
 // ---------------------------------------------------------------------------
-// Test 15: scene_enter_play with gui_callback — on_enter fires (via
-// SceneManager/SceneLogic), gui_callback resolvable for the active scene
-// (via a separately-maintained RenderSceneTable/SceneRender, mirroring how
-// production code keeps the two tables in sync by scene name).
+// Test 13: a scene with a GUI callback enters normally, and its callback
+// resolves for the active scene name (as render_system resolves it against
+// RenderActiveScene).
 // ---------------------------------------------------------------------------
 
 #[test]
 fn scene_with_gui_callback_enters_correctly() {
-    clear_logs();
     fn editor_gui(_: &mut GuiCtx) {}
 
-    let mut world = setup_world();
-
-    let mut sm = SceneManager::new();
-    sm.initial_scene = Some("editor".to_string());
-    sm.insert(
-        "editor",
-        SceneLogic {
-            on_enter: menu_enter, // reuse menu_enter to check ENTER_LOG
-            on_update: None,
-            on_exit: None,
-        },
-    );
-    world.insert_resource(sm);
-
+    let mut world = scene_world(&["editor"]);
     let mut render_table = RenderSceneTable::default();
     render_table.0.insert(
         "editor".to_string(),
@@ -838,38 +403,16 @@ fn scene_with_gui_callback_enters_correctly() {
         },
     );
 
-    register_switch_system(&mut world);
+    enter_play(&mut world);
 
-    world.run_system_once(scene_enter_play).unwrap();
-    world.flush();
-
-    // on_enter must have fired
-    ENTER_LOG.with(|v| {
-        assert_eq!(
-            *v.borrow(),
-            vec!["menu"],
-            "on_enter must fire for scene with gui_callback"
-        );
-    });
-
-    // gui_callback must be resolvable via the render-side table for the
-    // active scene name (mirrors render_system's callback resolution
-    // against RenderActiveScene in production).
-    let sm = world.resource::<SceneManager>();
-    let active = sm
-        .active_scene
-        .as_deref()
-        .expect("active_scene must be set");
+    assert_eq!(SceneLog::take(&mut world), ["enter editor"]);
+    let active = active_scene(&world).expect("active_scene must be set");
     let render = render_table
         .get(active)
         .expect("render entry must be present");
-    assert!(
-        render.gui_callback.is_some(),
-        "gui_callback must be resolvable for the active scene"
-    );
     assert_eq!(
-        render.gui_callback.unwrap() as *const () as usize,
-        editor_gui as *const () as usize,
-        "gui_callback fn pointer must be unchanged"
+        render.gui_callback.map(|gui| gui as *const () as usize),
+        Some(editor_gui as *const () as usize),
+        "gui_callback must be resolvable for the active scene"
     );
 }
