@@ -893,3 +893,60 @@ fn removing_an_unloaded_texture_during_deterministic_play_is_a_no_op() {
     tw.tick(1, DT);
     assert!(drain_forwarded(&tw).is_empty());
 }
+
+// --- tilemaps in deterministic play -----------------------------------------
+
+use aberredengine::core::components::sprite::Sprite;
+use aberredengine::core::components::tilemap::TileMap;
+use aberredengine::core::systems::tilemap::tilemap_texture_key;
+
+const TILEMAP_DIR: &str = "assets/tilemaps/sidescroller_test01";
+
+/// A deterministic world in `Playing` whose `on_enter_play` spawns a
+/// tilemap; `preload` decides whether the setup hook loads its atlas.
+fn world_spawning_a_tilemap(preload: bool) -> TestWorld {
+    let mut tw = TestWorldBuilder::new()
+        .deterministic(7)
+        .on_setup(move |mut assets: AssetLoader| -> Result {
+            if preload {
+                assets.load_tilemap(TILEMAP_DIR)?;
+            }
+            Ok(())
+        })
+        .on_enter_play(|mut commands: Commands| {
+            commands.spawn(TileMap::new(TILEMAP_DIR));
+        })
+        .build()
+        .expect("build should succeed");
+    tw.tick(1, DT);
+    if preload {
+        tw.deliver_texture_dims(&tilemap_texture_key(TILEMAP_DIR), 64, 64);
+    }
+    tw.tick(1, DT);
+    tw
+}
+
+#[test]
+fn a_preloaded_tilemap_spawns_during_deterministic_play() {
+    let mut tw = world_spawning_a_tilemap(true);
+    drain_forwarded(&tw);
+    tw.tick(2, DT);
+    assert!(
+        drain_forwarded(&tw).is_empty(),
+        "the atlas is already loaded"
+    );
+    let key = tilemap_texture_key(TILEMAP_DIR);
+    let mut sprites = tw.world.query::<&Sprite>();
+    assert!(
+        sprites.iter(&tw.world).any(|s| *s.tex_key == *key),
+        "tiles spawned"
+    );
+}
+
+#[cfg(debug_assertions)]
+#[test]
+#[should_panic(expected = "deterministic")]
+fn a_tilemap_without_a_preload_panics_during_deterministic_play_in_debug_builds() {
+    let mut tw = world_spawning_a_tilemap(false);
+    tw.tick(2, DT);
+}

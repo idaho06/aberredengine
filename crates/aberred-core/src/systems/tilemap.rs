@@ -68,6 +68,23 @@ pub fn tilemap_texture_key(path: &str) -> String {
     format!("tilemap:{}", normalize_tilemap_dir(path))
 }
 
+/// Path of the atlas PNG for the tilemap directory at `path`:
+/// `<dir>/<stem>.png`, with the directory spelled as in
+/// [`tilemap_texture_key`].
+pub fn tilemap_png_path(path: &str) -> String {
+    let path = normalize_tilemap_dir(path);
+    format!("{}/{}.png", path, path_stem(path))
+}
+
+/// The command that loads the atlas of the tilemap directory at `path`,
+/// shared by `tilemap_spawn_system` and `AssetLoader::load_tilemap`.
+pub fn tilemap_texture_cmd(path: &str) -> RenderAssetCmd {
+    RenderAssetCmd::TilemapTexture {
+        key: tilemap_texture_key(path),
+        png_path: tilemap_png_path(path),
+    }
+}
+
 const PNG_SIGNATURE: [u8; 8] = [0x89, b'P', b'N', b'G', b'\r', b'\n', 0x1a, b'\n'];
 
 /// Reads a PNG's width/height straight out of its `IHDR` chunk, without
@@ -100,14 +117,12 @@ fn read_png_dimensions(mut reader: impl Read, path: &str) -> Result<(i32, i32), 
 /// Load tilemap JSON and read atlas PNG dimensions, CPU-only (no GL context
 /// required). `path` is a directory; the last path segment is
 /// used as the stem for `<stem>.png` (texture) and `<stem>.txt` (JSON
-/// data). Returns the parsed [`Tilemap`], the atlas's pixel dimensions, and
-/// the computed `png_path` (so callers building a
-/// `RenderAssetCmd::TilemapTexture` don't need to recompute it).
-pub fn load_tilemap_data(path: &str) -> Result<(Tilemap, i32, i32, String), String> {
+/// data). Returns the parsed [`Tilemap`] and the atlas's pixel dimensions.
+pub fn load_tilemap_data(path: &str) -> Result<(Tilemap, i32, i32), String> {
     let path = normalize_tilemap_dir(path);
     let dirname = path_stem(path);
     let json_path = format!("{}/{}.txt", path, dirname);
-    let png_path = format!("{}/{}.png", path, dirname);
+    let png_path = tilemap_png_path(path);
 
     let file = std::fs::File::open(&png_path)
         .map_err(|err| format!("Failed to read tilemap texture '{}': {err}", png_path))?;
@@ -118,7 +133,7 @@ pub fn load_tilemap_data(path: &str) -> Result<(Tilemap, i32, i32, String), Stri
     let tilemap: Tilemap = serde_json::from_str(&json_string)
         .map_err(|err| format!("Failed to parse tilemap JSON '{}': {err}", json_path))?;
 
-    Ok((tilemap, tex_w, tex_h, png_path))
+    Ok((tilemap, tex_w, tex_h))
 }
 
 /// Spawn tile entities from a loaded tilemap.
@@ -224,7 +239,7 @@ pub fn tilemap_spawn_system(
 ) {
     for (entity, tilemap_comp, has_map_pos) in query.iter() {
         let path = &tilemap_comp.path;
-        let (tilemap_data, tex_w, tex_h, png_path) = match load_tilemap_data(path) {
+        let (tilemap_data, tex_w, tex_h) = match load_tilemap_data(path) {
             Ok(loaded) => loaded,
             Err(err) => {
                 warn!(
@@ -235,11 +250,8 @@ pub fn tilemap_spawn_system(
             }
         };
 
+        render_asset_cmd_writer.write(tilemap_texture_cmd(path));
         let key = tilemap_texture_key(path);
-        render_asset_cmd_writer.write(RenderAssetCmd::TilemapTexture {
-            key: key.clone(),
-            png_path,
-        });
 
         if !has_map_pos {
             commands.entity(entity).insert(MapPosition::new(0.0, 0.0));
@@ -266,13 +278,12 @@ mod tests {
 
     #[test]
     fn load_tilemap_data_reads_dimensions_and_parses_json_cpu_only() {
-        let (tilemap, tex_w, tex_h, png_path) =
-            load_tilemap_data(FIXTURE_DIR).expect("fixture should load");
+        let (tilemap, tex_w, tex_h) = load_tilemap_data(FIXTURE_DIR).expect("fixture should load");
 
         assert_eq!(tex_w, 192);
         assert_eq!(tex_h, 120);
         assert_eq!(
-            png_path,
+            tilemap_png_path(FIXTURE_DIR),
             "assets/tilemaps/sidescroller_test01/sidescroller_test01.png"
         );
         assert!(tilemap.tile_size > 0);
@@ -491,9 +502,12 @@ mod tests {
     #[test]
     fn trailing_slash_in_tilemap_path_is_ignored() {
         let with_slash = format!("{FIXTURE_DIR}/");
-        let (_, w, h, png_path) = load_tilemap_data(&with_slash).expect("trailing slash loads");
+        let (_, w, h) = load_tilemap_data(&with_slash).expect("trailing slash loads");
         assert_eq!((w, h), (192, 120));
-        assert_eq!(png_path, format!("{FIXTURE_DIR}/sidescroller_test01.png"));
+        assert_eq!(
+            tilemap_png_path(&with_slash),
+            format!("{FIXTURE_DIR}/sidescroller_test01.png")
+        );
 
         let mut world = World::new();
         world.spawn(TileMap::new(format!("{FIXTURE_DIR}//")));

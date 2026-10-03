@@ -646,7 +646,7 @@ This is useful for automated testing (replay a fixed input script, assert on the
 - `AssetLoader::load_*` for a key that is already loaded returns `Ok` and does nothing. For a key that isn't, it returns `Err(AssetError::AssetChangeDuringDeterministicPlay { .. })` and queues nothing.
 - A command written through a raw `MessageWriter<RenderAssetCmd>`/`MessageWriter<AudioCmd>` (or `assets.render()`/`assets.audio()`) has no result to return. A new load, or a removal, rename or unload of a loaded asset, is dropped and logged as an error, and panics in debug builds. Commands that change nothing (reloading a loaded key, removing one that isn't loaded) are dropped silently.
 - Texture filter changes and audio playback work as usual.
-- Engine features that load on the fly follow the same rule: spawn tilemaps and maps whose assets were loaded in Setup, and keep menus on dynamic text (the default; `with_dynamic_text(false)` rasterizes labels into new textures).
+- Engine features that load on the fly follow the same rule. Load each tilemap's atlas in Setup with `assets.load_tilemap(dir)` (same `dir` as its `TileMap`), spawn maps whose assets were loaded in Setup, and keep menus on dynamic text (the default; `with_dynamic_text(false)` rasterizes labels into new textures).
 
 ---
 
@@ -1029,6 +1029,8 @@ commands.spawn((
     Scale::new(2.0, 2.0),
 ));
 ```
+
+A `.deterministic()` game preloads the atlas in Setup with `assets.load_tilemap("assets/tilemaps/level01")` (see [Determinism and replay](#determinism-and-replay)).
 
 Move the whole tilemap at runtime by updating the root entity's `MapPosition`:
 

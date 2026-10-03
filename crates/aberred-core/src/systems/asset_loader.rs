@@ -10,6 +10,7 @@ use crate::resources::fontmetrics::FontMetricsStore;
 use crate::resources::texturedims::TextureDimsStore;
 use crate::resources::texturefilter::TextureFilter;
 use crate::systems::asset_gate::{AssetGate, Verdict};
+use crate::systems::tilemap::tilemap_texture_cmd;
 
 /// Why [`AssetLoader`] refused a load.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -129,6 +130,15 @@ impl<'w> AssetLoader<'w> {
         })
     }
 
+    /// Queues the atlas texture of the tilemap directory at `dir`, under the
+    /// key a `TileMap` spawned from the same `dir` uses
+    /// (`tilemap_texture_key`). A deterministic game calls this in `Setup`
+    /// for every tilemap it spawns while `Playing`; any other game can let
+    /// the spawn load it.
+    pub fn load_tilemap(&mut self, dir: &str) -> Result<(), AssetError> {
+        self.queue_render(tilemap_texture_cmd(dir))
+    }
+
     /// Queues a sound effect load from `path` under `key`.
     pub fn load_sound(
         &mut self,
@@ -217,6 +227,7 @@ mod tests {
     use crate::resources::fontmetrics::test_support::lowercase_alphabet_metrics;
     use crate::resources::gamestate::GameState;
     use crate::resources::loaded_assets::LoadedAssets;
+    use crate::systems::tilemap::tilemap_texture_key;
     use bevy_ecs::system::RunSystemOnce;
 
     fn loader_world() -> World {
@@ -278,6 +289,22 @@ mod tests {
                 if key == "glow" && fs == "glow.fs"
         ));
         assert!(audio_cmds(&mut world).is_empty());
+    }
+
+    #[test]
+    fn load_tilemap_queues_the_atlas_the_spawn_system_uses() {
+        const DIR: &str = "./assets/tilemaps/sidescroller_test01/";
+        let mut world = loader_world();
+        world
+            .run_system_once(|mut assets: AssetLoader| assets.load_tilemap(DIR).unwrap())
+            .unwrap();
+
+        assert!(matches!(
+            render_cmds(&mut world).as_slice(),
+            [RenderAssetCmd::TilemapTexture { key, png_path }]
+                if *key == tilemap_texture_key(DIR)
+                    && png_path == "assets/tilemaps/sidescroller_test01/sidescroller_test01.png"
+        ));
     }
 
     #[test]
