@@ -16,10 +16,12 @@ use crate::resources::shaderstore::ShaderStore;
 use crate::resources::texturestore::{TextureStore, load_texture_from_text};
 use crate::systems::RaylibAccess;
 use crate::systems::math::color_to_raylib;
+use aberred_core::protocol::asset_kind::AssetKind;
 use aberred_core::protocol::endpoints::LogicTx;
 use aberred_core::protocol::render_assets::RenderAssetCmd;
 use aberred_core::protocol::render_logic::LogicMsg;
 use aberred_core::resources::fontmetrics::{FontMetrics, GlyphMetrics};
+use aberred_core::resources::texturefilter::TextureFilter;
 use raylib::ffi;
 use raylib::prelude::Image;
 use rustc_hash::FxHashMap;
@@ -103,12 +105,14 @@ pub fn process_render_asset_cmds(
 
 /// Performs the GL load/upload for a single [`RenderAssetCmd`].
 ///
-/// Successful font/texture loads push a [`LogicMsg::FontLoaded`]/
-/// [`LogicMsg::TextureLoaded`] notification into `notifications` instead of
-/// writing `FontMetricsStore`/`TextureDimsStore` directly — those stores are
-/// logic-owned, while this function runs on the render thread; the caller
-/// ([`process_render_asset_cmds`]) ships each notification across the
-/// `LogicTx` channel.
+/// Every load command ([`RenderAssetCmd::load_target`] is `Some`) pushes
+/// exactly one reply into `notifications`: [`LogicMsg::TextureLoaded`],
+/// [`LogicMsg::FontLoaded`] or [`LogicMsg::ShaderLoaded`] on success, also
+/// when the load is skipped because the key is already loaded, and
+/// [`LogicMsg::AssetLoadFailed`] on failure. `FontMetricsStore`/
+/// `TextureDimsStore` are logic-owned, while this function runs on the
+/// render thread; the caller ([`process_render_asset_cmds`]) ships each
+/// reply across the `LogicTx` channel.
 pub(crate) fn apply_render_asset_cmd(
     rl: &mut raylib::RaylibHandle,
     th: &raylib::RaylibThread,
@@ -118,100 +122,89 @@ pub(crate) fn apply_render_asset_cmd(
     shaders: &mut ShaderStore,
     notifications: &mut Vec<LogicMsg>,
 ) {
-    match cmd {
+    let target = cmd.load_target().map(|(kind, key)| (kind, key.to_owned()));
+    let outcome = match cmd {
         RenderAssetCmd::Texture { key, path, filter } => match rl.load_texture(th, &path) {
             Ok(tex) => {
                 debug!("Loaded texture '{}' from '{}'", key, path);
-                let (width, height) = (tex.width, tex.height);
-                tex_store.insert(&key, tex, filter, Some(path));
-                notifications.push(LogicMsg::TextureLoaded { key, width, height });
+                Ok(insert_texture(tex_store, &key, tex, filter, Some(path)))
             }
-            Err(e) => error!("Failed to load texture '{}': {}", path, e),
+            Err(e) => Err(format!("'{path}': {e}")),
         },
         RenderAssetCmd::TextureFromMemory {
             key,
             ext,
             bytes,
             filter,
-        } => match Image::load_image_from_mem(&ext, &bytes) {
-            Ok(image) => match rl.load_texture_from_image(th, &image) {
-                Ok(tex) => {
-                    debug!(
-                        "Loaded texture '{}' from {} in-memory bytes (ext '{}')",
-                        key,
-                        bytes.len(),
-                        ext
-                    );
-                    let (width, height) = (tex.width, tex.height);
-                    tex_store.insert(&key, tex, filter, None);
-                    notifications.push(LogicMsg::TextureLoaded { key, width, height });
-                }
-                Err(e) => error!("Failed to upload in-memory texture '{}': {}", key, e),
-            },
-            Err(e) => error!(
-                "Failed to decode in-memory texture '{}' (ext '{}'): {}",
-                key, ext, e
-            ),
-        },
+        } => Image::load_image_from_mem(&ext, &bytes)
+            .map_err(|e| format!("decoding {} bytes (ext '{ext}'): {e}", bytes.len()))
+            .and_then(|image| {
+                rl.load_texture_from_image(th, &image)
+                    .map_err(|e| format!("uploading: {e}"))
+            })
+            .map(|tex| {
+                debug!(
+                    "Loaded texture '{}' from {} in-memory bytes (ext '{}')",
+                    key,
+                    bytes.len(),
+                    ext
+                );
+                insert_texture(tex_store, &key, tex, filter, None)
+            }),
         RenderAssetCmd::Font {
             key,
             path,
             size,
             skip_if_loaded,
         } => {
-            if skip_if_loaded && fonts.meta.contains_key(&key) {
+            if skip_if_loaded && let Some(font) = fonts.get(&key) {
                 debug!(
                     "process_render_asset_cmds: font '{}' already loaded, skipping",
                     key
                 );
-                return;
-            }
-            match load_font_with_mipmaps(rl, th, &path, size) {
-                Ok(font) => {
+                Ok(LogicMsg::FontLoaded {
+                    key,
+                    metrics: extract_font_metrics(font),
+                })
+            } else {
+                load_font_with_mipmaps(rl, th, &path, size).map(|font| {
                     debug!("Loaded font '{}' from '{}'", key, path);
                     let metrics = extract_font_metrics(&font);
                     fonts.add(&key, font);
-                    notifications.push(LogicMsg::FontLoaded { key, metrics });
-                }
-                Err(err) => error!("Failed to load font '{}' from '{}': {}", key, path, err),
+                    LogicMsg::FontLoaded { key, metrics }
+                })
             }
         }
         RenderAssetCmd::Shader {
             key,
             vs_path,
             fs_path,
-        } => {
-            let vs_path_c = vs_path.as_deref();
-            let fs_path_c = fs_path.as_deref();
-            match rl.load_shader(th, vs_path_c, fs_path_c) {
-                Ok(shader) if shader.is_shader_valid() => {
-                    debug!(
-                        "Loaded shader '{}' (vs: {:?}, fs: {:?})",
-                        key, vs_path, fs_path
-                    );
-                    shaders.add(&key, shader);
-                }
-                Ok(_) => error!(
-                    "Shader '{}' loaded but is invalid (vs: {:?}, fs: {:?})",
+        } => match rl.load_shader(th, vs_path.as_deref(), fs_path.as_deref()) {
+            Ok(shader) if shader.is_shader_valid() => {
+                debug!(
+                    "Loaded shader '{}' (vs: {:?}, fs: {:?})",
                     key, vs_path, fs_path
-                ),
-                Err(e) => error!(
-                    "Shader '{}' failed to load: {e} (vs: {:?}, fs: {:?})",
-                    key, vs_path, fs_path
-                ),
+                );
+                shaders.add(&key, shader);
+                Ok(LogicMsg::ShaderLoaded { key })
             }
-        }
+            Ok(_) => Err(format!(
+                "loaded but invalid (vs: {vs_path:?}, fs: {fs_path:?})"
+            )),
+            Err(e) => Err(format!("{e} (vs: {vs_path:?}, fs: {fs_path:?})")),
+        },
         RenderAssetCmd::ShaderFromMemory {
             key,
             vs_src,
             fs_src,
-        } => match rl.load_shader_from_memory(th, vs_src.as_deref(), fs_src.as_deref()) {
-            Ok(shader) => {
+        } => rl
+            .load_shader_from_memory(th, vs_src.as_deref(), fs_src.as_deref())
+            .map(|shader| {
                 debug!("Loaded shader '{}' from memory", key);
                 shaders.add(&key, shader);
-            }
-            Err(e) => error!("Shader '{}' failed to load from memory: {e}", key),
-        },
+                LogicMsg::ShaderLoaded { key }
+            })
+            .map_err(|e| format!("from memory: {e}")),
         RenderAssetCmd::RasterizeText {
             key,
             font_key,
@@ -219,15 +212,9 @@ pub(crate) fn apply_render_asset_cmd(
             font_size,
             spacing,
             color,
-        } => {
-            let Some(font) = fonts.get(&font_key) else {
-                warn!(
-                    "process_render_asset_cmds: font '{}' missing for RasterizeText '{}'",
-                    font_key, key
-                );
-                return;
-            };
-            match load_texture_from_text(
+        } => match fonts.get(&font_key) {
+            None => Err(format!("font '{font_key}' is not loaded")),
+            Some(font) => load_texture_from_text(
                 rl,
                 th,
                 font,
@@ -235,51 +222,36 @@ pub(crate) fn apply_render_asset_cmd(
                 font_size,
                 spacing,
                 color_to_raylib(color),
-            ) {
-                Some(tex) => {
-                    let (width, height) = (tex.width, tex.height);
-                    tex_store.insert(
-                        &key,
-                        tex,
-                        aberred_core::resources::texturefilter::TextureFilter::Nearest,
-                        None,
-                    );
-                    notifications.push(LogicMsg::TextureLoaded { key, width, height });
-                }
-                None => warn!(
-                    "process_render_asset_cmds: failed to rasterize text for '{}'",
-                    key
-                ),
-            }
-        }
-        RenderAssetCmd::TilemapTexture { key, png_path } => {
-            if tex_store.get(&key).is_some() {
-                return;
-            }
-            match rl.load_texture(th, &png_path) {
-                Ok(tex) => {
-                    let (width, height) = (tex.width, tex.height);
-                    tex_store.insert(
-                        &key,
-                        tex,
-                        aberred_core::resources::texturefilter::TextureFilter::Nearest,
-                        Some(png_path),
-                    );
-                    notifications.push(LogicMsg::TextureLoaded { key, width, height });
-                }
-                Err(e) => warn!(
-                    "process_render_asset_cmds: failed to load tilemap texture '{}': {e}",
-                    png_path
-                ),
-            }
-        }
+            )
+            .map(|tex| insert_texture(tex_store, &key, tex, TextureFilter::Nearest, None))
+            .ok_or_else(|| format!("rasterizing text with font '{font_key}'")),
+        },
+        RenderAssetCmd::TilemapTexture { key, png_path } => match tex_store.get(&key) {
+            Some(tex) => Ok(LogicMsg::TextureLoaded {
+                key,
+                width: tex.width,
+                height: tex.height,
+            }),
+            None => match rl.load_texture(th, &png_path) {
+                Ok(tex) => Ok(insert_texture(
+                    tex_store,
+                    &key,
+                    tex,
+                    TextureFilter::Nearest,
+                    Some(png_path),
+                )),
+                Err(e) => Err(format!("'{png_path}': {e}")),
+            },
+        },
         RenderAssetCmd::RemoveTexture { key } => {
             tex_store.remove(&key);
             notifications.push(LogicMsg::TextureRemoved { key });
+            return;
         }
         RenderAssetCmd::RemoveFont { key } => {
             fonts.remove(&key);
             notifications.push(LogicMsg::FontRemoved { key });
+            return;
         }
         RenderAssetCmd::RenameTexture { old_key, new_key } => {
             if tex_store.rename(&old_key, new_key.clone()) {
@@ -291,6 +263,7 @@ pub(crate) fn apply_render_asset_cmd(
                     old_key, new_key, old_key
                 );
             }
+            return;
         }
         RenderAssetCmd::SetTextureFilter { key, filter } => {
             if !tex_store.set_filter(&key, filter) {
@@ -299,6 +272,7 @@ pub(crate) fn apply_render_asset_cmd(
                     key
                 );
             }
+            return;
         }
         RenderAssetCmd::RenameFont { old_key, new_key } => {
             if fonts.rename(&old_key, new_key.clone()) {
@@ -310,8 +284,38 @@ pub(crate) fn apply_render_asset_cmd(
                     old_key, new_key, old_key
                 );
             }
+            return;
         }
+    };
+    let (kind, key) = target.expect("only load commands reach the reply");
+    notifications.push(load_reply(kind, key, outcome));
+}
+
+/// Stores a freshly loaded texture under `key` and builds its
+/// [`LogicMsg::TextureLoaded`] reply.
+fn insert_texture(
+    tex_store: &mut TextureStore,
+    key: &str,
+    tex: raylib::prelude::Texture2D,
+    filter: TextureFilter,
+    path: Option<String>,
+) -> LogicMsg {
+    let (width, height) = (tex.width, tex.height);
+    tex_store.insert(key, tex, filter, path);
+    LogicMsg::TextureLoaded {
+        key: key.to_owned(),
+        width,
+        height,
     }
+}
+
+/// The reply to one load command: its success message, or a logged
+/// [`LogicMsg::AssetLoadFailed`] for `kind`/`key` when it failed.
+fn load_reply(kind: AssetKind, key: String, outcome: Result<LogicMsg, String>) -> LogicMsg {
+    outcome.unwrap_or_else(|error| {
+        error!("Failed to load {kind:?} '{key}': {error}");
+        LogicMsg::AssetLoadFailed { kind, key, error }
+    })
 }
 
 /// Load a font with mipmaps and anisotropic filtering.
@@ -341,6 +345,32 @@ fn load_font_with_mipmaps(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_successful_load_replies_with_its_own_message() {
+        let reply = load_reply(
+            AssetKind::Shader,
+            "glow".to_owned(),
+            Ok(LogicMsg::ShaderLoaded {
+                key: "glow".to_owned(),
+            }),
+        );
+        assert!(matches!(reply, LogicMsg::ShaderLoaded { key } if key == "glow"));
+    }
+
+    #[test]
+    fn a_failed_load_replies_asset_load_failed() {
+        let reply = load_reply(
+            AssetKind::Texture,
+            "player".to_owned(),
+            Err("file not found".to_owned()),
+        );
+        assert!(matches!(
+            reply,
+            LogicMsg::AssetLoadFailed { kind: AssetKind::Texture, key, error }
+                if key == "player" && error == "file not found"
+        ));
+    }
 
     /// Windowed parity check: `extract_font_metrics(...).measure_text(...)`
     /// must match raylib's real `ffi::MeasureTextEx` for a real loaded font.

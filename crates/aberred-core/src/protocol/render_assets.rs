@@ -17,6 +17,7 @@
 use bevy_ecs::message::Message;
 
 use crate::math::Color;
+use crate::protocol::asset_kind::AssetKind;
 use crate::resources::texturefilter::TextureFilter;
 
 /// GL asset-load/upload commands. Consumed once per frame by
@@ -108,4 +109,137 @@ pub enum RenderAssetCmd {
     /// glyph-atlas regeneration, just a `FontStore` key move. No-ops with a
     /// warning if `old_key` isn't loaded.
     RenameFont { old_key: String, new_key: String },
+}
+
+impl RenderAssetCmd {
+    /// The kind and key of the asset this command loads, or `None` for a
+    /// command that changes an already-loaded asset (removal, rename,
+    /// filter). The render thread answers every load command with exactly
+    /// one reply for this key: a success message or
+    /// `LogicMsg::AssetLoadFailed`.
+    pub fn load_target(&self) -> Option<(AssetKind, &str)> {
+        match self {
+            Self::Texture { key, .. }
+            | Self::TextureFromMemory { key, .. }
+            | Self::TilemapTexture { key, .. }
+            | Self::RasterizeText { key, .. } => Some((AssetKind::Texture, key)),
+            Self::Font { key, .. } => Some((AssetKind::Font, key)),
+            Self::Shader { key, .. } | Self::ShaderFromMemory { key, .. } => {
+                Some((AssetKind::Shader, key))
+            }
+            Self::RemoveTexture { .. }
+            | Self::RemoveFont { .. }
+            | Self::RenameTexture { .. }
+            | Self::SetTextureFilter { .. }
+            | Self::RenameFont { .. } => None,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn s(v: &str) -> String {
+        v.to_owned()
+    }
+
+    #[test]
+    fn load_commands_name_their_kind_and_key() {
+        let cases = [
+            (
+                RenderAssetCmd::Texture {
+                    key: s("t"),
+                    path: s("t.png"),
+                    filter: TextureFilter::Nearest,
+                },
+                AssetKind::Texture,
+                "t",
+            ),
+            (
+                RenderAssetCmd::TextureFromMemory {
+                    key: s("m"),
+                    ext: s(".png"),
+                    bytes: Vec::new(),
+                    filter: TextureFilter::Nearest,
+                },
+                AssetKind::Texture,
+                "m",
+            ),
+            (
+                RenderAssetCmd::TilemapTexture {
+                    key: s("tm"),
+                    png_path: s("tm.png"),
+                },
+                AssetKind::Texture,
+                "tm",
+            ),
+            (
+                RenderAssetCmd::RasterizeText {
+                    key: s("label"),
+                    font_key: s("f"),
+                    text: s("hi"),
+                    font_size: 8.0,
+                    spacing: 1.0,
+                    color: Color::new(255, 255, 255, 255),
+                },
+                AssetKind::Texture,
+                "label",
+            ),
+            (
+                RenderAssetCmd::Font {
+                    key: s("f"),
+                    path: s("f.ttf"),
+                    size: 8,
+                    skip_if_loaded: true,
+                },
+                AssetKind::Font,
+                "f",
+            ),
+            (
+                RenderAssetCmd::Shader {
+                    key: s("sh"),
+                    vs_path: None,
+                    fs_path: None,
+                },
+                AssetKind::Shader,
+                "sh",
+            ),
+            (
+                RenderAssetCmd::ShaderFromMemory {
+                    key: s("shm"),
+                    vs_src: None,
+                    fs_src: None,
+                },
+                AssetKind::Shader,
+                "shm",
+            ),
+        ];
+        for (cmd, kind, key) in &cases {
+            assert_eq!(cmd.load_target(), Some((*kind, *key)), "{cmd:?}");
+        }
+    }
+
+    #[test]
+    fn non_load_commands_have_no_load_target() {
+        let cases = [
+            RenderAssetCmd::RemoveTexture { key: s("t") },
+            RenderAssetCmd::RemoveFont { key: s("f") },
+            RenderAssetCmd::RenameTexture {
+                old_key: s("a"),
+                new_key: s("b"),
+            },
+            RenderAssetCmd::RenameFont {
+                old_key: s("a"),
+                new_key: s("b"),
+            },
+            RenderAssetCmd::SetTextureFilter {
+                key: s("t"),
+                filter: TextureFilter::Bilinear,
+            },
+        ];
+        for cmd in &cases {
+            assert_eq!(cmd.load_target(), None, "{cmd:?}");
+        }
+    }
 }

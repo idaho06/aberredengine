@@ -255,6 +255,9 @@ fn drain_logic_messages(
                     .resource_mut::<TextureDimsStore>()
                     .insert(key, width, height);
             }
+            // No logic-side store mirrors shaders, and a failed load leaves
+            // the stores untouched.
+            LogicMsg::ShaderLoaded { .. } | LogicMsg::AssetLoadFailed { .. } => {}
             LogicMsg::TextureRemoved { key } => {
                 world.resource_mut::<TextureDimsStore>().remove(&key);
             }

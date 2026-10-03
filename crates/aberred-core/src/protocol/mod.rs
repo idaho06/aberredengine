@@ -10,6 +10,7 @@
 //! compile time for `LogicMsg`/`RenderMsg`.
 //!
 //! Submodules:
+//! - [`asset_kind`] – `AssetKind`, the asset category named by load replies
 //! - [`render_logic`] – `LogicMsg`/`RenderMsg`, the render<->logic channel
 //!   payloads
 //! - [`audio`] – `AudioCmd`/`AudioMessage`, the ECS<->audio-thread channel
@@ -40,6 +41,7 @@
 //!   — everything a sim tick consumes, recorded as an explicit value rather
 //!   than left to thread-scheduling timing; also the replay wire format
 
+pub mod asset_kind;
 pub mod audio;
 pub mod endpoints;
 pub mod raw_input;

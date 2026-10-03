@@ -797,7 +797,7 @@ asset_cmds.write(RenderAssetCmd::RasterizeText {
 });
 ```
 
-Queue it only after the font has loaded (wait for its `FontMetricsStore` entry): if `font_key` is missing on the render thread, the command logs a warning and is dropped. Draw the result with a `Sprite` whose `tex_key` is `key`, and free it with `RenderAssetCmd::RemoveTexture` when done. The engine's menus use this command for their static labels.
+Queue it only after the font has loaded (wait for its `FontMetricsStore` entry): if `font_key` is missing on the render thread, the command logs an error and is dropped. Draw the result with a `Sprite` whose `tex_key` is `key`, and free it with `RenderAssetCmd::RemoveTexture` when done. The engine's menus use this command for their static labels.
 
 ### Audio (sounds and music)
 

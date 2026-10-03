@@ -9,6 +9,7 @@
 //! See `src/protocol/endpoints.rs` for the bridge resources holding the
 //! endpoints.
 
+use crate::protocol::asset_kind::AssetKind;
 use crate::protocol::render_assets::RenderAssetCmd;
 use crate::resources::debugoverlayconfig::DebugOverlayConfig;
 use crate::resources::fontmetrics::FontMetrics;
@@ -28,16 +29,29 @@ pub enum LogicMsg {
     /// read `ScreenSize`).
     ScreenSize { w: i32, h: i32 },
     /// CPU-side glyph metrics extracted after a render-side font load,
-    /// sent by `process_render_asset_cmds`.
+    /// sent by `process_render_asset_cmds`. Also sent for a
+    /// `skip_if_loaded` load of an already-loaded font.
     FontLoaded { key: String, metrics: FontMetrics },
     /// Pixel dimensions of a texture the render side just loaded/uploaded
-    /// (`Texture`, `TilemapTexture`, and `RasterizeText` arms). Feeds the
-    /// logic-side `TextureDimsStore` used by `animation`'s multi-row frame
-    /// wrap.
+    /// (`Texture`, `TextureFromMemory`, `TilemapTexture` and `RasterizeText`
+    /// arms; also sent for a `TilemapTexture` whose key is already loaded).
+    /// Feeds the logic-side `TextureDimsStore` used by `animation`'s
+    /// multi-row frame wrap.
     TextureLoaded {
         key: String,
         width: i32,
         height: i32,
+    },
+    /// A shader the render side just loaded (`Shader` and
+    /// `ShaderFromMemory` arms).
+    ShaderLoaded { key: String },
+    /// A render-side load command failed: the file is missing or invalid,
+    /// or a `RasterizeText` names a font that isn't loaded. Sent once per
+    /// failed load command, in place of its success message.
+    AssetLoadFailed {
+        kind: AssetKind,
+        key: String,
+        error: String,
     },
     /// Sent after `RenderAssetCmd::RemoveTexture` drops the GPU handle;
     /// the logic side prunes the now-stale entry from `TextureDimsStore`.
