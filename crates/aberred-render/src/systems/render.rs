@@ -20,7 +20,8 @@ use bevy_ecs::system::SystemParam;
 use raylib::prelude::*;
 
 use super::math::{
-    camera2d_from_raylib, camera2d_to_raylib, color_to_raylib, vec2_from_raylib, vec2_to_raylib,
+    camera2d_from_raylib, camera2d_to_raylib, color_to_raylib, rect_to_raylib, vec2_from_raylib,
+    vec2_to_raylib,
 };
 use crate::components::mirror::SimMirror;
 use crate::resources::fontstore::FontStore;
@@ -64,10 +65,7 @@ use aberred_core::systems::scene_dispatch::WorldDrawCtx;
 use log::warn;
 
 use super::debug_overlay::{PerfPanelStats, draw_imgui_debug};
-use super::geometry::{
-    compute_sprite_cull_bounds, compute_sprite_geometry, compute_view_bounds,
-    draw_rotated_rect_lines, resolve_world_transform,
-};
+use super::geometry::{compute_sprite_cull_bounds, compute_view_bounds, draw_rotated_rect_lines};
 use super::gui_panel::{self, draw_screen_panel_item};
 use super::math::{resolve_sprite_tint, resolve_text_tint, shadow_color};
 use super::postprocess::{
@@ -75,6 +73,7 @@ use super::postprocess::{
 };
 use super::sprite::{draw_screen_sprite_item, sprite_src_rect};
 use super::text::draw_screen_text_item;
+use aberred_core::systems::sprite_geometry::{compute_sprite_geometry, resolve_world_transform};
 
 pub(super) struct SpriteBufferItem {
     entity: Entity,
@@ -476,8 +475,8 @@ pub fn render_system(
                             item.resolved_scale.as_ref(),
                             item.resolved_rot.as_ref(),
                         );
-                        let dest = geom.dest;
-                        let origin_scaled = geom.origin;
+                        let dest = rect_to_raylib(geom.dest);
+                        let origin_scaled = vec2_to_raylib(geom.origin);
                         let rotation = geom.rotation;
 
                         let tint_color = resolve_sprite_tint(item.maybe_tint);

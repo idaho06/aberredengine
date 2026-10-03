@@ -73,6 +73,7 @@ pub mod rust_collision;
 pub mod scene_dispatch;
 pub mod signal_intents;
 pub mod signalbinding;
+pub mod sprite_geometry;
 pub mod state_hash;
 pub mod stuckto;
 pub mod tilemap;

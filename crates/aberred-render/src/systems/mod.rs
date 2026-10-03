@@ -4,7 +4,7 @@
 //! - `render` – main render pass ([`render_system`]): draws sprites, optional
 //!   debug overlays, and basic diagnostics each frame
 //! - [`mirror`] – retained render-world mirror-entity reconciliation
-//! - [`geometry`] – sprite/text geometry and view-bounds helpers
+//! - `geometry` – view-bounds, cull-bounds and debug-outline helpers (pure sprite geometry is `aberred_core::systems::sprite_geometry`)
 //! - `math` – `aberred_core::math::Color`/`Rect` <-> raylib `Color`/`Rectangle` conversions
 //! - [`window`] – refreshes `WindowSize` from the OS each render frame
 //! - [`input`] – samples raw device input each render frame
@@ -18,7 +18,7 @@
 mod assets;
 mod debug_overlay;
 mod gameconfig;
-pub mod geometry;
+mod geometry;
 mod gui_panel;
 pub mod input;
 pub(crate) mod math;
