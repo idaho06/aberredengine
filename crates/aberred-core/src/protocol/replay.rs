@@ -138,16 +138,7 @@ pub enum ReplayEntry {
     /// clean end of file — a separate trailer *type* would need its own
     /// framing discriminator to be told apart from an entry, so it lives in
     /// this enum instead.
-    End {
-        total_ticks: u64,
-        final_hash: u64,
-        /// Whether the recording session tripped
-        /// [`DeterminismTaint`](crate::resources::determinism_taint::DeterminismTaint)
-        /// — i.e. this file is not guaranteed bit-exact reproducible, and a
-        /// divergence report from replaying it may be explained by that
-        /// rather than by a real regression.
-        tainted: bool,
-    },
+    End { total_ticks: u64, final_hash: u64 },
 }
 
 /// Sim-visible `GameConfig` fields, hashed in this fixed order via

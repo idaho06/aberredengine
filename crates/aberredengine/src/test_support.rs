@@ -43,7 +43,8 @@ use std::path::PathBuf;
 use crate::engine_app::SceneDescriptor;
 use crate::engine_app::{
     EngineBuilder, HookRegistrar, LogicInit, ObserverRegistrar, UpdateRegistrar, apply_tick_input,
-    drain_logic_messages, hold_back_setup_input, hook_registrar, in_envelope, run_sim_tick,
+    drain_logic_messages, hold_back_deterministic_setup_input, hook_registrar, in_envelope,
+    run_sim_tick,
 };
 use aberred_core::components::persistent::Persistent;
 use aberred_core::protocol::audio::{AudioCmd, AudioMessage};
@@ -74,7 +75,6 @@ pub struct TestWorld {
     /// Inject a fake `AudioMessage` as if the (nonexistent) audio thread
     /// replied.
     pub audio_msgs_tx: Sender<AudioMessage>,
-    deterministic: bool,
     /// Setup input held back for the first `Playing` tick (deterministic
     /// mode), as `logic_thread_main` does.
     held_setup_input: TickInput,
@@ -318,7 +318,6 @@ impl TestWorldBuilder {
             sent_to_render: rx_render,
             audio_cmds,
             audio_msgs_tx,
-            deterministic: self.deterministic_seed.is_some(),
             held_setup_input: TickInput::default(),
             snapshot_out: snap_out,
         })
@@ -393,10 +392,11 @@ impl TestWorld {
     /// `TickInput` sequence the same way the real logic thread would.
     pub fn apply_tick_input(&mut self, tick_input: &TickInput, dt: f32) {
         let mut tick_input = tick_input.clone();
-        if self.deterministic {
-            let playing = in_envelope(&self.world);
-            hold_back_setup_input(&mut tick_input, &mut self.held_setup_input, playing);
-        }
+        hold_back_deterministic_setup_input(
+            &self.world,
+            &mut tick_input,
+            &mut self.held_setup_input,
+        );
         apply_tick_input(&mut self.world, &tick_input);
         self.tick(1, dt);
     }
@@ -416,7 +416,7 @@ impl TestWorld {
     pub fn deliver_logic_msg(&mut self, msg: LogicMsg) {
         let (tx, rx) = unbounded();
         tx.send(msg).expect("receiver is alive");
-        drain_logic_messages(None, &rx, &mut self.world, self.deterministic);
+        drain_logic_messages(None, &rx, &mut self.world);
     }
 
     /// Fake a render-side font load reply (`LogicMsg::FontLoaded`), for
@@ -470,7 +470,7 @@ pub fn write_tick_inputs_to_replay(
     for ti in ticks {
         rec.record_tick(ti);
     }
-    rec.finish(0, false)
+    rec.finish(0)
 }
 
 /// Read `n` tick entries back from a replay file written by

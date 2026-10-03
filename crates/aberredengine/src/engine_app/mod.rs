@@ -125,8 +125,8 @@ pub use schedule::SimSet;
 // since these were inline item definitions rather than `use` re-exports).
 #[cfg(any(test, feature = "test-support"))]
 pub(crate) use logic_thread::{
-    LogicInit, apply_tick_input, drain_logic_messages, hold_back_setup_input, in_envelope,
-    run_sim_tick,
+    LogicInit, apply_tick_input, drain_logic_messages, hold_back_deterministic_setup_input,
+    in_envelope, run_sim_tick,
 };
 #[cfg(any(test, feature = "test-support"))]
 pub(crate) use registrar::{HookRegistrar, ObserverRegistrar, UpdateRegistrar, hook_registrar};

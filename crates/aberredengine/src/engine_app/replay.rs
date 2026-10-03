@@ -159,14 +159,11 @@ impl ReplayRecorder {
     /// Flush any trailing empty-run + write the closing [`ReplayEntry::End`].
     /// Must run on every `logic_thread_main` exit path or the file is left
     /// without one, which playback can only report as a read error.
-    /// `tainted` is the recording session's
-    /// [`DeterminismTaint`](aberred_core::resources::determinism_taint::DeterminismTaint).
-    pub(crate) fn finish(mut self, final_hash: u64, tainted: bool) -> io::Result<()> {
+    pub(crate) fn finish(mut self, final_hash: u64) -> io::Result<()> {
         self.flush_pending_empty_run()?;
         self.write_entry(&ReplayEntry::End {
             total_ticks: self.ticks_written,
             final_hash,
-            tainted,
         })?;
         self.writer.flush()
     }
@@ -252,19 +249,11 @@ impl ReplayPlayer {
     /// one to read it, depending on whether `collect` was draining a pending
     /// empty-run that tick, and the summary must be logged exactly once
     /// regardless of which.
-    fn note_end(&mut self, total_ticks: u64, final_hash: u64, tainted: bool) {
+    fn note_end(&mut self, total_ticks: u64, final_hash: u64) {
         log::info!(
             "replay: playback finished after {total_ticks} recorded ticks \
              (final hash {final_hash:#x})"
         );
-        if tainted {
-            log::warn!(
-                "replay: this recording was made in a session flagged by \
-                 DeterminismTaint -- it is not guaranteed bit-exact reproducible, \
-                 so any divergence reported above may be explained by that rather \
-                 than by a regression"
-            );
-        }
         self.finished = true;
     }
 
@@ -309,8 +298,7 @@ impl ReplayPlayer {
             Ok(Some(ReplayEntry::End {
                 total_ticks,
                 final_hash,
-                tainted,
-            })) => self.note_end(total_ticks, final_hash, tainted),
+            })) => self.note_end(total_ticks, final_hash),
             Ok(None) => {
                 log::warn!(
                     "replay: reached end of file with no End entry -- the recording \
@@ -356,13 +344,12 @@ impl ReplayPlayer {
             Ok(Some(ReplayEntry::End {
                 total_ticks,
                 final_hash,
-                tainted,
             })) => {
                 // The recording simply ended before this checkpoint tick --
                 // not a corrupt file. Reachable whenever `collect` was
                 // draining a pending empty-run this tick and so didn't read
                 // the entry itself.
-                self.note_end(total_ticks, final_hash, tainted);
+                self.note_end(total_ticks, final_hash);
                 None
             }
             Ok(Some(other)) => {
@@ -421,7 +408,7 @@ mod tests {
         let file = NamedTempFile::new().unwrap();
         let header = test_header();
         let rec = ReplayRecorder::create(file.path(), &header).unwrap();
-        rec.finish(42, false).unwrap();
+        rec.finish(42).unwrap();
 
         let (read_header, _player) = ReplayPlayer::open_header(file.path()).unwrap();
         assert_eq!(read_header.seed, header.seed);
@@ -436,7 +423,7 @@ mod tests {
         for _ in 0..1000 {
             rec.record_tick(&TickInput::default());
         }
-        rec.finish(0, false).unwrap();
+        rec.finish(0).unwrap();
 
         let (_h, mut player) = ReplayPlayer::open_header(file.path()).unwrap();
         for _ in 0..1000 {
@@ -456,7 +443,7 @@ mod tests {
         let mut ti = TickInput::default();
         ti.samples.push(RawDeviceSnapshot::default());
         rec.record_tick(&ti);
-        rec.finish(0, false).unwrap();
+        rec.finish(0).unwrap();
 
         let (_h, mut player) = ReplayPlayer::open_header(file.path()).unwrap();
         let mut out = TickInput::default();
@@ -474,7 +461,7 @@ mod tests {
         let mut rec = ReplayRecorder::create(file.path(), &header).unwrap();
         rec.record_tick(&TickInput::default());
         rec.record_checkpoint(0, 123);
-        rec.finish(123, false).unwrap();
+        rec.finish(123).unwrap();
 
         let (_h, mut player) = ReplayPlayer::open_header(file.path()).unwrap();
         let mut out = TickInput::default();
@@ -490,7 +477,7 @@ mod tests {
         let mut rec = ReplayRecorder::create(file.path(), &header).unwrap();
         rec.record_tick(&TickInput::default());
         rec.record_checkpoint(0, 123);
-        rec.finish(123, false).unwrap();
+        rec.finish(123).unwrap();
 
         let (_h, mut player) = ReplayPlayer::open_header(file.path()).unwrap();
         let mut out = TickInput::default();
@@ -505,7 +492,7 @@ mod tests {
         let header = test_header();
         let mut rec = ReplayRecorder::create(file.path(), &header).unwrap();
         rec.record_tick(&TickInput::default());
-        rec.finish(0, false).unwrap();
+        rec.finish(0).unwrap();
 
         let (_h, mut player) = ReplayPlayer::open_header(file.path()).unwrap();
         assert!(!player.is_finished());
@@ -524,7 +511,7 @@ mod tests {
         header.magic = *b"NOPE";
         ReplayRecorder::create(file.path(), &header)
             .unwrap()
-            .finish(0, false)
+            .finish(0)
             .unwrap();
 
         let Err(EngineError::ReplayOpen { path, .. }) =
@@ -551,7 +538,7 @@ mod tests {
         let file = NamedTempFile::new().unwrap();
         ReplayRecorder::create(file.path(), &test_header())
             .unwrap()
-            .finish(0, false)
+            .finish(0)
             .unwrap();
 
         let (_h, mut player) = ReplayPlayer::open_header(file.path()).unwrap();
@@ -571,7 +558,7 @@ mod tests {
         for _ in 0..3 {
             rec.record_tick(&TickInput::default());
         }
-        rec.finish(0, false).unwrap();
+        rec.finish(0).unwrap();
 
         let (_h, mut player) = ReplayPlayer::open_header(file.path()).unwrap();
         let mut out = TickInput::default();
@@ -595,7 +582,7 @@ mod tests {
         ti.samples.push(RawDeviceSnapshot::default());
         rec.record_tick(&ti);
         rec.record_tick(&ti);
-        rec.finish(0, false).unwrap();
+        rec.finish(0).unwrap();
 
         let (_h, mut player) = ReplayPlayer::open_header(file.path()).unwrap();
         let mut out = TickInput::default();

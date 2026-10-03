@@ -21,7 +21,7 @@ use aberred_core::protocol::render_logic::{LogicMsg, RenderMsg, ReplayControl};
 use aberred_core::protocol::snapshot::SnapshotPublisher;
 use aberred_core::protocol::tick_input::TickInput;
 use aberred_core::resources::debugoverlayconfig::DebugOverlayConfig;
-use aberred_core::resources::determinism_taint::DeterminismTaint;
+use aberred_core::resources::deterministic_mode::DeterministicMode;
 use aberred_core::resources::fontmetrics::FontMetricsStore;
 use aberred_core::resources::gameconfig::GameConfig;
 use aberred_core::resources::gamestate::{GameState, GameStates};
@@ -171,35 +171,24 @@ pub(crate) fn hold_back_setup_input(
     }
 }
 
-/// In deterministic mode, treat a `TextureDimsStore` key arriving for the
-/// *first* time while `GameState::Playing` as a determinism hazard: it means
-/// texture metadata arrives during gameplay instead of before the playing
-/// state begins. Logs an `error!` and marks [`DeterminismTaint`] without
-/// blocking the insert. No-op outside deterministic mode.
-fn guard_texture_preload(world: &mut World, key: &str, deterministic: bool) {
-    if !deterministic {
-        return;
+/// [`hold_back_setup_input`] in a `.deterministic()` game
+/// ([`DeterministicMode`]); outside one, Setup input applies live.
+pub(crate) fn hold_back_deterministic_setup_input(
+    world: &World,
+    tick_input: &mut TickInput,
+    held: &mut TickInput,
+) {
+    if world.contains_resource::<DeterministicMode>() {
+        hold_back_setup_input(tick_input, held, in_envelope(world));
     }
-    if !matches!(world.resource::<GameState>().get(), GameStates::Playing) {
-        return;
-    }
-    if world.resource::<TextureDimsStore>().get(key).is_some() {
-        return;
-    }
-    log::error!(
-        "Deterministic mode: TextureDimsStore gained new key {key:?} while \
-         GameState::Playing -- likely a texture loaded outside the preload \
-         window; session tainted"
-    );
-    world.resource_mut::<DeterminismTaint>().taint();
 }
 
 /// Collect stage (live source): drains `rx_input`/`rx_logic` for one tick.
 /// Non-sim-visible messages (`FontLoaded`/`FontRemoved`/`FontRenamed`,
 /// `TextureRemoved`/`TextureRenamed`, `OverlayConfig`) are applied directly
 /// to `world` here rather than through `apply_tick_input`. Sim-visible facts
-/// (raw samples, capture, `ScreenSize`, `SignalIntent`s, `TextureLoaded`
-/// dims) are written into `out` instead of straight into `World`
+/// (raw samples, capture, `ScreenSize`, `SignalIntent`s) are written into
+/// `out` instead of straight into `World`
 /// resources, so `out` already holds every sim-visible fact for this tick
 /// before `apply_tick_input` consumes it.
 ///
@@ -212,7 +201,6 @@ fn collect_tick_input_live(
     rx_input: &Receiver<InputSample>,
     rx_logic: &Receiver<LogicMsg>,
     world: &mut World,
-    deterministic: bool,
 ) -> DrainOutcome {
     // Read before update_world_time increments frame_count later this tick,
     // so `out.tick` describes "the tick about to run," 0-indexed.
@@ -229,7 +217,7 @@ fn collect_tick_input_live(
         out.samples.push(sample.raw);
     }
 
-    drain_logic_messages(Some(out), rx_logic, world, deterministic)
+    drain_logic_messages(Some(out), rx_logic, world)
 }
 
 /// What one [`drain_logic_messages`] pass saw on `rx_logic`.
@@ -265,7 +253,6 @@ pub(crate) fn drain_logic_messages(
     mut out: Option<&mut TickInput>,
     rx_logic: &Receiver<LogicMsg>,
     world: &mut World,
-    deterministic: bool,
 ) -> DrainOutcome {
     // Drain everything currently queued (non-blocking -- the Pacer already
     // did the waiting).
@@ -288,7 +275,6 @@ pub(crate) fn drain_logic_messages(
                     .insert(key, metrics);
             }
             LogicMsg::TextureLoaded { key, width, height } => {
-                guard_texture_preload(world, &key, deterministic);
                 world
                     .resource_mut::<TextureDimsStore>()
                     .insert(key, width, height);
@@ -304,10 +290,6 @@ pub(crate) fn drain_logic_messages(
                 world.resource_mut::<FontMetricsStore>().0.remove(&key);
             }
             LogicMsg::TextureRenamed { old_key, new_key } => {
-                // Not guarded by guard_texture_preload: this renames an
-                // already-loaded texture's key, not new texture metadata
-                // arriving during gameplay. The preload guard applies only
-                // to `TextureLoaded`.
                 world
                     .resource_mut::<TextureDimsStore>()
                     .rename(&old_key, new_key);
@@ -412,7 +394,6 @@ fn logic_thread_main(mut init: LogicInit) -> Result<(), EngineError> {
 
     let sim_hz = init.config.sim_hz;
     let snapshot_skip = init.config.snapshot_skip;
-    let deterministic = init.deterministic_seed.is_some();
 
     let mut world = EngineBuilder::setup_logic_world(&mut init)?;
     world.insert_resource(ReplayRuntimeState::default());
@@ -498,7 +479,7 @@ fn logic_thread_main(mut init: LogicInit) -> Result<(), EngineError> {
             // live ScreenSize/SignalIntent to apply to -- collecting them
             // here would only pile them into `tick_input` for the next
             // `reset` to discard.
-            let drained = drain_logic_messages(None, &rx_logic, &mut world, deterministic);
+            let drained = drain_logic_messages(None, &rx_logic, &mut world);
             if drained.shutdown || drained.disconnected {
                 break 'main;
             }
@@ -513,13 +494,9 @@ fn logic_thread_main(mut init: LogicInit) -> Result<(), EngineError> {
         // thing the recorder has to capture (it does, just below the break
         // checks) and the one thing apply_tick_input has to consume.
         let drained = match &mut source {
-            TickInputSource::Live => collect_tick_input_live(
-                &mut tick_input,
-                &rx_input,
-                &rx_logic,
-                &mut world,
-                deterministic,
-            ),
+            TickInputSource::Live => {
+                collect_tick_input_live(&mut tick_input, &rx_input, &rx_logic, &mut world)
+            }
             TickInputSource::Replay(player) => {
                 // Live input is discarded outright during playback -- the
                 // brainstorm doc's "drained and discarded by the sim" rule.
@@ -549,7 +526,7 @@ fn logic_thread_main(mut init: LogicInit) -> Result<(), EngineError> {
                     let tx_render = world.resource::<RenderTx>().0.clone();
                     let _ = tx_render.send(RenderMsg::ReplayEnded);
                 }
-                drain_logic_messages(None, &rx_logic, &mut world, deterministic)
+                drain_logic_messages(None, &rx_logic, &mut world)
             }
         };
 
@@ -577,9 +554,7 @@ fn logic_thread_main(mut init: LogicInit) -> Result<(), EngineError> {
         // file only ever contains ticks that actually ran (a batch carrying
         // both a SignalIntent and Shutdown would otherwise be recorded and
         // then replayed into a tick the original session never simulated).
-        if deterministic {
-            hold_back_setup_input(&mut tick_input, &mut held_setup_input, playing);
-        }
+        hold_back_deterministic_setup_input(&world, &mut tick_input, &mut held_setup_input);
         if playing && let Some(rec) = recorder.as_mut() {
             rec.record_tick(&tick_input);
         }
@@ -658,8 +633,7 @@ fn logic_thread_main(mut init: LogicInit) -> Result<(), EngineError> {
 
     // Logic owns the audio bridge: stop the audio thread before this world
     // (and the LuaRuntime pinned to this thread) drops.
-    let tainted = world.resource::<DeterminismTaint>().is_tainted();
-    finalize_recorder(&world, recorder, tainted);
+    finalize_recorder(&world, recorder);
     shutdown_audio(&mut world);
     Ok(())
 }
@@ -671,12 +645,10 @@ fn logic_thread_main(mut init: LogicInit) -> Result<(), EngineError> {
 /// checkpoint cache -- shutdown can happen between checkpoints, and
 /// `ReplayEntry::End` promises the true terminal world hash. `recorder` is
 /// consumed (its `finish` takes `self`), hence a free fn rather than a
-/// method taking `&mut Option<..>`. `tainted` carries this session's
-/// [`DeterminismTaint`] into the file, so a later playback can say up front
-/// that the *recording* was already known non-reproducible.
-fn finalize_recorder(world: &World, recorder: Option<ReplayRecorder>, tainted: bool) {
+/// method taking `&mut Option<..>`.
+fn finalize_recorder(world: &World, recorder: Option<ReplayRecorder>) {
     if let Some(rec) = recorder
-        && let Err(e) = rec.finish(hash_world_state(world), tainted)
+        && let Err(e) = rec.finish(hash_world_state(world))
     {
         log::error!("replay recorder: failed to finalize replay file: {e}");
     }
@@ -768,8 +740,7 @@ mod tests {
         let mut world = World::new();
         world.insert_resource(WorldTime::default());
         let mut tick_input = TickInput::default();
-        let drained =
-            collect_tick_input_live(&mut tick_input, &rx_input, &rx_logic, &mut world, false);
+        let drained = collect_tick_input_live(&mut tick_input, &rx_input, &rx_logic, &mut world);
 
         assert!(drained.shutdown);
         assert_eq!(
@@ -806,7 +777,7 @@ mod tests {
         tick_input.samples.push(Default::default());
         let recorded = tick_input.clone();
 
-        let drained = drain_logic_messages(None, &rx_logic, &mut world, false);
+        let drained = drain_logic_messages(None, &rx_logic, &mut world);
 
         assert!(!drained.shutdown);
         assert_eq!(
@@ -828,7 +799,7 @@ mod tests {
         world.init_resource::<PendingAssets>();
         world.init_resource::<LoadedAssets>();
 
-        let first = drain_logic_messages(None, &rx_logic, &mut world, false);
+        let first = drain_logic_messages(None, &rx_logic, &mut world);
         assert_eq!(first, DrainOutcome::default());
 
         tx_logic
@@ -840,7 +811,7 @@ mod tests {
         tx_logic.send(LogicMsg::Shutdown).unwrap();
         drop(tx_logic);
 
-        let outcome = drain_logic_messages(None, &rx_logic, &mut world, false);
+        let outcome = drain_logic_messages(None, &rx_logic, &mut world);
         assert_eq!(
             outcome,
             DrainOutcome {
@@ -905,7 +876,7 @@ mod tests {
         for msg in msgs {
             tx.send(msg).unwrap();
         }
-        drain_logic_messages(None, &rx, world, false)
+        drain_logic_messages(None, &rx, world)
     }
 
     /// Asset bookkeeping, overlay config and replay control apply to the
@@ -1046,13 +1017,13 @@ mod tests {
             .unwrap();
         tx_logic
             .send(LogicMsg::TextureLoaded {
-                key: "late".into(),
+                key: "player".into(),
                 width: 1,
                 height: 1,
             })
             .unwrap();
 
-        let mut world = world_with_state(GameStates::Playing);
+        let mut world = drain_world();
         world.insert_resource(WorldTime {
             frame_count: 7,
             ..Default::default()
@@ -1065,7 +1036,7 @@ mod tests {
             screen_size: Some((1, 1)),
         };
 
-        collect_tick_input_live(&mut tick_input, &rx_input, &rx_logic, &mut world, true);
+        collect_tick_input_live(&mut tick_input, &rx_input, &rx_logic, &mut world);
 
         assert_eq!(tick_input.tick, 7);
         let widths: Vec<i32> = tick_input.samples.iter().map(|s| s.window_w).collect();
@@ -1077,9 +1048,10 @@ mod tests {
         assert_eq!(tick_input.capture, Some(newest_capture));
         assert_eq!(tick_input.intents, [SignalIntent::SetFlag("new".into())]);
         assert_eq!(tick_input.screen_size, Some((320, 240)));
-        assert!(
-            world.resource::<DeterminismTaint>().is_tainted(),
-            "the deterministic flag reaches the texture preload guard"
+        assert_eq!(
+            world.resource::<TextureDimsStore>().get("player"),
+            Some((1, 1)),
+            "world-applied replies land during collect"
         );
     }
 
@@ -1147,7 +1119,7 @@ mod tests {
             "the regression needs a world change after the stale checkpoint hash"
         );
 
-        finalize_recorder(&world, Some(recorder), false);
+        finalize_recorder(&world, Some(recorder));
 
         let ReplayEntry::End { final_hash, .. } = read_replay_end(file.path()) else {
             panic!("replay file must end with ReplayEntry::End");
@@ -1162,70 +1134,10 @@ mod tests {
         );
     }
 
-    #[test]
-    fn finalize_recorder_records_the_session_taint() {
-        let file = NamedTempFile::new().unwrap();
-        let recorder = ReplayRecorder::create(file.path(), &test_replay_header()).unwrap();
-        let mut world = World::new();
-        world.insert_resource(WorldSignals::default());
-        world.insert_resource(WorldTime::default());
-        world.insert_resource(SimRng::from_seed(1));
-
-        finalize_recorder(&world, Some(recorder), true);
-
-        let ReplayEntry::End { tainted, .. } = read_replay_end(file.path()) else {
-            panic!("replay file must end with ReplayEntry::End");
-        };
-        assert!(tainted);
-    }
-
     /// Without an active recorder nothing is hashed: an empty world (no
     /// resources `hash_world_state` needs) must not be touched.
     #[test]
     fn finalize_without_a_recorder_does_nothing() {
-        finalize_recorder(&World::new(), None, true);
-    }
-
-    fn world_with_state(state: GameStates) -> World {
-        let mut world = World::new();
-        let mut game_state = GameState::new();
-        game_state.set(state);
-        world.insert_resource(game_state);
-        world.insert_resource(TextureDimsStore::default());
-        world.insert_resource(PendingAssets::default());
-        world.insert_resource(LoadedAssets::default());
-        world.insert_resource(DeterminismTaint::default());
-        world
-    }
-
-    #[test]
-    fn preload_guard_taints_on_new_key_while_playing_in_deterministic_mode() {
-        let mut world = world_with_state(GameStates::Playing);
-        guard_texture_preload(&mut world, "late_texture", true);
-        assert!(world.resource::<DeterminismTaint>().is_tainted());
-    }
-
-    #[test]
-    fn preload_guard_ignores_non_deterministic_mode() {
-        let mut world = world_with_state(GameStates::Playing);
-        guard_texture_preload(&mut world, "late_texture", false);
-        assert!(!world.resource::<DeterminismTaint>().is_tainted());
-    }
-
-    #[test]
-    fn preload_guard_ignores_non_playing_state() {
-        let mut world = world_with_state(GameStates::Setup);
-        guard_texture_preload(&mut world, "late_texture", true);
-        assert!(!world.resource::<DeterminismTaint>().is_tainted());
-    }
-
-    #[test]
-    fn preload_guard_ignores_already_known_key() {
-        let mut world = world_with_state(GameStates::Playing);
-        world
-            .resource_mut::<TextureDimsStore>()
-            .insert("known_texture", 32, 32);
-        guard_texture_preload(&mut world, "known_texture", true);
-        assert!(!world.resource::<DeterminismTaint>().is_tainted());
+        finalize_recorder(&World::new(), None);
     }
 }

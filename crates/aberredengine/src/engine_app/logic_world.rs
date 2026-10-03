@@ -31,7 +31,6 @@ use aberred_core::resources::camera2d::{Camera2D, Camera2DRes};
 use aberred_core::resources::camerafollowconfig::CameraFollowConfig;
 use aberred_core::resources::collision_rule_index::CollisionRuleIndex;
 use aberred_core::resources::debugoverlayconfig::DebugOverlayConfig;
-use aberred_core::resources::determinism_taint::DeterminismTaint;
 use aberred_core::resources::deterministic_mode::DeterministicMode;
 use aberred_core::resources::drawable_snapshot::DrawableSnapshot;
 use aberred_core::resources::fontmetrics::{FontMetricsStore, FontMetricsWarnCache};
@@ -139,7 +138,6 @@ impl EngineBuilder {
             }
         };
         world.insert_resource(SimRng::from_seed(sim_seed));
-        world.insert_resource(DeterminismTaint::default());
         world.insert_resource(GameConfigDefaults(config.clone()));
         world.insert_resource(config);
         world.insert_resource(InputState::default());
