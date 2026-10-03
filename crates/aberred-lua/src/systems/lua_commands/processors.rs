@@ -270,14 +270,12 @@ fn build_nine_patch(
     right: i32,
     bottom: i32,
 ) -> GuiNinePatch {
-    GuiNinePatch {
-        tex_key: Arc::from(tex_key),
-        source: Rect::new(source_x, source_y, source_w, source_h),
-        left,
-        top,
-        right,
-        bottom,
-    }
+    GuiNinePatch::new(
+        tex_key,
+        Rect::new(source_x, source_y, source_w, source_h),
+        0,
+    )
+    .with_borders(left, top, right, bottom)
 }
 
 /// Process a single render command from Lua and update post-process/GUI-theme state.

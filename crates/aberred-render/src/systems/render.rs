@@ -1616,23 +1616,17 @@ mod screen_draw_buffer_tests {
 #[cfg(test)]
 mod resolve_button_patch_tests {
     use super::*;
-    use std::sync::Arc;
+    use aberred_core::math::Rect;
 
     fn patch(tag: &str) -> GuiNinePatch {
-        GuiNinePatch {
-            tex_key: Arc::from(tag),
-            ..GuiNinePatch::default()
-        }
+        GuiNinePatch::new(tag, Rect::default(), 0)
     }
 
     fn skin() -> GuiButtonSkin {
-        GuiButtonSkin {
-            normal: patch("normal"),
-            hover: Some(patch("hover")),
-            pressed: Some(patch("pressed")),
-            disabled: Some(patch("disabled")),
-            ..GuiButtonSkin::default()
-        }
+        GuiButtonSkin::new(patch("normal"))
+            .with_hover(patch("hover"))
+            .with_pressed(patch("pressed"))
+            .with_disabled(patch("disabled"))
     }
 
     #[test]
@@ -1658,10 +1652,7 @@ mod resolve_button_patch_tests {
 
     #[test]
     fn falls_back_to_normal_when_state_patch_unset() {
-        let skin = GuiButtonSkin {
-            normal: patch("normal"),
-            ..GuiButtonSkin::default()
-        };
+        let skin = GuiButtonSkin::new(patch("normal"));
         assert_eq!(
             &*resolve_button_patch(&skin, GuiWidgetState::Hovered).tex_key,
             "normal"
@@ -1698,13 +1689,11 @@ mod resolve_button_patch_tests {
 
     #[test]
     fn button_shadow_uses_the_states_own_shadow_first() {
-        let skin = GuiButtonSkin {
-            shadow: Some(shadow(1.0)),
-            hover_shadow: Some(shadow(2.0)),
-            pressed_shadow: Some(shadow(3.0)),
-            disabled_shadow: Some(shadow(4.0)),
-            ..skin()
-        };
+        let skin = skin()
+            .with_shadow(shadow(1.0))
+            .with_hover_shadow(shadow(2.0))
+            .with_pressed_shadow(shadow(3.0))
+            .with_disabled_shadow(shadow(4.0));
         let tags: Vec<_> = STATES
             .iter()
             .map(|s| shadow_tag(&skin, *s, Some(shadow(9.0))))
@@ -1714,10 +1703,7 @@ mod resolve_button_patch_tests {
 
     #[test]
     fn button_shadow_falls_back_to_the_skin_then_the_theme_shadow() {
-        let with_skin_shadow = GuiButtonSkin {
-            shadow: Some(shadow(1.0)),
-            ..skin()
-        };
+        let with_skin_shadow = skin().with_shadow(shadow(1.0));
         let without = skin();
         for state in STATES {
             assert_eq!(

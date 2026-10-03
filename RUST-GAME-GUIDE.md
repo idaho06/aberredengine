@@ -1964,25 +1964,13 @@ use std::sync::Arc;
 
 fn setup_gui_theme(mut theme_store: ResMut<GuiThemeStore>) {
     let theme = theme_store.themes.entry(Arc::from("default")).or_default();
-    theme.panel = GuiNinePatch {
-        tex_key: "gui_panel".into(),
-        source: Rect::new(0.0, 0.0, 64.0, 64.0),
-        left: 6,
-        top: 6,
-        right: 6,
-        bottom: 6,
-    };
-    theme.button = Some(GuiButtonSkin {
-        normal: GuiNinePatch {
-            tex_key: "gui_button".into(),
-            source: Rect::new(0.0, 0.0, 32.0, 32.0),
-            left: 4,
-            top: 4,
-            right: 4,
-            bottom: 4,
-        },
-        ..Default::default() // hover/pressed/disabled fall back to normal if unset
-    });
+    theme.panel = GuiNinePatch::new("gui_panel", Rect::new(0.0, 0.0, 64.0, 64.0), 6);
+    // hover/pressed/disabled fall back to normal unless set with .with_hover(...) etc.
+    theme.button = Some(GuiButtonSkin::new(GuiNinePatch::new(
+        "gui_button",
+        Rect::new(0.0, 0.0, 32.0, 32.0),
+        4,
+    )));
     theme.font = "main_font".into();
     theme.font_size = 16.0;
     theme.text_color = Color::WHITE;
@@ -1994,16 +1982,16 @@ fn setup_gui_theme(mut theme_store: ResMut<GuiThemeStore>) {
 }
 ```
 
-`GuiNinePatch { tex_key, source, left, top, right, bottom }` maps 1:1 onto raylib's `NPatchInfo`. `tex_key`
-must already be loaded into `TextureStore` (see Section 4). `theme.font` defaults to an empty key — if it's
+`GuiNinePatch::new(tex_key, source, border)` maps onto raylib's `NPatchInfo`: the `source` region of the texture, with a
+`border`-pixel border on every side (`.with_borders(left, top, right, bottom)` for per-side widths). `tex_key` must already be loaded into `TextureStore` (see Section 4). `theme.font` defaults to an empty key — if it's
 still unset when a non-empty caption is about to spawn, the engine logs an `error!`; the caption entity still
 spawns, it just renders no visible glyphs.
 
 **`GuiTheme` fields of note:**
 - `panel: GuiNinePatch` — background patch for `GuiWindow`, `GuiLabel`, `GuiProgressBar`.
-- `button: Option<GuiButtonSkin>` — four nine-patches (`normal`/`hover`/`pressed`/`disabled`); unset states fall back to `normal`. Also has four optional per-state shadows (`shadow`, `hover_shadow`, `pressed_shadow`, `disabled_shadow`); unset states fall back to `shadow` (normal), which itself falls back to `panel_shadow`.
+- `button: Option<GuiButtonSkin>` — four nine-patches (`normal`/`hover`/`pressed`/`disabled`); unset states fall back to `normal`. Also has four optional per-state shadows (`shadow`, `hover_shadow`, `pressed_shadow`, `disabled_shadow`); unset states fall back to `shadow` (normal), which itself falls back to `panel_shadow`. Build it with `GuiButtonSkin::new(normal)` plus `.with_hover(patch)`, `.with_pressed(patch)`, `.with_disabled(patch)`, `.with_shadow(shadow)` and `.with_hover_shadow`/`.with_pressed_shadow`/`.with_disabled_shadow`.
 - `label: Option<GuiNinePatch>` — separate background for `GuiLabel` (falls back to `panel` if unset).
-- `progress_bar: Option<GuiProgressBarSkin>` — `track: Option<GuiNinePatch>` (full-size background, optional) and `fill: GuiNinePatch` (scaled to `value/max`).
+- `progress_bar: Option<GuiProgressBarSkin>` — `track: Option<GuiNinePatch>` (full-size background, optional) and `fill: GuiNinePatch` (scaled to `value/max`). Build it with `GuiProgressBarSkin::new(fill)`, plus `.with_track(track)` for a background.
 - `panel_shadow: Option<Shadow>` — drop shadow drawn behind all nine-patch backgrounds.
 - `text_shadow: Option<Shadow>` — `Shadow` component inserted on spawned caption `DynamicText` children.
 
@@ -2011,7 +1999,7 @@ spawns, it just renders no visible glyphs.
 
 ```rust
 let hud_theme = theme_store.themes.entry(Arc::from("hud")).or_default();
-hud_theme.panel = GuiNinePatch { tex_key: "hud_panel".into(), /* source, borders, … */ ..Default::default() };
+hud_theme.panel = GuiNinePatch::new("hud_panel", Rect::new(0.0, 0.0, 48.0, 48.0), 4);
 hud_theme.font = "hud_font".into();
 
 // Spawn a widget using the "hud" theme

@@ -33,6 +33,27 @@ pub struct GuiNinePatch {
 }
 
 impl GuiNinePatch {
+    /// The `source` region of texture `tex_key`, with a `border`-pixel border on every side.
+    pub fn new(tex_key: impl Into<Arc<str>>, source: Rect, border: i32) -> Self {
+        Self {
+            tex_key: tex_key.into(),
+            source,
+            left: border,
+            top: border,
+            right: border,
+            bottom: border,
+        }
+    }
+
+    /// Sets a different border width, in pixels, for each side.
+    pub fn with_borders(mut self, left: i32, top: i32, right: i32, bottom: i32) -> Self {
+        self.left = left;
+        self.top = top;
+        self.right = right;
+        self.bottom = bottom;
+        self
+    }
+
     /// True if this patch has never been set (still `GuiNinePatch::default()`'s empty `tex_key`).
     pub fn is_unset(&self) -> bool {
         self.tex_key.is_empty()
@@ -55,6 +76,58 @@ pub struct GuiButtonSkin {
     pub disabled_shadow: Option<Shadow>,
 }
 
+impl GuiButtonSkin {
+    /// A skin that draws `normal` in every state, with no shadows of its own.
+    pub fn new(normal: GuiNinePatch) -> Self {
+        Self {
+            normal,
+            ..Self::default()
+        }
+    }
+
+    /// Sets the patch drawn while the cursor is over the button.
+    pub fn with_hover(mut self, patch: GuiNinePatch) -> Self {
+        self.hover = Some(patch);
+        self
+    }
+
+    /// Sets the patch drawn while the button is held down.
+    pub fn with_pressed(mut self, patch: GuiNinePatch) -> Self {
+        self.pressed = Some(patch);
+        self
+    }
+
+    /// Sets the patch drawn while the button is disabled.
+    pub fn with_disabled(mut self, patch: GuiNinePatch) -> Self {
+        self.disabled = Some(patch);
+        self
+    }
+
+    /// Sets the shadow for the normal state, also used by states without their own.
+    pub fn with_shadow(mut self, shadow: Shadow) -> Self {
+        self.shadow = Some(shadow);
+        self
+    }
+
+    /// Sets the shadow for the hover state.
+    pub fn with_hover_shadow(mut self, shadow: Shadow) -> Self {
+        self.hover_shadow = Some(shadow);
+        self
+    }
+
+    /// Sets the shadow for the pressed state.
+    pub fn with_pressed_shadow(mut self, shadow: Shadow) -> Self {
+        self.pressed_shadow = Some(shadow);
+        self
+    }
+
+    /// Sets the shadow for the disabled state.
+    pub fn with_disabled_shadow(mut self, shadow: Shadow) -> Self {
+        self.disabled_shadow = Some(shadow);
+        self
+    }
+}
+
 /// Nine-patch skin for a `GuiProgressBar`. `fill` is the only required patch
 /// — `track` is optional (set to `None` to render a fill-only bar with no
 /// background). `engine.set_gui_theme_progress_bar` with `part = "track"`
@@ -66,6 +139,19 @@ pub struct GuiProgressBarSkin {
     /// Fill patch drawn at the proportional width or height. Required — the
     /// skin is dropped by `drop_invalid_progress_bar_skin` when unset.
     pub fill: GuiNinePatch,
+}
+
+impl GuiProgressBarSkin {
+    /// A fill-only bar (no background track).
+    pub fn new(fill: GuiNinePatch) -> Self {
+        Self { track: None, fill }
+    }
+
+    /// Sets the background track, drawn at the full bar size under the fill.
+    pub fn with_track(mut self, track: GuiNinePatch) -> Self {
+        self.track = Some(track);
+        self
+    }
 }
 
 /// One named theme's worth of GUI styling. `label` is `None` until
@@ -208,6 +294,15 @@ impl GuiThemeWarnCache {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn nine_patch_new_uses_one_border_on_every_side() {
+        let p = GuiNinePatch::new("gui_button", Rect::new(0.0, 0.0, 32.0, 32.0), 4);
+        assert!(!p.is_unset());
+        assert_eq!((p.left, p.top, p.right, p.bottom), (4, 4, 4, 4));
+        let p = p.with_borders(1, 2, 3, 4);
+        assert_eq!((p.left, p.top, p.right, p.bottom), (1, 2, 3, 4));
+    }
 
     #[test]
     fn nine_patch_is_unset_until_tex_key_set() {

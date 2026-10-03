@@ -5,25 +5,13 @@ mod gui_widgets {
 
     fn setup_gui_theme(mut theme_store: ResMut<GuiThemeStore>) {
         let theme = theme_store.themes.entry(Arc::from("default")).or_default();
-        theme.panel = GuiNinePatch {
-            tex_key: "gui_panel".into(),
-            source: Rect::new(0.0, 0.0, 64.0, 64.0),
-            left: 6,
-            top: 6,
-            right: 6,
-            bottom: 6,
-        };
-        theme.button = Some(GuiButtonSkin {
-            normal: GuiNinePatch {
-                tex_key: "gui_button".into(),
-                source: Rect::new(0.0, 0.0, 32.0, 32.0),
-                left: 4,
-                top: 4,
-                right: 4,
-                bottom: 4,
-            },
-            ..Default::default() // hover/pressed/disabled fall back to normal if unset
-        });
+        theme.panel = GuiNinePatch::new("gui_panel", Rect::new(0.0, 0.0, 64.0, 64.0), 6);
+        // hover/pressed/disabled fall back to normal unless set with .with_hover(...) etc.
+        theme.button = Some(GuiButtonSkin::new(GuiNinePatch::new(
+            "gui_button",
+            Rect::new(0.0, 0.0, 32.0, 32.0),
+            4,
+        )));
         theme.font = "main_font".into();
         theme.font_size = 16.0;
         theme.text_color = Color::WHITE;
@@ -36,7 +24,7 @@ mod gui_widgets {
 
     fn hud_theme(mut theme_store: ResMut<GuiThemeStore>, ctx: &mut GameCtx) { // GLUE
     let hud_theme = theme_store.themes.entry(Arc::from("hud")).or_default();
-    hud_theme.panel = GuiNinePatch { tex_key: "hud_panel".into(), /* source, borders, … */ ..Default::default() };
+    hud_theme.panel = GuiNinePatch::new("hud_panel", Rect::new(0.0, 0.0, 48.0, 48.0), 4);
     hud_theme.font = "hud_font".into();
 
     // Spawn a widget using the "hud" theme
