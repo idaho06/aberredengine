@@ -81,13 +81,9 @@ mod tween_components_in_rust {
 
     ctx.commands.spawn((
         MapPosition::new(0.0, 0.0),
-        Tween::new(
-            MapPosition::from_vec(Vec2::new(0.0, 0.0)),
-            MapPosition::from_vec(Vec2::new(200.0, 120.0)),
-            1.5,
-        )
-        .with_easing(Easing::CubicOut)
-        .with_loop_mode(LoopMode::PingPong),
+        Tween::position(Vec2::ZERO, Vec2::new(200.0, 120.0), 1.5)
+            .with_easing(Easing::CubicOut)
+            .with_loop_mode(LoopMode::PingPong),
     ));
     } // GLUE
 
@@ -96,11 +92,7 @@ mod tween_components_in_rust {
 
     ctx.commands.spawn((
         Rotation::new(0.0),
-        Tween::new(
-            Rotation::new(0.0),
-            Rotation::new(360.0),
-            2.0,
-        ),
+        Tween::rotation(0.0, 360.0, 2.0),
     ));
     } // GLUE
 
@@ -109,12 +101,8 @@ mod tween_components_in_rust {
 
     ctx.commands.spawn((
         Scale::new(1.0, 1.0),
-        Tween::new(
-            Scale::new(1.0, 1.0),
-            Scale::new(1.5, 0.75),
-            0.75,
-        )
-        .with_backwards(),
+        Tween::scale(Vec2::ONE, Vec2::new(1.5, 0.75), 0.75)
+            .with_backwards(),
     ));
     } // GLUE
 
@@ -123,11 +111,7 @@ mod tween_components_in_rust {
 
     ctx.commands.spawn((
         ScreenPosition::new(-200.0, 50.0),
-        Tween::new(
-            ScreenPosition::new(-200.0, 50.0),
-            ScreenPosition::new(20.0, 50.0),
-            0.4,
-        ),
+        Tween::screen_position(Vec2::new(-200.0, 50.0), Vec2::new(20.0, 50.0), 0.4),
     ));
     } // GLUE
 }

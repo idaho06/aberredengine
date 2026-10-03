@@ -1203,10 +1203,10 @@ When `WorldSignals` has a value for key `"score"`, the text automatically update
 | `Timer` | `Timer::rust(duration_secs, callback)` — use `::rust()` for Rust callbacks; see §7.1 |
 | `Phase` | `Phase::new("initial_phase", phases)` where `phases: FxHashMap<String, PhaseCallbackFns>` |
 | `CollisionRule` | `CollisionRule::rust("group_a", "group_b", callback)` — use `::rust()` for Rust callbacks; see §7.3 |
-| `Tween<MapPosition>` | `Tween::new(MapPosition::from_vec(from), MapPosition::from_vec(to), duration)` |
-| `Tween<Rotation>` | `Tween::new(Rotation::new(from), Rotation::new(to), duration)` |
-| `Tween<Scale>` | `Tween::new(Scale::new(from_x, from_y), Scale::new(to_x, to_y), duration)` |
-| `Tween<ScreenPosition>` | `Tween::new(ScreenPosition::new(from_x, from_y), ScreenPosition::new(to_x, to_y), duration)` |
+| `Tween<MapPosition>` | `Tween::position(from: Vec2, to: Vec2, duration)` |
+| `Tween<Rotation>` | `Tween::rotation(from_degrees, to_degrees, duration)` |
+| `Tween<Scale>` | `Tween::scale(from: Vec2, to: Vec2, duration)` |
+| `Tween<ScreenPosition>` | `Tween::screen_position(from: Vec2, to: Vec2, duration)` |
 | `GuiWindow` | `GuiWindow::new(w, h)` — `theme_key` defaults to `"default"`; override with `.with_theme_key("my_theme")` |
 | `GuiButton` | `GuiButton::new(width, height, "Caption")` — add `.with_theme_key(key)` to use a non-default theme |
 | `GuiLabel` | `GuiLabel::new(width, height, "Text")` — add `.with_signal_binding(key)` / `.with_signal_binding_format("fmt {}") ` to bind text to `WorldSignals` |
@@ -1247,6 +1247,8 @@ Use the target component type as `T`:
 
 `EngineBuilder` registers the built-in tween systems for these four component types automatically, so in normal game code you only need to spawn the tween component itself.
 
+`Tween::position`, `Tween::rotation`, `Tween::scale` and `Tween::screen_position` take raw values (`Vec2`, or degrees for rotation); `Tween::new(from, to, duration)` takes the component values themselves.
+
 **Position tween example:**
 
 ```rust
@@ -1254,13 +1256,9 @@ use aberredengine::prelude::*;
 
 ctx.commands.spawn((
     MapPosition::new(0.0, 0.0),
-    Tween::new(
-        MapPosition::from_vec(Vec2::new(0.0, 0.0)),
-        MapPosition::from_vec(Vec2::new(200.0, 120.0)),
-        1.5,
-    )
-    .with_easing(Easing::CubicOut)
-    .with_loop_mode(LoopMode::PingPong),
+    Tween::position(Vec2::ZERO, Vec2::new(200.0, 120.0), 1.5)
+        .with_easing(Easing::CubicOut)
+        .with_loop_mode(LoopMode::PingPong),
 ));
 ```
 
@@ -1271,11 +1269,7 @@ use aberredengine::prelude::*;
 
 ctx.commands.spawn((
     Rotation::new(0.0),
-    Tween::new(
-        Rotation::new(0.0),
-        Rotation::new(360.0),
-        2.0,
-    ),
+    Tween::rotation(0.0, 360.0, 2.0),
 ));
 ```
 
@@ -1286,12 +1280,8 @@ use aberredengine::prelude::*;
 
 ctx.commands.spawn((
     Scale::new(1.0, 1.0),
-    Tween::new(
-        Scale::new(1.0, 1.0),
-        Scale::new(1.5, 0.75),
-        0.75,
-    )
-    .with_backwards(),
+    Tween::scale(Vec2::ONE, Vec2::new(1.5, 0.75), 0.75)
+        .with_backwards(),
 ));
 ```
 
@@ -1302,11 +1292,7 @@ use aberredengine::prelude::*;
 
 ctx.commands.spawn((
     ScreenPosition::new(-200.0, 50.0),
-    Tween::new(
-        ScreenPosition::new(-200.0, 50.0),
-        ScreenPosition::new(20.0, 50.0),
-        0.4,
-    ),
+    Tween::screen_position(Vec2::new(-200.0, 50.0), Vec2::new(20.0, 50.0), 0.4),
 ));
 ```
 

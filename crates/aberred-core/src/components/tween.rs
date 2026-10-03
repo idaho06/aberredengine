@@ -2,9 +2,10 @@
 //!
 //! This module provides a shared [`Tween<T>`] component for smoothly animating
 //! entity properties over time:
-//! - `Tween<MapPosition>` – animate [`MapPosition`](super::mapposition::MapPosition)
+//! - `Tween<MapPosition>` – animate [`MapPosition`]
 //! - `Tween<Rotation>` – animate [`Rotation`]
 //! - `Tween<Scale>` – animate [`Scale`]
+//! - `Tween<ScreenPosition>` – animate [`ScreenPosition`]
 //!
 //! Each tween supports multiple [`Easing`] functions and [`LoopMode`] settings.
 //! See [`crate::systems::tween`] for the update systems.
@@ -15,9 +16,11 @@ use crate::math::Vec2;
 use bevy_ecs::component::Mutable;
 use bevy_ecs::prelude::Component;
 
+use crate::components::mapposition::MapPosition;
 use crate::components::position2d::{Position2D, PositionSpace};
 use crate::components::rotation::Rotation;
 use crate::components::scale::Scale;
+use crate::components::screenposition::ScreenPosition;
 
 /// Determines how a tween behaves when it reaches the end.
 #[derive(Copy, Clone, Debug)]
@@ -213,12 +216,61 @@ impl<T: TweenValue> Tween<T> {
     }
 }
 
+impl Tween<MapPosition> {
+    /// Tweens a world position from `from` to `to` over `duration` seconds.
+    pub fn position(from: Vec2, to: Vec2, duration: f32) -> Self {
+        Self::new(
+            MapPosition::from_vec(from),
+            MapPosition::from_vec(to),
+            duration,
+        )
+    }
+}
+
+impl Tween<ScreenPosition> {
+    /// Tweens a screen position from `from` to `to` over `duration` seconds.
+    pub fn screen_position(from: Vec2, to: Vec2, duration: f32) -> Self {
+        Self::new(
+            ScreenPosition::from_vec(from),
+            ScreenPosition::from_vec(to),
+            duration,
+        )
+    }
+}
+
+impl Tween<Rotation> {
+    /// Tweens a rotation from `from` to `to` degrees over `duration` seconds.
+    pub fn rotation(from: f32, to: f32, duration: f32) -> Self {
+        Self::new(Rotation::new(from), Rotation::new(to), duration)
+    }
+}
+
+impl Tween<Scale> {
+    /// Tweens a scale from `from` to `to` over `duration` seconds.
+    pub fn scale(from: Vec2, to: Vec2, duration: f32) -> Self {
+        Self::new(Scale { scale: from }, Scale { scale: to }, duration)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::components::mapposition::MapPosition;
-    use crate::components::screenposition::ScreenPosition;
     use crate::testing::{approx_eq, vec2_approx_eq};
+
+    #[test]
+    fn shortcuts_wrap_raw_values_in_the_component_they_animate() {
+        let a = Vec2::new(1.0, 2.0);
+        let b = Vec2::new(3.0, 4.0);
+
+        let t = Tween::position(a, b, 1.5);
+        assert_eq!((t.from.pos, t.to.pos, t.duration), (a, b, 1.5));
+        let t = Tween::screen_position(a, b, 0.5);
+        assert_eq!((t.from.pos, t.to.pos), (a, b));
+        let t = Tween::rotation(0.0, 360.0, 2.0);
+        assert_eq!((t.from, t.to), (Rotation::new(0.0), Rotation::new(360.0)));
+        let t = Tween::scale(a, b, 1.0);
+        assert_eq!((t.from.scale, t.to.scale), (a, b));
+    }
 
     fn map_position(x: f32, y: f32) -> MapPosition {
         MapPosition::from_vec(Vec2 { x, y })
