@@ -65,6 +65,10 @@ impl SystemsStore {
 /// One-shot asset-loading hook, called during the `Setup` game state.
 pub const SETUP: &str = "setup";
 
+/// Engine-installed system run once on entering `Setup`, right after the setup
+/// hook: enters the loading scene. Registered only when the game has one.
+pub const ENTER_SETUP: &str = "enter_setup";
+
 /// Engine-installed system run once when transitioning to `Playing`: enters
 /// the initial scene (scene manager) or calls `main.lua`'s `on_enter_play` (Lua).
 pub const ENTER_PLAY: &str = "enter_play";

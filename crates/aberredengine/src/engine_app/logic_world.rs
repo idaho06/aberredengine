@@ -58,7 +58,7 @@ use aberred_core::resources::worldtime::WorldTime;
 use aberred_core::systems::gamestate::{clean_all_entities, quit_game};
 use aberred_core::systems::rust_collision::rust_collision_observer;
 use aberred_core::systems::scene_dispatch::{
-    insert_scene_manager, scene_enter_play, scene_switch_system,
+    insert_scene_manager, scene_enter_loading, scene_enter_play, scene_switch_system,
 };
 use aberred_core::systems::timer::timer_observer;
 
@@ -246,6 +246,14 @@ impl EngineBuilder {
                 std::mem::take(&mut init.scenes),
                 init.initial_scene.take(),
             );
+            if let Some(loading) = init.loading_scene {
+                register_persistent_system(
+                    world,
+                    &mut systems_store,
+                    hook_keys::ENTER_SETUP,
+                    scene_enter_loading(loading),
+                );
+            }
 
             register_persistent_system(
                 world,
@@ -278,13 +286,32 @@ impl EngineBuilder {
         world.insert_resource(systems_store);
         world.flush();
 
-        {
-            let mut next_state = world.resource_mut::<NextGameState>();
-            next_state.set(GameStates::Setup);
-        }
-        world.trigger(GameStateChangedEvent {});
-
         Ok(())
+    }
+
+    /// The rest of the logic world's construction after
+    /// [`Self::setup_logic_world`], in its one valid order: hook and scene
+    /// systems, observers, entering `Setup` (so every observer exists when the
+    /// setup hook runs and the loading scene is entered), then the `sim` and
+    /// `present` schedules. Shared by the logic thread and `TestWorld`.
+    pub(crate) fn init_logic_world(
+        init: &mut LogicInit,
+        world: &mut World,
+    ) -> Result<(Schedule, Schedule), EngineError> {
+        #[cfg(feature = "lua")]
+        let has_lua = init.lua_script.is_some();
+        #[cfg(not(feature = "lua"))]
+        let has_lua = false;
+        Self::register_logic_systems(init, world)?;
+        Self::spawn_observers(world, has_lua, std::mem::take(&mut init.extra_observers));
+        Self::enter_setup(world);
+        Self::build_logic_schedules(std::mem::take(&mut init.extra_systems), world, has_lua)
+    }
+
+    /// Enter `Setup`: runs the setup hook and enters the loading scene.
+    fn enter_setup(world: &mut World) {
+        world.resource_mut::<NextGameState>().set(GameStates::Setup);
+        world.trigger(GameStateChangedEvent {});
     }
 
     pub(crate) fn spawn_observers(

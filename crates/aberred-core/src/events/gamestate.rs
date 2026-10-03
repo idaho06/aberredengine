@@ -91,6 +91,10 @@ fn on_state_enter(state: &GameStates, commands: &mut Commands, systems_store: &S
             if let Some(setup) = systems_store.get(hook_keys::SETUP) {
                 commands.run_system(*setup);
             }
+            // After the hook, so the loading scene sees the resources it inserted.
+            if let Some(enter_setup) = systems_store.get(hook_keys::ENTER_SETUP) {
+                commands.run_system(*enter_setup);
+            }
             // Queued after the hook, so a state the hook requested wins.
             commands.queue(request_playing_if_unchanged);
         }

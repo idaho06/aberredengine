@@ -100,6 +100,11 @@ impl EngineBuilder {
                 registered: self.registered_scene_list(),
             });
         }
+        if self.loading_scene == Some(initial_scene.as_str()) {
+            return Err(EngineError::LoadingSceneIsInitialScene {
+                name: initial_scene.clone(),
+            });
+        }
         Ok(())
     }
 

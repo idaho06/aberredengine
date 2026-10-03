@@ -37,6 +37,8 @@ pub struct EngineBuilder {
     /// thread's per-scene callback table.
     pub(super) scene_render: FxHashMap<String, SceneRender>,
     pub(super) initial_scene: Option<String>,
+    /// `.loading_scene()`: the scene active during `Setup`.
+    pub(super) loading_scene: Option<&'static str>,
     /// Group names from `.track_group()`, tracked across scene switches.
     pub(super) tracked_groups: Vec<String>,
     pub(super) extra_systems: Vec<UpdateRegistrar>,
@@ -72,6 +74,7 @@ impl EngineBuilder {
             scenes: Vec::new(),
             scene_render: FxHashMap::default(),
             initial_scene: None,
+            loading_scene: None,
             tracked_groups: Vec::new(),
             extra_systems: Vec::new(),
             extra_observers: Vec::new(),
@@ -394,6 +397,32 @@ impl EngineBuilder {
     /// transitions to the `Playing` state.
     pub fn initial_scene(mut self, name: impl Into<String>) -> Self {
         self.initial_scene = Some(name.into());
+        self
+    }
+
+    /// Show the scene `scene` while `Setup` waits for assets.
+    ///
+    /// The engine enters it on entering `Setup`, right after the setup hook, so
+    /// its [`SceneEntered`] observers see what the hook inserted and can queue
+    /// the few assets the loading scene needs (a font); `Setup` waits for those
+    /// too. Its
+    /// [`add_scene_system`](Self::add_scene_system)s run every sim tick while
+    /// loading, e.g. to show [`PendingAssets::len`](aberred_core::resources::pending_assets::PendingAssets::len).
+    /// On `Playing` the engine leaves it for the initial scene, which tears it
+    /// down along with everything spawned during `Setup`.
+    ///
+    /// `WorldTime` doesn't advance during `Setup`, so a loading scene shows
+    /// progress rather than time-based animation.
+    ///
+    /// # Errors (at `.run()`/`.try_run()`)
+    ///
+    /// [`EngineError::SceneNotRegistered`](aberred_core::error::EngineError::SceneNotRegistered)
+    /// if `scene` isn't registered with [`add_scene`](Self::add_scene), and
+    /// [`EngineError::LoadingSceneIsInitialScene`](aberred_core::error::EngineError::LoadingSceneIsInitialScene)
+    /// if it is the initial scene.
+    pub fn loading_scene(mut self, scene: &'static str) -> Self {
+        self.scene_refs.push(("loading_scene", scene));
+        self.loading_scene = Some(scene);
         self
     }
 

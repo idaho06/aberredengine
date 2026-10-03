@@ -361,7 +361,7 @@ Setup ──→ Playing ──→ Quitting
           scene switches
 ```
 
-1. **Setup** — The engine calls the `setup` hook once, on the logic thread. Load assets here (textures, fonts, sounds, shaders, animations) — see [Section 4](#4-loading-assets) for how texture/font/shader loading works. Omit `.on_setup()` if you have nothing to load. Once the hook has run, the engine moves to `Playing` on its own, as soon as every load queued so far has been answered (see [Waiting for loads](#waiting-for-loads)); a failed load counts as answered. A hook that requests `Playing` itself waits the same way. A hook that requests another state through `ResMut<NextGameState>` (e.g. `GameStates::Quitting`) gets it at once.
+1. **Setup** — The engine calls the `setup` hook once, on the logic thread. Load assets here (textures, fonts, sounds, shaders, animations) — see [Section 4](#4-loading-assets) for how texture/font/shader loading works. Omit `.on_setup()` if you have nothing to load. With `.loading_scene(name)`, that scene is entered right after the hook and stays active until Setup ends. Once the hook has run, the engine moves to `Playing` on its own, as soon as every load queued so far has been answered (see [Waiting for loads](#waiting-for-loads)); a failed load counts as answered. A hook that requests `Playing` itself waits the same way. A hook that requests another state through `ResMut<NextGameState>` (e.g. `GameStates::Quitting`) gets it at once.
 2. **Playing** — The engine transitions to playing, enters the initial scene (triggering `SceneEntered`), then runs your `.add_system()` systems (and the active scene's `.add_scene_system()` systems) once per sim tick.
 3. **Scene switches** — `WorldSignals::request_scene(name)` (which sets the `"switch_scene"` flag) runs the exit→enter sequence on the next sim tick; a `MenuAction::SetScene` menu item switches right away.
 4. **Quitting** — When the game state becomes `GameStates::Quitting` (via `NextGameState::set(GameStates::Quitting)`, `WorldSignals::request_quit()`, or a `MenuAction::QuitGame` menu item) or the window is closed, the engine shuts down. Timer, phase, collision and menu callbacks use `ctx.world_signals.request_quit()`, since `GameCtx` has no `NextGameState`.
@@ -378,6 +378,7 @@ Setup ──→ Playing ──→ Quitting
 | `.add_scene_gui(scene, callback)` | Draw ImGui widgets every render frame while `scene` is active (render thread). See [ImGui GUI callback](#imgui-gui-callback-rust-only). |
 | `.add_scene_world_draw(scene, callback)` | Draw world-space overlays every render frame while `scene` is active (render thread). See [World-space draw callback](#world-space-draw-callback-rust-only). |
 | `.initial_scene(name)` | Which scene starts first (required with `.add_scene()`) |
+| `.loading_scene(name)` | A registered scene shown while Setup waits for assets. See [Loading screen](#loading-screen). |
 | `.track_group(name)` | Count group `name`'s entities for the whole game (published as `"group_count:<name>"`, kept across scene switches). Can be called multiple times. See [Group tracking across scenes](#64-group-tracking-across-scenes). |
 | `.add_system(system)` | Add a per-sim-tick system, run only while `Playing` (`run_if(state_is_playing)`, ordered alongside script-update systems). Can be called multiple times. A sim tick is not the same as a render frame; see [Threading Model](#threading-model-what-your-code-can-access). |
 | `.configure_schedule(closure)` | Add systems to the same schedule `.add_system()` targets, with full ordering control — no auto-constraints applied. Use this for custom ordering relative to the engine's own systems (via `SimSet` or `.after()`/`.before()`). |
@@ -724,6 +725,61 @@ EngineBuilder::new()
 
 Setup waits for `PendingAssets` to empty (see [Game lifecycle](#game-lifecycle)). Loads count no matter how they were queued: through `AssetLoader`, a raw `MessageWriter<RenderAssetCmd>`/`MessageWriter<AudioCmd>`, a map spawn or a tilemap. Loading the same key twice counts twice and is answered twice.
 
+#### Loading screen
+
+`.loading_scene(name)` shows a registered scene while Setup waits. The engine enters it right after the setup hook, runs its `.add_scene_system()` systems every sim tick while loads are pending, and on `Playing` leaves it for the initial scene:
+
+```rust
+use aberredengine::prelude::*;
+
+#[derive(Component)]
+struct LoadingText;
+
+fn load_assets(mut assets: AssetLoader) -> Result {
+    assets.load_font("ui", "assets/fonts/ui.ttf", 16)?;
+    assets.load_texture("player", "assets/textures/player.png")?;
+    Ok(())
+}
+
+fn show_loading(_: On<SceneEntered>, mut commands: Commands) {
+    commands.spawn((
+        LoadingText,
+        ScreenPosition::new(10.0, 10.0),
+        DynamicText::new("Loading…", "ui", 16.0, Color::WHITE),
+    ));
+}
+
+fn update_loading(
+    pending: Res<PendingAssets>,
+    mut texts: Query<&mut DynamicText, With<LoadingText>>,
+) {
+    if pending.is_changed() {
+        for mut text in &mut texts {
+            text.set_text(format!("Loading… ({} left)", pending.len()));
+        }
+    }
+}
+
+fn main() -> Result<(), EngineError> {
+    EngineBuilder::new()
+        .on_setup(load_assets)
+        .add_scene("loading")
+        .add_scene("level01")
+        .initial_scene("level01")
+        .loading_scene("loading")
+        .on_scene_enter("loading", show_loading)
+        .add_scene_system("loading", update_loading)
+        .try_run()
+}
+```
+
+- `WorldTime` doesn't advance during Setup, so a loading scene shows progress, not time-based animation (tweens, sprite animations).
+- Its text appears once its font has loaded; until then it simply doesn't draw.
+- Leaving it tears it down along with everything spawned during Setup, the setup hook's spawns included. Mark what must survive `Persistent`, or spawn it in the initial scene.
+- A scene switch requested during Setup (`request_scene`, a menu's `SetScene`) is ignored; the engine always moves on to the initial scene. A quit requested during Setup takes effect on the first `Playing` tick.
+- In a deterministic game, spawn only from the loading scene's `SceneEntered` observer, never from its per-tick systems: the number of Setup ticks depends on load times, and entity ids must not.
+- The loading scene must differ from the initial scene.
+
 The subsections below show the underlying `RenderAssetCmd`/`AudioCmd` variants; write any that `AssetLoader` has no helper for through `assets.render()`/`assets.audio()`.
 
 ### What's pre-inserted vs. what you must create
@@ -756,7 +812,7 @@ asset_cmds.write(RenderAssetCmd::Texture {
 
 Keys (`key`) are arbitrary strings you'll reference later in `Sprite` components — you can spawn a `Sprite` referencing `"player"` in the very same tick that queued the load; it just won't have anything to draw until the render thread's GL upload lands (typically the next tick or two).
 
-**The load-then-use gap:** if your own logic-side code needs the texture's *dimensions* before the render thread has replied (e.g. to size a collider off a spritesheet), you can't read it back synchronously: the texture store lives on the render thread. Query `TextureDimsStore` instead, and tolerate `None` until the reply arrives:
+**The load-then-use gap:** assets loaded in the setup hook are ready when Setup ends (show a [loading screen](#loading-screen) meanwhile), so this matters only for loads queued later. If your own logic-side code needs the texture's *dimensions* before the render thread has replied (e.g. to size a collider off a spritesheet), you can't read it back synchronously: the texture store lives on the render thread. Query `TextureDimsStore` instead, and tolerate `None` until the reply arrives:
 
 ```rust
 use aberredengine::prelude::*;

@@ -72,6 +72,7 @@ pub(crate) struct LogicInit {
     pub(crate) extra_observers: Vec<ObserverRegistrar>,
     pub(crate) scenes: Vec<String>,
     pub(crate) initial_scene: Option<String>,
+    pub(crate) loading_scene: Option<&'static str>,
     /// Scene-persistent group names (`EngineBuilder::track_group`).
     pub(crate) tracked_groups: Vec<String>,
     #[cfg(feature = "lua")]
@@ -382,28 +383,12 @@ pub(crate) fn apply_tick_input(world: &mut World, tick_input: &TickInput) {
 /// of `sim` rather than on `present`, for the same reason: asset loads must
 /// reach the render thread every tick, not just on a publish tick.
 fn logic_thread_main(mut init: LogicInit) -> Result<(), EngineError> {
-    #[cfg(feature = "lua")]
-    let has_lua = init.lua_script.is_some();
-    #[cfg(not(feature = "lua"))]
-    let has_lua = false;
-
     let sim_hz = init.config.sim_hz;
     let snapshot_skip = init.config.snapshot_skip;
 
     let mut world = EngineBuilder::setup_logic_world(&mut init)?;
     world.insert_resource(ReplayRuntimeState::default());
-    EngineBuilder::register_logic_systems(&mut init, &mut world)?;
-    EngineBuilder::spawn_observers(
-        &mut world,
-        has_lua,
-        std::mem::take(&mut init.extra_observers),
-    );
-
-    let (mut sim, mut present) = EngineBuilder::build_logic_schedules(
-        std::mem::take(&mut init.extra_systems),
-        &mut world,
-        has_lua,
-    )?;
+    let (mut sim, mut present) = EngineBuilder::init_logic_world(&mut init, &mut world)?;
 
     let rx_logic = init.rx_logic;
     let rx_input = init.rx_input;

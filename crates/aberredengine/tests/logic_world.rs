@@ -678,6 +678,115 @@ fn a_builder_without_scenes_enters_the_main_scene() {
     assert_eq!(tw.world.resource::<SceneTicks>().0 - before, 3);
 }
 
+#[derive(Component)]
+struct LoadingText;
+
+/// A two-scene game with a `"loading"` scene shown while one texture loads.
+fn loading_scene_world(extra: impl FnOnce(TestWorldBuilder) -> TestWorldBuilder) -> TestWorld {
+    let builder = TestWorld::builder()
+        .add_scene("loading")
+        .add_scene("game")
+        .initial_scene("game")
+        .loading_scene("loading")
+        .on_setup(
+            |mut assets: AssetLoader, mut commands: Commands| -> Result {
+                // The loading scene is entered right after this hook, during build().
+                commands.init_resource::<SceneLog>();
+                assets.load_texture("player", "player.png")?;
+                Ok(())
+            },
+        )
+        .add_observer(log_scene_entered)
+        .add_observer(log_scene_exited)
+        .on_scene_enter("loading", |_: On<SceneEntered>, mut commands: Commands| {
+            commands.spawn(LoadingText);
+        })
+        .add_scene_system("loading", count_scene_ticks)
+        .add_scene_system("game", increment_counter);
+    let mut tw = extra(builder).build().expect("build should succeed");
+    tw.world.init_resource::<SceneTicks>();
+    tw.world.init_resource::<Counter>();
+    tw
+}
+
+fn loading_texts(tw: &mut TestWorld) -> usize {
+    tw.world
+        .query_filtered::<(), With<LoadingText>>()
+        .iter(&tw.world)
+        .count()
+}
+
+/// The loading scene is active while Setup waits for assets: its systems run,
+/// the initial scene's don't. Once the load is answered, the game leaves it
+/// for the initial scene, tearing down what it spawned.
+#[test]
+fn loading_scene_is_active_while_setup_waits_for_assets() {
+    let mut tw = loading_scene_world(|builder| builder);
+
+    tw.tick(3, DT);
+    assert_eq!(*tw.world.resource::<GameState>().get(), GameStates::Setup);
+    assert_eq!(
+        tw.world.resource::<SceneLog>().0,
+        ["enter loading (entity loading) from None"]
+    );
+    assert!(
+        tw.world.resource::<SceneTicks>().0 > 0,
+        "loading system runs"
+    );
+    assert_eq!(tw.world.resource::<Counter>().0, 0, "game system idle");
+    assert_eq!(loading_texts(&mut tw), 1);
+
+    tw.deliver_texture_dims("player", 8, 8);
+    tw.tick(2, DT);
+    let loading_ticks = tw.world.resource::<SceneTicks>().0;
+    tw.tick(2, DT);
+
+    assert_eq!(*tw.world.resource::<GameState>().get(), GameStates::Playing);
+    assert_eq!(
+        tw.world.resource::<SceneLog>().0,
+        [
+            "enter loading (entity loading) from None",
+            "exit loading -> game",
+            "enter game (entity game) from Some(\"loading\")",
+        ]
+    );
+    assert_eq!(
+        tw.world.resource::<SceneTicks>().0,
+        loading_ticks,
+        "loading system stopped"
+    );
+    assert!(tw.world.resource::<Counter>().0 > 0, "game system runs");
+    assert_eq!(
+        loading_texts(&mut tw),
+        0,
+        "torn down with the loading scene"
+    );
+}
+
+/// A scene switch requested from the loading scene doesn't fire again after
+/// the engine leaves it: leaving the loading scene is the engine's job.
+#[test]
+fn a_switch_requested_during_loading_does_not_repeat_after_it() {
+    let mut tw = loading_scene_world(|builder| {
+        builder.add_scene_system("loading", |mut signals: ResMut<WorldSignals>| {
+            signals.request_scene("game");
+        })
+    });
+
+    tw.tick(2, DT);
+    tw.deliver_texture_dims("player", 8, 8);
+    tw.tick(4, DT);
+
+    let entered_game = tw
+        .world
+        .resource::<SceneLog>()
+        .0
+        .iter()
+        .filter(|line| line.starts_with("enter game"))
+        .count();
+    assert_eq!(entered_game, 1);
+}
+
 #[derive(Resource, Default)]
 struct LoadLog(Vec<String>);
 

@@ -2,8 +2,8 @@
 //!
 //! [`TestWorld`] builds a REAL logic-thread `World` and its REAL `sim`/
 //! `present` schedules by calling the exact same `EngineBuilder` functions
-//! `logic_thread_main` calls (`setup_logic_world` -> `register_logic_systems`
-//! -> `spawn_observers` -> `build_logic_schedules`) -- no raylib window, no
+//! `logic_thread_main` calls (`setup_logic_world` -> `init_logic_world`)
+//! -- no raylib window, no
 //! GL, no real audio thread (a stub `AudioBridge` is inserted instead, see
 //! [`aberred_core::protocol::endpoints::setup_audio_stub`]), and Lua only if
 //! [`TestWorldBuilder::with_lua`] is used. This is deliberately NOT a
@@ -92,6 +92,7 @@ pub struct TestWorldBuilder {
     extra_observers: Vec<ObserverRegistrar>,
     scenes: Vec<String>,
     initial_scene: Option<String>,
+    loading_scene: Option<&'static str>,
     tracked_groups: Vec<String>,
     #[cfg(feature = "lua")]
     lua_script: Option<PathBuf>,
@@ -119,6 +120,7 @@ impl TestWorldBuilder {
             extra_observers: Vec::new(),
             scenes: Vec::new(),
             initial_scene: None,
+            loading_scene: None,
             tracked_groups: Vec::new(),
             #[cfg(feature = "lua")]
             lua_script: None,
@@ -227,6 +229,13 @@ impl TestWorldBuilder {
         self
     }
 
+    /// Set the scene shown while `Setup` waits for assets, mirroring
+    /// `EngineBuilder::loading_scene`.
+    pub fn loading_scene(mut self, scene: &'static str) -> Self {
+        self.loading_scene = Some(scene);
+        self
+    }
+
     /// Track a scene-persistent group, mirroring [`EngineBuilder::track_group`].
     pub fn track_group(mut self, name: impl Into<String>) -> Self {
         self.tracked_groups.push(name.into());
@@ -247,9 +256,9 @@ impl TestWorldBuilder {
         self
     }
 
-    /// Build the [`TestWorld`], calling the same four production
-    /// `EngineBuilder` functions `logic_thread_main` calls, in the same
-    /// order.
+    /// Build the [`TestWorld`], calling the same production `EngineBuilder`
+    /// functions `logic_thread_main` calls (`setup_logic_world`, then
+    /// `init_logic_world`).
     pub fn build(mut self) -> Result<TestWorld, aberred_core::error::EngineError> {
         #[cfg(feature = "lua")]
         let has_lua = self.lua_script.is_some();
@@ -270,6 +279,7 @@ impl TestWorldBuilder {
             extra_observers: std::mem::take(&mut self.extra_observers),
             scenes: std::mem::take(&mut self.scenes),
             initial_scene: self.initial_scene.take(),
+            loading_scene: self.loading_scene,
             tracked_groups: std::mem::take(&mut self.tracked_groups),
             #[cfg(feature = "lua")]
             lua_script: self.lua_script.take(),
@@ -292,18 +302,7 @@ impl TestWorldBuilder {
             .take()
             .expect("setup_logic_world always sets audio_stub_ends when stub_audio is true");
 
-        EngineBuilder::register_logic_systems(&mut init, &mut world)?;
-        EngineBuilder::spawn_observers(
-            &mut world,
-            has_lua,
-            std::mem::take(&mut init.extra_observers),
-        );
-
-        let (sim, present) = EngineBuilder::build_logic_schedules(
-            std::mem::take(&mut init.extra_systems),
-            &mut world,
-            has_lua,
-        )?;
+        let (sim, present) = EngineBuilder::init_logic_world(&mut init, &mut world)?;
 
         Ok(TestWorld {
             world,

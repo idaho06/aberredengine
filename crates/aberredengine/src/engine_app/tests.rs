@@ -725,6 +725,7 @@ fn scene_scoped_methods_reject_an_unregistered_scene() {
             base().add_scene_world_draw("level", level_world_draw),
             "add_scene_world_draw",
         ),
+        (base().loading_scene("level"), "loading_scene"),
     ];
     for (mut builder, expected_method) in cases {
         match validate(&mut builder).unwrap_err() {
@@ -753,6 +754,21 @@ fn scene_scoped_methods_accept_a_registered_scene() {
             .on_scene_exit("menu", on_level_exited),
     )
     .unwrap();
+}
+
+#[test]
+fn loading_scene_must_not_be_the_initial_scene() {
+    let err = validate(
+        &mut EngineBuilder::new()
+            .add_scene("menu")
+            .initial_scene("menu")
+            .loading_scene("menu"),
+    )
+    .unwrap_err();
+    assert!(
+        matches!(&err, EngineError::LoadingSceneIsInitialScene { name } if name == "menu"),
+        "{err}"
+    );
 }
 
 #[cfg(feature = "lua")]

@@ -49,6 +49,51 @@ mod waiting_for_loads {
     } // GLUE
 }
 
+// Loading screen
+mod loading_screen {
+    use aberredengine::prelude::*;
+
+    #[derive(Component)]
+    struct LoadingText;
+
+    fn load_assets(mut assets: AssetLoader) -> Result {
+        assets.load_font("ui", "assets/fonts/ui.ttf", 16)?;
+        assets.load_texture("player", "assets/textures/player.png")?;
+        Ok(())
+    }
+
+    fn show_loading(_: On<SceneEntered>, mut commands: Commands) {
+        commands.spawn((
+            LoadingText,
+            ScreenPosition::new(10.0, 10.0),
+            DynamicText::new("Loading…", "ui", 16.0, Color::WHITE),
+        ));
+    }
+
+    fn update_loading(
+        pending: Res<PendingAssets>,
+        mut texts: Query<&mut DynamicText, With<LoadingText>>,
+    ) {
+        if pending.is_changed() {
+            for mut text in &mut texts {
+                text.set_text(format!("Loading… ({} left)", pending.len()));
+            }
+        }
+    }
+
+    fn main() -> Result<(), EngineError> {
+        EngineBuilder::new()
+            .on_setup(load_assets)
+            .add_scene("loading")
+            .add_scene("level01")
+            .initial_scene("level01")
+            .loading_scene("loading")
+            .on_scene_enter("loading", show_loading)
+            .add_scene_system("loading", update_loading)
+            .try_run()
+    }
+}
+
 // Textures
 mod textures {
     use aberredengine::prelude::*; // GLUE

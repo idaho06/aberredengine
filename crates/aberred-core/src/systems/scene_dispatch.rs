@@ -10,6 +10,7 @@
 //! - [`in_scene`] — run condition: true while the named scene is active
 //! - [`scene_switch_poll`] — polls `WorldSignals["switch_scene"]` and triggers a scene transition
 //! - [`scene_enter_play`] — one-shot system that seeds the initial scene and triggers the first switch
+//! - [`scene_enter_loading`] — the same for the loading scene, on entering `Setup`
 //!
 //! Scene behavior is ECS: observers of [`SceneEntered`]/[`SceneExited`] and systems
 //! gated on [`in_scene`]. A scene's render callbacks live in `aberred-render`'s
@@ -24,7 +25,7 @@ use std::sync::Arc;
 
 use bevy_ecs::prelude::*;
 use bevy_ecs::system::SystemState;
-use log::{debug, error, info};
+use log::{debug, error, info, warn};
 
 use crate::components::persistent::{Persistent, SceneCleanup};
 use crate::components::scene::SceneName;
@@ -32,6 +33,7 @@ use crate::events::scene::{SceneEntered, SceneExited};
 use crate::math::{Color, Vec2};
 use crate::resources::appstate::AppState;
 use crate::resources::camera2d::Camera2D;
+use crate::resources::gamestate::{GameState, GameStates};
 use crate::resources::group::TrackedGroups;
 use crate::resources::scenemanager::SceneManager;
 use crate::resources::screensize::ScreenSize;
@@ -155,6 +157,8 @@ type SceneTeardown = (
 ///
 /// Reads the target from `WorldSignals["scene"]` and checks it first: an
 /// unregistered name logs an error and leaves the current scene untouched.
+/// During `Setup` the only switch is entering the loading scene; once a scene
+/// is active, further switches wait for `Playing` (logged and ignored).
 /// Otherwise, when a scene is active, it tears that scene down: it triggers
 /// [`SceneExited`] while the scene's entities are still alive, despawns
 /// non-[`Persistent`] entities, resets tracked groups to the persistent ones and
@@ -171,6 +175,16 @@ pub fn scene_switch_system(world: &mut World, state: &mut SystemState<SceneTeard
         .unwrap_or(sk::DEFAULT_SCENE)
         .into();
     let scene_manager = world.resource::<SceneManager>();
+    let in_setup = world
+        .get_resource::<GameState>()
+        .is_some_and(|state| *state.get() == GameStates::Setup);
+    if in_setup && let Some(active) = &scene_manager.active_scene {
+        warn!(
+            "scene_switch_system: switching from '{active}' to '{scene_name}' during Setup is ignored; \
+             the engine leaves the loading scene for the initial scene once loading ends"
+        );
+        return;
+    }
     let Some(entered) = scene_manager.scene_entity(&scene_name) else {
         error!(
             "scene_switch_system: No scene registered for '{}'; staying in the current scene. Registered scenes: {:?}",
@@ -274,24 +288,43 @@ pub fn scene_switch_poll(
 // scene_enter_play — one-shot bootstrap
 // ---------------------------------------------------------------------------
 
-/// One-shot system registered as `"enter_play"` for SceneManager-based games.
-///
-/// Seeds `WorldSignals["scene"]` with the initial scene name (stored in
-/// [`SceneManager`]) and then runs the `switch_scene` system.
+/// One-shot system registered as `"enter_play"` for SceneManager-based games:
+/// enters the initial scene (stored in [`SceneManager`]). A switch requested
+/// during `Setup` (from a loading scene) is dropped: leaving the loading scene
+/// is the engine's job.
 pub fn scene_enter_play(
-    mut commands: Commands,
+    commands: Commands,
     mut world_signals: ResMut<WorldSignals>,
     systems_store: Res<SystemsStore>,
     scene_manager: Res<SceneManager>,
 ) {
     let initial = scene_manager
         .initial_scene
-        .as_ref()
-        .cloned()
+        .clone()
         .expect("SceneManager.initial_scene not set; validate_builder should have caught this");
+    world_signals.remove_flag(sk::SWITCH_SCENE);
+    switch_to(commands, world_signals, &systems_store, initial);
+}
 
-    world_signals.set_string(sk::SCENE, initial);
+/// One-shot system registered as `"enter_setup"` when the game has a loading
+/// scene: enters `loading` on entering `Setup`, right after the setup hook.
+pub fn scene_enter_loading(
+    loading: &'static str,
+) -> impl FnMut(Commands, ResMut<WorldSignals>, Res<SystemsStore>) {
+    move |commands, world_signals, systems_store| {
+        switch_to(commands, world_signals, &systems_store, loading.to_owned());
+    }
+}
 
+/// Seeds `WorldSignals[`[`sk::SCENE`]`]` with `scene` and runs the
+/// `switch_scene` system.
+fn switch_to(
+    mut commands: Commands,
+    mut world_signals: ResMut<WorldSignals>,
+    systems_store: &SystemsStore,
+    scene: String,
+) {
+    world_signals.set_string(sk::SCENE, scene);
     commands.run_system(
         *systems_store
             .get(hook_keys::SWITCH_SCENE)
@@ -504,6 +537,27 @@ mod tests {
         assert_eq!(
             world.resource::<SceneManager>().active_scene.as_deref(),
             Some("level")
+        );
+    }
+
+    /// During `Setup` the only scene switch is entering the loading scene:
+    /// once a scene is active, a switch (e.g. a menu's `SetScene`) is refused
+    /// until the engine leaves it on `Playing`.
+    #[test]
+    fn no_switch_away_from_the_loading_scene_during_setup() {
+        let (mut world, menu_entity) = world_in_menu_switching_to("level");
+        let mut state = GameState::new();
+        state.set(GameStates::Setup);
+        world.insert_resource(state);
+        record_scene_events(&mut world);
+
+        world.run_system_once(scene_switch_system).unwrap();
+
+        assert!(world.resource::<SeenEvents>().0.is_empty());
+        assert!(world.get_entity(menu_entity).is_ok());
+        assert_eq!(
+            world.resource::<SceneManager>().active_scene.as_deref(),
+            Some("menu")
         );
     }
 

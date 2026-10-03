@@ -142,6 +142,7 @@ impl EngineBuilder {
             extra_observers: std::mem::take(&mut self.extra_observers),
             scenes: std::mem::take(&mut self.scenes),
             initial_scene: self.initial_scene.take(),
+            loading_scene: self.loading_scene,
             tracked_groups: std::mem::take(&mut self.tracked_groups),
             #[cfg(feature = "lua")]
             lua_script: self.lua_script.take(),

@@ -55,6 +55,12 @@ pub enum EngineError {
     },
 
     #[error(
+        "EngineBuilder: .loading_scene(\"{name}\") names the initial scene. The loading scene \
+         is shown while Setup waits for assets and is left for the initial scene, so they must differ."
+    )]
+    LoadingSceneIsInitialScene { name: String },
+
+    #[error(
         "EngineBuilder: .track_group(\"{name}\") is {len} bytes; group names are limited \
          to {max} bytes.",
         max = crate::resources::worldsignals::MAX_GROUP_NAME_LEN
