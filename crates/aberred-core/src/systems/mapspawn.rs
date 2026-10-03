@@ -65,7 +65,7 @@ pub fn spawn_map(
     for entry in &map.textures {
         let filter = TextureFilter::from_opt_str_or_warn(entry.filter.as_deref(), &entry.key);
         render_asset_cmds.push(RenderAssetCmd::Texture {
-            id: entry.key.clone(),
+            key: entry.key.clone(),
             path: entry.path.clone(),
             filter,
         });
@@ -76,7 +76,7 @@ pub fn spawn_map(
         // `skip_if_loaded: true` -- `spawn_map` does not read `FontStore`
         // directly.
         render_asset_cmds.push(RenderAssetCmd::Font {
-            id: entry.key.clone(),
+            key: entry.key.clone(),
             path: entry.path.clone(),
             size: entry.font_size as i32,
             skip_if_loaded: true,
@@ -393,20 +393,20 @@ mod tests {
         assert_eq!(entities.len(), map.entities.len());
         assert_eq!(render_asset_cmds.len(), 2);
         match &render_asset_cmds[0] {
-            RenderAssetCmd::Texture { id, path, .. } => {
-                assert_eq!(id, "tex1");
+            RenderAssetCmd::Texture { key, path, .. } => {
+                assert_eq!(key, "tex1");
                 assert_eq!(path, "assets/tex1.png");
             }
             other => panic!("expected RenderAssetCmd::Texture, got {other:?}"),
         }
         match &render_asset_cmds[1] {
             RenderAssetCmd::Font {
-                id,
+                key,
                 path,
                 size,
                 skip_if_loaded,
             } => {
-                assert_eq!(id, "font1");
+                assert_eq!(key, "font1");
                 assert_eq!(path, "assets/font1.ttf");
                 assert_eq!(*size, 24);
                 assert!(
@@ -674,7 +674,7 @@ mod tests {
             .collect();
         assert!(matches!(
             cmds.as_slice(),
-            [RenderAssetCmd::Texture { id, filter: TextureFilter::Bilinear, .. }] if id == "tex"
+            [RenderAssetCmd::Texture { key, filter: TextureFilter::Bilinear, .. }] if key == "tex"
         ));
         let thing = world
             .resource::<WorldSignals>()

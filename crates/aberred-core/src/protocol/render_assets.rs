@@ -23,16 +23,16 @@ use crate::resources::texturefilter::TextureFilter;
 /// `process_render_asset_cmds`.
 #[derive(Message, Debug, Clone)]
 pub enum RenderAssetCmd {
-    /// Load a texture from `path` and store it under `id`.
+    /// Load a texture from `path` and store it under `key`.
     Texture {
-        id: String,
+        key: String,
         path: String,
         filter: TextureFilter,
     },
-    /// Load a font from `path` at `size` and store it under `id`, also
-    /// populating `FontMetricsStore` under the same `id`.
+    /// Load a font from `path` at `size` and store it under `key`, also
+    /// populating `FontMetricsStore` under the same `key`.
     ///
-    /// `skip_if_loaded`: when `true`, the load is skipped if `id` is
+    /// `skip_if_loaded`: when `true`, the load is skipped if `key` is
     /// already present in `FontStore`'s metadata (preserves `spawn_map`'s
     /// "don't reload a font shared across maps" behavior). Lua's
     /// `engine.load_font` always sets this `false` (always reloads).
@@ -41,14 +41,14 @@ pub enum RenderAssetCmd {
     /// `FontStore` lives on the render thread, so synchronously checking
     /// "already loaded" from the producer side isn't possible.
     Font {
-        id: String,
+        key: String,
         path: String,
         size: i32,
         skip_if_loaded: bool,
     },
-    /// Load a shader from optional vertex/fragment paths, store under `id`.
+    /// Load a shader from optional vertex/fragment paths, store under `key`.
     Shader {
-        id: String,
+        key: String,
         vs_path: Option<String>,
         fs_path: Option<String>,
     },
@@ -68,21 +68,21 @@ pub enum RenderAssetCmd {
     /// was queued.
     TilemapTexture { key: String, png_path: String },
     /// Load a texture from an in-memory-encoded image buffer (e.g. an
-    /// embedded PNG) and store it under `id`. `ext` is the file-type hint
+    /// embedded PNG) and store it under `key`. `ext` is the file-type hint
     /// raylib's decoder needs, e.g. ".png" (leading dot, matches
     /// `LoadImageFromMemory`'s `fileType` convention).
     TextureFromMemory {
-        id: String,
+        key: String,
         ext: String,
         bytes: Vec<u8>,
         filter: TextureFilter,
     },
     /// Load a shader from optional in-memory vertex/fragment source
-    /// strings, store under `id`. Mirrors `Shader`'s `Option`-per-stage
+    /// strings, store under `key`. Mirrors `Shader`'s `Option`-per-stage
     /// shape (a shader can supply just one stage's source and let raylib
     /// use its default for the other).
     ShaderFromMemory {
-        id: String,
+        key: String,
         vs_src: Option<String>,
         fs_src: Option<String>,
     },

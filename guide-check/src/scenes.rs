@@ -183,7 +183,7 @@ mod add_system {
             return; // nothing to do this tick
         };
         asset_cmds.write(RenderAssetCmd::Texture {
-            id: path.clone(),
+            key: path.clone(),
             path,
             filter: TextureFilter::Nearest,
         });

@@ -147,7 +147,7 @@ fn font_load_forwards_and_metrics_reply_sizes_text_next_tick() {
     tw.world
         .resource_mut::<Messages<RenderAssetCmd>>()
         .write(RenderAssetCmd::Font {
-            id: "test_font".to_string(),
+            key: "test_font".to_string(),
             path: "assets/fonts/does_not_matter.ttf".to_string(),
             size: 20,
             skip_if_loaded: false,
@@ -164,7 +164,7 @@ fn font_load_forwards_and_metrics_reply_sizes_text_next_tick() {
         "queued RenderAssetCmd::Font must be forwarded as RenderMsg::Asset within one tick",
     );
     match forwarded {
-        RenderMsg::Asset(RenderAssetCmd::Font { id, .. }) => assert_eq!(id, "test_font"),
+        RenderMsg::Asset(RenderAssetCmd::Font { key, .. }) => assert_eq!(key, "test_font"),
         other => panic!("expected RenderMsg::Asset(Font), got {other:?}"),
     }
 

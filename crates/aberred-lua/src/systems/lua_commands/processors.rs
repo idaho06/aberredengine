@@ -220,10 +220,14 @@ pub fn asset_cmd_to_render_asset_cmd(cmd: AssetCmd) -> Option<RenderAssetCmd> {
     match cmd {
         AssetCmd::Texture { id, path, filter } => {
             let filter = TextureFilter::from_opt_str_or_warn(filter.as_deref(), &id);
-            Some(RenderAssetCmd::Texture { id, path, filter })
+            Some(RenderAssetCmd::Texture {
+                key: id,
+                path,
+                filter,
+            })
         }
         AssetCmd::Font { id, path, size } => Some(RenderAssetCmd::Font {
-            id,
+            key: id,
             path,
             size,
             skip_if_loaded: false,
@@ -233,7 +237,7 @@ pub fn asset_cmd_to_render_asset_cmd(cmd: AssetCmd) -> Option<RenderAssetCmd> {
             vs_path,
             fs_path,
         } => Some(RenderAssetCmd::Shader {
-            id,
+            key: id,
             vs_path,
             fs_path,
         }),
@@ -694,8 +698,8 @@ mod tests {
         let render_cmds = h.render_asset_cmds();
         assert_eq!(render_cmds.len(), 1);
         match &render_cmds[0] {
-            RenderAssetCmd::Texture { id, path, filter } => {
-                assert_eq!(id, "tex1");
+            RenderAssetCmd::Texture { key, path, filter } => {
+                assert_eq!(key, "tex1");
                 assert_eq!(path, "assets/tex1.png");
                 assert_eq!(*filter, TextureFilter::Bilinear);
             }
@@ -717,12 +721,12 @@ mod tests {
         assert_eq!(render_cmds.len(), 1);
         match &render_cmds[0] {
             RenderAssetCmd::Font {
-                id,
+                key,
                 path,
                 size,
                 skip_if_loaded,
             } => {
-                assert_eq!(id, "font1");
+                assert_eq!(key, "font1");
                 assert_eq!(path, "assets/font1.ttf");
                 assert_eq!(*size, 24);
                 assert!(!skip_if_loaded, "Lua font loads always reload");
@@ -742,7 +746,7 @@ mod tests {
 
         let render_cmds = h.render_asset_cmds();
         assert_eq!(render_cmds.len(), 1);
-        assert!(matches!(&render_cmds[0], RenderAssetCmd::Shader { id, .. } if id == "shader1"));
+        assert!(matches!(&render_cmds[0], RenderAssetCmd::Shader { key, .. } if key == "shader1"));
     }
 
     #[test]

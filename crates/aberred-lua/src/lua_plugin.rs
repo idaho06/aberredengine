@@ -972,8 +972,10 @@ mod tests {
             .collect();
         assert_eq!(cmds.len(), 1, "expected exactly one RenderAssetCmd");
         match &cmds[0] {
-            aberred_core::protocol::render_assets::RenderAssetCmd::Texture { id, path, .. } => {
-                assert_eq!(id, "boss");
+            aberred_core::protocol::render_assets::RenderAssetCmd::Texture {
+                key, path, ..
+            } => {
+                assert_eq!(key, "boss");
                 assert_eq!(path, "assets/boss.png");
             }
             other => panic!("expected RenderAssetCmd::Texture, got {other:?}"),

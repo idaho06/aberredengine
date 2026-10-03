@@ -464,7 +464,7 @@ fn tilemap_load_system(
         return; // nothing to do this tick
     };
     asset_cmds.write(RenderAssetCmd::Texture {
-        id: path.clone(),
+        key: path.clone(),
         path,
         filter: TextureFilter::Nearest,
     });
@@ -673,18 +673,18 @@ Queue a load with `RenderAssetCmd::Texture`, passing the desired `TextureFilter`
 use aberredengine::prelude::*;
 
 asset_cmds.write(RenderAssetCmd::Texture {
-    id: "player".to_string(),
+    key: "player".to_string(),
     path: "assets/textures/player.png".to_string(),
     filter: TextureFilter::Nearest,
 });
 asset_cmds.write(RenderAssetCmd::Texture {
-    id: "background".to_string(),
+    key: "background".to_string(),
     path: "assets/textures/background.png".to_string(),
     filter: TextureFilter::Nearest,
 });
 ```
 
-Keys (`id`) are arbitrary strings you'll reference later in `Sprite` components — you can spawn a `Sprite` referencing `"player"` in the very same tick that queued the load; it just won't have anything to draw until the render thread's GL upload lands (typically the next tick or two).
+Keys (`key`) are arbitrary strings you'll reference later in `Sprite` components — you can spawn a `Sprite` referencing `"player"` in the very same tick that queued the load; it just won't have anything to draw until the render thread's GL upload lands (typically the next tick or two).
 
 **The load-then-use gap:** if your own logic-side code needs the texture's *dimensions* before the render thread has replied (e.g. to size a collider off a spritesheet), you can't read it back synchronously: the texture store lives on the render thread. Query `TextureDimsStore` instead, and tolerate `None` until the reply arrives:
 
@@ -724,7 +724,7 @@ To load a texture from an in-memory-encoded buffer (e.g. a PNG embedded in your 
 
 ```rust
 asset_cmds.write(RenderAssetCmd::TextureFromMemory {
-    id: "intro_logo".to_string(),
+    key: "intro_logo".to_string(),
     ext: ".png".to_string(), // leading dot, matches raylib's file-type hint
     bytes: include_bytes!("../assets/textures/intro_logo.png").to_vec(),
     filter: TextureFilter::Nearest,
@@ -743,7 +743,7 @@ Queue a load with `RenderAssetCmd::Font`. Mipmap generation is handled internall
 
 ```rust
 asset_cmds.write(RenderAssetCmd::Font {
-    id: "arcade".to_string(),
+    key: "arcade".to_string(),
     path: "assets/fonts/arcade.ttf".to_string(),
     size: 32,
     skip_if_loaded: false, // true = don't reload if "arcade" is already loaded
@@ -844,19 +844,19 @@ Queue a load with `RenderAssetCmd::Shader`. `vs_path`/`fs_path` mirror raylib's 
 
 ```rust
 asset_cmds.write(RenderAssetCmd::Shader {
-    id: "glow".to_string(),
+    key: "glow".to_string(),
     vs_path: None, // default vertex shader
     fs_path: Some("assets/shaders/glow.fs".to_string()),
 });
 ```
 
-There's no synchronous "did it load, is it valid" result available to logic-side code — the render thread's loader logs an error and simply doesn't register the shader if the file is missing or fails validation. Reference the shader by its `id` key from an `EntityShader` component (see [Per-entity shaders](#per-entity-shaders)); after a failed load, entities using that key draw without it.
+There's no synchronous "did it load, is it valid" result available to logic-side code — the render thread's loader logs an error and simply doesn't register the shader if the file is missing or fails validation. Reference the shader by its `key` from an `EntityShader` component (see [Per-entity shaders](#per-entity-shaders)); after a failed load, entities using that key draw without it.
 
 To load a shader from in-memory source strings instead of file paths (e.g. shaders embedded via `include_str!`), use `RenderAssetCmd::ShaderFromMemory`:
 
 ```rust
 asset_cmds.write(RenderAssetCmd::ShaderFromMemory {
-    id: "glitch".to_string(),
+    key: "glitch".to_string(),
     vs_src: None, // default vertex shader
     fs_src: Some(include_str!("../assets/shaders/glitch.fs").to_string()),
 });
@@ -1071,14 +1071,14 @@ fn setup(
 ) {
     // Textures — queued, loaded asynchronously on the render thread
     asset_cmds.write(RenderAssetCmd::Texture {
-        id: "player".to_string(),
+        key: "player".to_string(),
         path: "assets/textures/player.png".to_string(),
         filter: TextureFilter::Nearest,
     });
 
     // Fonts — mipmap generation is handled internally by the render thread
     asset_cmds.write(RenderAssetCmd::Font {
-        id: "arcade".to_string(),
+        key: "arcade".to_string(),
         path: "assets/fonts/arcade.ttf".to_string(),
         size: 32,
         skip_if_loaded: false,
@@ -1090,7 +1090,7 @@ fn setup(
 
     // Shaders
     asset_cmds.write(RenderAssetCmd::Shader {
-        id: "glow".to_string(),
+        key: "glow".to_string(),
         vs_path: None,
         fs_path: Some("assets/shaders/glow.fs".to_string()),
     });

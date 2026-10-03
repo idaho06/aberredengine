@@ -119,21 +119,17 @@ pub(crate) fn apply_render_asset_cmd(
     notifications: &mut Vec<LogicMsg>,
 ) {
     match cmd {
-        RenderAssetCmd::Texture { id, path, filter } => match rl.load_texture(th, &path) {
+        RenderAssetCmd::Texture { key, path, filter } => match rl.load_texture(th, &path) {
             Ok(tex) => {
-                debug!("Loaded texture '{}' from '{}'", id, path);
+                debug!("Loaded texture '{}' from '{}'", key, path);
                 let (width, height) = (tex.width, tex.height);
-                tex_store.insert(&id, tex, filter, Some(path));
-                notifications.push(LogicMsg::TextureLoaded {
-                    key: id,
-                    width,
-                    height,
-                });
+                tex_store.insert(&key, tex, filter, Some(path));
+                notifications.push(LogicMsg::TextureLoaded { key, width, height });
             }
             Err(e) => error!("Failed to load texture '{}': {}", path, e),
         },
         RenderAssetCmd::TextureFromMemory {
-            id,
+            key,
             ext,
             bytes,
             filter,
@@ -142,50 +138,46 @@ pub(crate) fn apply_render_asset_cmd(
                 Ok(tex) => {
                     debug!(
                         "Loaded texture '{}' from {} in-memory bytes (ext '{}')",
-                        id,
+                        key,
                         bytes.len(),
                         ext
                     );
                     let (width, height) = (tex.width, tex.height);
-                    tex_store.insert(&id, tex, filter, None);
-                    notifications.push(LogicMsg::TextureLoaded {
-                        key: id,
-                        width,
-                        height,
-                    });
+                    tex_store.insert(&key, tex, filter, None);
+                    notifications.push(LogicMsg::TextureLoaded { key, width, height });
                 }
-                Err(e) => error!("Failed to upload in-memory texture '{}': {}", id, e),
+                Err(e) => error!("Failed to upload in-memory texture '{}': {}", key, e),
             },
             Err(e) => error!(
                 "Failed to decode in-memory texture '{}' (ext '{}'): {}",
-                id, ext, e
+                key, ext, e
             ),
         },
         RenderAssetCmd::Font {
-            id,
+            key,
             path,
             size,
             skip_if_loaded,
         } => {
-            if skip_if_loaded && fonts.meta.contains_key(&id) {
+            if skip_if_loaded && fonts.meta.contains_key(&key) {
                 debug!(
                     "process_render_asset_cmds: font '{}' already loaded, skipping",
-                    id
+                    key
                 );
                 return;
             }
             match load_font_with_mipmaps(rl, th, &path, size) {
                 Ok(font) => {
-                    debug!("Loaded font '{}' from '{}'", id, path);
+                    debug!("Loaded font '{}' from '{}'", key, path);
                     let metrics = extract_font_metrics(&font);
-                    fonts.add(&id, font);
-                    notifications.push(LogicMsg::FontLoaded { key: id, metrics });
+                    fonts.add(&key, font);
+                    notifications.push(LogicMsg::FontLoaded { key, metrics });
                 }
-                Err(err) => error!("Failed to load font '{}' from '{}': {}", id, path, err),
+                Err(err) => error!("Failed to load font '{}' from '{}': {}", key, path, err),
             }
         }
         RenderAssetCmd::Shader {
-            id,
+            key,
             vs_path,
             fs_path,
         } => {
@@ -195,29 +187,31 @@ pub(crate) fn apply_render_asset_cmd(
                 Ok(shader) if shader.is_shader_valid() => {
                     debug!(
                         "Loaded shader '{}' (vs: {:?}, fs: {:?})",
-                        id, vs_path, fs_path
+                        key, vs_path, fs_path
                     );
-                    shaders.add(&id, shader);
+                    shaders.add(&key, shader);
                 }
                 Ok(_) => error!(
                     "Shader '{}' loaded but is invalid (vs: {:?}, fs: {:?})",
-                    id, vs_path, fs_path
+                    key, vs_path, fs_path
                 ),
                 Err(e) => error!(
                     "Shader '{}' failed to load: {e} (vs: {:?}, fs: {:?})",
-                    id, vs_path, fs_path
+                    key, vs_path, fs_path
                 ),
             }
         }
-        RenderAssetCmd::ShaderFromMemory { id, vs_src, fs_src } => {
-            match rl.load_shader_from_memory(th, vs_src.as_deref(), fs_src.as_deref()) {
-                Ok(shader) => {
-                    debug!("Loaded shader '{}' from memory", id);
-                    shaders.add(&id, shader);
-                }
-                Err(e) => error!("Shader '{}' failed to load from memory: {e}", id),
+        RenderAssetCmd::ShaderFromMemory {
+            key,
+            vs_src,
+            fs_src,
+        } => match rl.load_shader_from_memory(th, vs_src.as_deref(), fs_src.as_deref()) {
+            Ok(shader) => {
+                debug!("Loaded shader '{}' from memory", key);
+                shaders.add(&key, shader);
             }
-        }
+            Err(e) => error!("Shader '{}' failed to load from memory: {e}", key),
+        },
         RenderAssetCmd::RasterizeText {
             key,
             font_key,

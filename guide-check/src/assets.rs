@@ -19,12 +19,12 @@ mod textures {
     use aberredengine::prelude::*;
 
     asset_cmds.write(RenderAssetCmd::Texture {
-        id: "player".to_string(),
+        key: "player".to_string(),
         path: "assets/textures/player.png".to_string(),
         filter: TextureFilter::Nearest,
     });
     asset_cmds.write(RenderAssetCmd::Texture {
-        id: "background".to_string(),
+        key: "background".to_string(),
         path: "assets/textures/background.png".to_string(),
         filter: TextureFilter::Nearest,
     });
@@ -58,7 +58,7 @@ mod textures {
 
     fn queue_from_memory(mut asset_cmds: MessageWriter<RenderAssetCmd>) { // GLUE
     asset_cmds.write(RenderAssetCmd::TextureFromMemory {
-        id: "intro_logo".to_string(),
+        key: "intro_logo".to_string(),
         ext: ".png".to_string(), // leading dot, matches raylib's file-type hint
         bytes: include_bytes!("../assets/textures/intro_logo.png").to_vec(),
         filter: TextureFilter::Nearest,
@@ -72,7 +72,7 @@ mod fonts {
 
     fn queue_font(mut asset_cmds: MessageWriter<RenderAssetCmd>) { // GLUE
     asset_cmds.write(RenderAssetCmd::Font {
-        id: "arcade".to_string(),
+        key: "arcade".to_string(),
         path: "assets/fonts/arcade.ttf".to_string(),
         size: 32,
         skip_if_loaded: false, // true = don't reload if "arcade" is already loaded
@@ -159,7 +159,7 @@ mod shaders {
 
     fn queue_shader(mut asset_cmds: MessageWriter<RenderAssetCmd>) { // GLUE
     asset_cmds.write(RenderAssetCmd::Shader {
-        id: "glow".to_string(),
+        key: "glow".to_string(),
         vs_path: None, // default vertex shader
         fs_path: Some("assets/shaders/glow.fs".to_string()),
     });
@@ -167,7 +167,7 @@ mod shaders {
 
     fn queue_shader_from_memory(mut asset_cmds: MessageWriter<RenderAssetCmd>) { // GLUE
     asset_cmds.write(RenderAssetCmd::ShaderFromMemory {
-        id: "glitch".to_string(),
+        key: "glitch".to_string(),
         vs_src: None, // default vertex shader
         fs_src: Some(include_str!("../assets/shaders/glitch.fs").to_string()),
     });
@@ -314,14 +314,14 @@ mod complete_setup_example {
     ) {
         // Textures — queued, loaded asynchronously on the render thread
         asset_cmds.write(RenderAssetCmd::Texture {
-            id: "player".to_string(),
+            key: "player".to_string(),
             path: "assets/textures/player.png".to_string(),
             filter: TextureFilter::Nearest,
         });
 
         // Fonts — mipmap generation is handled internally by the render thread
         asset_cmds.write(RenderAssetCmd::Font {
-            id: "arcade".to_string(),
+            key: "arcade".to_string(),
             path: "assets/fonts/arcade.ttf".to_string(),
             size: 32,
             skip_if_loaded: false,
@@ -333,7 +333,7 @@ mod complete_setup_example {
 
         // Shaders
         asset_cmds.write(RenderAssetCmd::Shader {
-            id: "glow".to_string(),
+            key: "glow".to_string(),
             vs_path: None,
             fs_path: Some("assets/shaders/glow.fs".to_string()),
         });
