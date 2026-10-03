@@ -83,14 +83,11 @@ pub struct TestWorld {
 }
 
 /// Builder for [`TestWorld`], mirroring [`EngineBuilder`]'s registrar
-/// surface (`on_setup`/`on_enter_play`/`add_system`/scenes/Lua) minus
+/// surface (`on_setup`/`add_system`/scenes/Lua) minus
 /// anything window/render-related.
 pub struct TestWorldBuilder {
     config: GameConfig,
     setup_hook: Option<HookRegistrar>,
-    enter_play_hook: Option<HookRegistrar>,
-    switch_scene_hook: Option<HookRegistrar>,
-    update_hook: Option<UpdateRegistrar>,
     extra_systems: Vec<UpdateRegistrar>,
     extra_observers: Vec<ObserverRegistrar>,
     scenes: Vec<String>,
@@ -118,9 +115,6 @@ impl TestWorldBuilder {
         Self {
             config: GameConfig::new(),
             setup_hook: None,
-            enter_play_hook: None,
-            switch_scene_hook: None,
-            update_hook: None,
             extra_systems: Vec::new(),
             extra_observers: Vec::new(),
             scenes: Vec::new(),
@@ -144,22 +138,6 @@ impl TestWorldBuilder {
     /// engine moves to `Playing` after it runs unless it requested another state.
     pub fn on_setup<M>(mut self, system: impl IntoSystem<(), (), M> + Send + 'static) -> Self {
         self.setup_hook = Some(hook_registrar(hook_keys::SETUP, system));
-        self
-    }
-
-    /// Register the `enter_play` hook.
-    pub fn on_enter_play<M>(mut self, system: impl IntoSystem<(), (), M> + Send + 'static) -> Self {
-        self.enter_play_hook = Some(hook_registrar(hook_keys::ENTER_PLAY, system));
-        self
-    }
-
-    /// Register the `switch_scene` hook (required if any scene is added
-    /// without using `add_scene`'s own `SceneManager` wiring).
-    pub fn on_switch_scene<M>(
-        mut self,
-        system: impl IntoSystem<(), (), M> + Send + 'static,
-    ) -> Self {
-        self.switch_scene_hook = Some(hook_registrar(hook_keys::SWITCH_SCENE, system));
         self
     }
 
@@ -258,25 +236,7 @@ impl TestWorldBuilder {
     #[cfg(feature = "lua")]
     /// Configure the harness for a Lua game, mirroring `EngineBuilder::with_lua`.
     pub fn with_lua(mut self, script_path: impl Into<PathBuf>) -> Self {
-        use aberred_lua::lua_plugin;
-
         self.lua_script = Some(script_path.into());
-        self.setup_hook = Some(hook_registrar(hook_keys::SETUP, lua_plugin::setup));
-        self.enter_play_hook = Some(hook_registrar(
-            hook_keys::ENTER_PLAY,
-            lua_plugin::enter_play,
-        ));
-        self.update_hook = Some(Box::new(|schedule: &mut Schedule| {
-            schedule.add_systems(
-                lua_plugin::update
-                    .run_if(aberred_core::systems::gamestate::state_is_playing)
-                    .in_set(crate::engine_app::SimSet::Bookkeeping),
-            );
-        }));
-        self.switch_scene_hook = Some(hook_registrar(
-            hook_keys::SWITCH_SCENE,
-            lua_plugin::switch_scene,
-        ));
         self
     }
 
@@ -288,10 +248,7 @@ impl TestWorldBuilder {
         let has_lua = self.lua_script.is_some();
         #[cfg(not(feature = "lua"))]
         let has_lua = false;
-        let driven_elsewhere =
-            has_lua || self.enter_play_hook.is_some() || self.switch_scene_hook.is_some();
-        let use_scene_manager =
-            ensure_main_scene(&mut self.scenes, &mut self.initial_scene, driven_elsewhere);
+        ensure_main_scene(&mut self.scenes, &mut self.initial_scene, has_lua);
 
         let (_tx_logic, rx_logic) = unbounded::<LogicMsg>();
         let (tx_render, rx_render) = unbounded::<RenderMsg>();
@@ -302,9 +259,6 @@ impl TestWorldBuilder {
         let mut init = LogicInit {
             config: self.config.clone(),
             setup_hook: self.setup_hook.take(),
-            enter_play_hook: self.enter_play_hook.take(),
-            switch_scene_hook: self.switch_scene_hook.take(),
-            update_hook: self.update_hook.take(),
             extra_systems: std::mem::take(&mut self.extra_systems),
             extra_observers: std::mem::take(&mut self.extra_observers),
             scenes: std::mem::take(&mut self.scenes),
@@ -331,7 +285,7 @@ impl TestWorldBuilder {
             .take()
             .expect("setup_logic_world always sets audio_stub_ends when stub_audio is true");
 
-        EngineBuilder::register_logic_systems(&mut init, &mut world, use_scene_manager)?;
+        EngineBuilder::register_logic_systems(&mut init, &mut world)?;
         EngineBuilder::spawn_observers(
             &mut world,
             has_lua,
@@ -339,11 +293,9 @@ impl TestWorldBuilder {
         );
 
         let (sim, present) = EngineBuilder::build_logic_schedules(
-            init.update_hook.take(),
             std::mem::take(&mut init.extra_systems),
             &mut world,
             has_lua,
-            use_scene_manager,
         )?;
 
         Ok(TestWorld {

@@ -187,11 +187,9 @@ impl EngineBuilder {
     /// structure guarantees the tick's `sim` run completes before
     /// `present` runs, which is the ordering those edges express.
     pub(crate) fn build_logic_schedules(
-        update_hook: Option<UpdateRegistrar>,
         extra_systems: Vec<UpdateRegistrar>,
         world: &mut World,
         has_lua: bool,
-        use_scene_manager: bool,
     ) -> Result<(Schedule, Schedule), EngineError> {
         let mut sim = Schedule::default();
         // Pinned unconditionally (not gated behind a deterministic-mode
@@ -205,8 +203,16 @@ impl EngineBuilder {
 
         Self::configure_sim_sets(&mut sim);
         Self::add_engine_sim_systems(&mut sim, has_lua);
-        Self::apply_user_registrars(&mut sim, update_hook, extra_systems);
-        Self::add_scene_manager_systems(&mut sim, use_scene_manager);
+        #[cfg(feature = "lua")]
+        if has_lua {
+            Self::add_lua_update(&mut sim);
+        }
+        for extra in extra_systems {
+            extra(&mut sim);
+        }
+        if !has_lua {
+            Self::add_scene_manager_systems(&mut sim);
+        }
 
         let mut present = Self::build_present_schedule();
         present.set_executor(SingleThreadedExecutor::new());
@@ -252,8 +258,8 @@ impl EngineBuilder {
     }
 
     /// Registers the engine's own `sim`-schedule systems (everything except
-    /// user-supplied hooks/systems, scene-manager systems, and the
-    /// `present` schedule -- see [`Self::apply_user_registrars`],
+    /// Lua's update, user-supplied systems, scene-manager systems, and the
+    /// `present` schedule -- see [`Self::build_logic_schedules`],
     /// [`Self::add_scene_manager_systems`], [`Self::build_present_schedule`]).
     fn add_engine_sim_systems(sim: &mut Schedule, has_lua: bool) {
         // --- SIM: signal intents + state bookkeeping, one-shot spawns ---
@@ -539,45 +545,36 @@ impl EngineBuilder {
         );
     }
 
-    /// Applies user-supplied `sim`-schedule registrars: the `update_hook`
-    /// installed by `.with_lua()`, plus every `extra_systems` closure
-    /// installed by `.add_system()`/`.configure_schedule()`. Each closure
-    /// supplies its own `.in_set(SimSet::X)` (see `add_system`/`with_lua`'s hook
-    /// installation for the concrete sets used); `configure_schedule`
-    /// closures are free to pick any `SimSet` (exported for exactly this).
-    fn apply_user_registrars(
-        sim: &mut Schedule,
-        update_hook: Option<UpdateRegistrar>,
-        extra_systems: Vec<UpdateRegistrar>,
-    ) {
-        if let Some(update_hook) = update_hook {
-            update_hook(sim);
-        }
-
-        for extra in extra_systems {
-            extra(sim);
-        }
+    /// Adds `lua_plugin::update` once per sim tick, in [`SimSet::Bookkeeping`]
+    /// (last among the engine's own groups) -- this is also where
+    /// `on_update_<scene>` itself is dispatched, after
+    /// `camera_follow_system` (see `lua_plugin::update`'s own doc comment for
+    /// the full rationale and the mid-tick scene-switch consequence).
+    #[cfg(feature = "lua")]
+    fn add_lua_update(sim: &mut Schedule) {
+        sim.add_systems(
+            aberred_lua::lua_plugin::update
+                .run_if(state_is_playing)
+                .in_set(SimSet::Bookkeeping),
+        );
     }
 
-    /// Registers the SceneManager's own `sim`-schedule systems, when
-    /// `.add_scene()` was used.
+    /// Registers the SceneManager's own `sim`-schedule systems: every game
+    /// without Lua has scenes (its own, or the implicit `"main"`).
     /// Accepted consequence: a scene switch resolved mid-tick runs the rest
     /// of that tick's pipeline against the newly-spawned scene, so the
     /// snapshot published at the end of that tick may show it partially
     /// constructed -- same accepted tradeoff as the Lua-direct switch path
-    /// (see `lua_plugin::update`'s doc comment and `with_lua()`'s
-    /// `update_hook` installation). `.add_scene()` (`use_scene_manager`)
-    /// and Lua's `.with_lua()` are mutually exclusive (`validate_builder`
-    /// rejects both `switch_scene_hook` and `use_scene_manager`), so this
-    /// and the Lua-direct path never run together.
-    fn add_scene_manager_systems(sim: &mut Schedule, use_scene_manager: bool) {
-        if use_scene_manager {
-            sim.add_systems(
-                scene_switch_poll
-                    .run_if(state_is_playing)
-                    .in_set(SimSet::Drain),
-            );
-        }
+    /// (see `lua_plugin::update`'s doc comment and [`Self::add_lua_update`]).
+    /// `.add_scene()` and Lua's `.with_lua()`
+    /// are mutually exclusive (`validate_builder`), so this and the
+    /// Lua-direct path never run together.
+    fn add_scene_manager_systems(sim: &mut Schedule) {
+        sim.add_systems(
+            scene_switch_poll
+                .run_if(state_is_playing)
+                .in_set(SimSet::Drain),
+        );
     }
 
     /// Builds (but does not initialize) the logic thread's `present`

@@ -24,10 +24,7 @@ pub(crate) type UpdateRegistrar = Box<dyn FnOnce(&mut Schedule) + Send>;
 pub(crate) type ObserverRegistrar = Box<dyn FnOnce(&mut World) + Send>;
 
 /// Build a [`HookRegistrar`] that registers `system` as a persistent system
-/// under `name` when run. Collapses the
-/// `Box::new(|world, store| register_persistent_system(world, store, name, system))`
-/// closure repeated across `on_setup`/`on_enter_play`/`on_switch_scene` and
-/// `with_lua`'s hook installations into one call site.
+/// under `name` when run (`on_setup` on both builders).
 pub(crate) fn hook_registrar<M>(
     name: &'static str,
     system: impl IntoSystem<(), (), M> + Send + 'static,

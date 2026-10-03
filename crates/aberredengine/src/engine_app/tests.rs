@@ -43,9 +43,6 @@ fn test_builder_default() {
     assert_eq!(builder.config_path, PathBuf::from("config.ini"));
     assert!(builder.title_override.is_none());
     assert!(builder.setup_hook.is_none());
-    assert!(builder.enter_play_hook.is_none());
-    assert!(builder.update_hook.is_none());
-    assert!(builder.switch_scene_hook.is_none());
     assert!(builder.scenes.is_empty());
     assert!(builder.initial_scene.is_none());
 }
@@ -110,9 +107,8 @@ fn test_raylib_log_level_from_rust_log_uses_global_directive_only() {
     );
 }
 
+#[cfg(feature = "lua")]
 fn dummy_setup() {}
-fn dummy_enter_play() {}
-fn dummy_switch_scene() {}
 
 // --- Input edge-latch (run_sim_tick) ---
 //
@@ -382,19 +378,17 @@ fn test_builder_with_lua() {
         builder.lua_script,
         Some(PathBuf::from("assets/scripts/main.lua"))
     );
-    assert!(builder.setup_hook.is_some());
-    assert!(builder.enter_play_hook.is_some());
-    assert!(builder.update_hook.is_some());
-    assert!(builder.switch_scene_hook.is_some());
+    // Lua's own hooks are registered from `lua_script` when the logic world
+    // is built, so the user's setup slot stays empty.
+    assert!(builder.setup_hook.is_none());
 }
 
 #[cfg(feature = "lua")]
 #[test]
 fn test_build_logic_schedules_without_lua_runtime_omits_lua_only_systems() {
     let mut world = World::new();
-    let (sim, _present) =
-        EngineBuilder::build_logic_schedules(None, Vec::new(), &mut world, false, false)
-            .expect("build_logic_schedules should succeed without Lua runtime");
+    let (sim, _present) = EngineBuilder::build_logic_schedules(Vec::new(), &mut world, false)
+        .expect("build_logic_schedules should succeed without Lua runtime");
     let sim_type_ids: Vec<_> = sim
         .systems()
         .expect("build_logic_schedules initializes the sim schedule")
@@ -432,15 +426,8 @@ fn test_build_logic_schedules_without_lua_runtime_omits_lua_only_systems() {
 #[test]
 fn test_build_logic_schedules_with_lua_orders_group_counts_before_lua_phase() {
     let mut world = World::new();
-    let builder = EngineBuilder::new().with_lua("assets/scripts/main.lua");
-    let (sim, present) = EngineBuilder::build_logic_schedules(
-        builder.update_hook,
-        Vec::new(),
-        &mut world,
-        true,
-        false,
-    )
-    .expect("build_logic_schedules should succeed with has_lua=true");
+    let (sim, present) = EngineBuilder::build_logic_schedules(Vec::new(), &mut world, true)
+        .expect("build_logic_schedules should succeed with has_lua=true");
 
     let sim_type_ids: Vec<_> = sim
         .systems()
@@ -501,36 +488,6 @@ fn test_build_logic_schedules_with_lua_orders_group_counts_before_lua_phase() {
 }
 
 // --- SceneManager builder tests ---
-
-#[test]
-fn test_add_scene_conflicts_with_on_switch_scene() {
-    let err = EngineBuilder::new()
-        .add_scene("menu")
-        .initial_scene("menu")
-        .on_switch_scene(dummy_switch_scene)
-        .try_run()
-        .expect_err("conflicting scene/switch_scene hooks should fail preflight");
-
-    assert!(
-        err.to_string()
-            .contains("EngineBuilder conflict: .add_scene() and .on_switch_scene()")
-    );
-}
-
-#[test]
-fn test_add_scene_conflicts_with_on_enter_play() {
-    let err = EngineBuilder::new()
-        .add_scene("menu")
-        .initial_scene("menu")
-        .on_enter_play(dummy_enter_play)
-        .try_run()
-        .expect_err("conflicting scene/enter_play hooks should fail preflight");
-
-    assert!(
-        err.to_string()
-            .contains("EngineBuilder conflict: .add_scene() and .on_enter_play()")
-    );
-}
 
 #[test]
 fn test_add_scene_requires_initial_scene() {
@@ -610,11 +567,11 @@ fn test_initial_scene_without_scenes() {
     );
 }
 
-/// Mirrors `try_run`'s own call (`use_scene_manager = !scenes.is_empty()`)
-/// without continuing into config loading / window creation.
+/// Mirrors `try_run`'s own calls without continuing into config loading /
+/// window creation.
 fn validate(builder: &mut EngineBuilder) -> Result<(), EngineError> {
-    let use_scene_manager = builder.ensure_main_scene();
-    builder.validate_builder(use_scene_manager)
+    builder.ensure_main_scene();
+    builder.validate_builder()
 }
 
 #[test]
@@ -863,24 +820,17 @@ fn validation_reports_the_earliest_conflict_first() {
 
 #[cfg(feature = "lua")]
 #[test]
-fn lua_conflict_names_the_first_user_hook_for_every_hook() {
-    let cases: [(EngineBuilder, &str); 3] = [
-        (
-            EngineBuilder::new().on_enter_play(dummy_enter_play),
-            "on_enter_play",
-        ),
-        (EngineBuilder::new().on_setup(dummy_setup), "on_setup"),
-        (
-            EngineBuilder::new().on_switch_scene(dummy_switch_scene),
-            "on_switch_scene",
-        ),
-    ];
-    for (builder, expected) in cases {
-        let err = validate(&mut builder.with_lua("main.lua")).unwrap_err();
-        assert!(
-            matches!(err, EngineError::LuaConflictsWithHooks { hook } if hook == expected),
-            "{expected}: {err}"
-        );
+fn lua_conflicts_with_an_explicit_setup_hook_in_either_order() {
+    for builder in [
+        EngineBuilder::new()
+            .on_setup(dummy_setup)
+            .with_lua("main.lua"),
+        EngineBuilder::new()
+            .with_lua("main.lua")
+            .on_setup(dummy_setup),
+    ] {
+        let err = validate(&mut { builder }).unwrap_err();
+        assert!(matches!(err, EngineError::LuaConflictsWithSetup), "{err}");
     }
 }
 
@@ -896,15 +846,6 @@ fn bump_ran(mut ran: ResMut<Ran>) {
 #[derive(Event)]
 struct Ping;
 
-#[test]
-fn first_user_hook_latches_the_first_on_hook_called() {
-    let builder = EngineBuilder::new()
-        .on_switch_scene(dummy_switch_scene)
-        .on_enter_play(dummy_enter_play)
-        .on_setup(dummy_setup);
-    assert_eq!(builder.first_user_hook, Some("on_switch_scene"));
-}
-
 #[cfg(feature = "lua")]
 #[test]
 fn with_lua_combines_with_add_system() {
@@ -914,15 +855,6 @@ fn with_lua_combines_with_add_system() {
             .add_system(bump_ran),
     )
     .unwrap();
-}
-
-#[cfg(feature = "lua")]
-#[test]
-fn with_lua_does_not_count_as_a_user_hook() {
-    let builder = EngineBuilder::new().with_lua("main.lua");
-    assert_eq!(builder.first_user_hook, None);
-    let builder = builder.on_setup(dummy_setup);
-    assert_eq!(builder.first_user_hook, Some("on_setup"));
 }
 
 /// Runs `schedule` once outside and once inside `GameStates::Playing`,

@@ -116,15 +116,15 @@ mod tween_components_in_rust {
     } // GLUE
 }
 
-// Spawning context: scene observers vs. raw hooks
-mod spawning_context_scene_observers_vs_raw_hooks {
+// Spawning context: observers and systems
+mod spawning_context_observers_and_systems {
     use aberredengine::prelude::*; // GLUE
 
     fn enter(_: On<SceneEntered>, mut commands: Commands) {
         commands.spawn(( /* ... */ ));
     }
 
-    fn my_enter_play(mut commands: Commands) {
+    fn my_update(mut commands: Commands) {
         commands.spawn(( /* ... */ ));
     }
 }

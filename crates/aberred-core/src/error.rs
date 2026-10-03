@@ -7,20 +7,6 @@ use std::path::PathBuf;
 #[derive(Debug, thiserror::Error)]
 pub enum EngineError {
     #[error(
-        "EngineBuilder conflict: .add_scene() and .on_switch_scene() cannot be used \
-         together. Use .add_scene() for SceneManager-based games, or \
-         .on_switch_scene() for full manual control -- not both."
-    )]
-    AddSceneConflictsWithSwitchScene,
-
-    #[error(
-        "EngineBuilder conflict: .add_scene() and .on_enter_play() cannot be used \
-         together. SceneManager owns the enter_play hook. Use .on_setup() for \
-         asset loading instead."
-    )]
-    AddSceneConflictsWithEnterPlay,
-
-    #[error(
         "EngineBuilder: .add_scene() requires .initial_scene(\"name\") to specify \
          which scene to enter first."
     )]
@@ -34,11 +20,10 @@ pub enum EngineError {
     LuaConflictsWithSceneManager,
 
     #[error(
-        "EngineBuilder conflict: .with_lua() replaces the setup/enter_play/update/\
-         switch_scene hooks; also calling .{hook}() is ambiguous. Remove the explicit \
-         hook call."
+        "EngineBuilder conflict: .with_lua() runs main.lua's on_setup(); also calling \
+         .on_setup() is ambiguous. Remove the .on_setup() call."
     )]
-    LuaConflictsWithHooks { hook: &'static str },
+    LuaConflictsWithSetup,
 
     #[error(
         "EngineBuilder conflict: .deterministic(seed) and .with_lua() cannot be used \

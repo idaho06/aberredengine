@@ -1,7 +1,8 @@
 //! Scene dispatch systems for Rust-native scene management.
 //!
-//! This module provides systems and types for the [`SceneManager`]
-//! pattern — an optional higher-level alternative to the raw `.on_switch_scene()` hook.
+//! This module provides the systems and types behind [`SceneManager`]: every
+//! Rust game runs in scenes (its own, or the implicit
+//! [`MAIN_SCENE`](crate::resources::signal_keys::MAIN_SCENE)).
 //!
 //! - [`scene_switch_system`] — engine-owned scene transition: [`SceneExited`] → teardown →
 //!   [`SceneEntered`]
@@ -253,8 +254,8 @@ pub fn in_scene(name: &'static str) -> impl FnMut(Option<Res<SceneManager>>) -> 
 /// Polls the `"switch_scene"` flag in [`WorldSignals`] and runs the
 /// scene switch system when set.
 ///
-/// Added to the update schedule automatically when using
-/// `aberredengine::EngineBuilder::add_scene()`.
+/// Added to the sim schedule for every game without Lua (all of them have
+/// scenes: their own, or the implicit `"main"`).
 pub fn scene_switch_poll(
     mut commands: Commands,
     mut world_signals: ResMut<WorldSignals>,

@@ -20,19 +20,17 @@
 //! # fn main() {}
 //! ```
 //!
-//! **Pure Rust game:**
+//! **Pure Rust game** (one implicit scene, `"main"`):
 //! ```rust,ignore
-//! use aberredengine::engine_app::EngineBuilder;
-//! use aberredengine::EngineError;
+//! use aberredengine::prelude::*;
 //!
 //! fn main() -> Result<(), EngineError> {
 //!     EngineBuilder::new()
 //!         .config("config.ini")
 //!         .title("My Game")
 //!         .on_setup(my_game::setup)
-//!         .on_enter_play(my_game::enter_play)
+//!         .on_scene_enter("main", my_game::spawn_world)
 //!         .add_system(my_game::update)
-//!         .on_switch_scene(my_game::switch_scene)
 //!         .try_run()
 //! }
 //! ```

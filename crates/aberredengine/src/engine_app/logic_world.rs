@@ -205,27 +205,42 @@ impl EngineBuilder {
     }
 
     /// Register the hook/scene one-shot systems into the LOGIC world (runs on
-    /// the logic thread; consumes the hooks out of `init`). The render-side
-    /// scene table was already cloned off before `init` crossed the thread
-    /// boundary.
+    /// the logic thread; consumes the setup hook and scenes out of `init`). A
+    /// Lua game gets `lua_plugin`'s setup/enter_play/switch_scene and no
+    /// scenes; every other game has at least `"main"`.
     pub(crate) fn register_logic_systems(
         init: &mut LogicInit,
         world: &mut World,
-        use_scene_manager: bool,
     ) -> Result<(), EngineError> {
         let mut systems_store = SystemsStore::new();
 
+        #[cfg(feature = "lua")]
+        if init.lua_script.is_some() {
+            use aberred_lua::lua_plugin;
+            register_persistent_system(
+                world,
+                &mut systems_store,
+                hook_keys::SETUP,
+                lua_plugin::setup,
+            );
+            register_persistent_system(
+                world,
+                &mut systems_store,
+                hook_keys::ENTER_PLAY,
+                lua_plugin::enter_play,
+            );
+            register_persistent_system(
+                world,
+                &mut systems_store,
+                hook_keys::SWITCH_SCENE,
+                lua_plugin::switch_scene,
+            );
+        }
         if let Some(hook) = init.setup_hook.take() {
             hook(world, &mut systems_store);
         }
-        if let Some(hook) = init.enter_play_hook.take() {
-            hook(world, &mut systems_store);
-        }
-        if let Some(hook) = init.switch_scene_hook.take() {
-            hook(world, &mut systems_store);
-        }
 
-        if use_scene_manager {
+        if !init.scenes.is_empty() {
             insert_scene_manager(
                 world,
                 std::mem::take(&mut init.scenes),

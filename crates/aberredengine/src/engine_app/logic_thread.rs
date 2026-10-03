@@ -68,9 +68,6 @@ enum TickInputSource {
 pub(crate) struct LogicInit {
     pub(crate) config: GameConfig,
     pub(crate) setup_hook: Option<HookRegistrar>,
-    pub(crate) enter_play_hook: Option<HookRegistrar>,
-    pub(crate) switch_scene_hook: Option<HookRegistrar>,
-    pub(crate) update_hook: Option<UpdateRegistrar>,
     pub(crate) extra_systems: Vec<UpdateRegistrar>,
     pub(crate) extra_observers: Vec<ObserverRegistrar>,
     pub(crate) scenes: Vec<String>,
@@ -385,7 +382,6 @@ pub(crate) fn apply_tick_input(world: &mut World, tick_input: &TickInput) {
 /// of `sim` rather than on `present`, for the same reason: asset loads must
 /// reach the render thread every tick, not just on a publish tick.
 fn logic_thread_main(mut init: LogicInit) -> Result<(), EngineError> {
-    let use_scene_manager = !init.scenes.is_empty();
     #[cfg(feature = "lua")]
     let has_lua = init.lua_script.is_some();
     #[cfg(not(feature = "lua"))]
@@ -396,7 +392,7 @@ fn logic_thread_main(mut init: LogicInit) -> Result<(), EngineError> {
 
     let mut world = EngineBuilder::setup_logic_world(&mut init)?;
     world.insert_resource(ReplayRuntimeState::default());
-    EngineBuilder::register_logic_systems(&mut init, &mut world, use_scene_manager)?;
+    EngineBuilder::register_logic_systems(&mut init, &mut world)?;
     EngineBuilder::spawn_observers(
         &mut world,
         has_lua,
@@ -404,11 +400,9 @@ fn logic_thread_main(mut init: LogicInit) -> Result<(), EngineError> {
     );
 
     let (mut sim, mut present) = EngineBuilder::build_logic_schedules(
-        init.update_hook.take(),
         std::mem::take(&mut init.extra_systems),
         &mut world,
         has_lua,
-        use_scene_manager,
     )?;
 
     let rx_logic = init.rx_logic;

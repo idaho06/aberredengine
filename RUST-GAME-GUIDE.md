@@ -141,7 +141,7 @@ The engine owns the main loop. You configure it through `EngineBuilder` and supp
 
 The engine runs **three separate ECS worlds on three threads**: render (the main thread — owns the raylib window and GPU resources), logic/sim (a spawned thread — this is where **all your game code runs**), and audio (a spawned thread, talked to via message queues you already use for sound/music). Understanding this is required to use the rest of this guide correctly.
 
-- **Every hook and callback you write — `on_setup`, `on_enter_play`, scene observers and systems (`.on_scene_enter()`/`.on_scene_exit()`/`.add_scene_system()`), systems added via `.add_system()`/`.configure_schedule()`, `Timer`/`Phase`/`CollisionRule` callbacks, and `.add_observer()` observers — runs on the LOGIC thread**, once per **sim tick**. Sim ticks happen at a configurable rate (`[simulation] hz` in `config.ini`, default 240) **decoupled from your render frame rate** — a sim tick is not the same thing as a rendered frame. `dt` is always the fixed constant `1.0 / hz` (scaled by `WorldTime.time_scale`), never a measured wall-clock value — a render stall does not spike `dt` or replay missed ticks, it simply dilates game time until the stall clears, and sim ticks keep running throughout.
+- **Every hook and callback you write — `on_setup`, scene observers and systems (`.on_scene_enter()`/`.on_scene_exit()`/`.add_scene_system()`), systems added via `.add_system()`/`.configure_schedule()`, `Timer`/`Phase`/`CollisionRule` callbacks, and `.add_observer()` observers — runs on the LOGIC thread**, once per **sim tick**. Sim ticks happen at a configurable rate (`[simulation] hz` in `config.ini`, default 240) **decoupled from your render frame rate** — a sim tick is not the same thing as a rendered frame. `dt` is always the fixed constant `1.0 / hz` (scaled by `WorldTime.time_scale`), never a measured wall-clock value — a render stall does not spike `dt` or replay missed ticks, it simply dilates game time until the stall clears, and sim ticks keep running throughout.
 - **Scene GUI and world-draw callbacks (`.add_scene_gui()`/`.add_scene_world_draw()`) are the one exception** — they run on the RENDER thread, inside the render pass itself. This is why they take a context struct (`GuiCtx`/`WorldDrawCtx`) of read-only snapshots instead of live, mutable `WorldSignals` — see below.
 - **A direct consequence**: logic-thread code (everything in the first bullet) can **never** take `RaylibAccess`, `NonSend<FontStore>`, `NonSend<ShaderStore>`, or `Res<TextureStore>` as a system parameter — those resources only exist in the render world. A logic-side system that requests one panics the first time it runs: Bevy checks a system's resources when the system runs, not when the schedule is built. There is no escape hatch to register a custom system on the render thread. This is why asset loading (Section 4) goes through a message queue instead of calling `rl.load_texture(...)` directly inside `setup()`.
 
@@ -193,7 +193,7 @@ fn my_gui(ctx: &mut GuiCtx) { /* draw with ctx.ui, queue signal writes, read typ
 fn my_world_draw(ctx: &mut WorldDrawCtx) { /* draw with ctx.draw, read camera/screen/app state */ }
 ```
 
-To trigger a scene transition from a system or observer, call `WorldSignals::request_scene(name)`. It sets the target scene name (`sk::SCENE`) and the `sk::SWITCH_SCENE` flag; the engine's `scene_switch_poll` system (registered automatically by `EngineBuilder::add_scene()`) picks up the flag each sim tick and triggers the transition.
+To trigger a scene transition from a system or observer, call `WorldSignals::request_scene(name)`. It sets the target scene name (`sk::SCENE`) and the `sk::SWITCH_SCENE` flag; the engine's `scene_switch_poll` system (registered automatically for every Rust game) picks up the flag each sim tick and triggers the transition.
 
 ```rust
 fn update(mut signals: ResMut<WorldSignals>) {
@@ -311,9 +311,9 @@ Register both render callbacks for the scene:
 .add_scene_world_draw("editor", editor_world_draw)
 ```
 
-### Approach B — Raw hooks (single-scene or full manual control)
+### Single-scene games
 
-For single-scene games or when you need full control over scene transitions, use the hook methods (`.on_setup()`, `.on_enter_play()`, `.on_switch_scene()`) plus `.add_system()` for per-tick logic. All are optional; register the ones your game needs:
+A game that registers no scene runs in one implicit scene named `"main"`. Load assets in `.on_setup()`, spawn the world when `"main"` is entered, and add per-tick systems with `.add_system()`. Every part is optional:
 
 ```rust
 use aberredengine::prelude::*;
@@ -323,12 +323,13 @@ fn main() -> Result<(), EngineError> {
         .config("config.ini")
         .title("My Game")
         .on_setup(my_setup)
-        .on_enter_play(my_enter_play)
+        .on_scene_enter("main", my_enter)
         .add_system(my_update)
-        .on_switch_scene(my_switch_scene)
         .try_run()
 }
 ```
+
+Add scenes with `.add_scene()` later and the same observers and systems move to their scenes.
 
 ### Startup error handling
 
@@ -336,7 +337,7 @@ Prefer `EngineBuilder::try_run()` in Rust applications. It returns `Result<(), a
 
 `EngineBuilder::run()` is still available as a convenience wrapper around `.try_run()`, but on startup failure it logs the error, prints it to stderr, and exits the process with status 1 instead of returning it to your `main` function.
 
-Each hook is a standard Bevy ECS system — it receives queries and resources as parameters. For example:
+Each hook and system is a standard Bevy ECS system — it receives queries and resources as parameters. For example:
 
 ```rust
 use aberredengine::prelude::*;
@@ -361,33 +362,9 @@ Setup ──→ Playing ──→ Quitting
 ```
 
 1. **Setup** — The engine calls the `setup` hook once, on the logic thread. Load assets here (textures, fonts, sounds, shaders, animations) — see [Section 4](#4-loading-assets) for how texture/font/shader loading works. Omit `.on_setup()` if you have nothing to load. Once the hook has run, the engine moves to `Playing` on its own, as soon as every load queued so far has been answered (see [Waiting for loads](#waiting-for-loads)); a failed load counts as answered. A hook that requests `Playing` itself waits the same way. A hook that requests another state through `ResMut<NextGameState>` (e.g. `GameStates::Quitting`) gets it at once.
-2. **Playing** — The engine transitions to playing, calls `enter_play` (or enters the initial scene, triggering `SceneEntered`), then runs your `.add_system()` systems (and the active scene's `.add_scene_system()` systems) once per sim tick.
-3. **Scene switches** — With the SceneManager, setting the `"switch_scene"` flag on `WorldSignals` runs the exit→enter sequence on the next sim tick. With raw hooks, only a `MenuAction::SetScene` menu item runs the `switch_scene` hook; nothing polls the flag in a pure-Rust game unless you register a poll system (see below).
+2. **Playing** — The engine transitions to playing, enters the initial scene (triggering `SceneEntered`), then runs your `.add_system()` systems (and the active scene's `.add_scene_system()` systems) once per sim tick.
+3. **Scene switches** — `WorldSignals::request_scene(name)` (which sets the `"switch_scene"` flag) runs the exit→enter sequence on the next sim tick; a `MenuAction::SetScene` menu item switches right away.
 4. **Quitting** — When the game state becomes `GameStates::Quitting` (via `NextGameState::set(GameStates::Quitting)`, `WorldSignals::request_quit()`, or a `MenuAction::QuitGame` menu item) or the window is closed, the engine shuts down. Timer, phase, collision and menu callbacks use `ctx.world_signals.request_quit()`, since `GameCtx` has no `NextGameState`.
-
-> **With raw hooks, the `"switch_scene"` flag needs a poll system.** The SceneManager polls it for you; with `.on_switch_scene()` nothing does, so setting the flag from a callback has no effect. Run the hook yourself:
->
-> ```rust
-> use aberredengine::prelude::*;
-> use aberredengine::core::resources::systemsstore::{self as hook_keys, SystemsStore};
->
-> fn switch_on_flag(
->     mut signals: ResMut<WorldSignals>,
->     systems: Res<SystemsStore>,
->     mut commands: Commands,
-> ) {
->     if signals.take_flag(sk::SWITCH_SCENE)
->         && let Some(switch_scene) = systems.get(hook_keys::SWITCH_SCENE)
->     {
->         commands.run_system(*switch_scene);
->     }
-> }
->
-> EngineBuilder::new()
->     .on_switch_scene(my_switch_scene)
->     .add_system(switch_on_flag)
->     // …
-> ```
 
 ### Builder method reference
 
@@ -397,8 +374,6 @@ Setup ──→ Playing ──→ Quitting
 | `.config_str(content)` | Load INI config from an embedded `&'static str` instead of a file. Takes precedence over `.config(path)`. Useful for tests or games that ship with bundled defaults. |
 | `.title(name)` | Window title (overrides config) |
 | `.on_setup(system)` | Asset loading hook (called once in the `Setup` state, on the logic thread). Optional; the engine moves to `Playing` after it runs. |
-| `.on_enter_play(system)` | Called once when transitioning to `Playing`. Optional with raw hooks; the SceneManager supplies its own. |
-| `.on_switch_scene(system)` | Called when a scene transition is requested |
 | `.add_scene(name, descriptor)` | Register a named scene (SceneManager path) |
 | `.add_scene_gui(scene, callback)` | Draw ImGui widgets every render frame while `scene` is active (render thread). See [ImGui GUI callback](#imgui-gui-callback-rust-only). |
 | `.add_scene_world_draw(scene, callback)` | Draw world-space overlays every render frame while `scene` is active (render thread). See [World-space draw callback](#world-space-draw-callback-rust-only). |
@@ -417,7 +392,7 @@ Setup ──→ Playing ──→ Quitting
 | `.try_run()` | Start the engine and return `Result<(), aberredengine::EngineError>` on startup failure. Recommended for Rust `main`. |
 | `.run()` | Convenience wrapper around `.try_run()` that logs the error, prints it to stderr, and exits the process with status 1 on startup failure. |
 
-**Conflict rules:** `.add_scene()` cannot be combined with `.on_switch_scene()`, `.on_enter_play()`, or `.with_lua()` — the SceneManager owns those hooks, and a Lua game drives scenes from `main.lua`'s scene registry instead. `.add_scene()` also requires `.initial_scene(...)`, and that name must match a scene actually registered via `.add_scene()` — a missing or misspelled `.initial_scene(...)` is a startup error, and so is calling `.initial_scene(...)` with no `.add_scene()` calls at all. `.with_lua()` also conflicts with any explicit `.on_setup()`/`.on_enter_play()`/`.on_switch_scene()` call, in either order — it installs its own hooks, and mixing in your own is ambiguous. `.add_system()` combines with `.with_lua()` freely. Use `.on_setup()` for asset loading in the SceneManager approach. With `.try_run()`, all of these are returned as startup errors instead of panicking; `.run()` prints the error to stderr and exits with a nonzero status instead of failing silently.
+**Conflict rules:** `.add_scene()` cannot be combined with `.with_lua()` — a Lua game drives scenes from `main.lua`'s scene registry instead. `.add_scene()` requires `.initial_scene(...)`, and that name must match a scene actually registered via `.add_scene()` — a missing or misspelled `.initial_scene(...)` is a startup error, and so is calling `.initial_scene(...)` with no `.add_scene()` calls at all. Every scene named by `.add_scene_system()`, `.on_scene_enter()`/`.on_scene_exit()` or `.add_scene_gui()`/`.add_scene_world_draw()` must be registered too (the implicit `"main"` counts). `.with_lua()` also conflicts with an explicit `.on_setup()` call, in either order — it installs its own setup hook, and mixing in yours is ambiguous. `.add_system()` combines with `.with_lua()` freely. With `.try_run()`, all of these are returned as startup errors instead of panicking; `.run()` prints the error to stderr and exits with a nonzero status instead of failing silently.
 
 ### Custom systems and observers
 
@@ -676,7 +651,7 @@ This is useful for automated testing (replay a fixed input script, assert on the
 - `WorldTime` doesn't advance during Setup (in every mode): `elapsed` and `frame_count` are `0` on the first `Playing` tick, and `delta` stays `0` until then.
 - A replay records and plays back from the first `Playing` tick; Setup runs live, loads included, in both.
 - In deterministic mode, input that arrives during Setup is held back. Key and mouse samples are dropped, so F10/F11 do nothing while loading. GUI intents and the latest screen size are applied on the first `Playing` tick.
-- Engine systems that don't use `delta` still run during Setup: collision rules, Rust phase `on_update`, group counts. Spawn gameplay entities in `on_enter_play` or the initial scene's `SceneEntered` observer, not in the setup hook, so a longer Setup can't change them.
+- Engine systems that don't use `delta` still run during Setup: collision rules, Rust phase `on_update`, group counts. Spawn gameplay entities in the initial scene's `SceneEntered` observer, not in the setup hook, so a longer Setup can't change them.
 
 **Assets load during Setup.** A load finishes at a wall-clock time, so a deterministic game can't change its loaded assets while `Playing`:
 
@@ -1181,7 +1156,7 @@ fn setup(mut assets: AssetLoader, mut anim_store: ResMut<AnimationStore>) -> Res
 }
 ```
 
-Setup waits for these loads, so they're ready by `on_enter_play`/the initial scene's `SceneEntered`. Assets loaded later, during `Playing`, follow the load-then-use gap described in the Textures/Fonts subsections.
+Setup waits for these loads, so they're ready by the initial scene's `SceneEntered`. Assets loaded later, during `Playing`, follow the load-then-use gap described in the Textures/Fonts subsections.
 
 ---
 
@@ -1365,9 +1340,9 @@ ctx.commands.spawn((
 
 > **Important:** The generic parameter must match the component you want the engine to animate. For example, use `Tween<MapPosition>` with `MapPosition`, not `Tween<Vec2>`. The tween systems query concrete ECS component types, not raw value types.
 
-### Spawning context: scene observers vs. raw hooks
+### Spawning context: observers and systems
 
-In **scene observers and systems**, take `Commands` as a parameter:
+In **scene observers**, take `Commands` as a parameter:
 
 ```rust
 fn enter(_: On<SceneEntered>, mut commands: Commands) {
@@ -1375,10 +1350,10 @@ fn enter(_: On<SceneEntered>, mut commands: Commands) {
 }
 ```
 
-In **raw hooks**, likewise:
+In **systems** (the setup hook, `.add_system()`, `.add_scene_system()`), likewise:
 
 ```rust
-fn my_enter_play(mut commands: Commands) {
+fn my_update(mut commands: Commands) {
     commands.spawn(( /* ... */ ));
 }
 ```
@@ -1454,7 +1429,7 @@ Scene transitions work by running the `scene_switch_system` as a one-shot system
 
 **1. Menu-driven (recommended):** Use `MenuAction::SetScene("level01")` — the menu system calls `commands.run_system()` internally via `dispatch_menu_action`.
 
-**2. Flag-based from systems and observers:** Call `WorldSignals::request_scene(name)`, which sets the target scene name and the `sk::SWITCH_SCENE` flag. The engine's `scene_switch_poll` system (registered automatically by `EngineBuilder::add_scene()`) picks up the flag each sim tick and triggers the transition:
+**2. Flag-based from systems and observers:** Call `WorldSignals::request_scene(name)`, which sets the target scene name and the `sk::SWITCH_SCENE` flag. The engine's `scene_switch_poll` system (registered automatically for every Rust game) picks up the flag each sim tick and triggers the transition:
 
 ```rust
 fn update(mut signals: ResMut<WorldSignals>) {
@@ -2594,7 +2569,7 @@ aberredengine = { path = "../aberredengine/crates/aberredengine", default-featur
 
 Repeat the exact source of your `[dependencies]` entry (the same `path`, or the same `git` plus `branch`/`tag`/`rev`): Cargo rejects a crate whose dependency and dev-dependency point to different sources.
 
-`TestWorld::builder()` takes the same registration calls as `EngineBuilder` (`on_setup`, `on_enter_play`, `add_system`, `configure_schedule`, `add_observer`, `add_scene`/`initial_scene`, `deterministic`, plus `config(GameConfig)`). Like a real game, it moves from `Setup` to `Playing` on its own. `tick(n, dt)` runs `n` sim ticks with a fixed `dt`, and `tw.world` is a plain Bevy `World` to spawn into and inspect:
+`TestWorld::builder()` takes the same registration calls as `EngineBuilder` (`on_setup`, `add_system`, `add_system_if`, `add_scene_system`, `on_scene_enter`/`on_scene_exit`, `configure_schedule`, `add_observer`, `add_scene`/`initial_scene`, `deterministic`, plus `config(GameConfig)`). Like a real game, it moves from `Setup` to `Playing` on its own. `tick(n, dt)` runs `n` sim ticks with a fixed `dt`, and `tw.world` is a plain Bevy `World` to spawn into and inspect:
 
 ```rust
 #[cfg(test)]

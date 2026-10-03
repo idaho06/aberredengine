@@ -7,12 +7,10 @@ use super::registrar::{
     HookRegistrar, ObserverRegistrar, UpdateRegistrar, conditional_system_registrar,
     hook_registrar, observer_registrar, scene_observer_registrar, system_registrar,
 };
-#[cfg(any(doc, feature = "lua"))] // doc links, and with_lua's update hook
+#[cfg(doc)] // doc links
 use super::schedule::SimSet;
 use aberred_core::events::scene::{SceneEntered, SceneExited};
 use aberred_core::resources::systemsstore as hook_keys;
-#[cfg(feature = "lua")]
-use aberred_core::systems::gamestate::state_is_playing;
 use aberred_core::systems::scene_dispatch::{WorldDrawCallback, in_scene};
 use aberred_render::resources::scene_table::{GuiCallback, RenderSceneTable, SceneRender};
 use rustc_hash::FxHashMap;
@@ -20,11 +18,9 @@ use rustc_hash::FxHashMap;
 /// Builder for bootstrapping the engine.
 ///
 /// Handles world setup, window init, resources, system schedule, and main loop.
-/// The developer supplies only game-specific hooks: `setup`, `enter_play`,
-/// `update`, and `switch_scene`.
-///
-/// In addition to the single-system hooks, the builder supports registering
-/// multiple per-frame systems ([`add_system`](Self::add_system),
+/// The developer supplies an optional `setup` hook, scenes (or the implicit
+/// `"main"` scene) with their observers and systems, and any number of
+/// per-frame systems ([`add_system`](Self::add_system),
 /// [`configure_schedule`](Self::configure_schedule)) and persistent observers
 /// ([`add_observer`](Self::add_observer)) for custom event handling.
 #[must_use = "EngineBuilder does nothing until .run() is called"]
@@ -32,10 +28,9 @@ pub struct EngineBuilder {
     pub(super) config_path: PathBuf,
     pub(super) config_str: Option<&'static str>,
     pub(super) title_override: Option<String>,
+    /// The user's `.on_setup()` hook. A Lua game's setup comes from
+    /// `register_logic_systems`, so this never holds Lua's.
     pub(super) setup_hook: Option<HookRegistrar>,
-    pub(super) enter_play_hook: Option<HookRegistrar>,
-    pub(super) update_hook: Option<UpdateRegistrar>,
-    pub(super) switch_scene_hook: Option<HookRegistrar>,
     pub(super) scenes: Vec<String>,
     /// `.add_scene_gui()`/`.add_scene_world_draw()` registrations: the render
     /// thread's per-scene callback table.
@@ -49,11 +44,6 @@ pub struct EngineBuilder {
     /// `on_scene_enter`, `on_scene_exit`), checked against `scenes` by
     /// `validate_builder`.
     pub(super) scene_refs: Vec<(&'static str, &'static str)>,
-    /// Name of the first `on_*` hook method explicitly called by the
-    /// developer, tracked so `validate_builder` can detect a conflict with
-    /// `.with_lua()` (which installs its own four hooks unconditionally)
-    /// regardless of call order.
-    pub(super) first_user_hook: Option<&'static str>,
     #[cfg(feature = "lua")]
     pub(super) lua_script: Option<PathBuf>,
     /// `Some(seed)` when `.deterministic(seed)` was called -- see that
@@ -78,9 +68,6 @@ impl EngineBuilder {
             config_str: None,
             title_override: None,
             setup_hook: None,
-            enter_play_hook: None,
-            update_hook: None,
-            switch_scene_hook: None,
             scenes: Vec::new(),
             scene_render: FxHashMap::default(),
             initial_scene: None,
@@ -88,7 +75,6 @@ impl EngineBuilder {
             extra_systems: Vec::new(),
             extra_observers: Vec::new(),
             scene_refs: Vec::new(),
-            first_user_hook: None,
             #[cfg(feature = "lua")]
             lua_script: None,
             deterministic_seed: None,
@@ -131,32 +117,6 @@ impl EngineBuilder {
     /// under the key `"setup"`.
     pub fn on_setup<M>(mut self, system: impl IntoSystem<(), (), M> + Send + 'static) -> Self {
         self.setup_hook = Some(hook_registrar(hook_keys::SETUP, system));
-        self.first_user_hook.get_or_insert("on_setup");
-        self
-    }
-
-    /// Register the `enter_play` hook (called when transitioning to `Playing`).
-    ///
-    /// Optional. With `.add_scene()` the SceneManager supplies its own.
-    ///
-    /// The system is registered into [`SystemsStore`](aberred_core::resources::systemsstore::SystemsStore)
-    /// under the key `"enter_play"`.
-    pub fn on_enter_play<M>(mut self, system: impl IntoSystem<(), (), M> + Send + 'static) -> Self {
-        self.enter_play_hook = Some(hook_registrar(hook_keys::ENTER_PLAY, system));
-        self.first_user_hook.get_or_insert("on_enter_play");
-        self
-    }
-
-    /// Register the `switch_scene` hook (called when a scene transition is requested).
-    ///
-    /// The system is registered into [`SystemsStore`](aberred_core::resources::systemsstore::SystemsStore)
-    /// under the key `"switch_scene"`.
-    pub fn on_switch_scene<M>(
-        mut self,
-        system: impl IntoSystem<(), (), M> + Send + 'static,
-    ) -> Self {
-        self.switch_scene_hook = Some(hook_registrar(hook_keys::SWITCH_SCENE, system));
-        self.first_user_hook.get_or_insert("on_switch_scene");
         self
     }
 
@@ -366,8 +326,7 @@ impl EngineBuilder {
     ///
     /// # Errors (at `.run()`/`.try_run()`)
     ///
-    /// - If `.add_scene()` is combined with `.on_switch_scene()`, `.on_enter_play()`,
-    ///   or `.with_lua()`
+    /// - If `.add_scene()` is combined with `.with_lua()`
     /// - If `.add_scene()` is used without `.initial_scene()`, or `.initial_scene()`
     ///   names a scene that was never registered
     ///
@@ -448,32 +407,7 @@ impl EngineBuilder {
     /// Lua runtime with the given script path.
     #[cfg(feature = "lua")]
     pub fn with_lua(mut self, script_path: impl Into<PathBuf>) -> Self {
-        use aberred_lua::lua_plugin;
-
         self.lua_script = Some(script_path.into());
-
-        self.setup_hook = Some(hook_registrar(hook_keys::SETUP, lua_plugin::setup));
-        self.enter_play_hook = Some(hook_registrar(
-            hook_keys::ENTER_PLAY,
-            lua_plugin::enter_play,
-        ));
-        // lua_plugin::update runs once per sim tick, in SimSet::Bookkeeping
-        // (last among the engine's own groups) -- this is also where
-        // on_update_<scene> itself is dispatched now, restoring the
-        // pre-thread-split engine's explicit `.after(camera_follow_system)`
-        // guarantee (see lua_plugin::update's own doc comment for the full
-        // rationale and the mid-tick scene-switch consequence).
-        self.update_hook = Some(Box::new(|schedule: &mut Schedule| {
-            schedule.add_systems(
-                lua_plugin::update
-                    .run_if(state_is_playing)
-                    .in_set(SimSet::Bookkeeping),
-            );
-        }));
-        self.switch_scene_hook = Some(hook_registrar(
-            hook_keys::SWITCH_SCENE,
-            lua_plugin::switch_scene,
-        ));
         self
     }
 

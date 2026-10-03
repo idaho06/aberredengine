@@ -110,11 +110,10 @@ mod world_space_draw_callback {
     } // GLUE
 }
 
-// Approach B — Raw hooks
-mod approach_b_raw_hooks {
+// Single-scene games
+mod single_scene_games {
     fn my_setup() {} // GLUE
-    fn my_enter_play() {} // GLUE
-    fn my_switch_scene() {} // GLUE
+    fn my_enter(_: aberredengine::prelude::On<aberredengine::prelude::SceneEntered>) {} // GLUE
 
     use aberredengine::prelude::*;
 
@@ -123,9 +122,8 @@ mod approach_b_raw_hooks {
             .config("config.ini")
             .title("My Game")
             .on_setup(my_setup)
-            .on_enter_play(my_enter_play)
+            .on_scene_enter("main", my_enter)
             .add_system(my_update)
-            .on_switch_scene(my_switch_scene)
             .try_run()
     }
 
@@ -325,34 +323,6 @@ mod determinism_and_replay {
         // …
         .try_run()
         .expect("engine startup failed");
-    } // GLUE
-}
-
-// Game lifecycle: switch_scene poll with raw hooks
-mod switch_on_flag {
-    use aberredengine::prelude::*; // GLUE
-    fn my_switch_scene() {} // GLUE
-
-    fn register() -> EngineBuilder { // GLUE
-    use aberredengine::prelude::*;
-    use aberredengine::core::resources::systemsstore::{self as hook_keys, SystemsStore};
-
-    fn switch_on_flag(
-        mut signals: ResMut<WorldSignals>,
-        systems: Res<SystemsStore>,
-        mut commands: Commands,
-    ) {
-        if signals.take_flag(sk::SWITCH_SCENE)
-            && let Some(switch_scene) = systems.get(hook_keys::SWITCH_SCENE)
-        {
-            commands.run_system(*switch_scene);
-        }
-    }
-
-    EngineBuilder::new()
-        .on_switch_scene(my_switch_scene)
-        .add_system(switch_on_flag)
-        // …
     } // GLUE
 }
 

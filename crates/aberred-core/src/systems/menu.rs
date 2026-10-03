@@ -619,13 +619,13 @@ pub fn dispatch_menu_action(
                 scene_name
             );
             ctx.world_signals.set_string(sk::SCENE, scene_name.clone());
-            // Startup validation only requires a switch_scene hook for Lua / scene-manager /
-            // custom-hook games, so a Rust-only game can reach this without one: log, don't panic.
+            // Every engine-built game registers switch_scene (the scene manager's or Lua's);
+            // a bare world without one logs instead of panicking.
             match systems_store.get(hook_keys::SWITCH_SCENE) {
                 Some(switch_scene) => ctx.commands.run_system(*switch_scene),
                 None => log::error!(
                     "menu action SetScene('{scene_name}'): no switch_scene system is registered \
-                     (use Lua, the scene manager, or EngineBuilder::on_switch_scene); ignoring"
+                     (the scene manager and Lua both register one); ignoring"
                 ),
             }
         }

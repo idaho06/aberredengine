@@ -3,36 +3,32 @@ use aberred_core::error::EngineError;
 use aberred_core::resources::signal_keys as sk;
 use aberred_core::resources::worldsignals::MAX_GROUP_NAME_LEN;
 
-/// Registers and enters [`sk::MAIN_SCENE`] when nothing else drives scenes:
-/// no `.add_scene()`, no `.initial_scene()`, and no `driven_elsewhere` (Lua or
-/// raw hooks). Returns whether the game uses the scene manager. Shared by
-/// `EngineBuilder::try_run` and `TestWorldBuilder::build`.
+/// Registers and enters [`sk::MAIN_SCENE`] when the game registers no scene of
+/// its own: no `.add_scene()`, no `.initial_scene()` and no Lua (which drives
+/// scenes from `main.lua`). Shared by `EngineBuilder::try_run` and
+/// `TestWorldBuilder::build`.
 pub(crate) fn ensure_main_scene(
     scenes: &mut Vec<String>,
     initial_scene: &mut Option<String>,
-    driven_elsewhere: bool,
-) -> bool {
-    if scenes.is_empty() && initial_scene.is_none() && !driven_elsewhere {
+    has_lua: bool,
+) {
+    if scenes.is_empty() && initial_scene.is_none() && !has_lua {
         scenes.push(sk::MAIN_SCENE.to_owned());
         *initial_scene = Some(sk::MAIN_SCENE.to_owned());
     }
-    !scenes.is_empty()
 }
 
 impl EngineBuilder {
-    /// See [`ensure_main_scene`]; returns whether the game uses the scene
-    /// manager. Runs before validation, so `.add_scene_system("main", ..)` and
-    /// friends validate against it.
-    pub(super) fn ensure_main_scene(&mut self) -> bool {
-        let driven_elsewhere = self.has_lua_script()
-            || self.enter_play_hook.is_some()
-            || self.switch_scene_hook.is_some();
-        ensure_main_scene(&mut self.scenes, &mut self.initial_scene, driven_elsewhere)
+    /// See [`ensure_main_scene`]. Runs before validation, so
+    /// `.add_scene_system("main", ..)` and friends validate against it.
+    pub(super) fn ensure_main_scene(&mut self) {
+        let has_lua = self.has_lua_script();
+        ensure_main_scene(&mut self.scenes, &mut self.initial_scene, has_lua);
     }
 
-    pub(super) fn validate_builder(&self, use_scene_manager: bool) -> Result<(), EngineError> {
-        self.validate_lua_conflicts(use_scene_manager)?;
-        self.validate_scene_manager(use_scene_manager)?;
+    pub(super) fn validate_builder(&self) -> Result<(), EngineError> {
+        self.validate_lua_conflicts()?;
+        self.validate_scene_manager()?;
         self.validate_scene_refs()?;
         self.validate_deterministic()?;
         self.validate_replay()?;
@@ -58,7 +54,7 @@ impl EngineBuilder {
 
     /// Whether `.with_lua()` was called -- always `false` when the `lua`
     /// feature is disabled (`lua_script` doesn't exist on the builder then).
-    fn has_lua_script(&self) -> bool {
+    pub(super) fn has_lua_script(&self) -> bool {
         #[cfg(feature = "lua")]
         {
             self.lua_script.is_some()
@@ -69,41 +65,32 @@ impl EngineBuilder {
         }
     }
 
-    /// Checks `.with_lua()` against `.add_scene()` and against any explicitly
-    /// called `.on_*()` hook, regardless of call order (`.with_lua()`
-    /// installs its own four hooks unconditionally, so by validation time
-    /// the hook `Option` fields alone can't tell "user set this" apart from
-    /// "with_lua set this" -- that's what `first_user_hook` tracks separately).
-    fn validate_lua_conflicts(&self, use_scene_manager: bool) -> Result<(), EngineError> {
+    /// Checks `.with_lua()` against `.add_scene()` and `.on_setup()`: a Lua
+    /// game's setup is `main.lua`'s `on_setup()`.
+    fn validate_lua_conflicts(&self) -> Result<(), EngineError> {
         if !self.has_lua_script() {
             return Ok(());
         }
-        if use_scene_manager {
+        if !self.scenes.is_empty() {
             return Err(EngineError::LuaConflictsWithSceneManager);
         }
-        if let Some(hook) = self.first_user_hook {
-            return Err(EngineError::LuaConflictsWithHooks { hook });
+        if self.setup_hook.is_some() {
+            return Err(EngineError::LuaConflictsWithSetup);
         }
         Ok(())
     }
 
-    /// Checks `.add_scene()`/`.initial_scene()` consistency: no conflicting
-    /// hooks, `initial_scene` is set and matches a registered scene name
-    /// (SceneManager path), or `initial_scene` is unset (non-SceneManager path).
-    fn validate_scene_manager(&self, use_scene_manager: bool) -> Result<(), EngineError> {
-        if !use_scene_manager {
+    /// Checks `.add_scene()`/`.initial_scene()` consistency: `initial_scene` is
+    /// set and matches a registered scene name, or, with no scenes (Lua),
+    /// `initial_scene` is unset.
+    fn validate_scene_manager(&self) -> Result<(), EngineError> {
+        if self.scenes.is_empty() {
             if self.initial_scene.is_some() {
                 return Err(EngineError::InitialSceneWithoutScenes);
             }
             return Ok(());
         }
 
-        if self.switch_scene_hook.is_some() {
-            return Err(EngineError::AddSceneConflictsWithSwitchScene);
-        }
-        if self.enter_play_hook.is_some() {
-            return Err(EngineError::AddSceneConflictsWithEnterPlay);
-        }
         let Some(initial_scene) = &self.initial_scene else {
             return Err(EngineError::AddSceneRequiresInitialScene);
         };

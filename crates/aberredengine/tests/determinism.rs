@@ -25,11 +25,13 @@ use aberredengine::core::components::collision::{BoxSides, CollisionRule};
 use aberredengine::core::components::group::Group;
 use aberredengine::core::components::mapposition::MapPosition;
 use aberredengine::core::events::input::InputAction;
+use aberredengine::core::events::scene::SceneEntered;
 use aberredengine::core::protocol::raw_input::RawDeviceSnapshot;
 use aberredengine::core::protocol::tick_input::TickInput;
 use aberredengine::core::resources::input::InputState;
 use aberredengine::core::resources::screensize::ScreenSize;
 use aberredengine::core::resources::signal_intents::SignalIntent;
+use aberredengine::core::resources::signal_keys as sk;
 use aberredengine::core::resources::worldsignals::WorldSignals;
 use aberredengine::core::systems::GameCtx;
 use aberredengine::raylib::ffi::KeyboardKey;
@@ -679,7 +681,7 @@ use aberredengine::core::systems::asset_loader::AssetLoader;
 
 /// A deterministic `TestWorld` whose Setup lasts `setup_ticks` ticks (its
 /// one texture load is answered after that many ticks), ticked to its first
-/// `Playing` tick. `on_enter_play` spawns a moving body.
+/// `Playing` tick. Entering the implicit `"main"` scene spawns a moving body.
 fn world_after_setup_of(setup_ticks: u32) -> TestWorld {
     let mut tw = TestWorldBuilder::new()
         .deterministic(7)
@@ -687,11 +689,14 @@ fn world_after_setup_of(setup_ticks: u32) -> TestWorld {
             assets.load_texture("player", "player.png")?;
             Ok(())
         })
-        .on_enter_play(|mut commands: Commands| {
-            let mut body = RigidBody::new();
-            body.velocity = Vec2::new(30.0, 0.0);
-            commands.spawn((MapPosition::new(0.0, 0.0), body));
-        })
+        .on_scene_enter(
+            sk::MAIN_SCENE,
+            |_: On<SceneEntered>, mut commands: Commands| {
+                let mut body = RigidBody::new();
+                body.velocity = Vec2::new(30.0, 0.0);
+                commands.spawn((MapPosition::new(0.0, 0.0), body));
+            },
+        )
         .build()
         .expect("build should succeed");
     tw.tick(setup_ticks, DT);
@@ -904,7 +909,7 @@ use aberredengine::core::systems::tilemap::tilemap_texture_key;
 
 const TILEMAP_DIR: &str = "assets/tilemaps/sidescroller_test01";
 
-/// A deterministic world in `Playing` whose `on_enter_play` spawns a
+/// A deterministic world in `Playing` whose `"main"` scene entry spawns a
 /// tilemap; `preload` decides whether the setup hook loads its atlas.
 fn world_spawning_a_tilemap(preload: bool) -> TestWorld {
     let mut tw = TestWorldBuilder::new()
@@ -915,9 +920,12 @@ fn world_spawning_a_tilemap(preload: bool) -> TestWorld {
             }
             Ok(())
         })
-        .on_enter_play(|mut commands: Commands| {
-            commands.spawn(TileMap::new(TILEMAP_DIR));
-        })
+        .on_scene_enter(
+            sk::MAIN_SCENE,
+            |_: On<SceneEntered>, mut commands: Commands| {
+                commands.spawn(TileMap::new(TILEMAP_DIR));
+            },
+        )
         .build()
         .expect("build should succeed");
     tw.tick(1, DT);

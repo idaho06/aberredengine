@@ -56,9 +56,8 @@ impl EngineBuilder {
         aberred_core::protocol::shutdown::install_panic_hook();
         log::info!("Hello, world! This is the Aberred Engine!");
 
-        let use_scene_manager = self.ensure_main_scene();
-
-        self.validate_builder(use_scene_manager)?;
+        self.ensure_main_scene();
+        self.validate_builder()?;
         let config = self.load_config()?;
 
         // Open and validate the replay header here, before spawning the
@@ -134,14 +133,11 @@ impl EngineBuilder {
 
         // Render-side table of per-scene gui/world-draw callbacks (fn pointers,
         // cheap) for resolution against RenderActiveScene.
-        let render_scene_table = use_scene_manager.then(|| self.render_scene_table());
+        let render_scene_table = (!self.has_lua_script()).then(|| self.render_scene_table());
 
         let init = LogicInit {
             config: config.clone(),
             setup_hook: self.setup_hook.take(),
-            enter_play_hook: self.enter_play_hook.take(),
-            switch_scene_hook: self.switch_scene_hook.take(),
-            update_hook: self.update_hook.take(),
             extra_systems: std::mem::take(&mut self.extra_systems),
             extra_observers: std::mem::take(&mut self.extra_observers),
             scenes: std::mem::take(&mut self.scenes),
