@@ -100,12 +100,18 @@ mod world_space_draw_callback {
     use aberredengine::prelude::*;
 
     fn editor_world_draw(ctx: &mut WorldDrawCtx) {
-        ctx.draw.draw_line_v(
+        // `..` is required: WorldDrawCtx is #[non_exhaustive]
+        let WorldDrawCtx { draw, .. } = ctx;
+        draw_origin_cross(draw);
+    }
+
+    fn draw_origin_cross(draw: &mut dyn WorldDraw) {
+        draw.draw_line_v(
             Vec2::new(-32.0, 0.0),
             Vec2::new(32.0, 0.0),
             Color::GREEN,
         );
-        ctx.draw.draw_line(-16, -16, 16, 16, Color::YELLOW);
+        draw.draw_line(-16, -16, 16, 16, Color::YELLOW);
     }
 
     fn register() -> EngineBuilder { // GLUE

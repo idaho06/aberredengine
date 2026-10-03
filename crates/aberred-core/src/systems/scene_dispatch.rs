@@ -74,6 +74,31 @@ pub trait WorldDraw {
     fn draw_line(&mut self, x1: i32, y1: i32, x2: i32, y2: i32, color: Color);
 }
 
+/// Forwards through a mutable reference, so a `&mut &mut dyn WorldDraw` (e.g. the
+/// `draw` binding from destructuring a `&mut WorldDrawCtx`) passes where a
+/// `&mut dyn WorldDraw` is expected.
+impl<T: WorldDraw + ?Sized> WorldDraw for &mut T {
+    fn draw_line_v(&mut self, start: Vec2, end: Vec2, color: Color) {
+        (**self).draw_line_v(start, end, color);
+    }
+    fn draw_line_ex(&mut self, start_pos: Vec2, end_pos: Vec2, thick: f32, color: Color) {
+        (**self).draw_line_ex(start_pos, end_pos, thick, color);
+    }
+    fn draw_line_dashed(
+        &mut self,
+        start_pos: Vec2,
+        end_pos: Vec2,
+        dash_size: i32,
+        space_size: i32,
+        color: Color,
+    ) {
+        (**self).draw_line_dashed(start_pos, end_pos, dash_size, space_size, color);
+    }
+    fn draw_line(&mut self, x1: i32, y1: i32, x2: i32, y2: i32, color: Color) {
+        (**self).draw_line(x1, y1, x2, y2, color);
+    }
+}
+
 // The `WorldDraw` impl over raylib draw handles lives in
 // `aberred-render`'s `systems::math` as `RaylibWorldDraw` — a newtype
 // wrapper, not a blanket impl, since `aberred-render` owns neither
@@ -276,6 +301,42 @@ mod tests {
     use super::*;
     use crate::testing::insert_game_ctx_resources;
     use bevy_ecs::system::RunSystemOnce;
+
+    #[derive(Default)]
+    struct RecordedLines(Vec<(Vec2, Vec2)>);
+
+    impl WorldDraw for RecordedLines {
+        fn draw_line_v(&mut self, start: Vec2, end: Vec2, _: Color) {
+            self.0.push((start, end));
+        }
+        fn draw_line_ex(&mut self, _: Vec2, _: Vec2, _: f32, _: Color) {}
+        fn draw_line_dashed(&mut self, _: Vec2, _: Vec2, _: i32, _: i32, _: Color) {}
+        fn draw_line(&mut self, _: i32, _: i32, _: i32, _: i32, _: Color) {}
+    }
+
+    fn draw_axis(d: &mut dyn WorldDraw) {
+        d.draw_line_v(Vec2::ZERO, Vec2::X, Color::WHITE);
+    }
+
+    /// The destructured `draw` binding is a `&mut &mut dyn WorldDraw`; it must still
+    /// pass straight to helpers that take `&mut dyn WorldDraw`.
+    fn overlay(ctx: &mut WorldDrawCtx) {
+        let WorldDrawCtx { draw, .. } = ctx;
+        draw_axis(draw);
+    }
+
+    #[test]
+    fn destructured_draw_handle_passes_to_helpers() {
+        let mut lines = RecordedLines::default();
+        let (camera, screen) = (Camera2D::default(), ScreenSize { w: 1, h: 1 });
+        let (app_state, signals) = (AppState::default(), SignalSnapshot::default());
+
+        overlay(&mut WorldDrawCtx::new(
+            &mut lines, &camera, &screen, &app_state, &signals,
+        ));
+
+        assert_eq!(lines.0, [(Vec2::ZERO, Vec2::X)]);
+    }
 
     const EXITED: &str = "test_menu_exited";
     const ENTERED: &str = "test_level_entered";

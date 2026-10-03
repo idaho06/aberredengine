@@ -295,16 +295,24 @@ The callback takes a `&mut WorldDrawCtx` with these fields:
 - `app_state: &AppState` for typed Rust-only snapshots
 - `signals: &SignalSnapshot` for read-only signal access (direct field access — `ctx.signals.flags.contains("key")` — no getter methods; there's no write side here, `world_draw_callback` only draws)
 
+Use the fields through `ctx`, or unpack them with `let WorldDrawCtx { draw, camera, .. } = ctx;`. Either `ctx.draw` or the unpacked `draw` passes straight to your own helpers that take `&mut dyn WorldDraw`, as below.
+
 ```rust
 use aberredengine::prelude::*;
 
 fn editor_world_draw(ctx: &mut WorldDrawCtx) {
-    ctx.draw.draw_line_v(
+    // `..` is required: WorldDrawCtx is #[non_exhaustive]
+    let WorldDrawCtx { draw, .. } = ctx;
+    draw_origin_cross(draw);
+}
+
+fn draw_origin_cross(draw: &mut dyn WorldDraw) {
+    draw.draw_line_v(
         Vec2::new(-32.0, 0.0),
         Vec2::new(32.0, 0.0),
         Color::GREEN,
     );
-    ctx.draw.draw_line(-16, -16, 16, 16, Color::YELLOW);
+    draw.draw_line(-16, -16, 16, 16, Color::YELLOW);
 }
 ```
 
