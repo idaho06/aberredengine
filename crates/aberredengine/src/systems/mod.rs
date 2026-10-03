@@ -9,11 +9,11 @@
 //! Rust-only-priority version of each of those four functions
 //! unconditionally, since it cannot name `LuaRuntime`/Lua-only component
 //! types at all. Every other Lua-callback system/command-processing module
-//! now lives in the `aberred-lua` crate (re-exported as
+//! lives in the `aberred-lua` crate (re-exported as
 //! `aberredengine::lua::systems`). The audio thread's own `bevy_ecs::World`
 //! and its systems live in the `aberred-audio` crate; render (main) thread
-//! systems live in the `aberred-render` crate (re-exported as
-//! `aberredengine::render::systems`).
+//! systems live in the `aberred-render` crate, which the facade does not
+//! re-export (its `render` module holds only callback-facing types).
 
 pub mod collision_rule_index;
 pub mod gui_interactable_click;

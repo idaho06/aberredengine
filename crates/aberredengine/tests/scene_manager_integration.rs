@@ -4,6 +4,7 @@
 //! `on_update`, and `on_exit` callbacks, and that conflict checks in
 //! `EngineBuilder` fire as expected.
 
+use aberred_render::resources::scene_table::{GuiCallback, GuiCtx, RenderSceneTable, SceneRender};
 use aberredengine::core::resources::group::TrackedGroups;
 use aberredengine::core::resources::input::InputState;
 use aberredengine::core::resources::scenemanager::SceneManager;
@@ -13,9 +14,6 @@ use aberredengine::core::resources::worldtime::WorldTime;
 use aberredengine::core::systems::GameCtx;
 use aberredengine::core::systems::scene_dispatch::{
     SceneLogic, scene_enter_play, scene_switch_poll, scene_switch_system, scene_update_system,
-};
-use aberredengine::render::resources::scene_table::{
-    GuiCallback, GuiCtx, RenderSceneTable, SceneRender,
 };
 use bevy_ecs::message::MessageReader;
 use bevy_ecs::prelude::*;

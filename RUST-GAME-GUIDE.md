@@ -70,7 +70,7 @@ Start every game module with the prelude:
 use aberredengine::prelude::*;
 ```
 
-It brings in the `bevy_ecs` prelude (`Commands`, `Query`, `Res`, `On`, …) and the `bevy_ecs` crate itself, so `#[derive(Component)]`, `#[derive(Resource)]` and `#[derive(Event)]` work; the math types (`Vec2`, `Color`, `Rect`); the common components, resources, events and commands; and `EngineBuilder`, `SceneDescriptor`, `SimSet` and `EngineError`. Less common items keep their full path under `aberredengine::core::...` (logic side) or `aberredengine::render::...` (render thread), and the examples below import those explicitly.
+It brings in the `bevy_ecs` prelude (`Commands`, `Query`, `Res`, `On`, …) and the `bevy_ecs` crate itself, so `#[derive(Component)]`, `#[derive(Resource)]` and `#[derive(Event)]` work; the math types (`Vec2`, `Color`, `Rect`); the common components, resources, events and commands; and `EngineBuilder`, `SceneDescriptor`, `SimSet` and `EngineError`. Less common items keep their full path under `aberredengine::core::...`, and the examples below import those explicitly. The render-thread types a `gui_callback` receives (`TextureStore`, `FontStore`, `GuiCtx`, `GuiCallback`) are in the prelude and in `aberredengine::render`; the rest of the render thread is out of reach of game code.
 
 The `bevy_ecs` prelude has its own `Result` (`Result<T = (), E = BevyError>`) and a lifecycle event named `Add`, so in a module that glob-imports the prelude they shadow `std::result::Result` and `std::ops::Add`. `Result<T, E>` with an explicit error type is still the standard `Result`; write `std::ops::Add` in full when implementing it.
 
