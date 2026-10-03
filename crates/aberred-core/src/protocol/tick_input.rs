@@ -47,6 +47,17 @@ impl TickInput {
         self.screen_size = None;
     }
 
+    /// Folds the latched facts of `older`, an earlier tick whose input was
+    /// held back, into this one: its `capture`/`screen_size` where this tick
+    /// has none, and its `intents` ahead of this tick's. Its `samples` are
+    /// dropped: a key held during the earlier tick shows up as pressed on
+    /// the next sample this tick carries.
+    pub fn absorb_latched(&mut self, older: TickInput) {
+        self.capture = self.capture.or(older.capture);
+        self.screen_size = self.screen_size.or(older.screen_size);
+        self.intents.splice(0..0, older.intents);
+    }
+
     /// True when nothing sim-visible landed this tick.
     pub fn is_empty(&self) -> bool {
         self.samples.is_empty()
@@ -59,6 +70,49 @@ impl TickInput {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn absorbing_an_earlier_tick_keeps_its_latched_facts_but_not_its_samples() {
+        let older = TickInput {
+            tick: 0,
+            samples: vec![RawDeviceSnapshot::default()],
+            capture: Some(ImguiCaptureState {
+                mouse: true,
+                keyboard: false,
+            }),
+            intents: vec![SignalIntent::SetFlag("first".into())],
+            screen_size: Some((640, 480)),
+        };
+        let mut newer = TickInput {
+            tick: 3,
+            samples: Vec::new(),
+            capture: None,
+            intents: vec![SignalIntent::SetFlag("second".into())],
+            screen_size: Some((800, 600)),
+        };
+
+        newer.absorb_latched(older.clone());
+
+        assert_eq!(newer.tick, 3);
+        assert!(
+            newer.samples.is_empty(),
+            "an earlier tick's samples are dropped"
+        );
+        assert_eq!(newer.capture, older.capture, "kept when this tick has none");
+        assert_eq!(
+            newer.screen_size,
+            Some((800, 600)),
+            "this tick's own value wins"
+        );
+        assert_eq!(
+            newer.intents,
+            [
+                SignalIntent::SetFlag("first".into()),
+                SignalIntent::SetFlag("second".into())
+            ],
+            "earlier intents apply first"
+        );
+    }
 
     #[test]
     fn default_is_empty() {

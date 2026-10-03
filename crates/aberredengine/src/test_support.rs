@@ -43,7 +43,7 @@ use std::path::PathBuf;
 use crate::engine_app::SceneDescriptor;
 use crate::engine_app::{
     EngineBuilder, HookRegistrar, LogicInit, ObserverRegistrar, UpdateRegistrar, apply_tick_input,
-    drain_logic_messages, hook_registrar, run_sim_tick,
+    drain_logic_messages, hold_back_setup_input, hook_registrar, in_envelope, run_sim_tick,
 };
 use aberred_core::components::persistent::Persistent;
 use aberred_core::protocol::audio::{AudioCmd, AudioMessage};
@@ -75,6 +75,9 @@ pub struct TestWorld {
     /// replied.
     pub audio_msgs_tx: Sender<AudioMessage>,
     deterministic: bool,
+    /// Setup input held back for the first `Playing` tick (deterministic
+    /// mode), as `logic_thread_main` does.
+    held_setup_input: TickInput,
     snapshot_out: triple_buffer::Output<DrawableSnapshot>,
 }
 
@@ -316,6 +319,7 @@ impl TestWorldBuilder {
             audio_cmds,
             audio_msgs_tx,
             deterministic: self.deterministic_seed.is_some(),
+            held_setup_input: TickInput::default(),
             snapshot_out: snap_out,
         })
     }
@@ -335,12 +339,15 @@ impl TestWorld {
 
     /// Run `n` sim ticks with the given `dt`, mirroring
     /// `logic_thread_main`'s per-tick loop body (minus the `Pacer`/channel
-    /// drain, which the harness doesn't need): `update_world_time` ->
+    /// drain, which the harness doesn't need): `update_world_time` (only
+    /// while `Playing`) ->
     /// `run_sim_tick` (which also clears `InputState`'s edge flags) ->
     /// `world.clear_trackers()`.
     pub fn tick(&mut self, n: u32, dt: f32) {
         for _ in 0..n {
-            update_world_time(&mut self.world, dt);
+            if in_envelope(&self.world) {
+                update_world_time(&mut self.world, dt);
+            }
             run_sim_tick(&mut self.world, &mut self.sim);
             self.world.clear_trackers();
         }
@@ -385,7 +392,12 @@ impl TestWorld {
     /// replay tests use this to drive a `TestWorld` from a recorded
     /// `TickInput` sequence the same way the real logic thread would.
     pub fn apply_tick_input(&mut self, tick_input: &TickInput, dt: f32) {
-        apply_tick_input(&mut self.world, tick_input);
+        let mut tick_input = tick_input.clone();
+        if self.deterministic {
+            let playing = in_envelope(&self.world);
+            hold_back_setup_input(&mut tick_input, &mut self.held_setup_input, playing);
+        }
+        apply_tick_input(&mut self.world, &tick_input);
         self.tick(1, dt);
     }
 

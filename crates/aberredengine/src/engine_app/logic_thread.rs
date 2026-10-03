@@ -138,6 +138,38 @@ pub(crate) fn run_sim_tick(world: &mut World, sim: &mut Schedule) {
     world.resource_mut::<InputState>().clear_edges();
 }
 
+/// Whether this tick is inside the deterministic envelope:
+/// `GameState::Playing`, read at the top of the tick. Setup lasts a
+/// wall-clock-dependent number of ticks (it waits for asset I/O), so
+/// outside the envelope `WorldTime` doesn't advance and no replay entry is
+/// recorded, played or checkpointed. `finish_setup` flips the state at the
+/// end of a tick, so the first `Playing` tick is a whole one.
+pub(crate) fn in_envelope(world: &World) -> bool {
+    matches!(world.resource::<GameState>().get(), GameStates::Playing)
+}
+
+/// Keeps live input out of deterministic Setup ticks (see [`in_envelope`]).
+/// Outside the envelope it moves `tick_input`'s latched facts
+/// (`screen_size`, `capture`, `intents`) into `held` and drops its samples;
+/// on the first `Playing` tick it folds `held` back in, so those facts are
+/// applied, and recorded, there.
+pub(crate) fn hold_back_setup_input(
+    tick_input: &mut TickInput,
+    held: &mut TickInput,
+    playing: bool,
+) {
+    if playing {
+        if !held.is_empty() {
+            tick_input.absorb_latched(std::mem::take(held));
+        }
+    } else {
+        held.capture = tick_input.capture.take().or(held.capture);
+        held.screen_size = tick_input.screen_size.take().or(held.screen_size);
+        held.intents.append(&mut tick_input.intents);
+        tick_input.samples.clear();
+    }
+}
+
 /// In deterministic mode, treat a `TextureDimsStore` key arriving for the
 /// *first* time while `GameState::Playing` as a determinism hazard: it means
 /// texture metadata arrives during gameplay instead of before the playing
@@ -420,6 +452,9 @@ fn logic_thread_main(mut init: LogicInit) -> Result<(), EngineError> {
     // Reused across ticks instead of a fresh TickInput per tick -- see
     // TickInput::reset's doc comment for the allocation-reuse rationale.
     let mut tick_input = TickInput::default();
+    // Latched input facts held back during deterministic Setup ticks; see
+    // `hold_back_setup_input`.
+    let mut held_setup_input = TickInput::default();
 
     // Replay wiring. `source`/`recorder` are independent -- `EngineBuilder`
     // exposes one mode at a time, but nothing here requires that.
@@ -465,6 +500,8 @@ fn logic_thread_main(mut init: LogicInit) -> Result<(), EngineError> {
             continue 'main;
         }
 
+        let playing = in_envelope(&world);
+
         // Collect stage: &tick_input holds every sim-visible fact this tick,
         // loss-free, once this call returns -- that's what makes it the one
         // thing the recorder has to capture (it does, just below the break
@@ -491,8 +528,16 @@ fn logic_thread_main(mut init: LogicInit) -> Result<(), EngineError> {
                 // record+play are mutually exclusive -- moving collect below
                 // the breaks would instead desync the checkpoint stream from
                 // the tick counter, which is worse.
+                //
+                // Setup runs live (its loads, its length) and reads no
+                // entry: the recording starts at the first Playing tick.
                 for _ in rx_input.try_iter() {}
-                player.collect(&mut tick_input, world.resource::<WorldTime>().frame_count);
+                let tick = world.resource::<WorldTime>().frame_count;
+                if playing {
+                    player.collect(&mut tick_input, tick);
+                } else {
+                    tick_input.reset(tick);
+                }
                 if player.is_finished() && !replay_ended_sent {
                     replay_ended_sent = true;
                     let tx_render = world.resource::<RenderTx>().0.clone();
@@ -526,7 +571,10 @@ fn logic_thread_main(mut init: LogicInit) -> Result<(), EngineError> {
         // file only ever contains ticks that actually ran (a batch carrying
         // both a SignalIntent and Shutdown would otherwise be recorded and
         // then replayed into a tick the original session never simulated).
-        if let Some(rec) = recorder.as_mut() {
+        if deterministic {
+            hold_back_setup_input(&mut tick_input, &mut held_setup_input, playing);
+        }
+        if playing && let Some(rec) = recorder.as_mut() {
             rec.record_tick(&tick_input);
         }
 
@@ -547,12 +595,14 @@ fn logic_thread_main(mut init: LogicInit) -> Result<(), EngineError> {
         // The sim ticks every Pacer wakeup regardless of whether new input
         // arrived this tick, holding the configured `sim_hz` through a
         // render stall (mirrors the old "Timeout => run FIXED only" arm).
-        update_world_time(&mut world, dt);
+        if playing {
+            update_world_time(&mut world, dt);
+        }
         let tick_start = std::time::Instant::now();
         run_sim_tick(&mut world, &mut sim);
         let tick_work = tick_start.elapsed();
 
-        if want_checkpoints && checkpoint_countdown.due() {
+        if playing && want_checkpoints && checkpoint_countdown.due() {
             let hash = hash_world_state(&world);
             if let Some(rec) = recorder.as_mut() {
                 rec.record_checkpoint(tick_input.tick, hash);
@@ -792,6 +842,42 @@ mod tests {
             }
         );
         assert!(world.resource::<FontMetricsStore>().0.contains_key("late"));
+    }
+
+    /// Deterministic Setup ticks run with no input; their latched facts land
+    /// on the first `Playing` tick, which is the first one recorded.
+    #[test]
+    fn setup_input_is_held_back_until_the_first_playing_tick() {
+        let mut held = TickInput::default();
+        let mut tick_input = TickInput {
+            tick: 0,
+            samples: vec![sample_with_window_w(1)],
+            capture: None,
+            intents: vec![SignalIntent::SetFlag("during_setup".into())],
+            screen_size: Some((320, 240)),
+        };
+        hold_back_setup_input(&mut tick_input, &mut held, false);
+        assert!(tick_input.is_empty(), "a Setup tick sees no input");
+        assert_eq!(tick_input.tick, 0);
+
+        tick_input.screen_size = Some((640, 480));
+        hold_back_setup_input(&mut tick_input, &mut held, false);
+        assert!(tick_input.is_empty());
+
+        tick_input.samples = vec![sample_with_window_w(2)];
+        tick_input.intents = vec![SignalIntent::SetFlag("playing".into())];
+        hold_back_setup_input(&mut tick_input, &mut held, true);
+        assert_eq!(tick_input.screen_size, Some((640, 480)), "the latest size");
+        assert_eq!(
+            tick_input.intents,
+            [
+                SignalIntent::SetFlag("during_setup".into()),
+                SignalIntent::SetFlag("playing".into())
+            ]
+        );
+        let widths: Vec<i32> = tick_input.samples.iter().map(|s| s.window_w).collect();
+        assert_eq!(widths, [2], "Setup samples are dropped");
+        assert!(held.is_empty());
     }
 
     /// World with every resource the world-applied `LogicMsg` arms touch.

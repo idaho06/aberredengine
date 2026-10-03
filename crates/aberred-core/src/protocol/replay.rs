@@ -31,7 +31,13 @@ pub const REPLAY_MAGIC: [u8; 4] = *b"ABRR";
 /// `state_hash`-reachable, changes. A v3 replay's recorded ticks would
 /// diverge on first mouse-world read, so it's refused rather than
 /// best-effort replayed.
-pub const REPLAY_FORMAT_VERSION: u32 = 4;
+///
+/// `5`: the first entry is the first `GameStates::Playing` tick. `Setup`
+/// ticks are neither recorded nor played back, `WorldTime` doesn't advance
+/// during them, and in deterministic mode their input is held for the first
+/// `Playing` tick. A v4 file starts with `Setup` ticks and numbers its
+/// checkpoints from them, so its entries would land one or more ticks off.
+pub const REPLAY_FORMAT_VERSION: u32 = 5;
 
 /// A stable, version-controlled FNV-1a-style hash mixer.
 ///

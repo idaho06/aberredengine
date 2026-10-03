@@ -213,6 +213,8 @@ fn run_tick_input_scenario(seed: u64) -> TickInputScenarioResult {
         .deterministic(seed)
         .build()
         .expect("build should succeed");
+    // Deterministic Setup ticks drop input, so the script starts in Playing.
+    tw.tick_to_play(DT, 4);
 
     let mut key_down = RawDeviceSnapshot::default();
     key_down.set_key(KeyboardKey::KEY_W as u32);
@@ -654,11 +656,106 @@ fn golden_replay_rust_scene_matches_checked_in_trail() {
     // system in the deterministic single-threaded executor's per-tick
     // sequence changes this hash, even for a scenario (like this one) that
     // spawns no `CollisionRule` entity for that system to act on.
-    const GOLDEN_HASH: u64 = 0xcec7_81a2_f7c4_1bfa;
+    const GOLDEN_HASH: u64 = 0xbd1d_3bb4_95c8_14fd;
     let actual = golden_scenario_final_hash(42);
     assert_eq!(
         actual, GOLDEN_HASH,
         "golden hash changed -- if this is an intentional sim/hash change, \
          update GOLDEN_HASH to {actual:#x}"
+    );
+}
+
+// --- the deterministic envelope starts at the first Playing tick ----------
+
+use aberredengine::core::components::rigidbody::RigidBody;
+use aberredengine::core::math::Vec2;
+use aberredengine::core::resources::gamestate::{GameState, GameStates};
+use aberredengine::core::resources::worldtime::WorldTime;
+use aberredengine::core::systems::asset_loader::AssetLoader;
+
+/// A deterministic `TestWorld` whose Setup lasts `setup_ticks` ticks (its
+/// one texture load is answered after that many ticks), ticked to its first
+/// `Playing` tick. `on_enter_play` spawns a moving body.
+fn world_after_setup_of(setup_ticks: u32) -> TestWorld {
+    let mut tw = TestWorldBuilder::new()
+        .deterministic(7)
+        .on_setup(|mut assets: AssetLoader| assets.load_texture("player", "player.png"))
+        .on_enter_play(|mut commands: Commands| {
+            let mut body = RigidBody::new();
+            body.velocity = Vec2::new(30.0, 0.0);
+            commands.spawn((MapPosition::new(0.0, 0.0), body));
+        })
+        .build()
+        .expect("build should succeed");
+    tw.tick(setup_ticks, DT);
+    tw.deliver_texture_dims("player", 8, 8);
+    tw.tick(1, DT);
+    assert_eq!(
+        tw.world.resource::<GameState>().get(),
+        &GameStates::Playing,
+        "Setup ends on the tick that sees the last reply"
+    );
+    tw
+}
+
+#[test]
+fn world_time_starts_at_zero_on_the_first_playing_tick() {
+    for setup_ticks in [1, 9] {
+        let tw = world_after_setup_of(setup_ticks);
+        let time = tw.world.resource::<WorldTime>();
+        assert_eq!(time.frame_count, 0, "setup_ticks={setup_ticks}");
+        assert_eq!(time.elapsed, 0.0, "setup_ticks={setup_ticks}");
+    }
+}
+
+/// The length of Setup (wall-clock asset I/O) never reaches the simulation:
+/// worlds whose Setup took different numbers of ticks hash identically on
+/// every `Playing` tick under the same input.
+#[test]
+fn setup_length_does_not_change_the_playing_hash_trail() {
+    let mut fast = world_after_setup_of(1);
+    let mut slow = world_after_setup_of(12);
+    assert_eq!(hash_world_state(&fast.world), hash_world_state(&slow.world));
+
+    for ti in &scripted_ticks(true) {
+        fast.apply_tick_input(ti, DT);
+        slow.apply_tick_input(ti, DT);
+        assert_eq!(
+            hash_world_state(&fast.world),
+            hash_world_state(&slow.world),
+            "diverged on Playing tick {}",
+            ti.tick
+        );
+    }
+}
+
+/// A GUI intent sent during deterministic Setup is held back and applied on
+/// the first `Playing` tick.
+#[test]
+fn setup_intents_land_on_the_first_playing_tick() {
+    let mut tw = TestWorldBuilder::new()
+        .deterministic(7)
+        .on_setup(|mut assets: AssetLoader| assets.load_texture("player", "player.png"))
+        .build()
+        .expect("build should succeed");
+    let intent = TickInput {
+        intents: vec![SignalIntent::SetFlag("loading_click".into())],
+        ..Default::default()
+    };
+    tw.apply_tick_input(&intent, DT);
+    tw.tick(3, DT);
+    assert!(
+        !tw.world
+            .resource::<WorldSignals>()
+            .has_flag("loading_click")
+    );
+
+    tw.deliver_texture_dims("player", 8, 8);
+    tw.tick(1, DT);
+    tw.apply_tick_input(&TickInput::default(), DT);
+    assert!(
+        tw.world
+            .resource::<WorldSignals>()
+            .has_flag("loading_click")
     );
 }

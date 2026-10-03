@@ -634,6 +634,13 @@ EngineBuilder::new()
 
 This is useful for automated testing (replay a fixed input script, assert on the resulting state), bug reports (a player-submitted replay reproduces the exact conditions that triggered a bug), and any gameplay mode that depends on reproducible simulation.
 
+**The envelope starts at `Playing`.** Setup lasts as long as its asset loads take, which varies from run to run. So the reproducible part of a session starts at the first `Playing` tick:
+
+- `WorldTime` doesn't advance during Setup (in every mode): `elapsed` and `frame_count` are `0` on the first `Playing` tick, and `delta` stays `0` until then.
+- A replay records and plays back from the first `Playing` tick; Setup runs live, loads included, in both.
+- In deterministic mode, input that arrives during Setup is held back. Key and mouse samples are dropped, so F10/F11 do nothing while loading. GUI intents and the latest screen size are applied on the first `Playing` tick.
+- Engine systems that don't use `delta` still run during Setup: collision rules, Rust phase `on_update`, group counts. Spawn gameplay entities in `on_enter_play` or the initial scene's `on_enter`, not in the setup hook, so a longer Setup can't change them.
+
 ---
 
 ## 4. Loading Assets
