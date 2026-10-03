@@ -101,7 +101,11 @@ fn on_state_enter(state: &GameStates, commands: &mut Commands, systems_store: &S
         }
         // GameStates::Paused => eprintln!("Entered Paused state"),
         GameStates::Quitting => {
-            commands.run_system(*systems_store.get(hook_keys::QUIT_GAME).expect("'quit_game' system not registered; validate_required_systems should have caught this"));
+            commands.run_system(
+                *systems_store
+                    .get(hook_keys::QUIT_GAME)
+                    .expect("the engine registers the 'quit_game' system in every configuration"),
+            );
         }
     }
 }

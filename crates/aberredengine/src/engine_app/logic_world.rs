@@ -200,27 +200,6 @@ impl EngineBuilder {
         Ok(world)
     }
 
-    pub(super) fn validate_required_systems(
-        systems_store: &SystemsStore,
-        requires_switch_scene: bool,
-    ) -> Result<(), EngineError> {
-        let mut missing = Vec::new();
-
-        if systems_store.get(hook_keys::QUIT_GAME).is_none() {
-            missing.push(hook_keys::QUIT_GAME);
-        }
-
-        if requires_switch_scene && systems_store.get(hook_keys::SWITCH_SCENE).is_none() {
-            missing.push(hook_keys::SWITCH_SCENE);
-        }
-
-        if missing.is_empty() {
-            Ok(())
-        } else {
-            Err(EngineError::MissingSystems(missing.join(", ")))
-        }
-    }
-
     /// Register the hook/scene one-shot systems into the LOGIC world (runs on
     /// the logic thread; consumes the hooks out of `init`). The render-side
     /// scene table was already cloned off before `init` crossed the thread
@@ -231,11 +210,6 @@ impl EngineBuilder {
         use_scene_manager: bool,
     ) -> Result<(), EngineError> {
         let mut systems_store = SystemsStore::new();
-        #[cfg(feature = "lua")]
-        let requires_switch_scene =
-            use_scene_manager || init.switch_scene_hook.is_some() || init.lua_script.is_some();
-        #[cfg(not(feature = "lua"))]
-        let requires_switch_scene = use_scene_manager || init.switch_scene_hook.is_some();
 
         if let Some(hook) = init.setup_hook.take() {
             hook(world, &mut systems_store);
@@ -289,8 +263,6 @@ impl EngineBuilder {
             .entity_mut(menu_despawn_system_id.entity())
             .insert(Persistent);
         systems_store.insert_entity_system(hook_keys::MENU_DESPAWN, menu_despawn_system_id);
-
-        Self::validate_required_systems(&systems_store, requires_switch_scene)?;
 
         world.insert_resource(systems_store);
         world.flush();

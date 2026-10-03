@@ -66,9 +66,6 @@ pub enum EngineError {
     )]
     GroupNameTooLong { name: String, len: usize },
 
-    #[error("EngineBuilder missing required system registrations: {0}")]
-    MissingSystems(String),
-
     #[error("Failed to parse embedded config: {message}")]
     ConfigEmbedded { message: String },
 

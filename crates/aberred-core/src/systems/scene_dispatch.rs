@@ -261,7 +261,11 @@ pub fn scene_switch_poll(
     systems_store: Res<SystemsStore>,
 ) {
     if world_signals.take_flag(sk::SWITCH_SCENE) {
-        commands.run_system(*systems_store.get(hook_keys::SWITCH_SCENE).expect("'switch_scene' system not registered; validate_required_systems should have caught this"));
+        commands.run_system(
+            *systems_store
+                .get(hook_keys::SWITCH_SCENE)
+                .expect("the scene manager registers the 'switch_scene' system"),
+        );
     }
 }
 
@@ -287,9 +291,11 @@ pub fn scene_enter_play(
 
     world_signals.set_string(sk::SCENE, initial);
 
-    commands.run_system(*systems_store.get(hook_keys::SWITCH_SCENE).expect(
-        "'switch_scene' system not registered; validate_required_systems should have caught this",
-    ));
+    commands.run_system(
+        *systems_store
+            .get(hook_keys::SWITCH_SCENE)
+            .expect("the scene manager registers the 'switch_scene' system"),
+    );
 }
 
 // ---------------------------------------------------------------------------
