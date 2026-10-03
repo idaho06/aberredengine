@@ -68,7 +68,7 @@ impl<'a> GuiCtx<'a> {
 
 /// A scene's render-thread callbacks, registered with the facade's
 /// `EngineBuilder::add_scene_gui`/`EngineBuilder::add_scene_world_draw`.
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct SceneRender {
     /// Called every frame to draw ImGui GUI widgets (optional). Rust-only.
     pub gui_callback: Option<GuiCallback>,

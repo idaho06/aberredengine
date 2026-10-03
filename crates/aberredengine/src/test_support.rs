@@ -44,8 +44,7 @@ use crate::engine_app::SceneDescriptor;
 use crate::engine_app::{
     EngineBuilder, HookRegistrar, LogicInit, ObserverRegistrar, UpdateRegistrar, apply_tick_input,
     conditional_system_registrar, drain_logic_messages, hold_back_deterministic_setup_input,
-    hook_registrar, in_envelope, run_sim_tick, scene_observer_registrar, scene_system_registrar,
-    system_registrar,
+    hook_registrar, in_envelope, run_sim_tick, scene_observer_registrar, system_registrar,
 };
 use aberred_core::components::persistent::Persistent;
 use aberred_core::events::scene::{SceneEntered, SceneExited};
@@ -60,6 +59,7 @@ use aberred_core::resources::gameconfig::GameConfig;
 use aberred_core::resources::gamestate::{GameState, GameStates};
 use aberred_core::resources::systemsstore as hook_keys;
 use aberred_core::systems::input::resolve_input_backlog;
+use aberred_core::systems::scene_dispatch::in_scene;
 use aberred_core::systems::time::update_world_time;
 
 /// A headless logic-thread `World` plus its `sim`/`present` schedules.
@@ -185,13 +185,11 @@ impl TestWorldBuilder {
 
     /// Add a scene-scoped system, mirroring `EngineBuilder::add_scene_system`.
     pub fn add_scene_system<M>(
-        mut self,
+        self,
         scene: &'static str,
         system: impl IntoSystem<(), (), M> + Send + 'static,
     ) -> Self {
-        self.extra_systems
-            .push(scene_system_registrar(scene, system));
-        self
+        self.add_system_if(system, in_scene(scene))
     }
 
     /// Observe one scene's `SceneEntered`, mirroring `EngineBuilder::on_scene_enter`.

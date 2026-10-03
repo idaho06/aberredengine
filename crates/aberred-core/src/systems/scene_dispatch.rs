@@ -295,7 +295,7 @@ pub fn spawn_scene_entities(world: &mut World) {
 /// False when no [`SceneManager`] exists (no `.add_scene()`, or a Lua game).
 ///
 /// ```ignore
-/// builder.add_system(hud.run_if(in_scene("level01")))
+/// builder.add_system_if(hud, in_scene("level01"))
 /// ```
 pub fn in_scene(name: &'static str) -> impl FnMut(Option<Res<SceneManager>>) -> bool + Clone {
     move |scene_manager| {

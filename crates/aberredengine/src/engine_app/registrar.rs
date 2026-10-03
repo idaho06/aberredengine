@@ -6,7 +6,6 @@ use super::schedule::SimSet;
 use aberred_core::resources::scenemanager::SceneManager;
 use aberred_core::resources::systemsstore::SystemsStore;
 use aberred_core::systems::gamestate::state_is_playing;
-use aberred_core::systems::scene_dispatch::in_scene;
 
 /// Closure that registers a system into the world and inserts its ID into
 /// [`SystemsStore`]. Deferred until `run()` when the [`World`] exists.
@@ -59,15 +58,6 @@ pub(crate) fn conditional_system_registrar<M, MC>(
                 .in_set(SimSet::ScriptUpdate),
         );
     })
-}
-
-/// Build the [`UpdateRegistrar`] behind `add_scene_system`: as
-/// [`system_registrar`], and only while `scene` is active.
-pub(crate) fn scene_system_registrar<M>(
-    scene: &'static str,
-    system: impl IntoSystem<(), (), M> + Send + 'static,
-) -> UpdateRegistrar {
-    conditional_system_registrar(system, in_scene(scene))
 }
 
 /// Build the [`ObserverRegistrar`] behind `on_scene_enter`/`on_scene_exit`:

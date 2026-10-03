@@ -6,7 +6,7 @@ use bevy_ecs::system::IntoObserverSystem;
 
 use super::registrar::{
     HookRegistrar, ObserverRegistrar, UpdateRegistrar, conditional_system_registrar,
-    hook_registrar, scene_observer_registrar, scene_system_registrar, system_registrar,
+    hook_registrar, scene_observer_registrar, system_registrar,
 };
 use super::scene::SceneDescriptor;
 #[cfg(any(doc, feature = "lua"))] // doc links, and with_lua's update hook
@@ -16,8 +16,8 @@ use aberred_core::events::scene::{SceneEntered, SceneExited};
 use aberred_core::resources::systemsstore as hook_keys;
 #[cfg(feature = "lua")]
 use aberred_core::systems::gamestate::state_is_playing;
-use aberred_core::systems::scene_dispatch::WorldDrawCallback;
-use aberred_render::resources::scene_table::{GuiCallback, RenderSceneTable, SceneRender};
+use aberred_core::systems::scene_dispatch::{WorldDrawCallback, in_scene};
+use aberred_render::resources::scene_table::{GuiCallback, RenderSceneTable};
 
 /// Builder for bootstrapping the engine.
 ///
@@ -240,9 +240,7 @@ impl EngineBuilder {
         system: impl IntoSystem<(), (), M> + Send + 'static,
     ) -> Self {
         self.scene_refs.push(("add_scene_system", scene));
-        self.extra_systems
-            .push(scene_system_registrar(scene, system));
-        self
+        self.add_system_if(system, in_scene(scene))
     }
 
     /// Observe [`SceneEntered`] for the scene `scene` only.
@@ -413,18 +411,15 @@ impl EngineBuilder {
     /// a `.add_scene_gui()` or `.add_scene_world_draw()` callback.
     pub(super) fn render_scene_table(&self) -> RenderSceneTable {
         let mut table = RenderSceneTable::default();
-        let guis = self
-            .scene_guis
-            .iter()
-            .map(|&(scene, gui)| (scene, Some(gui), None));
-        let draws = (self.scene_world_draws.iter()).map(|&(scene, draw)| (scene, None, Some(draw)));
-        for (scene, gui, draw) in guis.chain(draws) {
-            let render = table.0.entry(scene.to_owned()).or_insert(SceneRender {
-                gui_callback: None,
-                world_draw_callback: None,
-            });
-            render.gui_callback = gui.or(render.gui_callback);
-            render.world_draw_callback = draw.or(render.world_draw_callback);
+        for &(scene, gui) in &self.scene_guis {
+            table.0.entry(scene.to_owned()).or_default().gui_callback = Some(gui);
+        }
+        for &(scene, draw) in &self.scene_world_draws {
+            table
+                .0
+                .entry(scene.to_owned())
+                .or_default()
+                .world_draw_callback = Some(draw);
         }
         table
     }

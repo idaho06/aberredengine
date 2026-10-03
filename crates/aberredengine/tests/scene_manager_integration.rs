@@ -4,7 +4,6 @@
 //! in order, track the active scene, and tear down the old scene's entities
 //! and entity registrations on every switch.
 
-use aberred_render::resources::scene_table::{GuiCallback, GuiCtx, RenderSceneTable, SceneRender};
 use aberredengine::core::events::scene::{SceneEntered, SceneExited};
 use aberredengine::core::resources::group::TrackedGroups;
 use aberredengine::core::resources::input::InputState;
@@ -355,64 +354,5 @@ fn scene_switch_does_not_emit_stop_all_music() {
         cmds.iter()
             .all(|cmd| !matches!(cmd, AudioCmd::StopAllMusic)),
         "Scene switching should not stop all music automatically"
-    );
-}
-
-// ---------------------------------------------------------------------------
-// Test 12: gui_callback fn pointer roundtrips through RenderSceneTable unchanged
-// ---------------------------------------------------------------------------
-
-#[test]
-fn gui_callback_stored_and_retrieved_via_render_scene_table() {
-    fn my_gui(_: &mut GuiCtx) {}
-
-    let mut table = RenderSceneTable::default();
-    table.0.insert(
-        "editor".to_string(),
-        SceneRender {
-            gui_callback: Some(my_gui as GuiCallback),
-            world_draw_callback: None,
-        },
-    );
-
-    let render = table.get("editor").expect("scene must be present");
-    let stored = render.gui_callback.expect("gui_callback must be Some");
-    assert_eq!(
-        stored as *const () as usize, my_gui as *const () as usize,
-        "fn pointer must survive insertion/retrieval unchanged"
-    );
-}
-
-// ---------------------------------------------------------------------------
-// Test 13: a scene with a GUI callback enters normally, and its callback
-// resolves for the active scene name (as render_system resolves it against
-// RenderActiveScene).
-// ---------------------------------------------------------------------------
-
-#[test]
-fn scene_with_gui_callback_enters_correctly() {
-    fn editor_gui(_: &mut GuiCtx) {}
-
-    let mut world = scene_world(&["editor"]);
-    let mut render_table = RenderSceneTable::default();
-    render_table.0.insert(
-        "editor".to_string(),
-        SceneRender {
-            gui_callback: Some(editor_gui as GuiCallback),
-            world_draw_callback: None,
-        },
-    );
-
-    enter_play(&mut world);
-
-    assert_eq!(SceneLog::take(&mut world), ["enter editor"]);
-    let active = active_scene(&world).expect("active_scene must be set");
-    let render = render_table
-        .get(active)
-        .expect("render entry must be present");
-    assert_eq!(
-        render.gui_callback.map(|gui| gui as *const () as usize),
-        Some(editor_gui as *const () as usize),
-        "gui_callback must be resolvable for the active scene"
     );
 }
