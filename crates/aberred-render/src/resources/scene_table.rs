@@ -13,13 +13,6 @@ use aberred_core::systems::scene_dispatch::WorldDrawCallback;
 
 /// Called every frame to draw the scene's ImGui GUI.
 ///
-/// Receives the ImGui [`Ui`](ImguiUi) handle for drawing widgets, a read-only
-/// [`SignalSnapshot`] for reading current signal state, a mutable
-/// [`SignalIntents`] buffer for queuing writes back to game logic, read-only
-/// access to the [`TextureStore`] for displaying texture previews, read-only
-/// access to the [`FontStore`] for displaying font previews, and read-only
-/// access to [`AppState`] for typed Rust objects published by ECS observers.
-///
 /// # Contract
 /// - Called from inside the render system's ImGui frame — after the game world
 ///   is drawn, at window resolution (not render-target resolution).
@@ -31,8 +24,47 @@ use aberred_core::systems::scene_dispatch::WorldDrawCallback;
 ///   `AppState` is read-only from the GUI's perspective — it's a snapshot clone,
 ///   not the live resource.
 /// - `TextureStore` and `FontStore` are read-only; mutations go through observer events.
-pub type GuiCallback =
-    fn(&ImguiUi, &SignalSnapshot, &mut SignalIntents, &TextureStore, &FontStore, &AppState);
+pub type GuiCallback = fn(&mut GuiCtx);
+
+/// What a [`GuiCallback`] can draw with, read, and write.
+///
+/// New fields can be added without breaking callbacks, since only the engine
+/// constructs this.
+#[non_exhaustive]
+pub struct GuiCtx<'a> {
+    /// The ImGui handle for drawing widgets.
+    pub ui: &'a ImguiUi,
+    /// The latest snapshot of the logic world's signals.
+    pub signals: &'a SignalSnapshot,
+    /// Queued writes back to `WorldSignals`, applied at the start of the next sim tick.
+    pub intents: &'a mut SignalIntents,
+    /// Loaded textures, e.g. for image previews.
+    pub textures: &'a TextureStore,
+    /// Loaded fonts, e.g. for font previews.
+    pub fonts: &'a FontStore,
+    /// The latest snapshot of the logic world's [`AppState`].
+    pub app_state: &'a AppState,
+}
+
+impl<'a> GuiCtx<'a> {
+    pub(crate) fn new(
+        ui: &'a ImguiUi,
+        signals: &'a SignalSnapshot,
+        intents: &'a mut SignalIntents,
+        textures: &'a TextureStore,
+        fonts: &'a FontStore,
+        app_state: &'a AppState,
+    ) -> Self {
+        Self {
+            ui,
+            signals,
+            intents,
+            textures,
+            fonts,
+            app_state,
+        }
+    }
+}
 
 /// Render-side half of a scene's callbacks — the counterpart to core's
 /// `SceneLogic`, joined by scene name in the facade's combined

@@ -53,13 +53,14 @@ use crate::resources::mirrors::{
     RenderGameConfig, RenderGuiThemes, RenderPostProcess, RenderSignalSnapshot, RenderWorldTime,
 };
 use crate::resources::rendertarget::RenderTarget;
-use crate::resources::scene_table::GuiCallback;
 use crate::resources::scene_table::RenderSceneTable;
+use crate::resources::scene_table::{GuiCallback, GuiCtx};
 use crate::resources::shaderstore::ShaderStore;
 use crate::resources::texturestore::TextureStore;
 use crate::resources::thread_stats::RenderStats;
 use aberred_core::resources::screensize::ScreenSize;
 use aberred_core::resources::windowsize::WindowSize;
+use aberred_core::systems::scene_dispatch::WorldDrawCtx;
 use log::warn;
 
 use super::debug_overlay::{PerfPanelStats, draw_imgui_debug};
@@ -848,13 +849,13 @@ pub fn render_system(
             {
                 let core_camera: aberred_core::resources::camera2d::Camera2D =
                     camera2d_from_raylib(res.camera.0);
-                cb(
+                cb(&mut WorldDrawCtx::new(
                     &mut crate::systems::math::RaylibWorldDraw(&mut d2),
                     &core_camera,
                     &res.screensize,
                     &res.app_state.0,
                     &res.signals.0,
-                );
+                ));
             }
         }
 
@@ -1055,14 +1056,14 @@ pub fn render_system(
                 }
 
                 if let Some(cb) = gui_callback {
-                    cb(
+                    cb(&mut GuiCtx::new(
                         ui,
                         signal_snapshot,
                         signal_intents,
                         textures,
                         fonts,
                         app_state,
-                    );
+                    ));
                 }
             });
         };

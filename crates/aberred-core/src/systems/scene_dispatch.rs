@@ -86,11 +86,47 @@ pub trait WorldDraw {
 // core cannot name `ImguiUi`/`TextureStore`/`FontStore`.
 
 /// Called every frame inside `begin_mode2D` in camera-transformed world space.
+pub type WorldDrawCallback = fn(&mut WorldDrawCtx);
+
+/// What a [`WorldDrawCallback`] can draw with and read.
 ///
-/// The [`SignalSnapshot`] param is read-only, mirroring the render-side
-/// `GuiCallback`, which likewise takes no live `&WorldSignals`.
-pub type WorldDrawCallback =
-    fn(&mut dyn WorldDraw, &Camera2D, &ScreenSize, &AppState, &SignalSnapshot);
+/// Everything but `draw` is a read-only render-side copy: `signals` mirrors the
+/// render-side `GuiCallback`, which likewise holds no live `&WorldSignals`.
+/// New fields can be added without breaking callbacks, since only the engine
+/// constructs this.
+#[non_exhaustive]
+pub struct WorldDrawCtx<'a> {
+    /// Line-drawing interface, in camera-transformed world space.
+    pub draw: &'a mut dyn WorldDraw,
+    /// The camera this frame is drawn with.
+    pub camera: &'a Camera2D,
+    /// The internal game resolution.
+    pub screen: &'a ScreenSize,
+    /// The latest snapshot of the logic world's [`AppState`].
+    pub app_state: &'a AppState,
+    /// The latest snapshot of the logic world's signals.
+    pub signals: &'a SignalSnapshot,
+}
+
+impl<'a> WorldDrawCtx<'a> {
+    /// Engine-internal: the render thread builds this once per frame.
+    #[doc(hidden)]
+    pub fn new(
+        draw: &'a mut dyn WorldDraw,
+        camera: &'a Camera2D,
+        screen: &'a ScreenSize,
+        app_state: &'a AppState,
+        signals: &'a SignalSnapshot,
+    ) -> Self {
+        Self {
+            draw,
+            camera,
+            screen,
+            app_state,
+            signals,
+        }
+    }
+}
 
 // ---------------------------------------------------------------------------
 // SceneLogic

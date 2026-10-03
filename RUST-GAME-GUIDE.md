@@ -142,7 +142,7 @@ The engine owns the main loop. You configure it through `EngineBuilder` and supp
 The engine runs **three separate ECS worlds on three threads**: render (the main thread — owns the raylib window and GPU resources), logic/sim (a spawned thread — this is where **all your game code runs**), and audio (a spawned thread, talked to via message queues you already use for sound/music). Understanding this is required to use the rest of this guide correctly.
 
 - **Every hook and callback you write — `on_setup`, `on_enter_play`, scene `on_enter`/`on_update`/`on_exit`, systems added via `.add_system()`/`.configure_schedule()`, `Timer`/`Phase`/`CollisionRule` callbacks, and `.add_observer()` observers — runs on the LOGIC thread**, once per **sim tick**. Sim ticks happen at a configurable rate (`[simulation] hz` in `config.ini`, default 240) **decoupled from your render frame rate** — a sim tick is not the same thing as a rendered frame. `dt` is always the fixed constant `1.0 / hz` (scaled by `WorldTime.time_scale`), never a measured wall-clock value — a render stall does not spike `dt` or replay missed ticks, it simply dilates game time until the stall clears, and sim ticks keep running throughout.
-- **`gui_callback` and `world_draw_callback` are the one exception** — they run on the RENDER thread, inside the render pass itself. This is why their signatures look different from everything else (read-only signal snapshots instead of live, mutable `WorldSignals` — see below).
+- **`gui_callback` and `world_draw_callback` are the one exception** — they run on the RENDER thread, inside the render pass itself. This is why they take a context struct (`GuiCtx`/`WorldDrawCtx`) of read-only snapshots instead of live, mutable `WorldSignals` — see below.
 - **A direct consequence**: logic-thread code (everything in the first bullet) can **never** take `RaylibAccess`, `NonSend<FontStore>`, `NonSend<ShaderStore>`, or `Res<TextureStore>` as a system parameter — those resources only exist in the render world. A logic-side system that requests one panics the first time it runs: Bevy checks a system's resources when the system runs, not when the schedule is built. There is no escape hatch to register a custom system on the render thread. This is why asset loading (Section 4) goes through a message queue instead of calling `rl.load_texture(...)` directly inside `setup()`.
 
 ### Approach A — SceneManager (recommended for multi-scene games)
@@ -194,25 +194,10 @@ fn update(ctx: &mut GameCtx, dt: f32, input: &InputState) { /* per-tick logic */
 fn exit(ctx: &mut GameCtx) { /* cleanup */ }
 
 // Called every render frame to draw ImGui widgets — Rust-only, optional, RENDER thread
-// Signature must match: fn(&Ui, &SignalSnapshot, &mut SignalIntents, &TextureStore, &FontStore, &AppState)
-fn my_gui(
-    ui: &imgui::Ui,
-    signals: &SignalSnapshot,
-    intents: &mut SignalIntents,
-    textures: &TextureStore,
-    fonts: &FontStore,
-    app_state: &AppState,
-) { /* draw widgets, queue signal writes, read typed state */ }
+fn my_gui(ctx: &mut GuiCtx) { /* draw with ctx.ui, queue signal writes, read typed state */ }
 
 // Called every render frame inside begin_mode2D in world space — Rust-only, optional, RENDER thread
-// Signature must match: fn(&mut dyn WorldDraw, &Camera2D, &ScreenSize, &AppState, &SignalSnapshot)
-fn my_world_draw(
-    draw: &mut dyn WorldDraw,
-    camera: &Camera2D,
-    screen: &ScreenSize,
-    app_state: &AppState,
-    signals: &SignalSnapshot,
-) { /* draw world overlays, read camera/screen/app state */ }
+fn my_world_draw(ctx: &mut WorldDrawCtx) { /* draw with ctx.draw, read camera/screen/app state */ }
 ```
 
 To trigger a scene transition from within a scene callback, call `WorldSignals::request_scene(name)`. It sets the target scene name (`sk::SCENE`) and the `sk::SWITCH_SCENE` flag; the engine's `scene_switch_poll` system (registered automatically by `EngineBuilder::add_scene()`) picks up the flag each sim tick and triggers the transition.
@@ -231,14 +216,14 @@ fn update(ctx: &mut GameCtx, _dt: f32, _input: &InputState) {
 
 `gui_callback` lets a scene draw an ImGui overlay every frame — useful for editors, debug tools, and dev GUIs. It runs whether or not F11 debug mode is active, inside the same ImGui frame as the debug panels.
 
-**This callback runs on the render thread** (see [Threading Model](#threading-model-what-your-code-can-access) above) — unlike every other hook in this guide, which runs on the logic thread. That's why it can't take a live `&mut WorldSignals`: the render thread never holds one. Instead it receives a read-only snapshot and a write-queue:
+**This callback runs on the render thread** (see [Threading Model](#threading-model-what-your-code-can-access) above) — unlike every other hook in this guide, which runs on the logic thread. That's why it can't reach a live `&mut WorldSignals`: the render thread never holds one. Instead it takes a `&mut GuiCtx`, whose fields are a read-only snapshot and a write-queue:
 
-- `&imgui::Ui` for drawing widgets
-- `&SignalSnapshot` — a read-only, frame-stale-by-one-tick copy of `WorldSignals`. Read its fields **directly** (`signals.scalars.get("key")`, `signals.flags.contains("key")`, etc.) — `SignalSnapshot` has no getter methods, unlike `WorldSignals`.
-- `&mut SignalIntents` — queue writes here (`intents.set_flag("key")`, `intents.set_scalar("key", 1.0)`, etc. — the method names mirror `WorldSignals`' setters). Queued writes are applied to the live `WorldSignals` on the logic thread at the start of its next sim tick — not immediately.
-- `&TextureStore` for texture previews
-- `&FontStore` for font access (e.g. measuring text)
-- `&AppState` for richer Rust-only typed snapshots/view-models produced by systems or scene callbacks
+- `ui: &imgui::Ui` for drawing widgets
+- `signals: &SignalSnapshot` — a read-only, frame-stale-by-one-tick copy of `WorldSignals`. Read its fields **directly** (`ctx.signals.scalars.get("key")`, `ctx.signals.flags.contains("key")`, etc.) — `SignalSnapshot` has no getter methods, unlike `WorldSignals`.
+- `intents: &mut SignalIntents` — queue writes here (`ctx.intents.set_flag("key")`, `ctx.intents.set_scalar("key", 1.0)`, etc. — the method names mirror `WorldSignals`' setters). Queued writes are applied to the live `WorldSignals` on the logic thread at the start of its next sim tick — not immediately.
+- `textures: &TextureStore` for texture previews
+- `fonts: &FontStore` for font access (e.g. measuring text)
+- `app_state: &AppState` for richer Rust-only typed snapshots/view-models produced by systems or scene callbacks
 
 `AppState` is inserted automatically by the engine and stores one value per Rust type. Use newtypes when you need two values of the same underlying type.
 
@@ -250,14 +235,9 @@ struct EditorPanelState {
     active_tool: String,
 }
 
-fn editor_gui(
-    ui: &imgui::Ui,
-    _signals: &SignalSnapshot,
-    intents: &mut SignalIntents,
-    _textures: &TextureStore,
-    _fonts: &FontStore,
-    app_state: &AppState,
-) {
+fn editor_gui(ctx: &mut GuiCtx) {
+    let GuiCtx { ui, intents, app_state, .. } = ctx;
+
     // Read typed state written by on_update or ECS systems
     let tool = app_state
         .get::<EditorPanelState>()
@@ -305,32 +285,26 @@ Register it on the descriptor:
 
 `world_draw_callback` lets a scene draw world-space overlays every frame inside the render pass's `begin_mode2D` block. Use it for things like debug paths, editor gizmos, selection boxes, or navigation links that should follow the active camera transform.
 
-**Like `gui_callback`, this runs on the render thread** (see [Threading Model](#threading-model-what-your-code-can-access)) — its signal parameter is a read-only `&SignalSnapshot`, not a live `&WorldSignals`.
+**Like `gui_callback`, this runs on the render thread** (see [Threading Model](#threading-model-what-your-code-can-access)) — its signals are a read-only `&SignalSnapshot`, not a live `&WorldSignals`.
 
-The callback receives:
+The callback takes a `&mut WorldDrawCtx` with these fields:
 
-- `&mut dyn WorldDraw` with a minimal object-safe drawing API
-- `&Camera2D` for the active render camera
-- `&ScreenSize` for the internal game resolution
-- `&AppState` for typed Rust-only snapshots
-- `&SignalSnapshot` for read-only signal access (direct field access — `signals.flags.contains("key")` — no getter methods; there's no write side here, `world_draw_callback` only draws)
+- `draw: &mut dyn WorldDraw` with a minimal object-safe drawing API
+- `camera: &Camera2D` for the active render camera
+- `screen: &ScreenSize` for the internal game resolution
+- `app_state: &AppState` for typed Rust-only snapshots
+- `signals: &SignalSnapshot` for read-only signal access (direct field access — `ctx.signals.flags.contains("key")` — no getter methods; there's no write side here, `world_draw_callback` only draws)
 
 ```rust
 use aberredengine::prelude::*;
 
-fn editor_world_draw(
-    draw: &mut dyn WorldDraw,
-    _camera: &Camera2D,
-    _screen: &ScreenSize,
-    _app_state: &AppState,
-    _signals: &SignalSnapshot,
-) {
-    draw.draw_line_v(
+fn editor_world_draw(ctx: &mut WorldDrawCtx) {
+    ctx.draw.draw_line_v(
         Vec2::new(-32.0, 0.0),
         Vec2::new(32.0, 0.0),
         Color::GREEN,
     );
-    draw.draw_line(-16, -16, 16, 16, Color::YELLOW);
+    ctx.draw.draw_line(-16, -16, 16, 16, Color::YELLOW);
 }
 ```
 
@@ -2170,7 +2144,7 @@ These exist only in the render world. `RaylibAccess`/`NonSend<FontStore>`/`NonSe
 
 ### Render-thread-only resources used by `gui_callback`/`world_draw_callback`
 
-Since those two callbacks are the one exception that runs render-side (see [Threading Model](#threading-model-what-your-code-can-access) and [Section 3](#imgui-gui-callback-rust-only)), they're handed these directly as function parameters instead of fetched as `Res<T>`/`ResMut<T>` — and instead of the live `WorldSignals`:
+Since those two callbacks are the one exception that runs render-side (see [Threading Model](#threading-model-what-your-code-can-access) and [Section 3](#imgui-gui-callback-rust-only)), they're handed these as fields of their `GuiCtx`/`WorldDrawCtx` instead of fetched as `Res<T>`/`ResMut<T>` — and instead of the live `WorldSignals`:
 
 | Resource | Purpose |
 |----------|---------|
@@ -2284,16 +2258,9 @@ fn inspector_system(mut app_state: ResMut<AppState>) {
 }
 
 // GUI callback reads it (render thread — see Threading Model)
-fn inspector_gui(
-    ui: &imgui::Ui,
-    _signals: &SignalSnapshot,
-    _intents: &mut SignalIntents,
-    _textures: &TextureStore,
-    _fonts: &FontStore,
-    app_state: &AppState,
-) {
-    if let Some(snapshot) = app_state.get::<InspectorSnapshot>() {
-        ui.text(format!("Selected: {}", snapshot.selected_name));
+fn inspector_gui(ctx: &mut GuiCtx) {
+    if let Some(snapshot) = ctx.app_state.get::<InspectorSnapshot>() {
+        ctx.ui.text(format!("Selected: {}", snapshot.selected_name));
     }
 }
 ```

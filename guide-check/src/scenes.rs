@@ -12,25 +12,10 @@ mod scene_callbacks {
     fn exit(ctx: &mut GameCtx) { /* cleanup */ }
 
     // Called every render frame to draw ImGui widgets — Rust-only, optional, RENDER thread
-    // Signature must match: fn(&Ui, &SignalSnapshot, &mut SignalIntents, &TextureStore, &FontStore, &AppState)
-    fn my_gui(
-        ui: &imgui::Ui,
-        signals: &SignalSnapshot,
-        intents: &mut SignalIntents,
-        textures: &TextureStore,
-        fonts: &FontStore,
-        app_state: &AppState,
-    ) { /* draw widgets, queue signal writes, read typed state */ }
+    fn my_gui(ctx: &mut GuiCtx) { /* draw with ctx.ui, queue signal writes, read typed state */ }
 
     // Called every render frame inside begin_mode2D in world space — Rust-only, optional, RENDER thread
-    // Signature must match: fn(&mut dyn WorldDraw, &Camera2D, &ScreenSize, &AppState, &SignalSnapshot)
-    fn my_world_draw(
-        draw: &mut dyn WorldDraw,
-        camera: &Camera2D,
-        screen: &ScreenSize,
-        app_state: &AppState,
-        signals: &SignalSnapshot,
-    ) { /* draw world overlays, read camera/screen/app state */ }
+    fn my_world_draw(ctx: &mut WorldDrawCtx) { /* draw with ctx.draw, read camera/screen/app state */ }
 
     fn descriptor() -> aberredengine::engine_app::SceneDescriptor { // GLUE
         aberredengine::engine_app::SceneDescriptor { // GLUE
@@ -61,14 +46,9 @@ mod imgui_gui_callback {
         active_tool: String,
     }
 
-    fn editor_gui(
-        ui: &imgui::Ui,
-        _signals: &SignalSnapshot,
-        intents: &mut SignalIntents,
-        _textures: &TextureStore,
-        _fonts: &FontStore,
-        app_state: &AppState,
-    ) {
+    fn editor_gui(ctx: &mut GuiCtx) {
+        let GuiCtx { ui, intents, app_state, .. } = ctx;
+
         // Read typed state written by on_update or ECS systems
         let tool = app_state
             .get::<EditorPanelState>()
@@ -115,23 +95,17 @@ mod imgui_gui_callback {
 mod world_space_draw_callback {
     fn editor_enter(_: &mut GameCtx) {} // GLUE
     fn editor_update(_: &mut GameCtx, _: f32, _: &InputState) {} // GLUE
-    fn editor_gui(_: &imgui::Ui, _: &SignalSnapshot, _: &mut SignalIntents, _: &TextureStore, _: &FontStore, _: &AppState) {} // GLUE
+    fn editor_gui(_: &mut GuiCtx) {} // GLUE
 
     use aberredengine::prelude::*;
 
-    fn editor_world_draw(
-        draw: &mut dyn WorldDraw,
-        _camera: &Camera2D,
-        _screen: &ScreenSize,
-        _app_state: &AppState,
-        _signals: &SignalSnapshot,
-    ) {
-        draw.draw_line_v(
+    fn editor_world_draw(ctx: &mut WorldDrawCtx) {
+        ctx.draw.draw_line_v(
             Vec2::new(-32.0, 0.0),
             Vec2::new(32.0, 0.0),
             Color::GREEN,
         );
-        draw.draw_line(-16, -16, 16, 16, Color::YELLOW);
+        ctx.draw.draw_line(-16, -16, 16, 16, Color::YELLOW);
     }
 
     fn register() -> EngineBuilder { // GLUE

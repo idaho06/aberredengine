@@ -34,18 +34,12 @@ mod appstate_api {
     }
 
     // GUI callback reads it (render thread — see Threading Model)
-    fn inspector_gui(
-        ui: &imgui::Ui,
-        _signals: &SignalSnapshot,
-        _intents: &mut SignalIntents,
-        _textures: &TextureStore,
-        _fonts: &FontStore,
-        app_state: &AppState,
-    ) {
-        if let Some(snapshot) = app_state.get::<InspectorSnapshot>() {
-            ui.text(format!("Selected: {}", snapshot.selected_name));
+    fn inspector_gui(ctx: &mut GuiCtx) {
+        if let Some(snapshot) = ctx.app_state.get::<InspectorSnapshot>() {
+            ctx.ui.text(format!("Selected: {}", snapshot.selected_name));
         }
     }
+    const _: GuiCallback = inspector_gui; // GLUE
 }
 
 // Runtime modification

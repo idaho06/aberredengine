@@ -4,21 +4,19 @@
 //! `on_update`, and `on_exit` callbacks, and that conflict checks in
 //! `EngineBuilder` fire as expected.
 
-use aberredengine::core::resources::appstate::AppState;
 use aberredengine::core::resources::group::TrackedGroups;
 use aberredengine::core::resources::input::InputState;
 use aberredengine::core::resources::scenemanager::SceneManager;
-use aberredengine::core::resources::signal_intents::SignalIntents;
 use aberredengine::core::resources::systemsstore::SystemsStore;
-use aberredengine::core::resources::worldsignals::{SignalSnapshot, WorldSignals};
+use aberredengine::core::resources::worldsignals::WorldSignals;
 use aberredengine::core::resources::worldtime::WorldTime;
 use aberredengine::core::systems::GameCtx;
 use aberredengine::core::systems::scene_dispatch::{
     SceneLogic, scene_enter_play, scene_switch_poll, scene_switch_system, scene_update_system,
 };
-use aberredengine::render::resources::fontstore::FontStore;
-use aberredengine::render::resources::scene_table::{GuiCallback, RenderSceneTable, SceneRender};
-use aberredengine::render::resources::texturestore::TextureStore;
+use aberredengine::render::resources::scene_table::{
+    GuiCallback, GuiCtx, RenderSceneTable, SceneRender,
+};
 use bevy_ecs::message::MessageReader;
 use bevy_ecs::prelude::*;
 use bevy_ecs::system::RunSystemOnce;
@@ -788,15 +786,7 @@ fn scene_switch_does_not_emit_stop_all_music() {
 
 #[test]
 fn gui_callback_stored_and_retrieved_via_render_scene_table() {
-    fn my_gui(
-        _ui: &::imgui::Ui,
-        _signals: &SignalSnapshot,
-        _intents: &mut SignalIntents,
-        _tex: &TextureStore,
-        _fonts: &FontStore,
-        _app_state: &AppState,
-    ) {
-    }
+    fn my_gui(_: &mut GuiCtx) {}
 
     let mut table = RenderSceneTable::default();
     table.0.insert(
@@ -825,15 +815,7 @@ fn gui_callback_stored_and_retrieved_via_render_scene_table() {
 #[test]
 fn scene_with_gui_callback_enters_correctly() {
     clear_logs();
-    fn editor_gui(
-        _ui: &::imgui::Ui,
-        _signals: &SignalSnapshot,
-        _intents: &mut SignalIntents,
-        _tex: &TextureStore,
-        _fonts: &FontStore,
-        _app_state: &AppState,
-    ) {
-    }
+    fn editor_gui(_: &mut GuiCtx) {}
 
     let mut world = setup_world();
 
