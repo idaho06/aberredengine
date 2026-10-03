@@ -72,6 +72,71 @@ pub struct SignalSnapshot {
     pub entities: Arc<FxHashMap<String, u64>>,
 }
 
+/// Read access shared by the live [`WorldSignals`] resource and its read-only
+/// [`SignalSnapshot`] copy, so code that only reads signals works with either.
+///
+/// Render-side callbacks receive a `&SignalSnapshot`; logic-side systems read
+/// `Res<WorldSignals>`. Both answer these calls identically.
+pub trait SignalsRead {
+    /// Get a scalar signal by key.
+    fn get_scalar(&self, key: &str) -> Option<f32>;
+    /// Get an integer signal by key.
+    fn get_integer(&self, key: &str) -> Option<i32>;
+    /// Get a string signal by key.
+    fn get_string(&self, key: &str) -> Option<&str>;
+    /// Check whether a flag is set.
+    fn has_flag(&self, key: &str) -> bool;
+    /// Get a registered entity by key.
+    fn get_entity(&self, key: &str) -> Option<Entity>;
+    /// Get the live entity count of a tracked group.
+    fn get_group_count(&self, group_name: &str) -> Option<i32>;
+}
+
+impl SignalsRead for SignalSnapshot {
+    fn get_scalar(&self, key: &str) -> Option<f32> {
+        self.scalars.get(key).copied()
+    }
+    fn get_integer(&self, key: &str) -> Option<i32> {
+        self.integers.get(key).copied()
+    }
+    fn get_string(&self, key: &str) -> Option<&str> {
+        self.strings.get(key).map(String::as_str)
+    }
+    fn has_flag(&self, key: &str) -> bool {
+        self.flags.contains(key)
+    }
+    fn get_entity(&self, key: &str) -> Option<Entity> {
+        self.entities.get(key).copied().map(Entity::from_bits)
+    }
+    fn get_group_count(&self, group_name: &str) -> Option<i32> {
+        // Counts come from non-negative i32 integers, so the conversion never fails.
+        self.group_counts
+            .get(group_name)
+            .and_then(|&count| i32::try_from(count).ok())
+    }
+}
+
+impl SignalsRead for WorldSignals {
+    fn get_scalar(&self, key: &str) -> Option<f32> {
+        WorldSignals::get_scalar(self, key)
+    }
+    fn get_integer(&self, key: &str) -> Option<i32> {
+        WorldSignals::get_integer(self, key)
+    }
+    fn get_string(&self, key: &str) -> Option<&str> {
+        WorldSignals::get_string(self, key)
+    }
+    fn has_flag(&self, key: &str) -> bool {
+        WorldSignals::has_flag(self, key)
+    }
+    fn get_entity(&self, key: &str) -> Option<Entity> {
+        WorldSignals::get_entity(self, key)
+    }
+    fn get_group_count(&self, group_name: &str) -> Option<i32> {
+        WorldSignals::get_group_count(self, group_name)
+    }
+}
+
 /// Global signal storage for cross-system communication.
 ///
 /// Provides maps for scalars, integers, strings, and flags accessible from
@@ -527,6 +592,38 @@ mod tests {
     use crate::testing::approx_eq;
 
     // --- Scalars ---
+
+    /// The same reads must give the same answers on the live resource and its snapshot.
+    fn assert_signal_reads(signals: &impl SignalsRead, player: Entity) {
+        assert_eq!(signals.get_scalar("speed"), Some(1.5));
+        assert_eq!(signals.get_integer("score"), Some(7));
+        assert_eq!(signals.get_string("scene"), Some("menu"));
+        assert!(signals.has_flag("paused"));
+        assert_eq!(signals.get_entity("player"), Some(player));
+        assert_eq!(signals.get_group_count("enemies"), Some(3));
+
+        assert_eq!(signals.get_scalar("missing"), None);
+        assert_eq!(signals.get_integer("missing"), None);
+        assert_eq!(signals.get_string("missing"), None);
+        assert!(!signals.has_flag("missing"));
+        assert_eq!(signals.get_entity("missing"), None);
+        assert_eq!(signals.get_group_count("missing"), None);
+    }
+
+    #[test]
+    fn world_signals_and_snapshot_share_one_read_api() {
+        let mut ws = WorldSignals::default();
+        let player = Entity::from_bits(42);
+        ws.set_scalar("speed", 1.5);
+        ws.set_integer("score", 7);
+        ws.set_string("scene", "menu");
+        ws.set_flag("paused");
+        ws.set_entity("player", player);
+        ws.set_group_count("enemies", 3);
+
+        assert_signal_reads(&ws, player);
+        assert_signal_reads(&*ws.snapshot(), player);
+    }
 
     // Removing an absent key must not dirty the domain, or `snapshot()` would
     // rebuild (and hand Lua a fresh Arc) for no change.

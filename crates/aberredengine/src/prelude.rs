@@ -66,7 +66,7 @@ pub use aberred_core::resources::signal_keys as sk;
 pub use aberred_core::resources::sim_rng::SimRng;
 pub use aberred_core::resources::texturefilter::TextureFilter;
 pub use aberred_core::resources::uniformvalue::UniformValue;
-pub use aberred_core::resources::worldsignals::{SignalSnapshot, WorldSignals};
+pub use aberred_core::resources::worldsignals::{SignalSnapshot, SignalsRead, WorldSignals};
 pub use aberred_core::resources::worldtime::WorldTime;
 
 pub use aberred_core::systems::GameCtx;

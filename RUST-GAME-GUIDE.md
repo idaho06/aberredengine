@@ -219,7 +219,7 @@ fn update(ctx: &mut GameCtx, _dt: f32, _input: &InputState) {
 **This callback runs on the render thread** (see [Threading Model](#threading-model-what-your-code-can-access) above) — unlike every other hook in this guide, which runs on the logic thread. That's why it can't reach a live `&mut WorldSignals`: the render thread never holds one. Instead it takes a `&mut GuiCtx`, whose fields are a read-only snapshot and a write-queue:
 
 - `ui: &imgui::Ui` for drawing widgets
-- `signals: &SignalSnapshot` — a read-only, frame-stale-by-one-tick copy of `WorldSignals`. Read its fields **directly** (`ctx.signals.scalars.get("key")`, `ctx.signals.flags.contains("key")`, etc.) — `SignalSnapshot` has no getter methods, unlike `WorldSignals`.
+- `signals: &SignalSnapshot` — a read-only, frame-stale-by-one-tick copy of `WorldSignals`. Read it with the same getters as `WorldSignals` (`ctx.signals.get_scalar("key")`, `ctx.signals.has_flag("key")`, etc.), which both types implement through the `SignalsRead` trait in the prelude.
 - `intents: &mut SignalIntents` — queue writes here (`ctx.intents.set_flag("key")`, `ctx.intents.set_scalar("key", 1.0)`, etc. — the method names mirror `WorldSignals`' setters). Queued writes are applied to the live `WorldSignals` on the logic thread at the start of its next sim tick — not immediately.
 - `textures: &TextureStore` for texture previews
 - `fonts: &FontStore` for font access (e.g. measuring text)
@@ -293,7 +293,7 @@ The callback takes a `&mut WorldDrawCtx` with these fields:
 - `camera: &Camera2D` for the active render camera
 - `screen: &ScreenSize` for the internal game resolution
 - `app_state: &AppState` for typed Rust-only snapshots
-- `signals: &SignalSnapshot` for read-only signal access (direct field access — `ctx.signals.flags.contains("key")` — no getter methods; there's no write side here, `world_draw_callback` only draws)
+- `signals: &SignalSnapshot` for read-only signal access (the `SignalsRead` getters — `ctx.signals.has_flag("key")`; there's no write side here, `world_draw_callback` only draws)
 
 Use the fields through `ctx`, or unpack them with `let WorldDrawCtx { draw, camera, .. } = ctx;`. Either `ctx.draw` or the unpacked `draw` passes straight to your own helpers that take `&mut dyn WorldDraw`, as below.
 
@@ -2159,7 +2159,7 @@ Since those two callbacks are the one exception that runs render-side (see [Thre
 
 | Resource | Purpose |
 |----------|---------|
-| `SignalSnapshot` | Read-only, one-tick-stale copy of `WorldSignals`. **No getter methods** — read fields directly: `signals.scalars.get(key)`, `signals.flags.contains(key)`, `signals.integers`/`.strings`/`.entities`/`.group_counts` the same way. |
+| `SignalSnapshot` | Read-only, one-tick-stale copy of `WorldSignals`. Read it through `SignalsRead` (in the prelude), the getters it shares with `WorldSignals`: `get_scalar`, `get_integer`, `get_string`, `has_flag`, `get_entity`, `get_group_count`. |
 | `SignalIntents` | Queue of pending `WorldSignals` writes. Setter methods mirror `WorldSignals`' own: `.set_flag(key)`, `.set_scalar(key, v)`, `.set_integer(key, v)`, `.set_string(key, v)`, `.remove_flag(key)`. Applied to the live `WorldSignals` at the start of the logic thread's next sim tick. |
 | `TextureStore` | Read-only access to loaded textures by key, e.g. for previews. |
 | `FontStore` | Read-only access to loaded fonts by key, e.g. for text measurement. |
