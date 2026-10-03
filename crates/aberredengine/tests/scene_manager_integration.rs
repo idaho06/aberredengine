@@ -12,7 +12,7 @@ use aberredengine::core::resources::systemsstore::SystemsStore;
 use aberredengine::core::resources::worldsignals::WorldSignals;
 use aberredengine::core::resources::worldtime::WorldTime;
 use aberredengine::core::systems::scene_dispatch::{
-    SceneLogic, scene_enter_play, scene_switch_poll, scene_switch_system, spawn_scene_entities,
+    scene_enter_play, scene_switch_poll, scene_switch_system, spawn_scene_entities,
 };
 use bevy_ecs::message::MessageReader;
 use bevy_ecs::prelude::*;
@@ -37,15 +37,6 @@ impl SceneLog {
     }
 }
 
-/// A scene with no logic callbacks; its behavior comes from observers.
-fn no_callbacks() -> SceneLogic {
-    SceneLogic {
-        on_enter: |_| {},
-        on_update: None,
-        on_exit: None,
-    }
-}
-
 /// A world with `scenes` registered, their scene entities spawned, the
 /// `switch_scene` system registered, and persistent global observers logging
 /// every scene event into [`SceneLog`]. No scene is active yet.
@@ -63,7 +54,7 @@ fn scene_world(scenes: &[&str]) -> World {
     let mut scene_manager = SceneManager::new();
     scene_manager.initial_scene = scenes.first().map(|name| name.to_string());
     for name in scenes {
-        scene_manager.insert(*name, no_callbacks());
+        scene_manager.insert(*name);
     }
     world.insert_resource(scene_manager);
     spawn_scene_entities(&mut world);

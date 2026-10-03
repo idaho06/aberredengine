@@ -5,13 +5,13 @@ pub fn load_assets() {}
 
 pub mod menu {
     use super::*;
-    pub fn enter(_ctx: &mut GameCtx) {}
-    pub fn update(_ctx: &mut GameCtx, _dt: f32, _input: &InputState) {}
+    pub fn enter(_: On<SceneEntered>) {}
+    pub fn update() {}
 }
 
 pub mod level01 {
     use super::*;
-    pub fn enter(_ctx: &mut GameCtx) {}
-    pub fn update(_ctx: &mut GameCtx, _dt: f32, _input: &InputState) {}
-    pub fn exit(_ctx: &mut GameCtx) {}
+    pub fn enter(_: On<SceneEntered>) {}
+    pub fn update() {}
+    pub fn exit(_: On<SceneExited>) {}
 }

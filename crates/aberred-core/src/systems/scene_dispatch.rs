@@ -3,26 +3,16 @@
 //! This module provides systems and types for the [`SceneManager`]
 //! pattern — an optional higher-level alternative to the raw `.on_switch_scene()` hook.
 //!
-//! - [`SceneLogic`] — per-scene logic callbacks (`on_enter`, `on_update`, `on_exit`);
-//!   a scene's render callbacks live in `aberred-render`'s `SceneRender`, keyed by
-//!   the same scene name.
-//! - [`scene_switch_system`] — engine-owned scene transition: [`SceneExited`] → despawn →
-//!   on_exit → on_enter → [`SceneEntered`]
+//! - [`scene_switch_system`] — engine-owned scene transition: [`SceneExited`] → teardown →
+//!   [`SceneEntered`]
 //! - [`spawn_scene_entities`] — spawns the persistent [`SceneName`] entity the scene events target
 //! - [`in_scene`] — run condition: true while the named scene is active
-//! - [`scene_update_system`] — per-frame dispatch to the active scene's `on_update`
 //! - [`scene_switch_poll`] — polls `WorldSignals["switch_scene"]` and triggers a scene transition
 //! - [`scene_enter_play`] — one-shot system that seeds the initial scene and triggers the first switch
 //!
-//! Callbacks receive `&mut `[`GameCtx`] for full ECS access.
-//!
-//! # Callback Signatures
-//!
-//! ```ignore
-//! fn my_enter(ctx: &mut GameCtx) { /* spawn scene entities */ }
-//! fn my_update(ctx: &mut GameCtx, dt: f32, input: &InputState) { /* per-frame logic */ }
-//! fn my_exit(ctx: &mut GameCtx) { /* cleanup before leaving */ }
-//! ```
+//! Scene behavior is ECS: observers of [`SceneEntered`]/[`SceneExited`] and systems
+//! gated on [`in_scene`]. A scene's render callbacks live in `aberred-render`'s
+//! `SceneRender`, keyed by the same scene name.
 //!
 //! # Related
 //!
@@ -42,28 +32,12 @@ use crate::math::{Color, Vec2};
 use crate::resources::appstate::AppState;
 use crate::resources::camera2d::Camera2D;
 use crate::resources::group::TrackedGroups;
-use crate::resources::input::InputState;
 use crate::resources::scenemanager::SceneManager;
 use crate::resources::screensize::ScreenSize;
 use crate::resources::signal_keys as sk;
 use crate::resources::systemsstore as hook_keys;
 use crate::resources::systemsstore::SystemsStore;
 use crate::resources::worldsignals::{SignalSnapshot, WorldSignals};
-use crate::resources::worldtime::WorldTime;
-use crate::systems::GameCtx;
-
-// ---------------------------------------------------------------------------
-// Callback type aliases
-// ---------------------------------------------------------------------------
-
-/// Called when entering a scene (spawn entities, initialize state).
-pub type SceneEnterFn = for<'w, 's> fn(&mut GameCtx<'w, 's>);
-
-/// Called every frame while the scene is active. `f32` is delta time, `&InputState` is current input.
-pub type SceneUpdateFn = for<'w, 's> fn(&mut GameCtx<'w, 's>, f32, &InputState);
-
-/// Called when leaving a scene (cleanup before despawn).
-pub type SceneExitFn = for<'w, 's> fn(&mut GameCtx<'w, 's>);
 
 /// Minimal world-space drawing interface for `WorldDrawCallback`.
 /// Uses concrete types only so the callback stays object-safe.
@@ -161,24 +135,17 @@ impl<'a> WorldDrawCtx<'a> {
 }
 
 // ---------------------------------------------------------------------------
-// SceneLogic
-// ---------------------------------------------------------------------------
-
-/// Logic-side callbacks for a single scene, from the facade's
-/// `SceneDescriptor` (`EngineBuilder::add_scene`).
-#[derive(Clone)]
-pub struct SceneLogic {
-    /// Called once when the scene becomes active.
-    pub on_enter: SceneEnterFn,
-    /// Called every frame while the scene is active (optional).
-    pub on_update: Option<SceneUpdateFn>,
-    /// Called once when leaving the scene (optional).
-    pub on_exit: Option<SceneExitFn>,
-}
-
-// ---------------------------------------------------------------------------
 // scene_switch_system — engine-owned scene transition
 // ---------------------------------------------------------------------------
+
+/// What [`scene_switch_system`] needs between its two scene events.
+type SceneTeardown = (
+    Commands<'static, 'static>,
+    SceneCleanup<'static, 'static>,
+    ResMut<'static, WorldSignals>,
+    ResMut<'static, TrackedGroups>,
+    ResMut<'static, SceneManager>,
+);
 
 /// Handles scene transitions for [`SceneManager`]-based games.
 ///
@@ -189,19 +156,10 @@ pub struct SceneLogic {
 /// unregistered name logs an error and leaves the current scene untouched.
 /// Otherwise it triggers [`SceneExited`] for the old scene while its entities are
 /// still alive, despawns non-[`Persistent`] entities, resets tracked groups to the
-/// persistent ones, runs the old scene's `on_exit`, records its name under
-/// [`sk::PREVIOUS_SCENE`], enters the new scene (`on_enter`), and
-/// finally triggers [`SceneEntered`], so entities its observers spawn belong to the
-/// new scene.
-pub fn scene_switch_system(
-    world: &mut World,
-    state: &mut SystemState<(
-        GameCtx,
-        SceneCleanup,
-        ResMut<TrackedGroups>,
-        ResMut<SceneManager>,
-    )>,
-) {
+/// persistent ones, records the old scene's name under [`sk::PREVIOUS_SCENE`], makes
+/// the new scene active, and finally triggers [`SceneEntered`], so entities its
+/// observers spawn belong to the new scene.
+pub fn scene_switch_system(world: &mut World, state: &mut SystemState<SceneTeardown>) {
     debug!("scene_switch_system: System called!");
 
     let scene_name: Arc<str> = world
@@ -210,14 +168,14 @@ pub fn scene_switch_system(
         .unwrap_or(sk::DEFAULT_SCENE)
         .into();
     let scene_manager = world.resource::<SceneManager>();
-    let Some(on_enter) = scene_manager.get(&scene_name).map(|scene| scene.on_enter) else {
+    if !scene_manager.contains(&scene_name) {
         error!(
             "scene_switch_system: No scene registered for '{}'; staying in the current scene. Registered scenes: {:?}",
             scene_name,
             scene_manager.scene_names()
         );
         return;
-    };
+    }
     let entered_entity = scene_manager.scene_entity(&scene_name);
     let previous: Option<Arc<str>> = scene_manager.active_scene.as_deref().map(Arc::from);
     let exited_entity = previous
@@ -232,29 +190,24 @@ pub fn scene_switch_system(
         });
     }
 
-    let (mut ctx, scene_cleanup, mut tracked_groups, mut scene_manager) = state
-        .get_mut(world)
-        .expect("the logic world holds the GameCtx, TrackedGroups and SceneManager resources");
-    scene_cleanup.despawn_all(&mut ctx.commands);
+    let (mut commands, scene_cleanup, mut world_signals, mut tracked_groups, mut scene_manager) =
+        state.get_mut(world).expect(
+            "the logic world holds the WorldSignals, TrackedGroups and SceneManager resources",
+        );
+    scene_cleanup.despawn_all(&mut commands);
 
     // Clear entity registrations for despawned (non-persistent) entities
-    let persistent_set = scene_cleanup.persistent_set();
-    ctx.world_signals
-        .clear_non_persistent_entities(&persistent_set);
+    world_signals.clear_non_persistent_entities(&scene_cleanup.persistent_set());
 
     tracked_groups.reset_to_persistent();
-    ctx.world_signals.clear_group_counts();
+    world_signals.clear_group_counts();
 
     if let Some(prev) = scene_manager.active_scene.take() {
-        if let Some(on_exit) = scene_manager.get(&prev).and_then(|scene| scene.on_exit) {
-            on_exit(&mut ctx);
-        }
-        ctx.world_signals.set_string(sk::PREVIOUS_SCENE, prev);
+        world_signals.set_string(sk::PREVIOUS_SCENE, prev);
     }
 
     info!("scene_switch_system: Entering scene '{}'", scene_name);
     scene_manager.active_scene = Some(scene_name.to_string());
-    on_enter(&mut ctx);
     state.apply(world);
 
     if let Some(scene) = entered_entity {
@@ -300,29 +253,6 @@ pub fn spawn_scene_entities(world: &mut World) {
 pub fn in_scene(name: &'static str) -> impl FnMut(Option<Res<SceneManager>>) -> bool + Clone {
     move |scene_manager| {
         scene_manager.is_some_and(|scenes| scenes.active_scene.as_deref() == Some(name))
-    }
-}
-
-// ---------------------------------------------------------------------------
-// scene_update_system — per-frame dispatch
-// ---------------------------------------------------------------------------
-
-/// Calls `on_update` for the active scene each frame.
-///
-/// Looks up the active scene in [`SceneManager`], and if it has an `on_update`
-/// callback, calls it with `(ctx, dt)`.
-pub fn scene_update_system(
-    mut ctx: GameCtx,
-    scene_manager: Res<SceneManager>,
-    world_time: Res<WorldTime>,
-    input: Res<InputState>,
-) {
-    let dt = world_time.delta;
-    if let Some(ref active_name) = scene_manager.active_scene
-        && let Some(descriptor) = scene_manager.get(active_name)
-        && let Some(on_update) = descriptor.on_update
-    {
-        on_update(&mut ctx, dt, &input);
     }
 }
 
@@ -425,14 +355,9 @@ mod tests {
     fn world_in_menu_switching_to(target: &str) -> (World, Entity) {
         let mut world = World::new();
         insert_game_ctx_resources(&mut world);
-        let no_callbacks = || SceneLogic {
-            on_enter: |_| {},
-            on_update: None,
-            on_exit: None,
-        };
         let mut scene_manager = SceneManager::new();
-        scene_manager.insert("menu", no_callbacks());
-        scene_manager.insert("level", no_callbacks());
+        scene_manager.insert("menu");
+        scene_manager.insert("level");
         scene_manager.active_scene = Some("menu".to_owned());
         world.insert_resource(scene_manager);
         let mut groups = TrackedGroups::default();

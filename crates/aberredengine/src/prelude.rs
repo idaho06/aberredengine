@@ -81,4 +81,4 @@ pub use aberred_core::systems::scene_dispatch::{WorldDraw, WorldDrawCtx, in_scen
 
 pub use crate::render::*;
 
-pub use crate::engine_app::{EngineBuilder, SceneDescriptor, SimSet};
+pub use crate::engine_app::{EngineBuilder, SimSet};

@@ -501,24 +501,10 @@ fn test_build_logic_schedules_with_lua_orders_group_counts_before_lua_phase() {
 
 // --- SceneManager builder tests ---
 
-use super::scene::SceneDescriptor;
-use aberred_core::systems::GameCtx;
-
-fn dummy_scene_enter(_ctx: &mut GameCtx) {}
-fn dummy_scene_update(_ctx: &mut GameCtx, _dt: f32, _input: &InputState) {}
-
-fn make_descriptor() -> SceneDescriptor {
-    SceneDescriptor {
-        on_enter: dummy_scene_enter,
-        on_update: Some(dummy_scene_update),
-        on_exit: None,
-    }
-}
-
 #[test]
 fn test_add_scene_conflicts_with_on_switch_scene() {
     let err = EngineBuilder::new()
-        .add_scene("menu", make_descriptor())
+        .add_scene("menu")
         .initial_scene("menu")
         .on_switch_scene(dummy_switch_scene)
         .try_run()
@@ -533,7 +519,7 @@ fn test_add_scene_conflicts_with_on_switch_scene() {
 #[test]
 fn test_add_scene_conflicts_with_on_enter_play() {
     let err = EngineBuilder::new()
-        .add_scene("menu", make_descriptor())
+        .add_scene("menu")
         .initial_scene("menu")
         .on_enter_play(dummy_enter_play)
         .try_run()
@@ -548,7 +534,7 @@ fn test_add_scene_conflicts_with_on_enter_play() {
 #[test]
 fn test_add_scene_requires_initial_scene() {
     let err = EngineBuilder::new()
-        .add_scene("menu", make_descriptor())
+        .add_scene("menu")
         .try_run()
         .expect_err("missing initial_scene should fail preflight");
 
@@ -563,7 +549,7 @@ fn test_add_scene_requires_initial_scene() {
 fn test_with_lua_conflicts_with_add_scene() {
     let err = EngineBuilder::new()
         .with_lua("assets/scripts/main.lua")
-        .add_scene("menu", make_descriptor())
+        .add_scene("menu")
         .initial_scene("menu")
         .try_run()
         .expect_err("with_lua + add_scene should fail preflight");
@@ -600,7 +586,7 @@ fn test_with_lua_conflicts_with_user_hook_either_order() {
 #[test]
 fn test_initial_scene_not_registered() {
     let err = EngineBuilder::new()
-        .add_scene("menu", make_descriptor())
+        .add_scene("menu")
         .initial_scene("menuu")
         .try_run()
         .expect_err("typo'd initial_scene should fail preflight");
@@ -679,8 +665,8 @@ fn valid_replay_and_scene_setups_pass_validation() {
     validate(&EngineBuilder::new().deterministic(1)).unwrap();
     validate(
         &EngineBuilder::new()
-            .add_scene("menu", make_descriptor())
-            .add_scene("level", make_descriptor())
+            .add_scene("menu")
+            .add_scene("level")
             .initial_scene("level"),
     )
     .unwrap();
@@ -703,8 +689,8 @@ fn track_group_rejects_names_too_long_for_a_signal_key() {
 fn initial_scene_not_registered_lists_every_registered_scene() {
     let err = validate(
         &EngineBuilder::new()
-            .add_scene("menu", make_descriptor())
-            .add_scene("level", make_descriptor())
+            .add_scene("menu")
+            .add_scene("level")
             .initial_scene("credits"),
     )
     .unwrap_err();
@@ -730,8 +716,8 @@ fn level_world_draw(_: &mut WorldDrawCtx) {}
 fn scene_render_callbacks_land_on_their_scene() {
     let builder = EngineBuilder::new()
         .add_scene_gui("level", level_gui)
-        .add_scene("menu", make_descriptor())
-        .add_scene("level", make_descriptor())
+        .add_scene("menu")
+        .add_scene("level")
         .add_scene_world_draw("level", level_world_draw)
         .initial_scene("menu");
     validate(&builder).unwrap();
@@ -745,11 +731,7 @@ fn scene_render_callbacks_land_on_their_scene() {
 
 #[test]
 fn scene_scoped_methods_reject_an_unregistered_scene() {
-    let base = || {
-        EngineBuilder::new()
-            .add_scene("menu", make_descriptor())
-            .initial_scene("menu")
-    };
+    let base = || EngineBuilder::new().add_scene("menu").initial_scene("menu");
     let cases = [
         (
             base().add_scene_system("level", scene_tick),
@@ -789,7 +771,7 @@ fn scene_scoped_methods_reject_an_unregistered_scene() {
 fn scene_scoped_methods_accept_a_registered_scene() {
     validate(
         &EngineBuilder::new()
-            .add_scene("menu", make_descriptor())
+            .add_scene("menu")
             .initial_scene("menu")
             .add_scene_system("menu", scene_tick)
             .on_scene_enter("menu", on_level_entered)
@@ -837,7 +819,7 @@ fn validation_reports_the_earliest_conflict_first() {
         &EngineBuilder::new()
             .with_lua("main.lua")
             .deterministic(1)
-            .add_scene("menu", make_descriptor())
+            .add_scene("menu")
             .initial_scene("menu"),
     )
     .unwrap_err();
@@ -987,11 +969,10 @@ fn add_observer_spawns_a_persistent_observer() {
 #[test]
 fn scenes_keep_registration_order() {
     let builder = EngineBuilder::new()
-        .add_scene("b", make_descriptor())
-        .add_scene("a", make_descriptor())
+        .add_scene("b")
+        .add_scene("a")
         .initial_scene("a");
-    let names: Vec<&str> = builder.scenes.iter().map(|(n, _)| n.as_str()).collect();
-    assert_eq!(names, ["b", "a"]);
+    assert_eq!(builder.scenes, ["b", "a"]);
     assert_eq!(builder.initial_scene.as_deref(), Some("a"));
 }
 

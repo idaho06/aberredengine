@@ -58,7 +58,6 @@ use aberred_core::resources::worldsignals::WorldSignals;
 use aberred_core::resources::worldtime::WorldTime;
 use aberred_core::systems::gamestate::{clean_all_entities, quit_game};
 use aberred_core::systems::rust_collision::rust_collision_observer;
-use aberred_core::systems::scene_dispatch::SceneLogic;
 use aberred_core::systems::scene_dispatch::{
     scene_enter_play, scene_switch_system, spawn_scene_entities,
 };
@@ -230,15 +229,8 @@ impl EngineBuilder {
         if use_scene_manager {
             let mut scene_manager = SceneManager::new();
             scene_manager.initial_scene = init.initial_scene.take();
-            for (name, descriptor) in init.scenes.drain(..) {
-                scene_manager.insert(
-                    name,
-                    SceneLogic {
-                        on_enter: descriptor.on_enter,
-                        on_update: descriptor.on_update,
-                        on_exit: descriptor.on_exit,
-                    },
-                );
+            for name in init.scenes.drain(..) {
+                scene_manager.insert(name);
             }
             world.insert_resource(scene_manager);
             spawn_scene_entities(world);

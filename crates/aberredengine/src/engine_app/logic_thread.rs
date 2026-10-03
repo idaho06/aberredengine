@@ -8,7 +8,6 @@ use crossbeam_channel::{Receiver, Sender};
 use super::builder::EngineBuilder;
 use super::registrar::{HookRegistrar, ObserverRegistrar, UpdateRegistrar};
 use super::replay::{ReplayPlayer, ReplayRecorder};
-use super::scene::SceneDescriptor;
 use aberred_core::error::EngineError;
 use aberred_core::events::input::InputAction;
 use aberred_core::pacing::{Pacer, StatsWindow, TickCountdown};
@@ -74,7 +73,7 @@ pub(crate) struct LogicInit {
     pub(crate) update_hook: Option<UpdateRegistrar>,
     pub(crate) extra_systems: Vec<UpdateRegistrar>,
     pub(crate) extra_observers: Vec<ObserverRegistrar>,
-    pub(crate) scenes: Vec<(String, SceneDescriptor)>,
+    pub(crate) scenes: Vec<String>,
     pub(crate) initial_scene: Option<String>,
     /// Scene-persistent group names (`EngineBuilder::track_group`).
     pub(crate) tracked_groups: Vec<String>,

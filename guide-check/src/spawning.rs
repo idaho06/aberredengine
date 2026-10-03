@@ -116,12 +116,12 @@ mod tween_components_in_rust {
     } // GLUE
 }
 
-// Spawning context: GameCtx vs. raw hooks
-mod spawning_context_gamectx_vs_raw_hooks {
+// Spawning context: scene observers vs. raw hooks
+mod spawning_context_scene_observers_vs_raw_hooks {
     use aberredengine::prelude::*; // GLUE
 
-    fn enter(ctx: &mut GameCtx) {
-        ctx.commands.spawn(( /* ... */ ));
+    fn enter(_: On<SceneEntered>, mut commands: Commands) {
+        commands.spawn(( /* ... */ ));
     }
 
     fn my_enter_play(mut commands: Commands) {
@@ -132,11 +132,11 @@ mod spawning_context_gamectx_vs_raw_hooks {
 // 6.2 Triggering scene transitions
 mod triggering_scene_transitions {
     use aberredengine::prelude::*; // GLUE
-    fn player_reached_exit(_ctx: &mut GameCtx) -> bool { false } // GLUE
+    fn player_reached_exit() -> bool { false } // GLUE
 
-    fn update(ctx: &mut GameCtx, _dt: f32, _input: &InputState) {
-        if player_reached_exit(ctx) {
-            ctx.world_signals.request_scene("level02");
+    fn update(mut signals: ResMut<WorldSignals>) {
+        if player_reached_exit() {
+            signals.request_scene("level02");
         }
     }
 }
@@ -180,10 +180,9 @@ mod group_tracking_across_scenes {
 mod per_sim_tick_scene_updates {
     use aberredengine::prelude::*; // GLUE
 
-    fn update(ctx: &mut GameCtx, dt: f32, input: &InputState) {
-        // dt = world_time.delta (the fixed sim period, 1.0 / hz, scaled by time_scale)
-        // input = current keyboard state (just_pressed, active, just_released)
-        // Use ctx to read/write ECS state once per sim tick
+    fn update(time: Res<WorldTime>, input: Res<InputState>) {
+        let dt = time.delta; // the fixed sim period, 1.0 / hz, scaled by time_scale
+        // input = current action state (just_pressed, active, just_released)
     }
 }
 

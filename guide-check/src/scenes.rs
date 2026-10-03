@@ -1,15 +1,15 @@
-// Approach A — SceneManager: scene callback signatures and scene switch
+// Approach A — SceneManager: scene observer/system signatures and scene switch
 mod scene_callbacks {
     use aberredengine::prelude::*;
 
-    // Called once when the scene becomes active (logic thread)
-    fn enter(ctx: &mut GameCtx) { /* spawn entities, set signals */ }
+    // Observes SceneEntered: runs each time the scene becomes active, after the old scene is torn down (logic thread)
+    fn enter(_: On<SceneEntered>, mut commands: Commands) { /* spawn entities, set signals */ }
 
-    // Called once per sim tick while the scene is active (logic thread)
-    fn update(ctx: &mut GameCtx, dt: f32, input: &InputState) { /* per-tick logic */ }
+    // Scene system: runs once per sim tick while the scene is active (logic thread)
+    fn update(time: Res<WorldTime>, input: Res<InputState>) { /* per-tick logic */ }
 
-    // Called once when leaving the scene, before entities are despawned (logic thread)
-    fn exit(ctx: &mut GameCtx) { /* cleanup */ }
+    // Observes SceneExited: runs when the scene is left, before its entities are despawned (logic thread)
+    fn exit(_: On<SceneExited>, mut signals: ResMut<WorldSignals>) { /* save state */ }
 
     // Called every render frame to draw ImGui widgets — Rust-only, optional, RENDER thread
     fn my_gui(ctx: &mut GuiCtx) { /* draw with ctx.ui, queue signal writes, read typed state */ }
@@ -17,19 +17,17 @@ mod scene_callbacks {
     // Called every render frame inside begin_mode2D in world space — Rust-only, optional, RENDER thread
     fn my_world_draw(ctx: &mut WorldDrawCtx) { /* draw with ctx.draw, read camera/screen/app state */ }
 
-    fn descriptor() -> aberredengine::engine_app::SceneDescriptor { // GLUE
-        aberredengine::engine_app::SceneDescriptor { // GLUE
-            on_enter: enter, on_update: Some(update), on_exit: Some(exit), // GLUE
-        } // GLUE
+    fn register(builder: EngineBuilder) -> EngineBuilder { // GLUE
+        builder.on_scene_enter("a", enter).add_scene_system("a", update).on_scene_exit("a", exit) // GLUE
     } // GLUE
 
     mod switch { // GLUE
     use super::*; // GLUE
     fn some_condition() -> bool { true } // GLUE
 
-    fn update(ctx: &mut GameCtx, _dt: f32, _input: &InputState) {
+    fn update(mut signals: ResMut<WorldSignals>) {
         if some_condition() {
-            ctx.world_signals.request_scene("level01");
+            signals.request_scene("level01");
         }
     }
     } // GLUE
@@ -48,7 +46,7 @@ mod imgui_gui_callback {
     fn editor_gui(ctx: &mut GuiCtx) {
         let GuiCtx { ui, intents, app_state, .. } = ctx;
 
-        // Read typed state written by on_update or ECS systems
+        // Read typed state written by ECS systems
         let tool = app_state
             .get::<EditorPanelState>()
             .map(|s| s.active_tool.as_str())
@@ -60,18 +58,18 @@ mod imgui_gui_callback {
             && let Some(_file) = ui.begin_menu("File")
             && ui.menu_item("Save")
         {
-            intents.set_flag("gui:action:file:save"); // consumed by on_update next sim tick
+            intents.set_flag("gui:action:file:save"); // consumed by editor_update next sim tick
         }
     }
 
-    fn editor_update(ctx: &mut GameCtx, _dt: f32, _input: &InputState) {
+    fn editor_update(mut app_state: ResMut<AppState>, mut signals: ResMut<WorldSignals>) {
         // Every insert bumps AppState's generation, so the snapshot clones it again.
         // A real game inserts only when the value changes (see the AppState API section).
-        ctx.app_state.insert(EditorPanelState {
+        app_state.insert(EditorPanelState {
             active_tool: "place".to_string(),
         });
 
-        if ctx.world_signals.take_flag("gui:action:file:save") {
+        if signals.take_flag("gui:action:file:save") {
             // handle save
         }
     }
@@ -79,6 +77,7 @@ mod imgui_gui_callback {
 
     fn register() -> EngineBuilder { // GLUE
     EngineBuilder::new() // GLUE
+    .add_scene_system("editor", editor_update)
     .add_scene_gui("editor", editor_gui)
     } // GLUE
 }
@@ -144,7 +143,6 @@ mod add_system {
     use aberredengine::prelude::*; // GLUE
     fn load_assets() {} // GLUE
     fn tilemap_save_system() {} // GLUE
-    fn editor_scene() -> SceneDescriptor { unimplemented!() } // GLUE
 
     fn main() { // GLUE
     EngineBuilder::new()
@@ -152,7 +150,7 @@ mod add_system {
         .on_setup(load_assets)
         .add_system(tilemap_load_system)   // checks a signal each tick, then queues a load
         .add_system(tilemap_save_system)   // independent second system
-        .add_scene("editor", editor_scene())
+        .add_scene("editor")
         .initial_scene("editor")
         .try_run()
         .expect("engine startup failed");
@@ -235,9 +233,9 @@ mod add_observer {
         commands.trigger(TilemapLoaded { path: "maps/level01.json".into() });
     }
 
-    // From a scene callback (via GameCtx):
-    fn my_enter(ctx: &mut GameCtx) {
-        ctx.commands.trigger(TilemapLoaded { path: "maps/intro.json".into() });
+    // From a scene observer:
+    fn my_enter(_: On<SceneEntered>, mut commands: Commands) {
+        commands.trigger(TilemapLoaded { path: "maps/intro.json".into() });
     }
 }
 
@@ -287,10 +285,10 @@ mod scene_scoped_observers {
 
     use aberredengine::prelude::*;
 
-    fn editor_enter(ctx: &mut GameCtx) {
+    fn editor_enter(_: On<SceneEntered>, mut commands: Commands) {
         // This observer lives only until the next scene switch.
         // The scene switch despawns every non-Persistent entity, this observer included.
-        ctx.commands.spawn(Observer::new(on_tile_selected));
+        commands.spawn(Observer::new(on_tile_selected));
     }
 
     fn on_tile_selected(trigger: On<TileSelectedEvent>, /* params */) {

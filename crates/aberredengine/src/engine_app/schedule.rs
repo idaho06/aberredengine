@@ -45,7 +45,7 @@ use aberred_core::systems::propagate_transforms::{
     cleanup_orphaned_global_transforms, propagate_transforms,
 };
 use aberred_core::systems::render_assets::update_bevy_render_asset_cmds;
-use aberred_core::systems::scene_dispatch::{scene_switch_poll, scene_update_system};
+use aberred_core::systems::scene_dispatch::scene_switch_poll;
 use aberred_core::systems::signal_intents::apply_signal_intents;
 use aberred_core::systems::signalbinding::update_world_signals_binding_system;
 use aberred_core::systems::stuckto::stuck_to_entity_system;
@@ -573,14 +573,8 @@ impl EngineBuilder {
     fn add_scene_manager_systems(sim: &mut Schedule, use_scene_manager: bool) {
         if use_scene_manager {
             sim.add_systems(
-                scene_update_system
-                    .run_if(state_is_playing)
-                    .in_set(SimSet::Drain),
-            );
-            sim.add_systems(
                 scene_switch_poll
                     .run_if(state_is_playing)
-                    .after(scene_update_system)
                     .in_set(SimSet::Drain),
             );
         }

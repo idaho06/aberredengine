@@ -8,7 +8,6 @@ use super::registrar::{
     HookRegistrar, ObserverRegistrar, UpdateRegistrar, conditional_system_registrar,
     hook_registrar, scene_observer_registrar, system_registrar,
 };
-use super::scene::SceneDescriptor;
 #[cfg(any(doc, feature = "lua"))] // doc links, and with_lua's update hook
 use super::schedule::SimSet;
 use aberred_core::components::persistent::Persistent;
@@ -38,7 +37,7 @@ pub struct EngineBuilder {
     pub(super) enter_play_hook: Option<HookRegistrar>,
     pub(super) update_hook: Option<UpdateRegistrar>,
     pub(super) switch_scene_hook: Option<HookRegistrar>,
-    pub(super) scenes: Vec<(String, SceneDescriptor)>,
+    pub(super) scenes: Vec<String>,
     /// `.add_scene_gui()` registrations, joined into the render table by scene name.
     pub(super) scene_guis: Vec<(&'static str, GuiCallback)>,
     /// `.add_scene_world_draw()` registrations, joined into the render table by scene name.
@@ -180,12 +179,12 @@ impl EngineBuilder {
     /// # Scene-scoped (transient) observers
     ///
     /// If you need an observer that is only active within a specific scene, spawn
-    /// it from the scene's `on_enter` callback **without** the [`Persistent`] component:
+    /// it from the scene's [`SceneEntered`] observer **without** the [`Persistent`] component:
     ///
     /// ```rust,ignore
-    /// fn my_scene_enter(ctx: &mut GameCtx) {
-    ///     // No Persistent → cleaned up on scene switch by clean_all_entities
-    ///     ctx.commands.spawn(Observer::new(on_my_event));
+    /// fn my_scene_enter(_: On<SceneEntered>, mut commands: Commands) {
+    ///     // No Persistent → despawned with the scene on the next scene switch
+    ///     commands.spawn(Observer::new(on_my_event));
     /// }
     /// ```
     pub fn add_system<M>(mut self, system: impl IntoSystem<(), (), M> + Send + 'static) -> Self {
@@ -358,10 +357,12 @@ impl EngineBuilder {
 
     /// Register a named scene for [`SceneManager`](aberred_core::resources::scenemanager::SceneManager)-based games.
     ///
-    /// Scenes are stored and later inserted into a
-    /// [`SceneManager`](aberred_core::resources::scenemanager::SceneManager) resource
-    /// at `.run()` time. Use with [`.initial_scene()`](Self::initial_scene) to
-    /// specify which scene starts first.
+    /// A scene is a name: its behavior comes from observers of
+    /// [`SceneEntered`]/[`SceneExited`] ([`on_scene_enter`](Self::on_scene_enter),
+    /// [`on_scene_exit`](Self::on_scene_exit), [`add_observer`](Self::add_observer)) and
+    /// from systems gated on it ([`add_scene_system`](Self::add_scene_system)). Each
+    /// switch despawns every non-[`Persistent`] entity. Use with
+    /// [`.initial_scene()`](Self::initial_scene) to specify which scene starts first.
     ///
     /// # Errors (at `.run()`/`.try_run()`)
     ///
@@ -372,8 +373,8 @@ impl EngineBuilder {
     ///
     /// `.try_run()` returns these as an [`EngineError`](aberred_core::error::EngineError);
     /// `.run()` prints the error to stderr and exits with a nonzero status. Neither panics.
-    pub fn add_scene(mut self, name: impl Into<String>, descriptor: SceneDescriptor) -> Self {
-        self.scenes.push((name.into(), descriptor));
+    pub fn add_scene(mut self, name: impl Into<String>) -> Self {
+        self.scenes.push(name.into());
         self
     }
 
@@ -426,8 +427,8 @@ impl EngineBuilder {
 
     /// Set the initial scene for [`SceneManager`](aberred_core::resources::scenemanager::SceneManager)-based games.
     ///
-    /// This scene's `on_enter` callback will be the first called when the
-    /// game transitions to the `Playing` state.
+    /// This scene is entered (triggering [`SceneEntered`]) when the game
+    /// transitions to the `Playing` state.
     pub fn initial_scene(mut self, name: impl Into<String>) -> Self {
         self.initial_scene = Some(name.into());
         self

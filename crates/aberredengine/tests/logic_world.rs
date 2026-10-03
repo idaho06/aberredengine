@@ -455,14 +455,6 @@ struct Ping {
     entity: Entity,
 }
 
-fn empty_scene() -> aberredengine::engine_app::SceneDescriptor {
-    aberredengine::engine_app::SceneDescriptor {
-        on_enter: |_| {},
-        on_update: None,
-        on_exit: None,
-    }
-}
-
 /// The SceneManager switch cleans up through `SceneCleanup`: the observer
 /// of a `Persistent` entity survives, a scene entity's observer does not.
 #[test]
@@ -470,8 +462,8 @@ fn scene_switch_keeps_observers_of_persistent_entities() {
     use aberredengine::core::components::persistent::Persistent;
 
     let mut tw = TestWorld::builder()
-        .add_scene("a", empty_scene())
-        .add_scene("b", empty_scene())
+        .add_scene("a")
+        .add_scene("b")
         .initial_scene("a")
         .build()
         .expect("build should succeed");
@@ -500,8 +492,8 @@ fn track_group_survives_a_scene_switch() {
     use aberredengine::core::components::persistent::Persistent;
 
     let mut tw = TestWorld::builder()
-        .add_scene("a", empty_scene())
-        .add_scene("b", empty_scene())
+        .add_scene("a")
+        .add_scene("b")
         .initial_scene("a")
         .track_group("enemies")
         .build()
@@ -548,8 +540,8 @@ fn log_scene_exited(ev: On<SceneExited>, mut log: ResMut<SceneLog>) {
 #[test]
 fn scene_switches_trigger_scene_events() {
     let mut tw = TestWorld::builder()
-        .add_scene("a", empty_scene())
-        .add_scene("b", empty_scene())
+        .add_scene("a")
+        .add_scene("b")
         .initial_scene("a")
         .add_observer(log_scene_entered)
         .add_observer(log_scene_exited)
@@ -584,8 +576,8 @@ fn scene_ticks_before_and_after_switching_to_b(
     register: impl FnOnce(TestWorldBuilder) -> TestWorldBuilder,
 ) -> (u32, u32) {
     let builder = TestWorld::builder()
-        .add_scene("a", empty_scene())
-        .add_scene("b", empty_scene())
+        .add_scene("a")
+        .add_scene("b")
         .initial_scene("a");
     let mut tw = register(builder).build().expect("build should succeed");
     tw.world.init_resource::<SceneTicks>();
@@ -636,8 +628,8 @@ fn add_scene_system_runs_only_in_its_scene() {
 #[test]
 fn scene_enter_and_exit_observers_fire_only_for_their_scene() {
     let mut tw = TestWorld::builder()
-        .add_scene("a", empty_scene())
-        .add_scene("b", empty_scene())
+        .add_scene("a")
+        .add_scene("b")
         .initial_scene("a")
         .on_scene_enter("b", |ev: On<SceneEntered>, mut log: ResMut<SceneLog>| {
             log.0.push(format!("enter {}", ev.name));

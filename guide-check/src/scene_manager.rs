@@ -8,16 +8,13 @@ fn main() -> Result<(), EngineError> {
         .config("config.ini")
         .title("My Game")
         .on_setup(scenes::load_assets)
-        .add_scene("menu", SceneDescriptor {
-            on_enter:     scenes::menu::enter,
-            on_update:    Some(scenes::menu::update),
-            on_exit:      None,
-        })
-        .add_scene("level01", SceneDescriptor {
-            on_enter:     scenes::level01::enter,
-            on_update:    Some(scenes::level01::update),
-            on_exit:      Some(scenes::level01::exit),
-        })
+        .add_scene("menu")
+        .add_scene("level01")
+        .on_scene_enter("menu", scenes::menu::enter)
+        .add_scene_system("menu", scenes::menu::update)
+        .on_scene_enter("level01", scenes::level01::enter)
+        .add_scene_system("level01", scenes::level01::update)
+        .on_scene_exit("level01", scenes::level01::exit)
         .initial_scene("menu")
         .try_run()
 }

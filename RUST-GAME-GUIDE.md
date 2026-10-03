@@ -70,7 +70,7 @@ Start every game module with the prelude:
 use aberredengine::prelude::*;
 ```
 
-It brings in the `bevy_ecs` prelude (`Commands`, `Query`, `Res`, `On`, …) and the `bevy_ecs` crate itself, so `#[derive(Component)]`, `#[derive(Resource)]` and `#[derive(Event)]` work; the math types (`Vec2`, `Color`, `Rect`); the common components, resources, events and commands; and `EngineBuilder`, `SceneDescriptor`, `SimSet` and `EngineError`. Less common items keep their full path under `aberredengine::core::...`, and the examples below import those explicitly. The render-thread types a GUI callback receives (`TextureStore`, `FontStore`, `GuiCtx`, `GuiCallback`) are in the prelude and in `aberredengine::render`; the rest of the render thread is out of reach of game code.
+It brings in the `bevy_ecs` prelude (`Commands`, `Query`, `Res`, `On`, …) and the `bevy_ecs` crate itself, so `#[derive(Component)]`, `#[derive(Resource)]` and `#[derive(Event)]` work; the math types (`Vec2`, `Color`, `Rect`); the common components, resources, events and commands; the scene events (`SceneEntered`, `SceneExited`) and the `in_scene` run condition; and `EngineBuilder`, `SimSet` and `EngineError`. Less common items keep their full path under `aberredengine::core::...`, and the examples below import those explicitly. The render-thread types a GUI callback receives (`TextureStore`, `FontStore`, `GuiCtx`, `GuiCallback`) are in the prelude and in `aberredengine::render`; the rest of the render thread is out of reach of game code.
 
 The `bevy_ecs` prelude has its own `Result` (`Result<T = (), E = BevyError>`) and a lifecycle event named `Add`, so in a module that glob-imports the prelude they shadow `std::result::Result` and `std::ops::Add`. `Result<T, E>` with an explicit error type is still the standard `Result`; write `std::ops::Add` in full when implementing it.
 
@@ -84,8 +84,8 @@ my_game/
 │   ├── main.rs                # EngineBuilder entry point
 │   └── scenes/
 │       ├── mod.rs             # Re-exports scene modules
-│       ├── menu.rs            # Menu scene callbacks
-│       └── level01.rs         # Gameplay scene callbacks
+│       ├── menu.rs            # Menu scene observers and systems
+│       └── level01.rs         # Gameplay scene observers and systems
 └── assets/
     ├── textures/              # PNG images
     ├── fonts/                 # TTF fonts
@@ -141,13 +141,13 @@ The engine owns the main loop. You configure it through `EngineBuilder` and supp
 
 The engine runs **three separate ECS worlds on three threads**: render (the main thread — owns the raylib window and GPU resources), logic/sim (a spawned thread — this is where **all your game code runs**), and audio (a spawned thread, talked to via message queues you already use for sound/music). Understanding this is required to use the rest of this guide correctly.
 
-- **Every hook and callback you write — `on_setup`, `on_enter_play`, scene `on_enter`/`on_update`/`on_exit`, systems added via `.add_system()`/`.configure_schedule()`, `Timer`/`Phase`/`CollisionRule` callbacks, and `.add_observer()` observers — runs on the LOGIC thread**, once per **sim tick**. Sim ticks happen at a configurable rate (`[simulation] hz` in `config.ini`, default 240) **decoupled from your render frame rate** — a sim tick is not the same thing as a rendered frame. `dt` is always the fixed constant `1.0 / hz` (scaled by `WorldTime.time_scale`), never a measured wall-clock value — a render stall does not spike `dt` or replay missed ticks, it simply dilates game time until the stall clears, and sim ticks keep running throughout.
+- **Every hook and callback you write — `on_setup`, `on_enter_play`, scene observers and systems (`.on_scene_enter()`/`.on_scene_exit()`/`.add_scene_system()`), systems added via `.add_system()`/`.configure_schedule()`, `Timer`/`Phase`/`CollisionRule` callbacks, and `.add_observer()` observers — runs on the LOGIC thread**, once per **sim tick**. Sim ticks happen at a configurable rate (`[simulation] hz` in `config.ini`, default 240) **decoupled from your render frame rate** — a sim tick is not the same thing as a rendered frame. `dt` is always the fixed constant `1.0 / hz` (scaled by `WorldTime.time_scale`), never a measured wall-clock value — a render stall does not spike `dt` or replay missed ticks, it simply dilates game time until the stall clears, and sim ticks keep running throughout.
 - **Scene GUI and world-draw callbacks (`.add_scene_gui()`/`.add_scene_world_draw()`) are the one exception** — they run on the RENDER thread, inside the render pass itself. This is why they take a context struct (`GuiCtx`/`WorldDrawCtx`) of read-only snapshots instead of live, mutable `WorldSignals` — see below.
 - **A direct consequence**: logic-thread code (everything in the first bullet) can **never** take `RaylibAccess`, `NonSend<FontStore>`, `NonSend<ShaderStore>`, or `Res<TextureStore>` as a system parameter — those resources only exist in the render world. A logic-side system that requests one panics the first time it runs: Bevy checks a system's resources when the system runs, not when the schedule is built. There is no escape hatch to register a custom system on the render thread. This is why asset loading (Section 4) goes through a message queue instead of calling `rl.load_texture(...)` directly inside `setup()`.
 
 ### Approach A — SceneManager (recommended for multi-scene games)
 
-Register named scenes with enter/update/exit callbacks. A scene's optional GUI and world-space draw callbacks are registered with `.add_scene_gui()`/`.add_scene_world_draw()`. The engine handles despawning non-persistent entities on scene transitions and dispatching to the correct scene's callbacks.
+Register named scenes, then attach behavior to them: `.on_scene_enter()`/`.on_scene_exit()` observers run when a scene becomes active or is left, and `.add_scene_system()` systems run once per sim tick while it is active (see [Scene-scoped systems and observers](#scene-scoped-systems-and-observers)). A scene's optional GUI and world-space draw callbacks are registered with `.add_scene_gui()`/`.add_scene_world_draw()`. Every scene switch despawns the non-persistent entities.
 
 ```rust
 use aberredengine::prelude::*;
@@ -159,35 +159,32 @@ fn main() -> Result<(), EngineError> {
         .config("config.ini")
         .title("My Game")
         .on_setup(scenes::load_assets)
-        .add_scene("menu", SceneDescriptor {
-            on_enter:     scenes::menu::enter,
-            on_update:    Some(scenes::menu::update),
-            on_exit:      None,
-        })
-        .add_scene("level01", SceneDescriptor {
-            on_enter:     scenes::level01::enter,
-            on_update:    Some(scenes::level01::update),
-            on_exit:      Some(scenes::level01::exit),
-        })
+        .add_scene("menu")
+        .add_scene("level01")
+        .on_scene_enter("menu", scenes::menu::enter)
+        .add_scene_system("menu", scenes::menu::update)
+        .on_scene_enter("level01", scenes::level01::enter)
+        .add_scene_system("level01", scenes::level01::update)
+        .on_scene_exit("level01", scenes::level01::exit)
         .initial_scene("menu")
         .try_run()
 }
 
 ```
 
-Scene callback signatures:
+Scene observer and system signatures — ordinary Bevy observers and systems, with any parameters:
 
 ```rust
 use aberredengine::prelude::*;
 
-// Called once when the scene becomes active (logic thread)
-fn enter(ctx: &mut GameCtx) { /* spawn entities, set signals */ }
+// Observes SceneEntered: runs each time the scene becomes active, after the old scene is torn down (logic thread)
+fn enter(_: On<SceneEntered>, mut commands: Commands) { /* spawn entities, set signals */ }
 
-// Called once per sim tick while the scene is active (logic thread)
-fn update(ctx: &mut GameCtx, dt: f32, input: &InputState) { /* per-tick logic */ }
+// Scene system: runs once per sim tick while the scene is active (logic thread)
+fn update(time: Res<WorldTime>, input: Res<InputState>) { /* per-tick logic */ }
 
-// Called once when leaving the scene, before entities are despawned (logic thread)
-fn exit(ctx: &mut GameCtx) { /* cleanup */ }
+// Observes SceneExited: runs when the scene is left, before its entities are despawned (logic thread)
+fn exit(_: On<SceneExited>, mut signals: ResMut<WorldSignals>) { /* save state */ }
 
 // Called every render frame to draw ImGui widgets — Rust-only, optional, RENDER thread
 fn my_gui(ctx: &mut GuiCtx) { /* draw with ctx.ui, queue signal writes, read typed state */ }
@@ -196,17 +193,17 @@ fn my_gui(ctx: &mut GuiCtx) { /* draw with ctx.ui, queue signal writes, read typ
 fn my_world_draw(ctx: &mut WorldDrawCtx) { /* draw with ctx.draw, read camera/screen/app state */ }
 ```
 
-To trigger a scene transition from within a scene callback, call `WorldSignals::request_scene(name)`. It sets the target scene name (`sk::SCENE`) and the `sk::SWITCH_SCENE` flag; the engine's `scene_switch_poll` system (registered automatically by `EngineBuilder::add_scene()`) picks up the flag each sim tick and triggers the transition.
+To trigger a scene transition from a system or observer, call `WorldSignals::request_scene(name)`. It sets the target scene name (`sk::SCENE`) and the `sk::SWITCH_SCENE` flag; the engine's `scene_switch_poll` system (registered automatically by `EngineBuilder::add_scene()`) picks up the flag each sim tick and triggers the transition.
 
 ```rust
-fn update(ctx: &mut GameCtx, _dt: f32, _input: &InputState) {
+fn update(mut signals: ResMut<WorldSignals>) {
     if some_condition() {
-        ctx.world_signals.request_scene("level01");
+        signals.request_scene("level01");
     }
 }
 ```
 
-> **Tip:** Scene transitions can be triggered from callbacks by setting the `"switch_scene"` flag on `WorldSignals` — the engine polls this automatically. For menu-driven transitions, `MenuAction::SetScene` handles the switch internally. See [Section 6.2](#62-triggering-scene-transitions) for details.
+> **Tip:** Scene transitions can be triggered from any logic-thread system or observer by setting the `"switch_scene"` flag on `WorldSignals` — the engine polls this automatically. For menu-driven transitions, `MenuAction::SetScene` handles the switch internally. See [Section 6.2](#62-triggering-scene-transitions) for details.
 
 ### ImGui GUI callback (Rust-only)
 
@@ -219,7 +216,7 @@ A scene's GUI callback, registered with `.add_scene_gui(scene, callback)`, draws
 - `intents: &mut SignalIntents` — queue writes here (`ctx.intents.set_flag("key")`, `ctx.intents.set_scalar("key", 1.0)`, etc. — the method names mirror `WorldSignals`' setters). Queued writes are applied to the live `WorldSignals` on the logic thread at the start of its next sim tick — not immediately.
 - `textures: &TextureStore` for texture previews
 - `fonts: &FontStore` for font access (e.g. measuring text)
-- `app_state: &AppState` for richer Rust-only typed snapshots/view-models produced by systems or scene callbacks
+- `app_state: &AppState` for richer Rust-only typed snapshots/view-models produced by systems and observers
 
 `AppState` is inserted automatically by the engine and stores one value per Rust type. Use newtypes when you need two values of the same underlying type.
 
@@ -234,7 +231,7 @@ struct EditorPanelState {
 fn editor_gui(ctx: &mut GuiCtx) {
     let GuiCtx { ui, intents, app_state, .. } = ctx;
 
-    // Read typed state written by on_update or ECS systems
+    // Read typed state written by ECS systems
     let tool = app_state
         .get::<EditorPanelState>()
         .map(|s| s.active_tool.as_str())
@@ -246,30 +243,31 @@ fn editor_gui(ctx: &mut GuiCtx) {
         && let Some(_file) = ui.begin_menu("File")
         && ui.menu_item("Save")
     {
-        intents.set_flag("gui:action:file:save"); // consumed by on_update next sim tick
+        intents.set_flag("gui:action:file:save"); // consumed by editor_update next sim tick
     }
 }
 
-fn editor_update(ctx: &mut GameCtx, _dt: f32, _input: &InputState) {
+fn editor_update(mut app_state: ResMut<AppState>, mut signals: ResMut<WorldSignals>) {
     // Every insert bumps AppState's generation, so the snapshot clones it again.
     // A real game inserts only when the value changes (see the AppState API section).
-    ctx.app_state.insert(EditorPanelState {
+    app_state.insert(EditorPanelState {
         active_tool: "place".to_string(),
     });
 
-    if ctx.world_signals.take_flag("gui:action:file:save") {
+    if signals.take_flag("gui:action:file:save") {
         // handle save
     }
 }
 ```
 
-Register it for its scene:
+Register both for the scene:
 
 ```rust
+.add_scene_system("editor", editor_update)
 .add_scene_gui("editor", editor_gui)
 ```
 
-> **Convention:** prefix all GUI signal keys with `"gui:"` to avoid collisions with game signals. Use `"gui:action:<verb>"` for flags set by the GUI and consumed by `on_update`, and `"gui:state:<name>"` for values set by `on_update` and read by the GUI.
+> **Convention:** prefix all GUI signal keys with `"gui:"` to avoid collisions with game signals. Use `"gui:action:<verb>"` for flags set by the GUI and consumed by a scene system, and `"gui:state:<name>"` for values set by a scene system and read by the GUI.
 
 ### World-space draw callback (Rust-only)
 
@@ -363,9 +361,9 @@ Setup ──→ Playing ──→ Quitting
 ```
 
 1. **Setup** — The engine calls the `setup` hook once, on the logic thread. Load assets here (textures, fonts, sounds, shaders, animations) — see [Section 4](#4-loading-assets) for how texture/font/shader loading works. Omit `.on_setup()` if you have nothing to load. Once the hook has run, the engine moves to `Playing` on its own, as soon as every load queued so far has been answered (see [Waiting for loads](#waiting-for-loads)); a failed load counts as answered. A hook that requests `Playing` itself waits the same way. A hook that requests another state through `ResMut<NextGameState>` (e.g. `GameStates::Quitting`) gets it at once.
-2. **Playing** — The engine transitions to playing, calls `enter_play` (or the initial scene's `on_enter`), then runs your `.add_system()` systems (and the active scene's `on_update`) once per sim tick.
+2. **Playing** — The engine transitions to playing, calls `enter_play` (or enters the initial scene, triggering `SceneEntered`), then runs your `.add_system()` systems (and the active scene's `.add_scene_system()` systems) once per sim tick.
 3. **Scene switches** — With the SceneManager, setting the `"switch_scene"` flag on `WorldSignals` runs the exit→enter sequence on the next sim tick. With raw hooks, only a `MenuAction::SetScene` menu item runs the `switch_scene` hook; nothing polls the flag in a pure-Rust game unless you register a poll system (see below).
-4. **Quitting** — When the game state becomes `GameStates::Quitting` (via `NextGameState::set(GameStates::Quitting)`, `ctx.world_signals.request_quit()`, or a `MenuAction::QuitGame` menu item) or the window is closed, the engine shuts down. Scene, timer, phase, collision and menu callbacks use `request_quit()`, since `GameCtx` has no `NextGameState`.
+4. **Quitting** — When the game state becomes `GameStates::Quitting` (via `NextGameState::set(GameStates::Quitting)`, `WorldSignals::request_quit()`, or a `MenuAction::QuitGame` menu item) or the window is closed, the engine shuts down. Timer, phase, collision and menu callbacks use `ctx.world_signals.request_quit()`, since `GameCtx` has no `NextGameState`.
 
 > **With raw hooks, the `"switch_scene"` flag needs a poll system.** The SceneManager polls it for you; with `.on_switch_scene()` nothing does, so setting the flag from a callback has no effect. Run the hook yourself:
 >
@@ -435,7 +433,7 @@ EngineBuilder::new()
     .on_setup(load_assets)
     .add_system(tilemap_load_system)   // checks a signal each tick, then queues a load
     .add_system(tilemap_save_system)   // independent second system
-    .add_scene("editor", editor_scene())
+    .add_scene("editor")
     .initial_scene("editor")
     .try_run()
     .expect("engine startup failed");
@@ -462,7 +460,7 @@ fn tilemap_load_system(
 }
 ```
 
-> **When to use `.add_system()` vs scene callbacks:** Scene callbacks (`on_enter`, `on_update`) receive `&mut GameCtx`, which already covers most per-tick needs (commands, common queries, `WorldSignals`, `AppState`, audio). Reach for `.add_system()` when you need ECS system params `GameCtx` doesn't expose (arbitrary `Query`s, `MessageWriter<RenderAssetCmd>`, etc.), or when the logic should run independent of which scene is active.
+> **When to use `.add_system()` vs `.add_scene_system()`:** both take ordinary systems with any parameters. Use `.add_scene_system(scene, ..)` for logic that belongs to one scene, and `.add_system()` for logic that runs whichever scene is active.
 
 #### `.configure_schedule(closure)` — full ordering control
 
@@ -531,7 +529,7 @@ EngineBuilder::new()
     .expect("engine startup failed");
 ```
 
-**Trigger the event from any system or scene callback:**
+**Trigger the event from any system or observer:**
 
 ```rust
 // From a Bevy ECS system:
@@ -539,9 +537,9 @@ fn my_system(mut commands: Commands) {
     commands.trigger(TilemapLoaded { path: "maps/level01.json".into() });
 }
 
-// From a scene callback (via GameCtx):
-fn my_enter(ctx: &mut GameCtx) {
-    ctx.commands.trigger(TilemapLoaded { path: "maps/intro.json".into() });
+// From a scene observer:
+fn my_enter(_: On<SceneEntered>, mut commands: Commands) {
+    commands.trigger(TilemapLoaded { path: "maps/intro.json".into() });
 }
 ```
 
@@ -594,19 +592,19 @@ fn register(builder: EngineBuilder) -> EngineBuilder {
 }
 ```
 
-Scene systems run in `SimSet::ScriptUpdate`, before movement and collision, so they see the state the previous tick left. A scene's `on_update` callback runs later in the tick, after collision.
+Scene systems run in `SimSet::ScriptUpdate`, before movement and collision, so they see the state the previous tick left.
 
 #### Scene-scoped (transient) observers
 
-Observers registered with `.add_observer()` are always active. For observers that should only fire within a specific scene, spawn them from the scene's `on_enter` callback **without** the `Persistent` component:
+Observers registered with `.add_observer()` are always active. For observers that should only fire within a specific scene, spawn them from the scene's `SceneEntered` observer **without** the `Persistent` component:
 
 ```rust
 use aberredengine::prelude::*;
 
-fn editor_enter(ctx: &mut GameCtx) {
+fn editor_enter(_: On<SceneEntered>, mut commands: Commands) {
     // This observer lives only until the next scene switch.
     // The scene switch despawns every non-Persistent entity, this observer included.
-    ctx.commands.spawn(Observer::new(on_tile_selected));
+    commands.spawn(Observer::new(on_tile_selected));
 }
 
 fn on_tile_selected(trigger: On<TileSelectedEvent>, /* params */) {
@@ -678,7 +676,7 @@ This is useful for automated testing (replay a fixed input script, assert on the
 - `WorldTime` doesn't advance during Setup (in every mode): `elapsed` and `frame_count` are `0` on the first `Playing` tick, and `delta` stays `0` until then.
 - A replay records and plays back from the first `Playing` tick; Setup runs live, loads included, in both.
 - In deterministic mode, input that arrives during Setup is held back. Key and mouse samples are dropped, so F10/F11 do nothing while loading. GUI intents and the latest screen size are applied on the first `Playing` tick.
-- Engine systems that don't use `delta` still run during Setup: collision rules, Rust phase `on_update`, group counts. Spawn gameplay entities in `on_enter_play` or the initial scene's `on_enter`, not in the setup hook, so a longer Setup can't change them.
+- Engine systems that don't use `delta` still run during Setup: collision rules, Rust phase `on_update`, group counts. Spawn gameplay entities in `on_enter_play` or the initial scene's `SceneEntered` observer, not in the setup hook, so a longer Setup can't change them.
 
 **Assets load during Setup.** A load finishes at a wall-clock time, so a deterministic game can't change its loaded assets while `Playing`:
 
@@ -1183,7 +1181,7 @@ fn setup(mut assets: AssetLoader, mut anim_store: ResMut<AnimationStore>) -> Res
 }
 ```
 
-Setup waits for these loads, so they're ready by `on_enter_play`/the initial scene's `on_enter`. Assets loaded later, during `Playing`, follow the load-then-use gap described in the Textures/Fonts subsections.
+Setup waits for these loads, so they're ready by `on_enter_play`/the initial scene's `SceneEntered`. Assets loaded later, during `Playing`, follow the load-then-use gap described in the Textures/Fonts subsections.
 
 ---
 
@@ -1367,17 +1365,17 @@ ctx.commands.spawn((
 
 > **Important:** The generic parameter must match the component you want the engine to animate. For example, use `Tween<MapPosition>` with `MapPosition`, not `Tween<Vec2>`. The tween systems query concrete ECS component types, not raw value types.
 
-### Spawning context: GameCtx vs. raw hooks
+### Spawning context: scene observers vs. raw hooks
 
-In **scene callbacks**, use `ctx.commands` to spawn entities:
+In **scene observers and systems**, take `Commands` as a parameter:
 
 ```rust
-fn enter(ctx: &mut GameCtx) {
-    ctx.commands.spawn(( /* ... */ ));
+fn enter(_: On<SceneEntered>, mut commands: Commands) {
+    commands.spawn(( /* ... */ ));
 }
 ```
 
-In **raw hooks**, use `Commands` as a system parameter directly:
+In **raw hooks**, likewise:
 
 ```rust
 fn my_enter_play(mut commands: Commands) {
@@ -1434,15 +1432,15 @@ Section 3 introduced `SceneManager` at the API level. This section covers intern
 When the `scene_switch_system` runs, it performs these steps in order:
 
 1. **Read and check the target scene** — reads `WorldSignals["scene"]` for the target scene name (defaults to `"menu"` if unset). If no scene is registered under that name, the system logs "No scene registered" and returns: nothing below runs, and the current scene keeps running untouched
-2. **Despawn non-persistent entities** — every entity *without* the `Persistent` component is despawned
-3. **Clear entity registrations** — non-persistent entity refs stored in `WorldSignals` are removed
-4. **Reset group tracking** — `TrackedGroups` drops every group except the `.track_group()` ones, and `WorldSignals` group counts are wiped (they are published again on the next tick)
-5. **Call `on_exit` on previous scene** — if there was an active scene with an `on_exit` callback, it fires
+2. **Trigger `SceneExited`** — if a scene was active, its exit observers run while its entities, `WorldSignals` entity registrations and group counts are all still in place
+3. **Despawn non-persistent entities** — every entity *without* the `Persistent` component is despawned
+4. **Clear entity registrations** — non-persistent entity refs stored in `WorldSignals` are removed
+5. **Reset group tracking** — `TrackedGroups` drops every group except the `.track_group()` ones, and `WorldSignals` group counts are wiped (they are published again on the next tick)
 6. **Write `previous_scene`** — the old active scene name is stored in `WorldSignals["previous_scene"]`
 7. **Set active scene** — updates `SceneManager.active_scene` to the new scene name
-8. **Call `on_enter` on new scene** — fires the new scene's `on_enter` callback, which typically spawns entities and sets up initial state
+8. **Trigger `SceneEntered`** — the new scene's enter observers run, typically spawning entities and setting up initial state; what they spawn belongs to the new scene
 
-When `on_exit` runs, the old scene's entities still exist (their despawn is queued, not applied yet), but steps 3 and 4 have already run: `WorldSignals` entity registrations of non-persistent entities and all group counts are gone, so `get_entity()` and `get_group_count()` return `None` there. Read what you need from them in `on_update` before triggering the switch.
+The new scene's `.add_scene_system()` systems start running on the next sim tick.
 
 > **Note:** a mistyped scene name only logs an error ("No scene registered for '…'", followed by the list of registered scenes), so it is easy to miss. Prefer constants over repeated string literals.
 
@@ -1454,12 +1452,12 @@ Scene transitions work by running the `scene_switch_system` as a one-shot system
 
 **1. Menu-driven (recommended):** Use `MenuAction::SetScene("level01")` — the menu system calls `commands.run_system()` internally via `dispatch_menu_action`.
 
-**2. Flag-based from scene callbacks:** Call `WorldSignals::request_scene(name)`, which sets the target scene name and the `sk::SWITCH_SCENE` flag. The engine's `scene_switch_poll` system (registered automatically by `EngineBuilder::add_scene()`) picks up the flag each sim tick and triggers the transition:
+**2. Flag-based from systems and observers:** Call `WorldSignals::request_scene(name)`, which sets the target scene name and the `sk::SWITCH_SCENE` flag. The engine's `scene_switch_poll` system (registered automatically by `EngineBuilder::add_scene()`) picks up the flag each sim tick and triggers the transition:
 
 ```rust
-fn update(ctx: &mut GameCtx, _dt: f32, _input: &InputState) {
-    if player_reached_exit(ctx) {
-        ctx.world_signals.request_scene("level02");
+fn update(mut signals: ResMut<WorldSignals>) {
+    if player_reached_exit() {
+        signals.request_scene("level02");
     }
 }
 ```
@@ -1522,17 +1520,16 @@ Key behaviors:
 
 ### 6.5 Per-sim-tick scene updates
 
-The `scene_update_system` runs once per sim tick while a scene is active — not once per rendered frame; see [Threading Model](#threading-model-what-your-code-can-access) for why those differ. It looks up the active scene in `SceneManager`, and if it has an `on_update` callback, calls it:
+A system registered with `.add_scene_system(scene, system)` runs once per sim tick while `scene` is active — not once per rendered frame; see [Threading Model](#threading-model-what-your-code-can-access) for why those differ. It takes whatever system parameters it needs:
 
 ```rust
-fn update(ctx: &mut GameCtx, dt: f32, input: &InputState) {
-    // dt = world_time.delta (the fixed sim period, 1.0 / hz, scaled by time_scale)
-    // input = current keyboard state (just_pressed, active, just_released)
-    // Use ctx to read/write ECS state once per sim tick
+fn update(time: Res<WorldTime>, input: Res<InputState>) {
+    let dt = time.delta; // the fixed sim period, 1.0 / hz, scaled by time_scale
+    // input = current action state (just_pressed, active, just_released)
 }
 ```
 
-The `dt` parameter is `WorldTime.delta` — always the fixed constant `1.0 / hz` (`[simulation] hz` in `config.ini`), scaled only by `WorldTime.time_scale`. It is never a measured, render-frame-dependent value — a render stall dilates game time instead of spiking `dt`. Use it for frame-rate-independent logic (e.g., `speed * dt`) exactly as you would a measured delta; the fixed-constant behavior only matters if you're reasoning about stalls or determinism.
+`WorldTime.delta` — always the fixed constant `1.0 / hz` (`[simulation] hz` in `config.ini`), scaled only by `WorldTime.time_scale`. It is never a measured, render-frame-dependent value — a render stall dilates game time instead of spiking `dt`. Use it for frame-rate-independent logic (e.g., `speed * dt`) exactly as you would a measured delta; the fixed-constant behavior only matters if you're reasoning about stalls or determinism.
 
 ---
 
@@ -1540,7 +1537,7 @@ The `dt` parameter is `WorldTime.delta` — always the fixed constant `1.0 / hz`
 
 The engine provides several gameplay systems: **timers**, **phase state machines**, **collision rules**, **menus**, animation/tween-finished events, and GUI widgets. Each of the first four follows the same pattern: a **component** attached to an entity, a **callback type** (Rust function pointer), and a **context SystemParam** providing full ECS access.
 
-All callback types — timers, phases, collisions, menus, and scene callbacks — receive `&mut GameCtx` (`aberred-core/src/systems/game_ctx.rs`), which provides commands, mutable/write queries, read-only queries, and key resources including `world_signals`, `app_state`, `audio`, `world_time`, `config`, `post_process`, `camera_follow`, `input_bindings`, and `sim_rng` (the RNG deterministic-mode games must draw from for anything that needs to reproduce — see [Determinism and replay](#determinism-and-replay)). `GameCtx` runs on the logic thread and has **no direct texture access** — if a callback needs texture data, load it via `RenderAssetCmd` and read back dimensions from `TextureDimsStore` (see [Section 4](#4-loading-assets)). Callbacks have full ECS access otherwise.
+All callback types — timers, phases, collisions and menus — receive `&mut GameCtx` (`aberred-core/src/systems/game_ctx.rs`), which provides commands, mutable/write queries, read-only queries, and key resources including `world_signals`, `app_state`, `audio`, `world_time`, `config`, `post_process`, `camera_follow`, `input_bindings`, and `sim_rng` (the RNG deterministic-mode games must draw from for anything that needs to reproduce — see [Determinism and replay](#determinism-and-replay)). `GameCtx` runs on the logic thread and has **no direct texture access** — if a callback needs texture data, load it via `RenderAssetCmd` and read back dimensions from `TextureDimsStore` (see [Section 4](#4-loading-assets)). Callbacks have full ECS access otherwise.
 
 ### 7.1 Timers
 

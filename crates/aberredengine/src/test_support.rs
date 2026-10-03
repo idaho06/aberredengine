@@ -40,7 +40,6 @@ use crossbeam_channel::{Receiver, Sender, bounded, unbounded};
 #[cfg(feature = "lua")]
 use std::path::PathBuf;
 
-use crate::engine_app::SceneDescriptor;
 use crate::engine_app::{
     EngineBuilder, HookRegistrar, LogicInit, ObserverRegistrar, UpdateRegistrar, apply_tick_input,
     conditional_system_registrar, drain_logic_messages, hold_back_deterministic_setup_input,
@@ -94,7 +93,7 @@ pub struct TestWorldBuilder {
     update_hook: Option<UpdateRegistrar>,
     extra_systems: Vec<UpdateRegistrar>,
     extra_observers: Vec<ObserverRegistrar>,
-    scenes: Vec<(String, SceneDescriptor)>,
+    scenes: Vec<String>,
     initial_scene: Option<String>,
     tracked_groups: Vec<String>,
     #[cfg(feature = "lua")]
@@ -235,8 +234,8 @@ impl TestWorldBuilder {
     }
 
     /// Register a named scene for `SceneManager`-based tests.
-    pub fn add_scene(mut self, name: impl Into<String>, descriptor: SceneDescriptor) -> Self {
-        self.scenes.push((name.into(), descriptor));
+    pub fn add_scene(mut self, name: impl Into<String>) -> Self {
+        self.scenes.push(name.into());
         self
     }
 

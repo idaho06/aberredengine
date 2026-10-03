@@ -80,7 +80,7 @@ impl EngineBuilder {
         let Some(initial_scene) = &self.initial_scene else {
             return Err(EngineError::AddSceneRequiresInitialScene);
         };
-        if !self.scenes.iter().any(|(name, _)| name == initial_scene) {
+        if !self.scenes.contains(initial_scene) {
             return Err(EngineError::InitialSceneNotRegistered {
                 name: initial_scene.clone(),
                 registered: self.registered_scene_list(),
@@ -93,7 +93,7 @@ impl EngineBuilder {
     /// must be registered with `.add_scene()`; otherwise the system would never
     /// run, or the observer would have no scene entity to attach to.
     fn validate_scene_refs(&self) -> Result<(), EngineError> {
-        let registered = |name: &str| self.scenes.iter().any(|(scene, _)| scene == name);
+        let registered = |name: &str| self.scenes.iter().any(|scene| scene == name);
         if let Some(&(method, name)) = self.scene_refs.iter().find(|(_, name)| !registered(name)) {
             return Err(EngineError::SceneNotRegistered {
                 method,
@@ -106,11 +106,7 @@ impl EngineBuilder {
 
     /// `"menu, level"`: registered scene names in registration order, for errors.
     fn registered_scene_list(&self) -> String {
-        self.scenes
-            .iter()
-            .map(|(name, _)| name.as_str())
-            .collect::<Vec<_>>()
-            .join(", ")
+        self.scenes.join(", ")
     }
 
     /// `.deterministic(seed)` and `.with_lua()` are mutually exclusive --

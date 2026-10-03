@@ -22,7 +22,6 @@
 //! - [`crate::components::phase::PhaseEnterFn`] etc. – fn-pointer types for phase callbacks
 //! - [`crate::components::collision::CollisionCallback`] – fn-pointer type for collision callbacks
 //! - [`crate::components::menu::MenuRustCallback`] – fn-pointer type for menu callbacks
-//! - [`crate::systems::scene_dispatch::SceneEnterFn`] etc. – fn-pointer types for scene callbacks
 
 use bevy_ecs::prelude::*;
 use bevy_ecs::system::SystemParam;

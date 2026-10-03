@@ -37,11 +37,9 @@
 //! }
 //! ```
 //!
-//! **Multiple per-frame systems and custom observers:**
+//! **Scenes, per-tick systems and custom observers:**
 //! ```rust,ignore
-//! use aberredengine::engine_app::EngineBuilder;
-//! use aberredengine::engine_app::SceneDescriptor;
-//! use aberredengine::EngineError;
+//! use aberredengine::prelude::*;
 //!
 //! fn main() -> Result<(), EngineError> {
 //!     EngineBuilder::new()
@@ -50,19 +48,21 @@
 //!         .add_system(tilemap_load_system)   // runs once per sim tick while Playing
 //!         .add_system(tilemap_save_system)   // multiple systems allowed
 //!         .add_observer(on_tilemap_loaded)   // persistent observer for a custom event
-//!         .add_scene("intro", SceneDescriptor { /* … */ })
-//!         .add_scene("editor", SceneDescriptor { /* … */ })
+//!         .add_scene("intro")
+//!         .add_scene("editor")
+//!         .on_scene_enter("editor", spawn_editor)  // SceneEntered, "editor" only
+//!         .add_scene_system("editor", editor_tools) // per tick while "editor" is active
 //!         .initial_scene("intro")
 //!         .try_run()
 //! }
 //! ```
 //!
 //! For scene-scoped (transient) observers — active only within one scene —
-//! spawn them from the scene's `on_enter` callback without [`Persistent`](aberred_core::components::persistent::Persistent):
+//! spawn them from a `SceneEntered` observer without [`Persistent`](aberred_core::components::persistent::Persistent):
 //! ```rust,ignore
-//! fn my_scene_enter(ctx: &mut GameCtx) {
-//!     // Cleaned up automatically by clean_all_entities on scene switch
-//!     ctx.commands.spawn(Observer::new(on_my_scene_event));
+//! fn spawn_editor(_: On<SceneEntered>, mut commands: Commands) {
+//!     // Despawned with the scene on the next scene switch
+//!     commands.spawn(Observer::new(on_my_scene_event));
 //! }
 //! ```
 //!
@@ -106,7 +106,6 @@ mod logic_world;
 mod registrar;
 mod replay;
 mod run;
-mod scene;
 mod schedule;
 #[cfg(test)]
 mod tests;
@@ -115,7 +114,6 @@ mod validate;
 // External API surface — keeps `crate::engine_app::EngineBuilder` unchanged
 // for src/main.rs, doc examples, and downstream games.
 pub use builder::EngineBuilder;
-pub use scene::SceneDescriptor;
 pub use schedule::SimSet;
 
 // Crate-internal surface — exactly what src/test_support.rs imports today.
