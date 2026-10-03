@@ -662,7 +662,6 @@ Instead, texture/font/shader loading is **queued** from the logic thread and **p
 
 ```rust
 use aberredengine::prelude::*;
-use std::sync::Arc;
 
 fn setup(
     mut anim_store: ResMut<AnimationStore>,
@@ -954,26 +953,16 @@ Animations are pure data — no raylib calls needed. `AnimationStore` is pre-ins
 ```rust
 use aberredengine::prelude::*;
 
-anim_store.animations.insert("player_idle".to_string(), AnimationResource {
-    tex_key: Arc::from("player"),              // must match a TextureStore key
-    position: Vec2::new(0.0, 0.0),            // base offset in spritesheet
-    horizontal_displacement: 32.0,             // per-frame X step (= frame width)
-    vertical_displacement: 0.0,                // non-zero enables row-wrapping
-    frame_count: 4,                            // number of frames
-    fps: 8.0,                                  // playback speed
-    looped: true,                              // restart after last frame
-});
+anim_store.insert("player_idle", AnimationResource::new("player", 32.0, 4, 8.0));
 
-anim_store.animations.insert("player_run".to_string(), AnimationResource {
-    tex_key: Arc::from("player"),
-    position: Vec2::new(0.0, 64.0),           // second row of spritesheet
-    horizontal_displacement: 32.0,
-    vertical_displacement: 0.0,
-    frame_count: 6,
-    fps: 12.0,
-    looped: true,
-});
+anim_store.insert(
+    "player_run",
+    AnimationResource::new("player", 32.0, 6, 12.0)
+        .with_position(Vec2::new(0.0, 64.0)), // second row of the spritesheet
+);
 ```
+
+`AnimationResource::new(tex_key, frame_width, frame_count, fps)` loops, starts at the texture's top-left and steps `frame_width` pixels per frame on one row; `tex_key` must match a loaded texture key. `.with_position(v)` moves frame 0, `.with_vertical_displacement(row_height)` wraps frames that run past the texture's right edge onto the next row, and `.with_looped(false)` plays once (see [Animation Finished Event](#75-animation-finished-event)).
 
 ### Tilemaps
 
@@ -1123,15 +1112,7 @@ fn setup(
     });
 
     // Animations (AnimationStore is pre-inserted, logic-owned — just populate it)
-    anim_store.animations.insert("player_idle".into(), AnimationResource {
-        tex_key: Arc::from("player"),
-        position: Vec2::new(0.0, 0.0),
-        horizontal_displacement: 32.0,
-        vertical_displacement: 0.0,
-        frame_count: 4,
-        fps: 8.0,
-        looped: true,
-    });
+    anim_store.insert("player_idle", AnimationResource::new("player", 32.0, 4, 8.0));
 }
 ```
 

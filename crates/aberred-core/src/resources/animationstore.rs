@@ -46,3 +46,64 @@ pub struct AnimationResource {
     /// Whether the animation restarts after the last frame.
     pub looped: bool,
 }
+
+impl AnimationResource {
+    /// A looping `frame_count`-frame animation of texture `tex_key` at `fps`, with frame 0
+    /// at the texture's top-left and frames `frame_width` pixels apart on one row.
+    pub fn new(
+        tex_key: impl Into<Arc<str>>,
+        frame_width: f32,
+        frame_count: usize,
+        fps: f32,
+    ) -> Self {
+        Self {
+            tex_key: tex_key.into(),
+            position: Vec2::ZERO,
+            horizontal_displacement: frame_width,
+            vertical_displacement: 0.0,
+            frame_count,
+            fps,
+            looped: true,
+        }
+    }
+
+    /// Sets the pixel position of frame 0 within the texture.
+    pub fn with_position(mut self, position: Vec2) -> Self {
+        self.position = position;
+        self
+    }
+
+    /// Sets the row height for row-wrapping: frames past the texture's right edge continue
+    /// on the next row, this many pixels down. 0 disables wrapping.
+    pub fn with_vertical_displacement(mut self, row_height: f32) -> Self {
+        self.vertical_displacement = row_height;
+        self
+    }
+
+    /// Sets whether the animation restarts after its last frame.
+    pub fn with_looped(mut self, looped: bool) -> Self {
+        self.looped = looped;
+        self
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn new_animation_loops_from_the_texture_origin_without_row_wrap() {
+        assert_eq!(
+            AnimationResource::new("player", 32.0, 4, 8.0),
+            AnimationResource {
+                tex_key: "player".into(),
+                position: Vec2::ZERO,
+                horizontal_displacement: 32.0,
+                vertical_displacement: 0.0,
+                frame_count: 4,
+                fps: 8.0,
+                looped: true,
+            }
+        );
+    }
+}

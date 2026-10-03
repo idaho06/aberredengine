@@ -1,7 +1,6 @@
 // 4. Loading Assets
 mod loading_assets {
     use aberredengine::prelude::*;
-    use std::sync::Arc;
 
     fn setup(
         mut anim_store: ResMut<AnimationStore>,
@@ -213,30 +212,17 @@ mod post_process_shaders {
 // Animations
 mod animations {
     use aberredengine::prelude::*; // GLUE
-    use std::sync::Arc; // GLUE
 
     fn register_animations(mut anim_store: ResMut<AnimationStore>) { // GLUE
     use aberredengine::prelude::*;
 
-    anim_store.animations.insert("player_idle".to_string(), AnimationResource {
-        tex_key: Arc::from("player"),              // must match a TextureStore key
-        position: Vec2::new(0.0, 0.0),            // base offset in spritesheet
-        horizontal_displacement: 32.0,             // per-frame X step (= frame width)
-        vertical_displacement: 0.0,                // non-zero enables row-wrapping
-        frame_count: 4,                            // number of frames
-        fps: 8.0,                                  // playback speed
-        looped: true,                              // restart after last frame
-    });
+    anim_store.insert("player_idle", AnimationResource::new("player", 32.0, 4, 8.0));
 
-    anim_store.animations.insert("player_run".to_string(), AnimationResource {
-        tex_key: Arc::from("player"),
-        position: Vec2::new(0.0, 64.0),           // second row of spritesheet
-        horizontal_displacement: 32.0,
-        vertical_displacement: 0.0,
-        frame_count: 6,
-        fps: 12.0,
-        looped: true,
-    });
+    anim_store.insert(
+        "player_run",
+        AnimationResource::new("player", 32.0, 6, 12.0)
+            .with_position(Vec2::new(0.0, 64.0)), // second row of the spritesheet
+    );
     } // GLUE
 }
 
@@ -318,7 +304,6 @@ mod following_an_entity {
 // Complete setup example
 mod complete_setup_example {
     use aberredengine::prelude::*; // GLUE
-    use std::sync::Arc; // GLUE
 
     fn setup(
         mut anim_store: ResMut<AnimationStore>,
@@ -352,14 +337,6 @@ mod complete_setup_example {
         });
 
         // Animations (AnimationStore is pre-inserted, logic-owned — just populate it)
-        anim_store.animations.insert("player_idle".into(), AnimationResource {
-            tex_key: Arc::from("player"),
-            position: Vec2::new(0.0, 0.0),
-            horizontal_displacement: 32.0,
-            vertical_displacement: 0.0,
-            frame_count: 4,
-            fps: 8.0,
-            looped: true,
-        });
+        anim_store.insert("player_idle", AnimationResource::new("player", 32.0, 4, 8.0));
     }
 }
