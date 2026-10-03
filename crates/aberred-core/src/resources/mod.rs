@@ -13,6 +13,7 @@
 //! - [`collision_rule_index`] – pre-filters collision rule entities by group pair, avoiding a per-event linear scan
 //! - [`debugmode`] – presence toggles optional debug overlays and logs
 //! - [`debugoverlayconfig`] – per-overlay toggles for the imgui debug HUD
+//! - [`deterministic_mode`] – marker resource of a `.deterministic()` game
 //! - [`determinism_taint`] – flags a deterministic session that hit a known
 //!   determinism hazard (e.g. async asset metadata arriving mid-gameplay)
 //! - [`fontmetrics`] – CPU-side glyph metrics for text measurement without a GL context
@@ -40,6 +41,7 @@ pub mod collision_rule_index;
 pub mod debugmode;
 pub mod debugoverlayconfig;
 pub mod determinism_taint;
+pub mod deterministic_mode;
 pub mod drawable_snapshot;
 pub mod fontmetrics;
 pub mod gameconfig;

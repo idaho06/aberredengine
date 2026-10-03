@@ -20,11 +20,15 @@ use crate::protocol::audio::{AudioCmd, AudioMessage};
 use crate::protocol::endpoints::AudioBridge;
 use crate::resources::pending_assets::PendingAssets;
 use crate::resources::thread_stats::AudioStats;
+use crate::systems::asset_gate::{AssetGate, audio_cmd_label};
+use bevy_ecs::prelude::Local;
 use bevy_ecs::prelude::Messages;
 use bevy_ecs::{
     prelude::{MessageReader, MessageWriter, Res},
     system::ResMut,
 };
+use rustc_hash::FxHashSet;
+use std::sync::Arc;
 
 /// Drain any pending events from the audio thread and enqueue them into the
 /// ECS [`Messages<AudioMessage>`] mailbox.
@@ -52,14 +56,22 @@ pub fn update_bevy_audio_messages(mut msgs: ResMut<Messages<AudioMessage>>) {
 /// Forward ECS AudioCmd messages to the audio thread via the AudioBridge
 /// sender, recording each load in [`PendingAssets`] until its reply arrives.
 /// Runs at the end of the sim tick, after every engine system that queues
-/// audio commands.
+/// audio commands. Gated like `forward_render_asset_cmds` (see [`AssetGate`]).
 pub fn forward_audio_cmds(
     bridge: Res<AudioBridge>,
     mut reader: bevy_ecs::prelude::MessageReader<AudioCmd>,
     mut pending: ResMut<PendingAssets>,
+    gate: AssetGate,
+    mut reported: Local<FxHashSet<Arc<str>>>,
 ) {
     crate::tracy::tracy_span!("forward_audio_cmds");
     for cmd in reader.read() {
+        if !gate
+            .audio(cmd)
+            .admit(|| audio_cmd_label(cmd), &mut reported)
+        {
+            continue;
+        }
         if let Some((kind, key)) = cmd.load_target() {
             pending.queue(kind, key);
         }

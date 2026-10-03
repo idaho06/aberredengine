@@ -23,16 +23,29 @@ use crate::protocol::render_logic::RenderMsg;
 use crate::protocol::snapshot::SnapshotPublisher;
 use crate::resources::drawable_snapshot::DrawableSnapshot;
 use crate::resources::pending_assets::PendingAssets;
+use crate::systems::asset_gate::{AssetGate, render_cmd_label};
+use rustc_hash::FxHashSet;
+use std::sync::Arc;
 
 /// Forward queued [`RenderAssetCmd`]s to the render thread, recording each
-/// load in [`PendingAssets`] until its reply arrives. Send errors are
+/// load in [`PendingAssets`] until its reply arrives. During deterministic
+/// `Playing`, [`AssetGate`] drops loads of already-loaded keys and rejects
+/// changes to the loaded set (see [`Verdict::admit`](crate::systems::asset_gate::Verdict::admit)). Send errors are
 /// ignored (they only occur during shutdown, when the render side is gone).
 pub fn forward_render_asset_cmds(
     tx: Res<RenderTx>,
     mut reader: MessageReader<RenderAssetCmd>,
     mut pending: ResMut<PendingAssets>,
+    gate: AssetGate,
+    mut reported: Local<FxHashSet<Arc<str>>>,
 ) {
     for cmd in reader.read() {
+        if !gate
+            .render(cmd)
+            .admit(|| render_cmd_label(cmd), &mut reported)
+        {
+            continue;
+        }
         if let Some((kind, key)) = cmd.load_target() {
             pending.queue(kind, key);
         }

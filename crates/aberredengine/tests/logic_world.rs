@@ -543,10 +543,11 @@ fn log_failed(ev: On<AssetLoadFailed>, mut log: ResMut<LoadLog>) {
 #[test]
 fn load_replies_settle_pending_assets_and_trigger_events_once() {
     let mut tw = TestWorld::builder()
-        .on_setup(|mut assets: AssetLoader| {
-            assets.load_texture("player", "player.png");
-            assets.load_font("arcade", "arcade.ttf", 8);
-            assets.load_sound("jump", "jump.wav");
+        .on_setup(|mut assets: AssetLoader| -> Result {
+            assets.load_texture("player", "player.png")?;
+            assets.load_font("arcade", "arcade.ttf", 8)?;
+            assets.load_sound("jump", "jump.wav")?;
+            Ok(())
         })
         .add_observer(log_loaded)
         .add_observer(log_failed)
@@ -621,9 +622,10 @@ fn state(tw: &TestWorld) -> GameStates {
 /// until both loads are pending.
 fn loading_world() -> TestWorld {
     let mut tw = TestWorld::builder()
-        .on_setup(|mut assets: AssetLoader| {
-            assets.load_texture("player", "player.png");
-            assets.load_sound("jump", "jump.wav");
+        .on_setup(|mut assets: AssetLoader| -> Result {
+            assets.load_texture("player", "player.png")?;
+            assets.load_sound("jump", "jump.wav")?;
+            Ok(())
         })
         .build()
         .unwrap();
@@ -701,10 +703,13 @@ fn a_failed_load_does_not_block_setup() {
 #[test]
 fn a_setup_hook_requesting_playing_still_waits_for_its_loads() {
     let mut tw = TestWorld::builder()
-        .on_setup(|mut assets: AssetLoader, mut next: ResMut<NextGameState>| {
-            assets.load_texture("player", "player.png");
-            next.set(GameStates::Playing);
-        })
+        .on_setup(
+            |mut assets: AssetLoader, mut next: ResMut<NextGameState>| -> Result {
+                assets.load_texture("player", "player.png")?;
+                next.set(GameStates::Playing);
+                Ok(())
+            },
+        )
         .build()
         .unwrap();
     tw.tick(4, DT);
@@ -763,4 +768,25 @@ fn loaded_assets_follow_load_remove_rename_and_unload_replies() {
     assert!(!loaded(&tw, AssetKind::Sound, "jump"));
     assert!(loaded(&tw, AssetKind::Sound, "coin"));
     assert!(!loaded(&tw, AssetKind::Music, "bgm"));
+}
+/// Hooks and `add_system` systems may return bevy's `Result`, so they can
+/// use `?`.
+#[test]
+fn hooks_and_systems_may_return_result() {
+    let mut tw = TestWorld::builder()
+        .on_setup(|mut signals: ResMut<WorldSignals>| -> Result {
+            signals.set_flag("setup_ran");
+            Ok(())
+        })
+        .add_system(|mut signals: ResMut<WorldSignals>| -> Result {
+            signals.set_flag("system_ran");
+            Ok(())
+        })
+        .build()
+        .unwrap();
+    tw.tick_to_play(DT, 4);
+    tw.tick(1, DT);
+    let signals = tw.world.resource::<WorldSignals>();
+    assert!(signals.has_flag("setup_ran"));
+    assert!(signals.has_flag("system_ran"));
 }

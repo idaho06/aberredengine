@@ -44,6 +44,11 @@ impl LoadedAssets {
         }
     }
 
+    /// Whether any asset of `kind` is loaded.
+    pub fn any(&self, kind: AssetKind) -> bool {
+        self.keys.get(&kind).is_some_and(|keys| !keys.is_empty())
+    }
+
     /// Whether `key` is loaded.
     pub fn contains(&self, kind: AssetKind, key: &str) -> bool {
         self.keys.get(&kind).is_some_and(|keys| keys.contains(key))

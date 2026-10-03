@@ -5,6 +5,7 @@
 //!
 //! Submodules overview
 //! - [`animation`] – advance sprite animations and select tracks via rules
+//! - [`asset_gate`] – `AssetGate`: rejects asset changes during deterministic `Playing`
 //! - [`asset_loader`] – [`AssetLoader`](asset_loader::AssetLoader) system param: queue render/audio asset loads
 //! - [`camera_follow`] – move the camera to track entities with `CameraTarget`
 //! - [`asset_tracking`] – settle `PendingAssets` on load replies and trigger `AssetLoaded`/`AssetLoadFailed`
@@ -41,6 +42,7 @@
 pub use game_ctx::GameCtx;
 
 pub mod animation;
+pub mod asset_gate;
 pub mod asset_loader;
 pub mod asset_tracking;
 pub mod audio_bridge;

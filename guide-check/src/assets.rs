@@ -2,13 +2,14 @@
 mod loading_assets {
     use aberredengine::prelude::*;
 
-    fn setup(mut assets: AssetLoader) {
-        assets.load_texture("player", "assets/textures/player.png");
-        assets.load_texture_with("background", "assets/textures/bg.png", TextureFilter::Bilinear);
-        assets.load_font("arcade", "assets/fonts/arcade.ttf", 32);
-        assets.load_shader("glow", None, Some("assets/shaders/glow.fs"));
-        assets.load_sound("jump", "assets/audio/jump.wav");
-        assets.load_music("bgm", "assets/audio/music.ogg");
+    fn setup(mut assets: AssetLoader) -> Result {
+        assets.load_texture("player", "assets/textures/player.png")?;
+        assets.load_texture_with("background", "assets/textures/bg.png", TextureFilter::Bilinear)?;
+        assets.load_font("arcade", "assets/fonts/arcade.ttf", 32)?;
+        assets.load_shader("glow", None, Some("assets/shaders/glow.fs"))?;
+        assets.load_sound("jump", "assets/audio/jump.wav")?;
+        assets.load_music("bgm", "assets/audio/music.ogg")?;
+        Ok(())
     }
 }
 
@@ -344,21 +345,22 @@ mod following_an_entity {
 mod complete_setup_example {
     use aberredengine::prelude::*; // GLUE
 
-    fn setup(mut assets: AssetLoader, mut anim_store: ResMut<AnimationStore>) {
+    fn setup(mut assets: AssetLoader, mut anim_store: ResMut<AnimationStore>) -> Result {
         // Textures — queued, loaded asynchronously on the render thread
-        assets.load_texture("player", "assets/textures/player.png");
+        assets.load_texture("player", "assets/textures/player.png")?;
 
         // Fonts — mipmap generation is handled internally by the render thread
-        assets.load_font("arcade", "assets/fonts/arcade.ttf", 32);
+        assets.load_font("arcade", "assets/fonts/arcade.ttf", 32)?;
 
         // Audio — loaded asynchronously on the audio thread
-        assets.load_sound("jump", "assets/audio/jump.wav");
-        assets.load_music("bgm", "assets/audio/music.ogg");
+        assets.load_sound("jump", "assets/audio/jump.wav")?;
+        assets.load_music("bgm", "assets/audio/music.ogg")?;
 
         // Shaders
-        assets.load_shader("glow", None, Some("assets/shaders/glow.fs"));
+        assets.load_shader("glow", None, Some("assets/shaders/glow.fs"))?;
 
         // Animations (AnimationStore is pre-inserted, logic-owned — just populate it)
         anim_store.insert("player_idle", AnimationResource::new("player", 32.0, 4, 8.0));
+        Ok(())
     }
 }

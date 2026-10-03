@@ -658,7 +658,7 @@ fn golden_replay_rust_scene_matches_checked_in_trail() {
     // spawns no `CollisionRule` entity for that system to act on. It also
     // hashes every `Entity::to_bits()`, and resources are entities, so
     // inserting a new logic-world resource shifts later ids and changes it.
-    const GOLDEN_HASH: u64 = 0x6d2e_60cd_267e_b9a4;
+    const GOLDEN_HASH: u64 = 0x3106_c39e_0d8c_cc82;
     let actual = golden_scenario_final_hash(42);
     assert_eq!(
         actual, GOLDEN_HASH,
@@ -681,7 +681,10 @@ use aberredengine::core::systems::asset_loader::AssetLoader;
 fn world_after_setup_of(setup_ticks: u32) -> TestWorld {
     let mut tw = TestWorldBuilder::new()
         .deterministic(7)
-        .on_setup(|mut assets: AssetLoader| assets.load_texture("player", "player.png"))
+        .on_setup(|mut assets: AssetLoader| -> Result {
+            assets.load_texture("player", "player.png")?;
+            Ok(())
+        })
         .on_enter_play(|mut commands: Commands| {
             let mut body = RigidBody::new();
             body.velocity = Vec2::new(30.0, 0.0);
@@ -737,7 +740,10 @@ fn setup_length_does_not_change_the_playing_hash_trail() {
 fn setup_intents_land_on_the_first_playing_tick() {
     let mut tw = TestWorldBuilder::new()
         .deterministic(7)
-        .on_setup(|mut assets: AssetLoader| assets.load_texture("player", "player.png"))
+        .on_setup(|mut assets: AssetLoader| -> Result {
+            assets.load_texture("player", "player.png")?;
+            Ok(())
+        })
         .build()
         .expect("build should succeed");
     let intent = TickInput {
@@ -760,4 +766,130 @@ fn setup_intents_land_on_the_first_playing_tick() {
             .resource::<WorldSignals>()
             .has_flag("loading_click")
     );
+}
+
+// --- deterministic Playing doesn't change the set of loaded assets --------
+
+use aberredengine::bevy_ecs::system::RunSystemOnce;
+use aberredengine::core::protocol::render_assets::RenderAssetCmd;
+use aberredengine::core::protocol::render_logic::RenderMsg;
+use aberredengine::core::resources::texturefilter::TextureFilter;
+use aberredengine::core::systems::asset_loader::AssetError;
+
+/// Drains the render commands forwarded so far.
+fn drain_forwarded(tw: &TestWorld) -> Vec<RenderAssetCmd> {
+    tw.sent_to_render
+        .try_iter()
+        .filter_map(|msg| match msg {
+            RenderMsg::Asset(cmd) => Some(cmd),
+            _ => None,
+        })
+        .collect()
+}
+
+#[test]
+fn a_new_load_during_deterministic_play_is_rejected() {
+    let mut tw = world_after_setup_of(1);
+    drain_forwarded(&tw);
+
+    let result = tw
+        .world
+        .run_system_once(|mut assets: AssetLoader| assets.load_texture("enemy", "enemy.png"))
+        .unwrap();
+    assert!(matches!(
+        result,
+        Err(AssetError::AssetChangeDuringDeterministicPlay { .. })
+    ));
+    tw.tick(1, DT);
+    assert!(
+        drain_forwarded(&tw).is_empty(),
+        "nothing reaches the render thread"
+    );
+}
+
+#[test]
+fn reloading_a_preloaded_key_during_deterministic_play_is_a_no_op() {
+    let mut tw = world_after_setup_of(1);
+    drain_forwarded(&tw);
+
+    let result = tw
+        .world
+        .run_system_once(|mut assets: AssetLoader| assets.load_texture("player", "player.png"))
+        .unwrap();
+    assert!(result.is_ok());
+    tw.tick(1, DT);
+    assert!(
+        drain_forwarded(&tw).is_empty(),
+        "no reload, no reply, no load event"
+    );
+}
+
+#[test]
+fn a_texture_filter_change_during_deterministic_play_passes() {
+    let mut tw = world_after_setup_of(1);
+    drain_forwarded(&tw);
+
+    tw.world
+        .run_system_once(|mut assets: AssetLoader| {
+            assets.render().write(RenderAssetCmd::SetTextureFilter {
+                key: "player".into(),
+                filter: TextureFilter::Bilinear,
+            });
+        })
+        .unwrap();
+    tw.tick(1, DT);
+    assert!(matches!(
+        drain_forwarded(&tw).as_slice(),
+        [RenderAssetCmd::SetTextureFilter { .. }]
+    ));
+}
+
+#[test]
+fn loads_during_non_deterministic_play_are_unchanged() {
+    let mut tw = TestWorld::new();
+    tw.tick_to_play(DT, 4);
+    drain_forwarded(&tw);
+
+    let result = tw
+        .world
+        .run_system_once(|mut assets: AssetLoader| assets.load_texture("enemy", "enemy.png"))
+        .unwrap();
+    assert!(result.is_ok());
+    tw.tick(1, DT);
+    assert!(matches!(
+        drain_forwarded(&tw).as_slice(),
+        [RenderAssetCmd::Texture { key, .. }] if key == "enemy"
+    ));
+}
+
+/// A raw writer has no return value, so a rejected command fails loudly in
+/// debug builds.
+#[cfg(debug_assertions)]
+#[test]
+#[should_panic(expected = "deterministic")]
+fn a_raw_new_load_during_deterministic_play_panics_in_debug_builds() {
+    let mut tw = world_after_setup_of(1);
+    tw.world
+        .resource_mut::<Messages<RenderAssetCmd>>()
+        .write(RenderAssetCmd::Texture {
+            key: "enemy".into(),
+            path: "enemy.png".into(),
+            filter: TextureFilter::Nearest,
+        });
+    tw.tick(1, DT);
+}
+
+/// Closing a dynamic-text menu removes label textures it never created;
+/// removing what isn't loaded changes nothing, so it passes quietly.
+#[test]
+fn removing_an_unloaded_texture_during_deterministic_play_is_a_no_op() {
+    let mut tw = world_after_setup_of(1);
+    drain_forwarded(&tw);
+    tw.world
+        .resource_mut::<Messages<RenderAssetCmd>>()
+        .write(RenderAssetCmd::RemoveTexture {
+            key: "menu_0".into(),
+        });
+    tw.tick(1, DT);
+    assert!(drain_forwarded(&tw).is_empty());
 }

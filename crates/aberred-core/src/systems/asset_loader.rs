@@ -3,11 +3,40 @@
 use bevy_ecs::prelude::*;
 use bevy_ecs::system::SystemParam;
 
+use crate::protocol::asset_kind::AssetKind;
 use crate::protocol::audio::AudioCmd;
 use crate::protocol::render_assets::RenderAssetCmd;
 use crate::resources::fontmetrics::FontMetricsStore;
 use crate::resources::texturedims::TextureDimsStore;
 use crate::resources::texturefilter::TextureFilter;
+use crate::systems::asset_gate::{AssetGate, Verdict};
+
+/// Why [`AssetLoader`] refused a load.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AssetError {
+    /// A `.deterministic()` game asked for an asset that isn't loaded while
+    /// `Playing`. Load every asset during `Setup`.
+    AssetChangeDuringDeterministicPlay {
+        /// The kind of asset requested.
+        kind: AssetKind,
+        /// The key requested.
+        key: String,
+    },
+}
+
+impl std::fmt::Display for AssetError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::AssetChangeDuringDeterministicPlay { kind, key } => write!(
+                f,
+                "{kind:?} '{key}' isn't loaded, and a deterministic game can't load \
+                 assets while Playing; load it during Setup"
+            ),
+        }
+    }
+}
+
+impl std::error::Error for AssetError {}
 
 /// Queues texture, font, shader, sound and music loads from any logic-side
 /// system, and reports which textures and fonts have finished loading.
@@ -21,10 +50,18 @@ use crate::resources::texturefilter::TextureFilter;
 /// Render assets and audio assets have separate key spaces: a texture and a
 /// sound may share a key without clashing.
 ///
+/// In a `.deterministic()` game, every asset loads during `Setup`. While
+/// `Playing`, `load_*` returns `Ok` without queuing anything for a key that
+/// is already loaded, and [`AssetError::AssetChangeDuringDeterministicPlay`]
+/// for one that isn't. Outside deterministic mode, `load_*` always queues
+/// and returns `Ok`.
+///
 /// `AssetLoader` holds the writers for [`RenderAssetCmd`] and [`AudioCmd`], so
 /// a system that takes it must not also take `MessageWriter<RenderAssetCmd>`,
 /// `MessageWriter<AudioCmd>` or `GameCtx` (which holds an audio writer). Bevy
-/// rejects such a system at startup with a conflicting-access panic. Use
+/// rejects such a system at startup with a conflicting-access panic. The
+/// same goes for `ResMut<GameState>` and `ResMut<LoadedAssets>`, which it
+/// reads. Use
 /// [`audio`](Self::audio) and [`render`](Self::render) to write any other
 /// command, e.g. `assets.audio().write(AudioCmd::PlayFx { id: "jump".into() })`.
 #[derive(SystemParam)]
@@ -33,13 +70,18 @@ pub struct AssetLoader<'w> {
     audio: MessageWriter<'w, AudioCmd>,
     texture_dims: Res<'w, TextureDimsStore>,
     font_metrics: Res<'w, FontMetricsStore>,
+    gate: AssetGate<'w>,
 }
 
 impl<'w> AssetLoader<'w> {
     /// Queues a texture load from `path` under `key`, with
     /// [`TextureFilter::Nearest`] sampling.
-    pub fn load_texture(&mut self, key: impl Into<String>, path: impl Into<String>) {
-        self.load_texture_with(key, path, TextureFilter::Nearest);
+    pub fn load_texture(
+        &mut self,
+        key: impl Into<String>,
+        path: impl Into<String>,
+    ) -> Result<(), AssetError> {
+        self.load_texture_with(key, path, TextureFilter::Nearest)
     }
 
     /// Queues a texture load from `path` under `key`, sampled with `filter`.
@@ -48,23 +90,28 @@ impl<'w> AssetLoader<'w> {
         key: impl Into<String>,
         path: impl Into<String>,
         filter: TextureFilter,
-    ) {
-        self.render.write(RenderAssetCmd::Texture {
+    ) -> Result<(), AssetError> {
+        self.queue_render(RenderAssetCmd::Texture {
             key: key.into(),
             path: path.into(),
             filter,
-        });
+        })
     }
 
     /// Queues a font load from `path` at `size` pixels under `key`. An already
     /// loaded `key` is reloaded.
-    pub fn load_font(&mut self, key: impl Into<String>, path: impl Into<String>, size: i32) {
-        self.render.write(RenderAssetCmd::Font {
+    pub fn load_font(
+        &mut self,
+        key: impl Into<String>,
+        path: impl Into<String>,
+        size: i32,
+    ) -> Result<(), AssetError> {
+        self.queue_render(RenderAssetCmd::Font {
             key: key.into(),
             path: path.into(),
             size,
             skip_if_loaded: false,
-        });
+        })
     }
 
     /// Queues a shader load under `key`. A `None` path uses raylib's default
@@ -74,28 +121,50 @@ impl<'w> AssetLoader<'w> {
         key: impl Into<String>,
         vs_path: Option<&str>,
         fs_path: Option<&str>,
-    ) {
-        self.render.write(RenderAssetCmd::Shader {
+    ) -> Result<(), AssetError> {
+        self.queue_render(RenderAssetCmd::Shader {
             key: key.into(),
             vs_path: vs_path.map(str::to_owned),
             fs_path: fs_path.map(str::to_owned),
-        });
+        })
     }
 
     /// Queues a sound effect load from `path` under `key`.
-    pub fn load_sound(&mut self, key: impl Into<String>, path: impl Into<String>) {
-        self.audio.write(AudioCmd::LoadFx {
+    pub fn load_sound(
+        &mut self,
+        key: impl Into<String>,
+        path: impl Into<String>,
+    ) -> Result<(), AssetError> {
+        self.queue_audio(AudioCmd::LoadFx {
             id: key.into(),
             path: path.into(),
-        });
+        })
     }
 
     /// Queues a music stream load from `path` under `key`.
-    pub fn load_music(&mut self, key: impl Into<String>, path: impl Into<String>) {
-        self.audio.write(AudioCmd::LoadMusic {
+    pub fn load_music(
+        &mut self,
+        key: impl Into<String>,
+        path: impl Into<String>,
+    ) -> Result<(), AssetError> {
+        self.queue_audio(AudioCmd::LoadMusic {
             id: key.into(),
             path: path.into(),
-        });
+        })
+    }
+
+    fn queue_render(&mut self, cmd: RenderAssetCmd) -> Result<(), AssetError> {
+        if queues(self.gate.render(&cmd), cmd.load_target())? {
+            self.render.write(cmd);
+        }
+        Ok(())
+    }
+
+    fn queue_audio(&mut self, cmd: AudioCmd) -> Result<(), AssetError> {
+        if queues(self.gate.audio(&cmd), cmd.load_target())? {
+            self.audio.write(cmd);
+        }
+        Ok(())
     }
 
     /// Pixel size `(width, height)` of the loaded texture `key`, or `None`
@@ -126,10 +195,28 @@ impl<'w> AssetLoader<'w> {
     }
 }
 
+/// Whether a load with this verdict is queued, or the error for a rejected
+/// one. `target` is the load's own `load_target()`, always `Some`.
+fn queues(verdict: Verdict, target: Option<(AssetKind, &str)>) -> Result<bool, AssetError> {
+    match verdict {
+        Verdict::Forward => Ok(true),
+        Verdict::NoOp => Ok(false),
+        Verdict::Rejected => {
+            let (kind, key) = target.expect("AssetLoader only queues load commands");
+            Err(AssetError::AssetChangeDuringDeterministicPlay {
+                kind,
+                key: key.to_owned(),
+            })
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::resources::fontmetrics::test_support::lowercase_alphabet_metrics;
+    use crate::resources::gamestate::GameState;
+    use crate::resources::loaded_assets::LoadedAssets;
     use bevy_ecs::system::RunSystemOnce;
 
     fn loader_world() -> World {
@@ -138,6 +225,8 @@ mod tests {
         world.insert_resource(Messages::<AudioCmd>::default());
         world.insert_resource(TextureDimsStore::default());
         world.insert_resource(FontMetricsStore::default());
+        world.init_resource::<GameState>();
+        world.init_resource::<LoadedAssets>();
         world
     }
 
@@ -157,10 +246,12 @@ mod tests {
         let mut world = loader_world();
         world
             .run_system_once(|mut assets: AssetLoader| {
-                assets.load_texture("player", "player.png");
-                assets.load_texture_with("bg", "bg.png", TextureFilter::Bilinear);
-                assets.load_font("arcade", "arcade.ttf", 32);
-                assets.load_shader("glow", None, Some("glow.fs"));
+                assets.load_texture("player", "player.png").unwrap();
+                assets
+                    .load_texture_with("bg", "bg.png", TextureFilter::Bilinear)
+                    .unwrap();
+                assets.load_font("arcade", "arcade.ttf", 32).unwrap();
+                assets.load_shader("glow", None, Some("glow.fs")).unwrap();
             })
             .unwrap();
 
@@ -194,8 +285,8 @@ mod tests {
         let mut world = loader_world();
         world
             .run_system_once(|mut assets: AssetLoader| {
-                assets.load_sound("jump", "jump.wav");
-                assets.load_music("bgm", "music.ogg");
+                assets.load_sound("jump", "jump.wav").unwrap();
+                assets.load_music("bgm", "music.ogg").unwrap();
             })
             .unwrap();
 

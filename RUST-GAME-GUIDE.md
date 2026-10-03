@@ -641,6 +641,13 @@ This is useful for automated testing (replay a fixed input script, assert on the
 - In deterministic mode, input that arrives during Setup is held back. Key and mouse samples are dropped, so F10/F11 do nothing while loading. GUI intents and the latest screen size are applied on the first `Playing` tick.
 - Engine systems that don't use `delta` still run during Setup: collision rules, Rust phase `on_update`, group counts. Spawn gameplay entities in `on_enter_play` or the initial scene's `on_enter`, not in the setup hook, so a longer Setup can't change them.
 
+**Assets load during Setup.** A load finishes at a wall-clock time, so a deterministic game can't change its loaded assets while `Playing`:
+
+- `AssetLoader::load_*` for a key that is already loaded returns `Ok` and does nothing. For a key that isn't, it returns `Err(AssetError::AssetChangeDuringDeterministicPlay { .. })` and queues nothing.
+- A command written through a raw `MessageWriter<RenderAssetCmd>`/`MessageWriter<AudioCmd>` (or `assets.render()`/`assets.audio()`) has no result to return. A new load, or a removal, rename or unload of a loaded asset, is dropped and logged as an error, and panics in debug builds. Commands that change nothing (reloading a loaded key, removing one that isn't loaded) are dropped silently.
+- Texture filter changes and audio playback work as usual.
+- Engine features that load on the fly follow the same rule: spawn tilemaps and maps whose assets were loaded in Setup, and keep menus on dynamic text (the default; `with_dynamic_text(false)` rasterizes labels into new textures).
+
 ---
 
 ## 4. Loading Assets
@@ -652,15 +659,18 @@ Instead, asset loading is **queued** from the logic thread and **performed** els
 ```rust
 use aberredengine::prelude::*;
 
-fn setup(mut assets: AssetLoader) {
-    assets.load_texture("player", "assets/textures/player.png");
-    assets.load_texture_with("background", "assets/textures/bg.png", TextureFilter::Bilinear);
-    assets.load_font("arcade", "assets/fonts/arcade.ttf", 32);
-    assets.load_shader("glow", None, Some("assets/shaders/glow.fs"));
-    assets.load_sound("jump", "assets/audio/jump.wav");
-    assets.load_music("bgm", "assets/audio/music.ogg");
+fn setup(mut assets: AssetLoader) -> Result {
+    assets.load_texture("player", "assets/textures/player.png")?;
+    assets.load_texture_with("background", "assets/textures/bg.png", TextureFilter::Bilinear)?;
+    assets.load_font("arcade", "assets/fonts/arcade.ttf", 32)?;
+    assets.load_shader("glow", None, Some("assets/shaders/glow.fs"))?;
+    assets.load_sound("jump", "assets/audio/jump.wav")?;
+    assets.load_music("bgm", "assets/audio/music.ogg")?;
+    Ok(())
 }
 ```
+
+Each `load_*` returns `Result<(), AssetError>`. It only fails in a `.deterministic()` game that is already `Playing` (see [Determinism and replay](#determinism-and-replay)). Hooks and `.add_system()` systems may return bevy's `Result`, so `?` works there. An error from an `.add_system()` system goes to bevy's error handler; an error from a hook is logged as a warning.
 
 `AssetLoader` also answers whether a load has landed: `is_texture_loaded(key)`, `texture_size(key)` and `is_font_loaded(key)` return `false`/`None` until the render thread replies, usually a tick or two after the load was queued. Render assets and audio assets have separate key spaces, so a texture and a sound can share a key.
 
@@ -1112,22 +1122,23 @@ fn follow_player(mut commands: Commands, mut follow: ResMut<CameraFollowConfig>)
 ### Complete setup example
 
 ```rust
-fn setup(mut assets: AssetLoader, mut anim_store: ResMut<AnimationStore>) {
+fn setup(mut assets: AssetLoader, mut anim_store: ResMut<AnimationStore>) -> Result {
     // Textures — queued, loaded asynchronously on the render thread
-    assets.load_texture("player", "assets/textures/player.png");
+    assets.load_texture("player", "assets/textures/player.png")?;
 
     // Fonts — mipmap generation is handled internally by the render thread
-    assets.load_font("arcade", "assets/fonts/arcade.ttf", 32);
+    assets.load_font("arcade", "assets/fonts/arcade.ttf", 32)?;
 
     // Audio — loaded asynchronously on the audio thread
-    assets.load_sound("jump", "assets/audio/jump.wav");
-    assets.load_music("bgm", "assets/audio/music.ogg");
+    assets.load_sound("jump", "assets/audio/jump.wav")?;
+    assets.load_music("bgm", "assets/audio/music.ogg")?;
 
     // Shaders
-    assets.load_shader("glow", None, Some("assets/shaders/glow.fs"));
+    assets.load_shader("glow", None, Some("assets/shaders/glow.fs"))?;
 
     // Animations (AnimationStore is pre-inserted, logic-owned — just populate it)
     anim_store.insert("player_idle", AnimationResource::new("player", 32.0, 4, 8.0));
+    Ok(())
 }
 ```
 

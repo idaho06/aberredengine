@@ -32,6 +32,7 @@ use aberred_core::resources::camerafollowconfig::CameraFollowConfig;
 use aberred_core::resources::collision_rule_index::CollisionRuleIndex;
 use aberred_core::resources::debugoverlayconfig::DebugOverlayConfig;
 use aberred_core::resources::determinism_taint::DeterminismTaint;
+use aberred_core::resources::deterministic_mode::DeterministicMode;
 use aberred_core::resources::drawable_snapshot::DrawableSnapshot;
 use aberred_core::resources::fontmetrics::{FontMetricsStore, FontMetricsWarnCache};
 use aberred_core::resources::gameconfig::GameConfigDefaults;
@@ -128,6 +129,7 @@ impl EngineBuilder {
         let sim_seed = match init.deterministic_seed {
             Some(seed) => {
                 log::info!("Deterministic mode: SimRng seeded with {seed}");
+                world.insert_resource(DeterministicMode);
                 seed
             }
             None => {
