@@ -38,7 +38,7 @@ use aberredengine::core::systems::asset_loader::AssetLoader;
 use aberredengine::core::systems::scene_dispatch::in_scene;
 use aberredengine::engine_app::SimSet;
 use aberredengine::raylib::ffi::KeyboardKey;
-use aberredengine::test_support::TestWorld;
+use aberredengine::test_support::{TestWorld, TestWorldBuilder};
 use rustc_hash::FxHashMap;
 
 mod common;
@@ -580,32 +580,89 @@ fn count_scene_ticks(mut ticks: ResMut<SceneTicks>) {
     ticks.0 += 1;
 }
 
-/// A system gated on `in_scene("b")` runs only while `b` is active.
-#[test]
-fn in_scene_gates_a_system_to_its_scene() {
-    let mut tw = TestWorld::builder()
+/// Counts `count_scene_ticks` runs before and after switching from `a` to
+/// `b`; `register` adds the system under test to a two-scene builder.
+fn scene_ticks_before_and_after_switching_to_b(
+    register: impl FnOnce(TestWorldBuilder) -> TestWorldBuilder,
+) -> (u32, u32) {
+    let builder = TestWorld::builder()
         .add_scene("a", empty_scene())
         .add_scene("b", empty_scene())
-        .initial_scene("a")
-        .configure_schedule(|schedule| {
-            schedule.add_systems(
-                count_scene_ticks
-                    .run_if(in_scene("b"))
-                    .in_set(SimSet::ScriptUpdate),
-            );
-        })
-        .build()
-        .expect("build should succeed");
+        .initial_scene("a");
+    let mut tw = register(builder).build().expect("build should succeed");
     tw.world.init_resource::<SceneTicks>();
     tw.tick_to_play(DT, 8);
     tw.tick(3, DT);
-    assert_eq!(tw.world.resource::<SceneTicks>().0, 0, "not in scene b yet");
+    let before = tw.world.resource::<SceneTicks>().0;
 
     tw.world.resource_mut::<WorldSignals>().request_scene("b");
     tw.tick(1, DT); // the switch lands at the end of this tick
     tw.tick(3, DT);
+    (before, tw.world.resource::<SceneTicks>().0)
+}
 
-    assert_eq!(tw.world.resource::<SceneTicks>().0, 3);
+/// A system gated on `in_scene("b")` runs only while `b` is active.
+#[test]
+fn in_scene_gates_a_system_to_its_scene() {
+    let ticks = scene_ticks_before_and_after_switching_to_b(|builder| {
+        builder.add_system_if(count_scene_ticks, in_scene("b"))
+    });
+    assert_eq!(ticks, (0, 3));
+}
+
+/// Scene conditions combine like any run condition.
+#[test]
+fn add_system_if_takes_combined_scene_conditions() {
+    let (before, after) = scene_ticks_before_and_after_switching_to_b(|builder| {
+        builder.add_system_if(count_scene_ticks, in_scene("a").or_else(in_scene("b")))
+    });
+    assert!(before >= 3, "runs in scene a: {before}");
+    assert_eq!(
+        after - before,
+        4,
+        "and keeps running across the switch to b"
+    );
+}
+
+/// `add_scene_system("b", ..)` is the short form of the above.
+#[test]
+fn add_scene_system_runs_only_in_its_scene() {
+    let ticks = scene_ticks_before_and_after_switching_to_b(|builder| {
+        builder.add_scene_system("b", count_scene_ticks)
+    });
+    assert_eq!(ticks, (0, 3));
+}
+
+/// `on_scene_enter`/`on_scene_exit` observe one scene's entity: they fire
+/// only for that scene, and keep firing on every later visit.
+#[test]
+fn scene_enter_and_exit_observers_fire_only_for_their_scene() {
+    let mut tw = TestWorld::builder()
+        .add_scene("a", empty_scene())
+        .add_scene("b", empty_scene())
+        .initial_scene("a")
+        .on_scene_enter("b", |ev: On<SceneEntered>, mut log: ResMut<SceneLog>| {
+            log.0.push(format!("enter {}", ev.name));
+        })
+        .on_scene_exit("b", |ev: On<SceneExited>, mut log: ResMut<SceneLog>| {
+            log.0.push(format!("exit {} -> {}", ev.name, ev.next));
+        })
+        .build()
+        .expect("build should succeed");
+    tw.world.init_resource::<SceneLog>();
+    tw.tick_to_play(DT, 8);
+
+    for target in ["b", "a", "b"] {
+        tw.world
+            .resource_mut::<WorldSignals>()
+            .request_scene(target);
+        tw.tick(2, DT);
+    }
+
+    assert_eq!(
+        tw.world.resource::<SceneLog>().0,
+        ["enter b", "exit b -> a", "enter b"]
+    );
 }
 
 #[derive(Resource, Default)]

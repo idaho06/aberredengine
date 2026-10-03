@@ -60,6 +60,16 @@ pub enum EngineError {
     InitialSceneWithoutScenes,
 
     #[error(
+        "EngineBuilder: .{method}(\"{name}\", ..) names a scene that was not registered \
+         with .add_scene(). Registered scenes: {registered}."
+    )]
+    SceneNotRegistered {
+        method: &'static str,
+        name: String,
+        registered: String,
+    },
+
+    #[error(
         "EngineBuilder: .track_group(\"{name}\") is {len} bytes; group names are limited \
          to {max} bytes.",
         max = crate::resources::worldsignals::MAX_GROUP_NAME_LEN

@@ -129,6 +129,9 @@ pub(crate) use logic_thread::{
     in_envelope, run_sim_tick,
 };
 #[cfg(any(test, feature = "test-support"))]
-pub(crate) use registrar::{HookRegistrar, ObserverRegistrar, UpdateRegistrar, hook_registrar};
+pub(crate) use registrar::{
+    HookRegistrar, ObserverRegistrar, UpdateRegistrar, conditional_system_registrar,
+    hook_registrar, scene_observer_registrar, scene_system_registrar, system_registrar,
+};
 #[cfg(any(test, feature = "test-support"))]
 pub(crate) use replay::{ReplayPlayer, ReplayRecorder, validate_replay_header};

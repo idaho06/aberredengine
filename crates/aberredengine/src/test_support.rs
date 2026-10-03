@@ -43,10 +43,12 @@ use std::path::PathBuf;
 use crate::engine_app::SceneDescriptor;
 use crate::engine_app::{
     EngineBuilder, HookRegistrar, LogicInit, ObserverRegistrar, UpdateRegistrar, apply_tick_input,
-    drain_logic_messages, hold_back_deterministic_setup_input, hook_registrar, in_envelope,
-    run_sim_tick,
+    conditional_system_registrar, drain_logic_messages, hold_back_deterministic_setup_input,
+    hook_registrar, in_envelope, run_sim_tick, scene_observer_registrar, scene_system_registrar,
+    system_registrar,
 };
 use aberred_core::components::persistent::Persistent;
+use aberred_core::events::scene::{SceneEntered, SceneExited};
 use aberred_core::protocol::audio::{AudioCmd, AudioMessage};
 use aberred_core::protocol::raw_input::RawDeviceSnapshot;
 use aberred_core::protocol::render_logic::{LogicMsg, RenderMsg};
@@ -166,14 +168,51 @@ impl TestWorldBuilder {
     /// `EngineBuilder::add_system`: `.run_if(state_is_playing)`,
     /// `.in_set(SimSet::ScriptUpdate)`. Can be called multiple times.
     pub fn add_system<M>(mut self, system: impl IntoSystem<(), (), M> + Send + 'static) -> Self {
+        self.extra_systems.push(system_registrar(system));
+        self
+    }
+
+    /// Add a conditional system, mirroring `EngineBuilder::add_system_if`.
+    pub fn add_system_if<M, MC>(
+        mut self,
+        system: impl IntoSystem<(), (), M> + Send + 'static,
+        condition: impl SystemCondition<MC> + Send + 'static,
+    ) -> Self {
         self.extra_systems
-            .push(Box::new(move |schedule: &mut Schedule| {
-                schedule.add_systems(
-                    system
-                        .run_if(aberred_core::systems::gamestate::state_is_playing)
-                        .in_set(crate::engine_app::SimSet::ScriptUpdate),
-                );
-            }));
+            .push(conditional_system_registrar(system, condition));
+        self
+    }
+
+    /// Add a scene-scoped system, mirroring `EngineBuilder::add_scene_system`.
+    pub fn add_scene_system<M>(
+        mut self,
+        scene: &'static str,
+        system: impl IntoSystem<(), (), M> + Send + 'static,
+    ) -> Self {
+        self.extra_systems
+            .push(scene_system_registrar(scene, system));
+        self
+    }
+
+    /// Observe one scene's `SceneEntered`, mirroring `EngineBuilder::on_scene_enter`.
+    pub fn on_scene_enter<B: Bundle, M>(
+        mut self,
+        scene: &'static str,
+        observer: impl IntoObserverSystem<SceneEntered, B, M>,
+    ) -> Self {
+        self.extra_observers
+            .push(scene_observer_registrar(scene, observer));
+        self
+    }
+
+    /// Observe one scene's `SceneExited`, mirroring `EngineBuilder::on_scene_exit`.
+    pub fn on_scene_exit<B: Bundle, M>(
+        mut self,
+        scene: &'static str,
+        observer: impl IntoObserverSystem<SceneExited, B, M>,
+    ) -> Self {
+        self.extra_observers
+            .push(scene_observer_registrar(scene, observer));
         self
     }
 

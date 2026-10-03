@@ -256,6 +256,45 @@ mod add_observer {
     }
 }
 
+// Scene-scoped systems and observers
+mod scene_scoped_systems_and_observers {
+    use aberredengine::prelude::*;
+
+    // Runs once per sim tick, only while "level01" is active.
+    fn level_tick(mut signals: ResMut<WorldSignals>) {
+        signals.set_flag("level01_ticking");
+    }
+
+    // Runs while either level is active.
+    fn hud_update(time: Res<WorldTime>) {
+        let _elapsed = time.elapsed;
+    }
+
+    // Fires each time "level01" becomes active, after the previous scene is torn down.
+    fn spawn_level(_: On<SceneEntered>, mut commands: Commands) {
+        commands.spawn((Group::new("player"), MapPosition::new(100.0, 200.0)));
+    }
+
+    // Fires each time "level01" is left, while its entities are still alive.
+    fn save_score(_: On<SceneExited>, players: Query<&Signals, With<Group>>) {
+        let _count = players.iter().count();
+    }
+
+    // A global observer fires for every scene; the event carries the names.
+    fn log_scene(ev: On<SceneEntered>) {
+        log::info!("entered {} from {:?}", ev.name, ev.previous);
+    }
+
+    fn register(builder: EngineBuilder) -> EngineBuilder {
+        builder
+            .add_scene_system("level01", level_tick)
+            .add_system_if(hud_update, in_scene("level01").or_else(in_scene("level02")))
+            .on_scene_enter("level01", spawn_level)
+            .on_scene_exit("level01", save_score)
+            .add_observer(log_scene)
+    }
+}
+
 // Scene-scoped (transient) observers
 mod scene_scoped_observers {
     #[derive(Event)] // GLUE

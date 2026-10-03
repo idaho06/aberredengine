@@ -11,6 +11,7 @@ use aberred_core::components::mapposition::MapPosition;
 use aberred_core::components::persistent::Persistent;
 use aberred_core::error::EngineError;
 use aberred_core::events::input::InputAction;
+use aberred_core::events::scene::{SceneEntered, SceneExited};
 use aberred_core::protocol::raw_input::ImguiCaptureState;
 use aberred_core::protocol::raw_input::InputSample;
 use aberred_core::protocol::raw_input::RawDeviceSnapshot;
@@ -714,6 +715,60 @@ fn initial_scene_not_registered_lists_every_registered_scene() {
         }
         other => panic!("unexpected error: {other}"),
     }
+}
+
+fn scene_tick() {}
+fn on_level_entered(_: On<SceneEntered>) {}
+fn on_level_exited(_: On<SceneExited>) {}
+
+#[test]
+fn scene_scoped_methods_reject_an_unregistered_scene() {
+    let base = || {
+        EngineBuilder::new()
+            .add_scene("menu", make_descriptor())
+            .initial_scene("menu")
+    };
+    let cases = [
+        (
+            base().add_scene_system("level", scene_tick),
+            "add_scene_system",
+        ),
+        (
+            base().on_scene_enter("level", on_level_entered),
+            "on_scene_enter",
+        ),
+        (
+            base().on_scene_exit("level", on_level_exited),
+            "on_scene_exit",
+        ),
+    ];
+    for (builder, expected_method) in cases {
+        match validate(&builder).unwrap_err() {
+            EngineError::SceneNotRegistered {
+                method,
+                name,
+                registered,
+            } => {
+                assert_eq!(method, expected_method);
+                assert_eq!(name, "level");
+                assert_eq!(registered, "menu");
+            }
+            other => panic!("unexpected error: {other}"),
+        }
+    }
+}
+
+#[test]
+fn scene_scoped_methods_accept_a_registered_scene() {
+    validate(
+        &EngineBuilder::new()
+            .add_scene("menu", make_descriptor())
+            .initial_scene("menu")
+            .add_scene_system("menu", scene_tick)
+            .on_scene_enter("menu", on_level_entered)
+            .on_scene_exit("menu", on_level_exited),
+    )
+    .unwrap();
 }
 
 #[cfg(feature = "lua")]

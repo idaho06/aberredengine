@@ -6,6 +6,7 @@ impl EngineBuilder {
     pub(super) fn validate_builder(&self, use_scene_manager: bool) -> Result<(), EngineError> {
         self.validate_lua_conflicts(use_scene_manager)?;
         self.validate_scene_manager(use_scene_manager)?;
+        self.validate_scene_refs()?;
         self.validate_deterministic()?;
         self.validate_replay()?;
         self.validate_tracked_groups()?;
@@ -80,18 +81,36 @@ impl EngineBuilder {
             return Err(EngineError::AddSceneRequiresInitialScene);
         };
         if !self.scenes.iter().any(|(name, _)| name == initial_scene) {
-            let registered = self
-                .scenes
-                .iter()
-                .map(|(name, _)| name.as_str())
-                .collect::<Vec<_>>()
-                .join(", ");
             return Err(EngineError::InitialSceneNotRegistered {
                 name: initial_scene.clone(),
-                registered,
+                registered: self.registered_scene_list(),
             });
         }
         Ok(())
+    }
+
+    /// Every scene named by `add_scene_system`/`on_scene_enter`/`on_scene_exit`
+    /// must be registered with `.add_scene()`; otherwise the system would never
+    /// run, or the observer would have no scene entity to attach to.
+    fn validate_scene_refs(&self) -> Result<(), EngineError> {
+        let registered = |name: &str| self.scenes.iter().any(|(scene, _)| scene == name);
+        if let Some(&(method, name)) = self.scene_refs.iter().find(|(_, name)| !registered(name)) {
+            return Err(EngineError::SceneNotRegistered {
+                method,
+                name: name.to_owned(),
+                registered: self.registered_scene_list(),
+            });
+        }
+        Ok(())
+    }
+
+    /// `"menu, level"`: registered scene names in registration order, for errors.
+    fn registered_scene_list(&self) -> String {
+        self.scenes
+            .iter()
+            .map(|(name, _)| name.as_str())
+            .collect::<Vec<_>>()
+            .join(", ")
     }
 
     /// `.deterministic(seed)` and `.with_lua()` are mutually exclusive --

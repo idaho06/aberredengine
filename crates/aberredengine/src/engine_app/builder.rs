@@ -4,11 +4,17 @@ use bevy_ecs::observer::Observer;
 use bevy_ecs::prelude::*;
 use bevy_ecs::system::IntoObserverSystem;
 
-use super::registrar::{HookRegistrar, ObserverRegistrar, UpdateRegistrar, hook_registrar};
+use super::registrar::{
+    HookRegistrar, ObserverRegistrar, UpdateRegistrar, conditional_system_registrar,
+    hook_registrar, scene_observer_registrar, scene_system_registrar, system_registrar,
+};
 use super::scene::SceneDescriptor;
+#[cfg(any(doc, feature = "lua"))] // doc links, and with_lua's update hook
 use super::schedule::SimSet;
 use aberred_core::components::persistent::Persistent;
+use aberred_core::events::scene::{SceneEntered, SceneExited};
 use aberred_core::resources::systemsstore as hook_keys;
+#[cfg(feature = "lua")]
 use aberred_core::systems::gamestate::state_is_playing;
 
 /// Builder for bootstrapping the engine.
@@ -36,6 +42,10 @@ pub struct EngineBuilder {
     pub(super) tracked_groups: Vec<String>,
     pub(super) extra_systems: Vec<UpdateRegistrar>,
     pub(super) extra_observers: Vec<ObserverRegistrar>,
+    /// `(method, scene)` for every scene-scoped call (`add_scene_system`,
+    /// `on_scene_enter`, `on_scene_exit`), checked against `scenes` by
+    /// `validate_builder`.
+    pub(super) scene_refs: Vec<(&'static str, &'static str)>,
     /// Name of the first `on_*` hook method explicitly called by the
     /// developer, tracked so `validate_builder` can detect a conflict with
     /// `.with_lua()` (which installs its own four hooks unconditionally)
@@ -73,6 +83,7 @@ impl EngineBuilder {
             tracked_groups: Vec::new(),
             extra_systems: Vec::new(),
             extra_observers: Vec::new(),
+            scene_refs: Vec::new(),
             first_user_hook: None,
             #[cfg(feature = "lua")]
             lua_script: None,
@@ -170,10 +181,105 @@ impl EngineBuilder {
     /// }
     /// ```
     pub fn add_system<M>(mut self, system: impl IntoSystem<(), (), M> + Send + 'static) -> Self {
+        self.extra_systems.push(system_registrar(system));
+        self
+    }
+
+    /// Add a system that runs only while `condition` holds.
+    ///
+    /// Like [`add_system`](Self::add_system) (once per sim tick, in
+    /// [`SimSet::ScriptUpdate`], while `Playing`), plus `.run_if(condition)`.
+    /// The condition is passed separately because a `.run_if(..)`-configured
+    /// system can't be carried to the logic thread.
+    ///
+    /// ```rust,ignore
+    /// EngineBuilder::new()
+    ///     .add_system_if(hud, in_scene("level01"))
+    ///     .add_system_if(enemy_ai, in_scene("level01").or_else(in_scene("level02")))
+    /// ```
+    pub fn add_system_if<M, MC>(
+        mut self,
+        system: impl IntoSystem<(), (), M> + Send + 'static,
+        condition: impl SystemCondition<MC> + Send + 'static,
+    ) -> Self {
         self.extra_systems
-            .push(Box::new(move |schedule: &mut Schedule| {
-                schedule.add_systems(system.run_if(state_is_playing).in_set(SimSet::ScriptUpdate));
-            }));
+            .push(conditional_system_registrar(system, condition));
+        self
+    }
+
+    /// Add a system that runs only while the scene `scene` is active.
+    ///
+    /// Short for [`add_system_if`](Self::add_system_if)`(system,`
+    /// [`in_scene`](aberred_core::systems::scene_dispatch::in_scene)`(scene))`:
+    /// once per sim tick, in [`SimSet::ScriptUpdate`], while `Playing`.
+    /// `ScriptUpdate` runs before movement and collision, so the system sees
+    /// the state the previous tick left. Can be called multiple times, also
+    /// for the same scene.
+    ///
+    /// ```rust,ignore
+    /// EngineBuilder::new()
+    ///     .add_scene("level01", level01())
+    ///     .add_scene_system("level01", enemy_waves)
+    /// ```
+    ///
+    /// # Errors (at `.run()`/`.try_run()`)
+    ///
+    /// [`EngineError::SceneNotRegistered`](aberred_core::error::EngineError::SceneNotRegistered)
+    /// if `scene` was never registered with [`add_scene`](Self::add_scene).
+    pub fn add_scene_system<M>(
+        mut self,
+        scene: &'static str,
+        system: impl IntoSystem<(), (), M> + Send + 'static,
+    ) -> Self {
+        self.scene_refs.push(("add_scene_system", scene));
+        self.extra_systems
+            .push(scene_system_registrar(scene, system));
+        self
+    }
+
+    /// Observe [`SceneEntered`] for the scene `scene` only.
+    ///
+    /// The observer is attached to the scene's entity, so it fires each time
+    /// `scene` becomes active, after the previous scene is torn down: the
+    /// entities it spawns belong to `scene`. For every scene, use
+    /// [`add_observer`](Self::add_observer) and read `name` from the event.
+    ///
+    /// ```rust,ignore
+    /// fn spawn_level(_: On<SceneEntered>, mut commands: Commands) { /* … */ }
+    ///
+    /// EngineBuilder::new().on_scene_enter("level01", spawn_level)
+    /// ```
+    ///
+    /// # Errors (at `.run()`/`.try_run()`)
+    ///
+    /// As [`add_scene_system`](Self::add_scene_system).
+    pub fn on_scene_enter<B: Bundle, M>(
+        mut self,
+        scene: &'static str,
+        observer: impl IntoObserverSystem<SceneEntered, B, M>,
+    ) -> Self {
+        self.scene_refs.push(("on_scene_enter", scene));
+        self.extra_observers
+            .push(scene_observer_registrar(scene, observer));
+        self
+    }
+
+    /// Observe [`SceneExited`] for the scene `scene` only.
+    ///
+    /// Fires each time `scene` is left, before its entities are despawned, so
+    /// the observer can still read them.
+    ///
+    /// # Errors (at `.run()`/`.try_run()`)
+    ///
+    /// As [`add_scene_system`](Self::add_scene_system).
+    pub fn on_scene_exit<B: Bundle, M>(
+        mut self,
+        scene: &'static str,
+        observer: impl IntoObserverSystem<SceneExited, B, M>,
+    ) -> Self {
+        self.scene_refs.push(("on_scene_exit", scene));
+        self.extra_observers
+            .push(scene_observer_registrar(scene, observer));
         self
     }
 

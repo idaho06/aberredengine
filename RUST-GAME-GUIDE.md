@@ -421,7 +421,10 @@ Setup ──→ Playing ──→ Quitting
 | `.track_group(name)` | Count group `name`'s entities for the whole game (published as `"group_count:<name>"`, kept across scene switches). Can be called multiple times. See [Group tracking across scenes](#64-group-tracking-across-scenes). |
 | `.add_system(system)` | Add a per-sim-tick system, run only while `Playing` (`run_if(state_is_playing)`, ordered alongside script-update systems). Can be called multiple times. A sim tick is not the same as a render frame; see [Threading Model](#threading-model-what-your-code-can-access). |
 | `.configure_schedule(closure)` | Add systems to the same schedule `.add_system()` targets, with full ordering control — no auto-constraints applied. Use this for custom ordering relative to the engine's own systems (via `SimSet` or `.after()`/`.before()`). |
+| `.add_system_if(system, condition)` | `.add_system()` plus a run condition, e.g. `in_scene("level01")`. The condition is a separate argument because a `.run_if(..)`-configured system can't be passed to the builder. |
+| `.add_scene_system(scene, system)` | Short for `.add_system_if(system, in_scene(scene))`: a per-sim-tick system that runs only while `scene` is active. |
 | `.add_observer(observer_fn)` | Register a persistent observer for a custom or engine event. |
+| `.on_scene_enter(scene, observer_fn)` / `.on_scene_exit(scene, observer_fn)` | Observe `SceneEntered`/`SceneExited` for one scene only. See [Scene-scoped systems and observers](#scene-scoped-systems-and-observers). |
 | `.with_lua(path)` | **Lua builds only** (`lua` feature). Run a Lua game from the `main.lua` at `path`. Listed here because the conflict rules below refer to it; a pure-Rust game never calls it. |
 | `.deterministic(seed)` | Seed `SimRng` from `seed` instead of entropy, pinning simulation randomness to a known value. Mutually exclusive with `.with_lua()`. See [Determinism and replay](#determinism-and-replay) below. |
 | `.record_replay(path, game_version)` | Record this session's input stream to `path`. Requires `.deterministic(seed)` first; mutually exclusive with `.play_replay()`. |
@@ -556,6 +559,55 @@ fn my_enter(ctx: &mut GameCtx) {
 ```
 
 > You can also observe engine-defined events: `CollisionEvent`, `TimerEvent`, `InputEvent`, `GameStateChangedEvent`, `WindowResizedEvent`, etc. Note that not every engine type that crosses a system boundary is an `Event` — `AudioCmd` and `RenderAssetCmd`, for example, are Bevy `Message`s (`MessageWriter`/`MessageReader`, queue-based), a different mechanism from `Commands::trigger`/`.add_observer()`.
+
+#### Scene-scoped systems and observers
+
+With `.add_scene()`, every scene has a persistent scene entity. Each scene switch triggers `SceneExited` for the old scene, then `SceneEntered` for the new one, both targeted at that entity:
+
+- `SceneExited { scene, name, next }` fires before the old scene is torn down: its entities are still alive.
+- `SceneEntered { scene, name, previous }` fires after the teardown, so entities its observers spawn belong to the new scene. It also fires for the initial scene, with `previous: None`.
+
+`.on_scene_enter(scene, ..)`/`.on_scene_exit(scene, ..)` attach an observer to one scene's entity; `.add_observer()` sees every scene and reads `name` from the event. `.add_scene_system(scene, ..)` and `.add_system_if(.., in_scene(..))` run a system only while a scene is active. Every scene these methods name must be registered with `.add_scene()`, or startup fails with `EngineError::SceneNotRegistered`.
+
+```rust
+use aberredengine::prelude::*;
+
+// Runs once per sim tick, only while "level01" is active.
+fn level_tick(mut signals: ResMut<WorldSignals>) {
+    signals.set_flag("level01_ticking");
+}
+
+// Runs while either level is active.
+fn hud_update(time: Res<WorldTime>) {
+    let _elapsed = time.elapsed;
+}
+
+// Fires each time "level01" becomes active, after the previous scene is torn down.
+fn spawn_level(_: On<SceneEntered>, mut commands: Commands) {
+    commands.spawn((Group::new("player"), MapPosition::new(100.0, 200.0)));
+}
+
+// Fires each time "level01" is left, while its entities are still alive.
+fn save_score(_: On<SceneExited>, players: Query<&Signals, With<Group>>) {
+    let _count = players.iter().count();
+}
+
+// A global observer fires for every scene; the event carries the names.
+fn log_scene(ev: On<SceneEntered>) {
+    log::info!("entered {} from {:?}", ev.name, ev.previous);
+}
+
+fn register(builder: EngineBuilder) -> EngineBuilder {
+    builder
+        .add_scene_system("level01", level_tick)
+        .add_system_if(hud_update, in_scene("level01").or_else(in_scene("level02")))
+        .on_scene_enter("level01", spawn_level)
+        .on_scene_exit("level01", save_score)
+        .add_observer(log_scene)
+}
+```
+
+Scene systems run in `SimSet::ScriptUpdate`, before movement and collision, so they see the state the previous tick left. A scene's `on_update` callback runs later in the tick, after collision.
 
 #### Scene-scoped (transient) observers
 
