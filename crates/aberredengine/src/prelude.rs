@@ -70,6 +70,7 @@ pub use aberred_core::resources::worldsignals::{SignalSnapshot, SignalsRead, Wor
 pub use aberred_core::resources::worldtime::WorldTime;
 
 pub use aberred_core::systems::GameCtx;
+pub use aberred_core::systems::asset_loader::AssetLoader;
 pub use aberred_core::systems::gamestate::state_is_playing;
 pub use aberred_core::systems::scene_dispatch::{WorldDraw, WorldDrawCtx};
 

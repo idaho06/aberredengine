@@ -68,6 +68,10 @@ use crate::resources::worldtime::WorldTime;
 /// that overlaps one of `GameCtx`'s queries causes a Bevy `B0001`
 /// query-aliasing panic at startup (see `gui_interactable_click_observer`,
 /// which hit this when `gui_interactables` was added here).
+///
+/// `GameCtx` holds a `MessageWriter<AudioCmd>`, so a system that takes it
+/// can't also take [`AssetLoader`](crate::systems::asset_loader::AssetLoader),
+/// which holds one too.
 #[derive(SystemParam)]
 pub struct GameCtx<'w, 's> {
     /// ECS command buffer for spawning, despawning, inserting/removing components.

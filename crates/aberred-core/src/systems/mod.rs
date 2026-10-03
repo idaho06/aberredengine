@@ -5,6 +5,7 @@
 //!
 //! Submodules overview
 //! - [`animation`] – advance sprite animations and select tracks via rules
+//! - [`asset_loader`] – [`AssetLoader`](asset_loader::AssetLoader) system param: queue render/audio asset loads
 //! - [`camera_follow`] – move the camera to track entities with `CameraTarget`
 //! - [`audio_bridge`] – logic-thread systems that shuttle `AudioCmd`/`AudioMessage` with the audio thread
 //! - [`collision_detector`] – broad/simple overlap checks and event emission
@@ -39,6 +40,7 @@
 pub use game_ctx::GameCtx;
 
 pub mod animation;
+pub mod asset_loader;
 pub mod audio_bridge;
 pub mod camera_follow;
 pub mod collision;

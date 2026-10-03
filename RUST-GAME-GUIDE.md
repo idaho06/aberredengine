@@ -640,27 +640,42 @@ This is useful for automated testing (replay a fixed input script, assert on the
 
 The setup hook is a standard Bevy ECS system running on the **logic thread** (see [Threading Model](#threading-model-what-your-code-can-access)). That means it **cannot** take `RaylibAccess`, `NonSendMut<FontStore>`, `NonSendMut<ShaderStore>`, or `ResMut<TextureStore>` — those resources exist only in the render world, on the render thread. Requesting any of them from `setup()` (or any other logic-side system) panics the first time that system runs.
 
-Instead, texture/font/shader loading is **queued** from the logic thread and **performed** on the render thread: take `MessageWriter<RenderAssetCmd>` and write a `RenderAssetCmd` variant. The render thread's `process_render_asset_cmds` system drains the queue, does the actual GL load, and reports back — so the load itself is asynchronous relative to the tick that requested it.
+Instead, asset loading is **queued** from the logic thread and **performed** elsewhere: textures, fonts and shaders on the render thread, sounds and music on the audio thread. Take the `AssetLoader` system param and call its `load_*` methods. Each load is asynchronous relative to the tick that requested it.
 
 ```rust
 use aberredengine::prelude::*;
 
-fn setup(
-    mut anim_store: ResMut<AnimationStore>,
-    mut asset_cmds: MessageWriter<RenderAssetCmd>,
-    mut audio: MessageWriter<AudioCmd>,
-) {
-    // ... queue asset loads here (see subsections below) ...
+fn setup(mut assets: AssetLoader) {
+    assets.load_texture("player", "assets/textures/player.png");
+    assets.load_texture_with("background", "assets/textures/bg.png", TextureFilter::Bilinear);
+    assets.load_font("arcade", "assets/fonts/arcade.ttf", 32);
+    assets.load_shader("glow", None, Some("assets/shaders/glow.fs"));
+    assets.load_sound("jump", "assets/audio/jump.wav");
+    assets.load_music("bgm", "assets/audio/music.ogg");
 }
 ```
 
-Audio loading uses the same message-queue pattern (`MessageWriter<AudioCmd>`) — see the Audio subsection below.
+`AssetLoader` also answers whether a load has landed: `is_texture_loaded(key)`, `texture_size(key)` and `is_font_loaded(key)` return `false`/`None` until the render thread replies, usually a tick or two after the load was queued. Render assets and audio assets have separate key spaces, so a texture and a sound can share a key.
+
+`AssetLoader` holds the `MessageWriter<RenderAssetCmd>` and the `MessageWriter<AudioCmd>`. A system that takes it must not also take either writer, or `GameCtx` (which holds the audio writer): Bevy rejects that system at startup with a conflicting-access panic. Write any other command through its passthroughs, `assets.audio()` and `assets.render()`, instead:
+
+```rust
+use aberredengine::prelude::*;
+
+fn play_jump(mut assets: AssetLoader, input: Res<InputState>) {
+    if input.action(InputAction::Action1).just_pressed {
+        assets.audio().write(AudioCmd::PlayFx { id: "jump".into() });
+    }
+}
+```
+
+The subsections below show the underlying `RenderAssetCmd`/`AudioCmd` variants; write any that `AssetLoader` has no helper for through `assets.render()`/`assets.audio()`.
 
 ### What's pre-inserted vs. what you must create
 
 | Resource | Where it lives | Accessible from your logic-side code? |
 |----------|-----------------|----------------------------------------|
-| `FontStore` / `ShaderStore` / `TextureStore` / `RenderTarget` | Render world only | **No** — request `MessageWriter<RenderAssetCmd>` instead |
+| `FontStore` / `ShaderStore` / `TextureStore` / `RenderTarget` | Render world only | **No** — queue loads with `AssetLoader` instead |
 | `FontMetricsStore` / `TextureDimsStore` | Logic world, pre-inserted | Yes — `Res<FontMetricsStore>` / `Res<TextureDimsStore>`; populated asynchronously after a load completes (see below) |
 | `AnimationStore` | Logic world, pre-inserted | Yes — `ResMut<AnimationStore>` |
 | `Camera2DRes` | Logic world, pre-inserted (pre-set to center offset) | Yes — `ResMut<Camera2DRes>` |
@@ -1064,43 +1079,26 @@ fn follow_player(mut commands: Commands, mut follow: ResMut<CameraFollowConfig>)
 ### Complete setup example
 
 ```rust
-fn setup(
-    mut anim_store: ResMut<AnimationStore>,
-    mut asset_cmds: MessageWriter<RenderAssetCmd>,
-    mut audio: MessageWriter<AudioCmd>,
-) {
+fn setup(mut assets: AssetLoader, mut anim_store: ResMut<AnimationStore>) {
     // Textures — queued, loaded asynchronously on the render thread
-    asset_cmds.write(RenderAssetCmd::Texture {
-        key: "player".to_string(),
-        path: "assets/textures/player.png".to_string(),
-        filter: TextureFilter::Nearest,
-    });
+    assets.load_texture("player", "assets/textures/player.png");
 
     // Fonts — mipmap generation is handled internally by the render thread
-    asset_cmds.write(RenderAssetCmd::Font {
-        key: "arcade".to_string(),
-        path: "assets/fonts/arcade.ttf".to_string(),
-        size: 32,
-        skip_if_loaded: false,
-    });
+    assets.load_font("arcade", "assets/fonts/arcade.ttf", 32);
 
-    // Audio — same message-queue pattern
-    audio.write(AudioCmd::LoadFx { id: "jump".into(), path: "assets/audio/jump.wav".into() });
-    audio.write(AudioCmd::LoadMusic { id: "bgm".into(), path: "assets/audio/music.ogg".into() });
+    // Audio — loaded asynchronously on the audio thread
+    assets.load_sound("jump", "assets/audio/jump.wav");
+    assets.load_music("bgm", "assets/audio/music.ogg");
 
     // Shaders
-    asset_cmds.write(RenderAssetCmd::Shader {
-        key: "glow".to_string(),
-        vs_path: None,
-        fs_path: Some("assets/shaders/glow.fs".to_string()),
-    });
+    assets.load_shader("glow", None, Some("assets/shaders/glow.fs"));
 
     // Animations (AnimationStore is pre-inserted, logic-owned — just populate it)
     anim_store.insert("player_idle", AnimationResource::new("player", 32.0, 4, 8.0));
 }
 ```
 
-Entities that reference `"player"`/`"arcade"`/`"glow"` can be spawned right away in `on_enter_play`/the initial scene's `on_enter` — they just won't render anything until the render thread's uploads land a tick or two later. Use the `TextureDimsStore`/`FontMetricsStore` pattern from the Textures/Fonts subsections above only if your own logic needs the actual dimensions/metrics before then.
+Entities that reference `"player"`/`"arcade"`/`"glow"` can be spawned right away in `on_enter_play`/the initial scene's `on_enter` — they just won't render anything until the render thread's uploads land a tick or two later. Check `AssetLoader::is_texture_loaded`/`texture_size` (or the `TextureDimsStore`/`FontMetricsStore` patterns from the Textures/Fonts subsections above) only if your own logic needs the actual dimensions/metrics before then.
 
 ---
 
