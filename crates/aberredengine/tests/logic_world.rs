@@ -381,7 +381,7 @@ fn signal_intent_is_visible_to_script_update_on_its_delivery_tick() {
 const DOOMED_KEY: &str = "test:doomed";
 
 fn despawn_doomed(mut commands: Commands, signals: Res<WorldSignals>) {
-    if let Some(&entity) = signals.get_entity(DOOMED_KEY) {
+    if let Some(entity) = signals.get_entity(DOOMED_KEY) {
         commands.entity(entity).despawn();
     }
 }
@@ -415,7 +415,7 @@ fn rust_despawn_prunes_world_signals_registration_same_tick() {
         signals.get_entity(DOOMED_KEY).is_none(),
         "registration of an entity despawned this tick must be pruned by tick end"
     );
-    assert_eq!(signals.get_entity("test:survivor"), Some(&survivor));
+    assert_eq!(signals.get_entity("test:survivor"), Some(survivor));
 }
 
 /// The `quit_game` flag quits a Rust-only game (no Lua): set while

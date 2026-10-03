@@ -393,7 +393,6 @@ pub fn update(
     let scene_str = scene_state
         .world_signals
         .get_string(sk::SCENE)
-        .map(|s| s.as_str())
         .unwrap_or(sk::DEFAULT_SCENE);
 
     refresh_cached_callback_name(&mut cached_callback, scene_str);
@@ -499,7 +498,7 @@ pub fn switch_scene(
     let scene = scene_state
         .world_signals
         .get_string(sk::SCENE)
-        .cloned()
+        .map(str::to_owned)
         .unwrap_or_else(|| sk::DEFAULT_SCENE.to_string());
 
     // Call Lua on_switch_scene function if it exists

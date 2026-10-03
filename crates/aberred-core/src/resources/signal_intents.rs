@@ -16,7 +16,7 @@ use bevy_ecs::prelude::{Entity, Resource};
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum SignalIntent {
     SetFlag(String),
-    ClearFlag(String),
+    RemoveFlag(String),
     SetScalar(String, f32),
     SetInteger(String, i32),
     SetString(String, String),
@@ -40,8 +40,8 @@ impl SignalIntents {
     }
 
     /// Queue a flag-clear intent.
-    pub fn clear_flag(&mut self, key: impl Into<String>) {
-        self.0.push(SignalIntent::ClearFlag(key.into()));
+    pub fn remove_flag(&mut self, key: impl Into<String>) {
+        self.0.push(SignalIntent::RemoveFlag(key.into()));
     }
 
     /// Queue a scalar-set intent.
@@ -71,7 +71,9 @@ impl SignalIntents {
         for intent in self.0.drain(..) {
             match intent {
                 SignalIntent::SetFlag(key) => signals.set_flag(key),
-                SignalIntent::ClearFlag(key) => signals.clear_flag(&key),
+                SignalIntent::RemoveFlag(key) => {
+                    signals.remove_flag(&key);
+                }
                 SignalIntent::SetScalar(key, value) => signals.set_scalar(key, value),
                 SignalIntent::SetInteger(key, value) => signals.set_integer(key, value),
                 SignalIntent::SetString(key, value) => signals.set_string(key, value),
@@ -101,10 +103,7 @@ mod tests {
         assert!(signals.has_flag("gui:action:save"));
         assert_eq!(signals.get_scalar("volume"), Some(0.5));
         assert_eq!(signals.get_integer("score"), Some(42));
-        assert_eq!(
-            signals.get_string("player_name").map(String::as_str),
-            Some("Ada")
-        );
+        assert_eq!(signals.get_string("player_name"), Some("Ada"));
     }
 
     #[test]
@@ -113,7 +112,7 @@ mod tests {
         signals.set_flag("gui:action:save");
 
         let mut intents = SignalIntents::default();
-        intents.clear_flag("gui:action:save");
+        intents.remove_flag("gui:action:save");
         intents.apply_to(&mut signals);
 
         assert!(!signals.has_flag("gui:action:save"));
@@ -128,7 +127,7 @@ mod tests {
         let mut signals = WorldSignals::default();
         intents.apply_to(&mut signals);
 
-        assert_eq!(signals.get_entity("selected"), Some(&entity));
+        assert_eq!(signals.get_entity("selected"), Some(entity));
     }
 
     #[test]

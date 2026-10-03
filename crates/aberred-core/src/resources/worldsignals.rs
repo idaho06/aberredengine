@@ -264,9 +264,8 @@ impl WorldSignals {
         self.strings_dirty = true;
     }
     /// Get a string signal by key.
-    /// It's recommended to clone the String if you need ownership.
-    pub fn get_string(&self, key: &str) -> Option<&String> {
-        self.strings.get(key)
+    pub fn get_string(&self, key: &str) -> Option<&str> {
+        self.strings.get(key).map(String::as_str)
     }
     /// Remove a string signal by key.
     pub fn remove_string(&mut self, key: &str) -> Option<String> {
@@ -277,7 +276,7 @@ impl WorldSignals {
         result
     }
     /// Remove a scalar signal by key.
-    pub fn clear_scalar(&mut self, key: &str) -> Option<f32> {
+    pub fn remove_scalar(&mut self, key: &str) -> Option<f32> {
         let result = self.scalars.remove(key);
         if result.is_some() {
             self.scalars_dirty = true;
@@ -285,7 +284,7 @@ impl WorldSignals {
         result
     }
     /// Remove an integer signal by key.
-    pub fn clear_integer(&mut self, key: &str) -> Option<i32> {
+    pub fn remove_integer(&mut self, key: &str) -> Option<i32> {
         let result = self.integers.remove(key);
         if result.is_some() {
             self.integers_dirty = true;
@@ -304,26 +303,24 @@ impl WorldSignals {
             self.flags_dirty = true;
         }
     }
-    /// Remove a flag (make it false/absent).
-    pub fn clear_flag(&mut self, key: &str) {
-        if self.flags.remove(key) {
+    /// Remove a flag (make it false/absent). Returns whether it was present.
+    pub fn remove_flag(&mut self, key: &str) -> bool {
+        let removed = self.flags.remove(key);
+        if removed {
             self.flags_dirty = true;
         }
+        removed
     }
     /// Check whether a flag is present/true.
     pub fn has_flag(&self, key: &str) -> bool {
         self.flags.contains(key)
     }
-    /// Remove a flag and return whether it was present.
+    /// Consume a one-shot event flag: returns whether it was set, and clears it.
     ///
-    /// Equivalent to `has_flag` + `clear_flag` in a single hash-set lookup.
+    /// The same operation as [`remove_flag`](Self::remove_flag), named for
+    /// the `if signals.take_flag("event") { ... }` idiom.
     pub fn take_flag(&mut self, key: &str) -> bool {
-        if self.flags.remove(key) {
-            self.flags_dirty = true;
-            true
-        } else {
-            false
-        }
+        self.remove_flag(key)
     }
     /// Toggle a flag: remove it if present, add it if absent.
     ///
@@ -359,8 +356,8 @@ impl WorldSignals {
         &self.strings
     }
     /// Get an entity by key.
-    pub fn get_entity(&self, key: &str) -> Option<&Entity> {
-        self.entities.get(key)
+    pub fn get_entity(&self, key: &str) -> Option<Entity> {
+        self.entities.get(key).copied()
     }
     /// Set an entity by key.
     pub fn set_entity(&mut self, key: impl Into<String>, entity: Entity) {
@@ -543,18 +540,20 @@ mod tests {
         ws.set_flag("f");
         ws.set_entity("e", e);
         ws.snapshot();
+        assert_eq!(ws.get_string("t"), Some("hi"));
+        assert_eq!(ws.get_entity("e"), Some(e));
 
-        assert_eq!(ws.clear_scalar("missing"), None);
-        assert_eq!(ws.clear_integer("missing"), None);
+        assert_eq!(ws.remove_scalar("missing"), None);
+        assert_eq!(ws.remove_integer("missing"), None);
         assert_eq!(ws.remove_string("missing"), None);
-        ws.clear_flag("missing");
+        assert!(!ws.remove_flag("missing"));
         assert_eq!(ws.remove_entity("missing"), None);
         assert!(!ws.is_dirty(), "removing absent keys must not dirty");
 
-        assert_eq!(ws.clear_scalar("s"), Some(1.5));
-        assert_eq!(ws.clear_integer("i"), Some(7));
+        assert_eq!(ws.remove_scalar("s"), Some(1.5));
+        assert_eq!(ws.remove_integer("i"), Some(7));
         assert_eq!(ws.remove_string("t").as_deref(), Some("hi"));
-        ws.clear_flag("f");
+        assert!(ws.remove_flag("f"));
         assert_eq!(ws.remove_entity("e"), Some(e));
         assert!(ws.scalars_dirty && ws.integers_dirty && ws.strings_dirty);
         assert!(ws.flags_dirty && ws.entities_dirty);
@@ -660,7 +659,7 @@ mod tests {
     fn request_scene_sets_the_target_and_the_switch_flag() {
         let mut ws = WorldSignals::default();
         ws.request_scene("lvl");
-        assert_eq!(ws.get_string(sk::SCENE).map(String::as_str), Some("lvl"));
+        assert_eq!(ws.get_string(sk::SCENE), Some("lvl"));
         assert!(ws.has_flag(sk::SWITCH_SCENE));
     }
 
@@ -690,7 +689,7 @@ mod tests {
         );
         assert_eq!(
             ws.get_entity("cursor"),
-            Some(&entity_b),
+            Some(entity_b),
             "registration pointing at a different entity should be kept"
         );
         assert!(ws.entities_dirty);
@@ -706,7 +705,7 @@ mod tests {
 
         ws.remove_entity_registrations_for(entity_a);
 
-        assert_eq!(ws.get_entity("cursor"), Some(&entity_b));
+        assert_eq!(ws.get_entity("cursor"), Some(entity_b));
         assert!(!ws.entities_dirty);
     }
 
@@ -725,7 +724,7 @@ mod tests {
         assert!(removed);
         assert!(ws.get_entity("enemy").is_none());
         assert!(ws.get_entity("enemy_alias").is_none());
-        assert_eq!(ws.get_entity("player"), Some(&live));
+        assert_eq!(ws.get_entity("player"), Some(live));
         assert!(ws.entities_dirty);
     }
 
@@ -739,7 +738,7 @@ mod tests {
         let removed = ws.remove_dead_entity_registrations(|_| true);
 
         assert!(!removed);
-        assert_eq!(ws.get_entity("player"), Some(&live));
+        assert_eq!(ws.get_entity("player"), Some(live));
         assert!(!ws.entities_dirty);
     }
 
@@ -772,7 +771,7 @@ mod tests {
         );
         assert_eq!(
             ws.get_entity("cursor"),
-            Some(&entity_b),
+            Some(entity_b),
             "persistent registration should be kept"
         );
     }
@@ -800,8 +799,8 @@ mod tests {
         let persistent = FxHashSet::from_iter([entity_a, entity_b]);
         ws.clear_non_persistent_entities(&persistent);
 
-        assert_eq!(ws.get_entity("player"), Some(&entity_a));
-        assert_eq!(ws.get_entity("cursor"), Some(&entity_b));
+        assert_eq!(ws.get_entity("player"), Some(entity_a));
+        assert_eq!(ws.get_entity("cursor"), Some(entity_b));
     }
 
     #[test]
@@ -996,7 +995,7 @@ mod tests {
     fn test_clear_integer_syncs_group_counts() {
         let mut ws = WorldSignals::default();
         ws.set_group_count("enemy", 5);
-        ws.clear_integer(&format!("{}enemy", sk::GROUP_COUNT_PREFIX));
+        ws.remove_integer(&format!("{}enemy", sk::GROUP_COUNT_PREFIX));
         assert_eq!(ws.get_group_count("enemy"), None);
         let snap = ws.snapshot();
         assert_eq!(

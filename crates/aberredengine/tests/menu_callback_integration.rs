@@ -140,7 +140,7 @@ fn menu_actions_work_without_callback() {
 
     assert_eq!(
         world.resource::<WorldSignals>().get_string("scene"),
-        Some(&"level01".to_string())
+        Some("level01")
     );
 }
 

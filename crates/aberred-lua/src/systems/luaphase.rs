@@ -389,9 +389,7 @@ mod tests {
 
         let world_signals = world.resource::<WorldSignals>();
         assert_eq!(
-            world_signals
-                .get_string("exit_phase_seen")
-                .map(|s| s.as_str()),
+            world_signals.get_string("exit_phase_seen"),
             Some("attacking")
         );
         assert!(approx_eq(

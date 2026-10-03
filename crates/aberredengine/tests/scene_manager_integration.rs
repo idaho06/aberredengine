@@ -665,7 +665,7 @@ fn persistent_entity_registration_survives_scene_switch() {
 
     assert_eq!(
         world.resource::<WorldSignals>().get_entity("cursor"),
-        Some(&cursor),
+        Some(cursor),
         "Persistent entity registration should survive scene switch"
     );
 }
@@ -713,7 +713,7 @@ fn mixed_registrations_only_non_persistent_cleared_on_scene_switch() {
     let ws = world.resource::<WorldSignals>();
     assert_eq!(
         ws.get_entity("cursor"),
-        Some(&cursor),
+        Some(cursor),
         "Persistent registration should survive"
     );
     assert!(

@@ -523,7 +523,7 @@ fn apply_ui_components(
             menu_component = menu_component.with_selection_sound(sound);
         }
         if let Some(cursor_key) = menu_data.cursor_entity_key {
-            if let Some(cursor_entity) = world_signals.get_entity(&cursor_key).copied() {
+            if let Some(cursor_entity) = world_signals.get_entity(&cursor_key) {
                 menu_component = menu_component.with_cursor(cursor_entity);
             } else {
                 warn!(
@@ -573,7 +573,7 @@ fn apply_particle_emitter(
     // Resolve template keys to Entity IDs
     let mut templates = Vec::new();
     for key in &emitter_data.template_keys {
-        if let Some(entity) = world_signals.get_entity(key).copied() {
+        if let Some(entity) = world_signals.get_entity(key) {
             templates.push(entity);
         } else {
             warn!(
@@ -654,7 +654,7 @@ pub fn process_clone_command(
     world_signals: &mut WorldSignals,
 ) {
     // 1. Look up source entity from WorldSignals
-    let Some(source_entity) = world_signals.get_entity(&cmd.source_key).copied() else {
+    let Some(source_entity) = world_signals.get_entity(&cmd.source_key) else {
         log::error!(
             "Clone source '{}' not found in WorldSignals",
             cmd.source_key
@@ -892,8 +892,8 @@ mod tests {
         );
 
         assert_ne!(clone, source);
-        assert_eq!(world_signals.get_entity("copy").copied(), Some(clone));
-        assert_eq!(world_signals.get_entity("tpl").copied(), Some(source));
+        assert_eq!(world_signals.get_entity("copy"), Some(clone));
+        assert_eq!(world_signals.get_entity("tpl"), Some(source));
     }
 
     #[test]

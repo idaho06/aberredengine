@@ -235,7 +235,7 @@ fn insert_particle_emitter(
         .template_keys
         .iter()
         .filter_map(|k| {
-            let e = world_signals.get_entity(k).copied();
+            let e = world_signals.get_entity(k);
             if e.is_none() {
                 log::warn!(
                     "insert_particle_emitter: template key '{}' not found in WorldSignals; ignoring",
@@ -541,7 +541,7 @@ mod tests {
         );
         let anim = world.get::<Animation>(hero).unwrap();
         assert_eq!((anim.animation_key.as_str(), anim.frame_index), ("walk", 0));
-        assert_eq!(signals.get_entity("hero").copied(), Some(hero));
+        assert_eq!(signals.get_entity("hero"), Some(hero));
 
         let s = world.get::<Sprite>(other).unwrap();
         assert_eq!(
@@ -679,7 +679,6 @@ mod tests {
         let thing = world
             .resource::<WorldSignals>()
             .get_entity("thing")
-            .copied()
             .unwrap();
         assert_eq!(
             world.get::<MapPosition>(thing).unwrap().pos,

@@ -102,7 +102,7 @@ fn get_world_signal_as_str<'a>(
         return Some(SignalStr::Stack(buf));
     }
     if let Some(s) = world_signals.get_string(signal_key) {
-        return Some(SignalStr::Borrowed(s.as_str()));
+        return Some(SignalStr::Borrowed(s));
     }
     if world_signals.has_flag(signal_key) {
         return Some(SignalStr::Borrowed("true"));
@@ -191,10 +191,10 @@ mod tests {
         run(&mut world);
         assert_eq!(text(&world, e), "1");
 
-        world.resource_mut::<WorldSignals>().clear_integer("k");
+        world.resource_mut::<WorldSignals>().remove_integer("k");
         run(&mut world);
         assert_eq!(text(&world, e), "2.5");
-        world.resource_mut::<WorldSignals>().clear_scalar("k");
+        world.resource_mut::<WorldSignals>().remove_scalar("k");
         run(&mut world);
         assert_eq!(text(&world, e), "s");
         world.resource_mut::<WorldSignals>().remove_string("k");

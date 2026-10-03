@@ -51,7 +51,7 @@ mod tests {
 
         let ws = world.resource::<WorldSignals>();
         assert!(ws.get_entity("dead").is_none());
-        assert_eq!(ws.get_entity("live"), Some(&live));
+        assert_eq!(ws.get_entity("live"), Some(live));
     }
 
     #[test]
@@ -71,7 +71,7 @@ mod tests {
 
         assert_eq!(
             world.resource::<WorldSignals>().get_entity("reserved"),
-            Some(&reserved)
+            Some(reserved)
         );
     }
 

@@ -91,7 +91,7 @@ pub fn process_signal_command(world_signals: &mut WorldSignals, cmd: SignalCmd) 
             world_signals.set_flag(key);
         }
         SignalCmd::ClearFlag { key } => {
-            world_signals.clear_flag(&key);
+            world_signals.remove_flag(&key);
         }
         SignalCmd::ToggleFlag { key } => {
             world_signals.toggle_flag(&key);
@@ -100,10 +100,10 @@ pub fn process_signal_command(world_signals: &mut WorldSignals, cmd: SignalCmd) 
             world_signals.set_string(key, value);
         }
         SignalCmd::ClearScalar { key } => {
-            world_signals.clear_scalar(&key);
+            world_signals.remove_scalar(&key);
         }
         SignalCmd::ClearInteger { key } => {
-            world_signals.clear_integer(&key);
+            world_signals.remove_integer(&key);
         }
         SignalCmd::ClearString { key } => {
             world_signals.remove_string(&key);
@@ -1117,9 +1117,9 @@ mod tests {
             (Some(3), None)
         );
         assert!(ws.has_flag("kept") && !ws.has_flag("gone_f"));
-        assert_eq!(ws.get_string("name").map(String::as_str), Some("bob"));
+        assert_eq!(ws.get_string("name"), Some("bob"));
         assert!(ws.get_string("gone_str").is_none());
-        assert_eq!(ws.get_entity("player").copied(), Some(player));
+        assert_eq!(ws.get_entity("player"), Some(player));
         assert!(
             ws.get_entity("bad").is_none(),
             "invalid entity bits are ignored"

@@ -2160,7 +2160,7 @@ Since those two callbacks are the one exception that runs render-side (see [Thre
 | Resource | Purpose |
 |----------|---------|
 | `SignalSnapshot` | Read-only, one-tick-stale copy of `WorldSignals`. **No getter methods** — read fields directly: `signals.scalars.get(key)`, `signals.flags.contains(key)`, `signals.integers`/`.strings`/`.entities`/`.group_counts` the same way. |
-| `SignalIntents` | Queue of pending `WorldSignals` writes. Setter methods mirror `WorldSignals`' own: `.set_flag(key)`, `.set_scalar(key, v)`, `.set_integer(key, v)`, `.set_string(key, v)`, `.clear_flag(key)`. Applied to the live `WorldSignals` at the start of the logic thread's next sim tick. |
+| `SignalIntents` | Queue of pending `WorldSignals` writes. Setter methods mirror `WorldSignals`' own: `.set_flag(key)`, `.set_scalar(key, v)`, `.set_integer(key, v)`, `.set_string(key, v)`, `.remove_flag(key)`. Applied to the live `WorldSignals` at the start of the logic thread's next sim tick. |
 | `TextureStore` | Read-only access to loaded textures by key, e.g. for previews. |
 | `FontStore` | Read-only access to loaded fonts by key, e.g. for text measurement. |
 | `AppState` | The same read-only, generation-gated snapshot copy described in the AppState API section below — write typed Rust state from a logic-thread system/observer instead. |
@@ -2183,7 +2183,7 @@ Fullscreen is not a resource your game can insert: the engine's `FullScreen` mar
 |--------|-----------|
 | `set_scalar` | `(&mut self, key: impl Into<String>, value: f32)` |
 | `get_scalar` | `(&self, key: &str) -> Option<f32>` |
-| `clear_scalar` | `(&mut self, key: &str) -> Option<f32>` |
+| `remove_scalar` | `(&mut self, key: &str) -> Option<f32>` |
 
 **Integers (`i32`):**
 
@@ -2191,14 +2191,14 @@ Fullscreen is not a resource your game can insert: the engine's `FullScreen` mar
 |--------|-----------|
 | `set_integer` | `(&mut self, key: impl Into<String>, value: i32)` |
 | `get_integer` | `(&self, key: &str) -> Option<i32>` |
-| `clear_integer` | `(&mut self, key: &str) -> Option<i32>` |
+| `remove_integer` | `(&mut self, key: &str) -> Option<i32>` |
 
 **Strings:**
 
 | Method | Signature |
 |--------|-----------|
 | `set_string` | `(&mut self, key: impl Into<String>, value: impl Into<String>)` |
-| `get_string` | `(&self, key: &str) -> Option<&String>` |
+| `get_string` | `(&self, key: &str) -> Option<&str>` |
 | `remove_string` | `(&mut self, key: &str) -> Option<String>` |
 
 **Flags (presence-based booleans):**
@@ -2207,15 +2207,15 @@ Fullscreen is not a resource your game can insert: the engine's `FullScreen` mar
 |--------|-----------|
 | `set_flag` | `(&mut self, key: impl Into<String>)` |
 | `has_flag` | `(&self, key: &str) -> bool` |
-| `clear_flag` | `(&mut self, key: &str)` |
-| `take_flag` | `(&mut self, key: &str) -> bool` — returns `true` and clears the flag if present; `false` if absent. Equivalent to `has_flag` + `clear_flag` in one lookup. Preferred in `on_update` to consume a GUI action flag. |
+| `remove_flag` | `(&mut self, key: &str) -> bool` — clears the flag; returns whether it was present. |
+| `take_flag` | `(&mut self, key: &str) -> bool` — the same operation as `remove_flag`, named for consuming a one-shot flag: `if signals.take_flag("gui:action:save") { … }`. Preferred in `on_update` to consume a GUI action flag. |
 
 **Entities:**
 
 | Method | Signature |
 |--------|-----------|
 | `set_entity` | `(&mut self, key: impl Into<String>, entity: Entity)` |
-| `get_entity` | `(&self, key: &str) -> Option<&Entity>` |
+| `get_entity` | `(&self, key: &str) -> Option<Entity>` |
 | `remove_entity` | `(&mut self, key: &str) -> Option<Entity>` |
 | `remove_entity_registrations_for` | `(&mut self, entity: Entity)` — removes every entity-keyed registration pointing at `entity`, regardless of key. You rarely need it: at the end of every sim tick the engine drops registrations whose entity has been despawned, however it was despawned (`commands.entity(e).despawn()`, `Ttl`, a scene switch), so a registration never resolves to a dead entity past the tick that despawned it. Call it yourself only when a later system in the *same* tick must already see the key gone. |
 | `clear_non_persistent_entities` | `(&mut self, persistent_entities: &FxHashSet<Entity>)` — drops every registered entity not present in `persistent_entities`. Called automatically by `scene_switch_system` on every scene transition; call it yourself only if you build custom scene-transition logic outside `.add_scene()`. |

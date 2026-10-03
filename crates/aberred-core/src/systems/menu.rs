@@ -1063,7 +1063,7 @@ mod tests {
             .id();
         select(&mut world, menu, "play");
         let ws = world.resource::<WorldSignals>();
-        assert_eq!(ws.get_string("rust_cb").map(String::as_str), Some("play:0"));
+        assert_eq!(ws.get_string("rust_cb"), Some("play:0"));
         assert!(
             ws.get_string(sk::SCENE).is_none(),
             "MenuActions not consulted"
@@ -1077,10 +1077,7 @@ mod tests {
 
         select(&mut world, menu, "play");
         let ws = world.resource::<WorldSignals>();
-        assert_eq!(
-            ws.get_string(sk::SCENE).map(String::as_str),
-            Some("level01")
-        );
+        assert_eq!(ws.get_string(sk::SCENE), Some("level01"));
         assert!(ws.has_flag("switch_hook_ran"), "switch_scene hook was run");
 
         assert_eq!(
@@ -1122,10 +1119,7 @@ mod tests {
         select(&mut world, menu, "play");
 
         assert_eq!(
-            world
-                .resource::<WorldSignals>()
-                .get_string(sk::SCENE)
-                .map(String::as_str),
+            world.resource::<WorldSignals>().get_string(sk::SCENE),
             Some("level01"),
             "the requested scene is still recorded"
         );
