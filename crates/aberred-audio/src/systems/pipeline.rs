@@ -19,21 +19,30 @@ use crate::components::playing_fx::PlayingFx;
 use crate::resources::backend::AudioBackend;
 use crate::resources::channels::{CmdReceiver, MsgSender, ShouldExit};
 use crate::resources::store::AudioStore;
-use aberred_core::protocol::audio::{AudioCmd, AudioMessage};
+use aberred_core::protocol::audio::{AudioCmd, AudioMessage, AudioWire};
 
-/// Drain all pending [`AudioCmd`]s non-blockingly and apply them to the
-/// audio world. Once every sender is gone (and nothing is left queued) it
-/// sets [`ShouldExit`] -- detected by the draining `try_recv` itself, so a
-/// command that lands mid-drain is still applied, never lost.
+/// Drain all pending [`AudioWire`] messages non-blockingly and apply them to
+/// the audio world. [`AudioWire::Shutdown`] unloads everything and sets
+/// [`ShouldExit`]; so does a disconnected channel once nothing is left queued
+/// -- detected by the draining `try_recv` itself, so a command that lands
+/// mid-drain is still applied, never lost.
 pub fn drain_cmds<B: AudioBackend>(world: &mut World) {
     aberred_core::tracy::tracy_span!("audio_drain_cmds");
-    let mut cmds: Vec<AudioCmd> = Vec::new();
+    let mut wires: Vec<AudioWire> = Vec::new();
     let disconnected =
-        aberred_core::pacing::drain_channel(&world.resource::<CmdReceiver>().0, |cmd| {
-            cmds.push(cmd)
+        aberred_core::pacing::drain_channel(&world.resource::<CmdReceiver>().0, |wire| {
+            wires.push(wire)
         });
-    for cmd in cmds {
-        handle_cmd::<B>(world, cmd);
+    for wire in wires {
+        match wire {
+            AudioWire::Cmd(cmd) => handle_cmd::<B>(world, cmd),
+            AudioWire::Shutdown => {
+                info!(target: "audio", "shutdown requested");
+                handle_cmd::<B>(world, AudioCmd::UnloadAllMusic);
+                handle_cmd::<B>(world, AudioCmd::UnloadAllFx);
+                world.resource_mut::<ShouldExit>().0 = true;
+            }
+        }
     }
     if disconnected {
         world.resource_mut::<ShouldExit>().0 = true;
@@ -386,13 +395,6 @@ fn handle_cmd<B: AudioBackend>(world: &mut World, cmd: AudioCmd) {
             unload_all_sounds::<B>(world);
             send(world, AudioMessage::FxUnloadedAll);
         }
-        AudioCmd::Shutdown => {
-            info!(target: "audio", "shutdown requested");
-            debug!(target: "audio", "unload all");
-            handle_cmd::<B>(world, AudioCmd::UnloadAllMusic);
-            handle_cmd::<B>(world, AudioCmd::UnloadAllFx);
-            world.resource_mut::<ShouldExit>().0 = true;
-        }
     }
 }
 
@@ -483,13 +485,13 @@ mod tests {
     struct Harness {
         world: World,
         schedule: Schedule,
-        tx_cmd: Option<Sender<AudioCmd>>,
+        tx_cmd: Option<Sender<AudioWire>>,
         rx_evt: Receiver<AudioMessage>,
     }
 
     impl Harness {
         fn new() -> Self {
-            let (tx_cmd, rx_cmd) = crossbeam_channel::unbounded::<AudioCmd>();
+            let (tx_cmd, rx_cmd) = crossbeam_channel::unbounded::<AudioWire>();
             let (tx_evt, rx_evt) = crossbeam_channel::unbounded::<AudioMessage>();
             let (world, schedule) = build_world(RecordingBackend::default(), rx_cmd, tx_evt);
             Self {
@@ -500,11 +502,16 @@ mod tests {
             }
         }
 
+        /// Queue one wire message for the next tick.
+        fn send_wire(&self, wire: AudioWire) {
+            self.tx_cmd.as_ref().unwrap().send(wire).unwrap();
+        }
+
         /// Queue `cmds`, run one audio tick, return the replies (as `Debug`
         /// strings -- `AudioMessage` has no `PartialEq`).
         fn tick(&mut self, cmds: impl IntoIterator<Item = AudioCmd>) -> Vec<String> {
             for cmd in cmds {
-                self.tx_cmd.as_ref().unwrap().send(cmd).unwrap();
+                self.tx_cmd.as_ref().unwrap().send(cmd.into()).unwrap();
             }
             self.schedule.run(&mut self.world);
             self.rx_evt.try_iter().map(|m| format!("{m:?}")).collect()
@@ -978,7 +985,8 @@ mod tests {
             play_fx("hit"),
         ]);
 
-        let replies = h.tick([AudioCmd::Shutdown]);
+        h.send_wire(AudioWire::Shutdown);
+        let replies = h.tick([]);
 
         assert_eq!(replies, ["MusicUnloadedAll", "FxUnloadedAll"]);
         assert!(h.world.resource::<ShouldExit>().0);
@@ -988,9 +996,24 @@ mod tests {
     }
 
     #[test]
+    fn unloading_everything_through_audio_cmds_keeps_the_thread_running() {
+        let mut h = Harness::new();
+        h.setup([load_music("theme"), load_fx("hit")]);
+
+        let replies = h.tick([AudioCmd::UnloadAllMusic, AudioCmd::UnloadAllFx]);
+
+        assert_eq!(replies, ["MusicUnloadedAll", "FxUnloadedAll"]);
+        assert!(!h.world.resource::<ShouldExit>().0);
+    }
+
+    #[test]
     fn a_command_queued_before_disconnect_is_applied_before_exiting() {
         let mut h = Harness::new();
-        h.tx_cmd.take().unwrap().send(load_music("theme")).unwrap();
+        h.tx_cmd
+            .take()
+            .unwrap()
+            .send(load_music("theme").into())
+            .unwrap();
 
         let replies = h.tick([]);
 

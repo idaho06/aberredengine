@@ -13,7 +13,7 @@ use aberred_core::error::EngineError;
 use aberred_core::events::input::InputAction;
 use aberred_core::pacing::{Pacer, StatsWindow, TickCountdown};
 #[cfg(any(test, feature = "test-support"))]
-use aberred_core::protocol::audio::{AudioCmd, AudioMessage};
+use aberred_core::protocol::audio::{AudioMessage, AudioWire};
 use aberred_core::protocol::endpoints::RenderTx;
 use aberred_core::protocol::endpoints::shutdown_audio;
 use aberred_core::protocol::raw_input::InputSample;
@@ -110,7 +110,7 @@ pub(crate) struct LogicInit {
     #[cfg(any(test, feature = "test-support"))]
     pub(crate) stub_audio: bool,
     #[cfg(any(test, feature = "test-support"))]
-    pub(crate) audio_stub_ends: Option<(Receiver<AudioCmd>, Sender<AudioMessage>)>,
+    pub(crate) audio_stub_ends: Option<(Receiver<AudioWire>, Sender<AudioMessage>)>,
 }
 
 /// Logic thread entry point. Startup errors can't propagate to

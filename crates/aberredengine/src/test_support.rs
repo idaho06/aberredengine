@@ -20,7 +20,7 @@
 //!
 //! - `world`, `sim`, `present`: the real production `World`/`Schedule`s.
 //! - `audio_cmds`/`audio_msgs_tx`: a stub `AudioBridge` far end -- no audio
-//!   thread runs, but outgoing `AudioCmd`s can be inspected and fake
+//!   thread runs, but outgoing `AudioWire`s can be inspected and fake
 //!   `AudioMessage` replies injected.
 //! - `sent_to_render`: a plain `RenderMsg` channel the harness owns instead
 //!   of a real render thread.
@@ -46,7 +46,7 @@ use crate::engine_app::{
     hook_registrar, run_sim_tick,
 };
 use aberred_core::components::persistent::Persistent;
-use aberred_core::protocol::audio::{AudioCmd, AudioMessage};
+use aberred_core::protocol::audio::{AudioMessage, AudioWire};
 use aberred_core::protocol::raw_input::RawDeviceSnapshot;
 use aberred_core::protocol::render_logic::{LogicMsg, RenderMsg};
 use aberred_core::protocol::snapshot::SnapshotPublisher;
@@ -70,8 +70,8 @@ pub struct TestWorld {
     /// `RenderMsg`s the logic world would have sent to a real render thread
     /// (asset commands, fullscreen toggle, quit).
     pub sent_to_render: Receiver<RenderMsg>,
-    /// Outgoing `AudioCmd`s -- no real audio thread consumes these.
-    pub audio_cmds: Receiver<AudioCmd>,
+    /// Outgoing `AudioWire`s -- no real audio thread consumes these.
+    pub audio_cmds: Receiver<AudioWire>,
     /// Inject a fake `AudioMessage` as if the (nonexistent) audio thread
     /// replied.
     pub audio_msgs_tx: Sender<AudioMessage>,

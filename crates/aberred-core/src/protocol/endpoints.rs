@@ -89,22 +89,24 @@ pub fn shutdown_logic_bridge(bridge: LogicBridge) {
 // resources. Call [`shutdown_audio`] during teardown to gracefully stop the
 // thread and free audio resources.
 
-use crate::protocol::audio::{AudioCmd, AudioMessage};
+use crate::protocol::audio::{AudioCmd, AudioMessage, AudioWire};
 #[cfg(any(test, feature = "test-support"))]
 use crossbeam_channel::unbounded;
 
 /// Shared bridge between the ECS world and the audio thread.
 ///
-/// This resource is created by `aberred_audio::setup_audio`. Systems can send commands via
-/// [`AudioBridge::tx_cmd`] and poll for events via [`AudioBridge::rx_msg`].
+/// This resource is created by `aberred_audio::setup_audio`. Systems send commands by writing
+/// [`AudioCmd`] messages and read replies as [`AudioMessage`] messages; the engine's bridge
+/// systems move them across the channel. The channel ends are private, so only the engine can
+/// send [`AudioWire::Shutdown`].
 #[derive(Resource)]
 pub struct AudioBridge {
-    /// Sender for [`AudioCmd`] messages (ECS -> audio thread).
-    pub tx_cmd: Sender<AudioCmd>,
+    /// Sender for [`AudioWire`] messages (ECS -> audio thread).
+    pub(crate) tx_cmd: Sender<AudioWire>,
     /// Receiver for [`AudioMessage`] messages (audio thread -> ECS).
-    pub rx_msg: Receiver<AudioMessage>,
+    pub(crate) rx_msg: Receiver<AudioMessage>,
     /// Join handle for the background audio thread.
-    pub handle: std::thread::JoinHandle<()>,
+    pub(crate) handle: std::thread::JoinHandle<()>,
 }
 
 /// Shared by `aberred_audio::setup_audio` and `setup_audio_stub` (test support): insert the
@@ -114,7 +116,7 @@ pub struct AudioBridge {
 /// a no-op stub thread).
 pub fn insert_audio_bridge_resources(
     world: &mut World,
-    tx_cmd: Sender<AudioCmd>,
+    tx_cmd: Sender<AudioWire>,
     rx_msg: Receiver<AudioMessage>,
     handle: std::thread::JoinHandle<()>,
 ) {
@@ -132,7 +134,7 @@ pub fn insert_audio_bridge_resources(
 /// but spawns NO real audio thread -- `handle` is a trivial
 /// `std::thread::spawn(|| {})` that returns (and therefore joins) instantly,
 /// so [`shutdown_audio`] works unchanged against it. Returns the far ends so
-/// the caller (a `TestWorld`) can inspect outgoing [`AudioCmd`]s and inject
+/// the caller (a `TestWorld`) can inspect outgoing [`AudioWire`]s and inject
 /// fake [`AudioMessage`] replies. The caller MUST hold both for the World's
 /// whole lifetime -- `forward_audio_cmds` swallows send errors, so a dropped
 /// receiver won't panic, it'll just silently break the inspection contract.
@@ -143,8 +145,8 @@ pub fn insert_audio_bridge_resources(
 // `aberred-core/test-support` so its own `#[cfg(any(test, feature =
 // "test-support"))]` call site stays reachable under plain `cargo test`.
 #[cfg(any(test, feature = "test-support"))]
-pub fn setup_audio_stub(world: &mut World) -> (Receiver<AudioCmd>, Sender<AudioMessage>) {
-    let (tx_cmd, rx_cmd) = unbounded::<AudioCmd>();
+pub fn setup_audio_stub(world: &mut World) -> (Receiver<AudioWire>, Sender<AudioMessage>) {
+    let (tx_cmd, rx_cmd) = unbounded::<AudioWire>();
     let (tx_msg, rx_msg) = unbounded::<AudioMessage>();
 
     let handle = std::thread::spawn(|| {});
@@ -156,11 +158,11 @@ pub fn setup_audio_stub(world: &mut World) -> (Receiver<AudioCmd>, Sender<AudioM
 
 /// Gracefully request shutdown of the audio thread and join it.
 ///
-/// If the bridge resource exists, sends [`AudioCmd::Shutdown`], waits for the
+/// If the bridge resource exists, sends [`AudioWire::Shutdown`], waits for the
 /// thread to exit, and removes the resource from the world.
 pub fn shutdown_audio(world: &mut World) {
     if let Some(bridge) = world.remove_resource::<AudioBridge>() {
-        let _ = bridge.tx_cmd.send(AudioCmd::Shutdown);
+        let _ = bridge.tx_cmd.send(AudioWire::Shutdown);
         let _ = bridge.handle.join();
     }
 }

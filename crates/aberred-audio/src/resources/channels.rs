@@ -3,10 +3,10 @@
 use bevy_ecs::prelude::Resource;
 use crossbeam_channel::{Receiver, Sender};
 
-use aberred_core::protocol::audio::{AudioCmd, AudioMessage};
+use aberred_core::protocol::audio::{AudioMessage, AudioWire};
 
 #[derive(Resource)]
-pub struct CmdReceiver(pub Receiver<AudioCmd>);
+pub struct CmdReceiver(pub Receiver<AudioWire>);
 
 #[derive(Resource)]
 pub struct MsgSender(pub Sender<AudioMessage>);

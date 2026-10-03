@@ -9,7 +9,7 @@ use log::info;
 use raylib::core::audio::RaylibAudio;
 
 use aberred_core::pacing::{Pacer, StatsWindow};
-use aberred_core::protocol::audio::{AudioCmd, AudioMessage};
+use aberred_core::protocol::audio::{AudioMessage, AudioWire};
 
 use crate::components::music_track::MusicTrack;
 use crate::resources::backend::{AudioBackend, RaylibBackend};
@@ -27,7 +27,7 @@ use super::pipeline::{
 /// - Initialize the Raylib audio device once for the life of the thread.
 /// - Own all `Music`/`Sound` handles via the NonSend [`AudioStore`],
 ///   preventing use from other threads.
-/// - React to [`AudioCmd`] inputs to load/unload and control playback.
+/// - React to [`AudioWire`] inputs to load/unload and control playback.
 /// - Emit [`AudioMessage`] outputs for state changes (loaded, started,
 ///   finished, etc.).
 /// - Periodically pump music streams and detect when playback finishes.
@@ -39,10 +39,10 @@ use super::pipeline::{
 ///   music streams (`pump_music`) and cleans up finished sound aliases
 ///   (`pump_fx`) -- constant wakeups, no blocking while idle.
 ///
-/// This function runs until it receives [`AudioCmd::Shutdown`] (or the
+/// This function runs until it receives [`AudioWire::Shutdown`] (or the
 /// channel disconnects), at which point it unloads resources and exits
 /// cleanly.
-pub fn audio_thread(rx_cmd: Receiver<AudioCmd>, tx_evt: Sender<AudioMessage>, audio_hz: f64) {
+pub fn audio_thread(rx_cmd: Receiver<AudioWire>, tx_evt: Sender<AudioMessage>, audio_hz: f64) {
     // Declared before `world` so it drops after it: raylib requires the
     // device to outlive every Music/Sound handle in the world's AudioStore.
     let device = match RaylibAudio::init_audio_device() {
@@ -104,7 +104,7 @@ pub fn audio_thread(rx_cmd: Receiver<AudioCmd>, tx_evt: Sender<AudioMessage>, au
 /// alive for as long as this world exists.
 pub fn build_world<B: AudioBackend>(
     backend: B,
-    rx_cmd: Receiver<AudioCmd>,
+    rx_cmd: Receiver<AudioWire>,
     tx_evt: Sender<AudioMessage>,
 ) -> (World, Schedule) {
     let mut world = World::new();
@@ -151,7 +151,7 @@ mod tests {
     /// `audio_thread` itself opens one.
     #[test]
     fn build_world_runs_headless_and_exits_on_disconnect() {
-        let (tx_cmd, rx_cmd) = crossbeam_channel::unbounded::<AudioCmd>();
+        let (tx_cmd, rx_cmd) = crossbeam_channel::unbounded::<AudioWire>();
         let (tx_evt, _rx_evt) = crossbeam_channel::unbounded::<AudioMessage>();
         let (mut world, mut schedule) = build_world(RecordingBackend::default(), rx_cmd, tx_evt);
 

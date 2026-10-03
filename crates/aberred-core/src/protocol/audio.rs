@@ -82,8 +82,25 @@ pub enum AudioCmd {
     UnloadFx { id: String },
     /// Unload all sound effects.
     UnloadAllFx,
-    /// Terminate the audio thread after unloading all resources.
+}
+
+/// What the logic→audio channel carries: a game-facing [`AudioCmd`], or the
+/// engine's own request to stop the audio thread.
+///
+/// Games write [`AudioCmd`]s into `Messages<AudioCmd>`; only the engine sends
+/// [`AudioWire::Shutdown`], when it tears the audio thread down.
+#[derive(Debug, Clone)]
+pub enum AudioWire {
+    /// A command forwarded from the logic world.
+    Cmd(AudioCmd),
+    /// Unload every resource, then terminate the audio thread.
     Shutdown,
+}
+
+impl From<AudioCmd> for AudioWire {
+    fn from(cmd: AudioCmd) -> Self {
+        Self::Cmd(cmd)
+    }
 }
 
 /// Events sent *back* from the audio thread
