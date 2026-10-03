@@ -43,7 +43,8 @@ use std::path::PathBuf;
 use crate::engine_app::{
     EngineBuilder, HookRegistrar, LogicInit, ObserverRegistrar, UpdateRegistrar, apply_tick_input,
     drain_logic_messages, ensure_main_scene, hold_back_deterministic_setup_input, hook_registrar,
-    in_envelope, observer_registrar, run_sim_tick, scene_observer_registrar, system_registrar,
+    in_envelope, observer_registrar, playing_system, playing_system_if, run_sim_tick,
+    scene_observer_registrar, scene_system,
 };
 use aberred_core::events::scene::{SceneEntered, SceneExited};
 use aberred_core::protocol::audio::{AudioCmd, AudioMessage};
@@ -56,9 +57,7 @@ use aberred_core::resources::fontmetrics::FontMetrics;
 use aberred_core::resources::gameconfig::GameConfig;
 use aberred_core::resources::gamestate::{GameState, GameStates};
 use aberred_core::resources::systemsstore as hook_keys;
-use aberred_core::systems::gamestate::{state_is_playing, state_runs_scenes};
 use aberred_core::systems::input::resolve_input_backlog;
-use aberred_core::systems::scene_dispatch::in_scene;
 use aberred_core::systems::time::update_world_time;
 
 /// A headless logic-thread `World` plus its `sim`/`present` schedules.
@@ -147,8 +146,7 @@ impl TestWorldBuilder {
     /// `EngineBuilder::add_system`: `.run_if(state_is_playing)`,
     /// `.in_set(SimSet::ScriptUpdate)`. Can be called multiple times.
     pub fn add_system<M>(mut self, system: impl IntoSystem<(), (), M> + Send + 'static) -> Self {
-        self.extra_systems
-            .push(system_registrar(system, state_is_playing));
+        self.extra_systems.push(playing_system(system));
         self
     }
 
@@ -158,10 +156,8 @@ impl TestWorldBuilder {
         system: impl IntoSystem<(), (), M> + Send + 'static,
         condition: impl SystemCondition<MC> + Send + 'static,
     ) -> Self {
-        self.extra_systems.push(system_registrar(
-            system,
-            state_is_playing.and_then(condition),
-        ));
+        self.extra_systems
+            .push(playing_system_if(system, condition));
         self
     }
 
@@ -171,10 +167,7 @@ impl TestWorldBuilder {
         scene: &'static str,
         system: impl IntoSystem<(), (), M> + Send + 'static,
     ) -> Self {
-        self.extra_systems.push(system_registrar(
-            system,
-            state_runs_scenes.and_then(in_scene(scene)),
-        ));
+        self.extra_systems.push(scene_system(scene, system));
         self
     }
 

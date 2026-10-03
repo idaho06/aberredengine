@@ -776,7 +776,7 @@ fn main() -> Result<(), EngineError> {
 - `WorldTime` doesn't advance during Setup, so a loading scene shows progress, not time-based animation (tweens, sprite animations).
 - Its text appears once its font has loaded; until then it simply doesn't draw.
 - Leaving it tears it down along with everything spawned during Setup, the setup hook's spawns included. Mark what must survive `Persistent`, or spawn it in the initial scene.
-- A scene switch requested during Setup (`request_scene`, a menu's `SetScene`) is ignored; the engine always moves on to the initial scene. A quit requested during Setup takes effect on the first `Playing` tick.
+- During Setup the loading scene is the only scene: any other switch (`request_scene`, a menu's `SetScene`) is ignored with a warning, with or without a loading scene, and the engine always moves on to the initial scene. A quit requested during Setup takes effect on the first `Playing` tick.
 - In a deterministic game, spawn only from the loading scene's `SceneEntered` observer, never from its per-tick systems: the number of Setup ticks depends on load times, and entity ids must not.
 - The loading scene must differ from the initial scene.
 

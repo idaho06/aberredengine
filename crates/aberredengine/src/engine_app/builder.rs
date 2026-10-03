@@ -5,14 +5,13 @@ use bevy_ecs::system::IntoObserverSystem;
 
 use super::registrar::{
     HookRegistrar, ObserverRegistrar, UpdateRegistrar, hook_registrar, observer_registrar,
-    scene_observer_registrar, system_registrar,
+    playing_system, playing_system_if, scene_observer_registrar, scene_system,
 };
 #[cfg(doc)] // doc links
 use super::schedule::SimSet;
 use aberred_core::events::scene::{SceneEntered, SceneExited};
 use aberred_core::resources::systemsstore as hook_keys;
-use aberred_core::systems::gamestate::{state_is_playing, state_runs_scenes};
-use aberred_core::systems::scene_dispatch::{WorldDrawCallback, in_scene};
+use aberred_core::systems::scene_dispatch::WorldDrawCallback;
 use aberred_render::resources::scene_table::{GuiCallback, RenderSceneTable, SceneRender};
 use rustc_hash::FxHashMap;
 
@@ -149,8 +148,7 @@ impl EngineBuilder {
     /// }
     /// ```
     pub fn add_system<M>(mut self, system: impl IntoSystem<(), (), M> + Send + 'static) -> Self {
-        self.extra_systems
-            .push(system_registrar(system, state_is_playing));
+        self.extra_systems.push(playing_system(system));
         self
     }
 
@@ -173,10 +171,8 @@ impl EngineBuilder {
         system: impl IntoSystem<(), (), M> + Send + 'static,
         condition: impl SystemCondition<MC> + Send + 'static,
     ) -> Self {
-        self.extra_systems.push(system_registrar(
-            system,
-            state_is_playing.and_then(condition),
-        ));
+        self.extra_systems
+            .push(playing_system_if(system, condition));
         self
     }
 
@@ -204,10 +200,7 @@ impl EngineBuilder {
         system: impl IntoSystem<(), (), M> + Send + 'static,
     ) -> Self {
         self.scene_refs.push(("add_scene_system", scene));
-        self.extra_systems.push(system_registrar(
-            system,
-            state_runs_scenes.and_then(in_scene(scene)),
-        ));
+        self.extra_systems.push(scene_system(scene, system));
         self
     }
 

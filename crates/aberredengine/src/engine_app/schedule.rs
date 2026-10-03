@@ -23,7 +23,7 @@ use aberred_core::systems::collision_detector::collision_detector;
 use aberred_core::systems::dynamictext_size::dynamictext_size_system;
 use aberred_core::systems::entity_registrations::prune_dead_entity_registrations;
 use aberred_core::systems::gamestate::{
-    check_pending_state, finish_setup, quit_flag_poll, state_is_playing,
+    check_pending_state, finish_setup, quit_flag_poll, state_is_playing, state_runs_scenes,
 };
 use aberred_core::systems::gridlayout::gridlayout_spawn_system;
 use aberred_core::systems::group::update_group_counts_system;
@@ -572,7 +572,7 @@ impl EngineBuilder {
     fn add_scene_manager_systems(sim: &mut Schedule) {
         sim.add_systems(
             scene_switch_poll
-                .run_if(state_is_playing)
+                .run_if(state_runs_scenes)
                 .in_set(SimSet::Drain),
         );
     }

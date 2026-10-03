@@ -6,6 +6,8 @@ use super::schedule::SimSet;
 use aberred_core::components::persistent::Persistent;
 use aberred_core::resources::scenemanager::SceneManager;
 use aberred_core::resources::systemsstore::SystemsStore;
+use aberred_core::systems::gamestate::{state_is_playing, state_runs_scenes};
+use aberred_core::systems::scene_dispatch::in_scene;
 
 /// Closure that registers a system into the world and inserts its ID into
 /// [`SystemsStore`]. Deferred until `run()` when the [`World`] exists.
@@ -31,17 +33,39 @@ pub(crate) fn hook_registrar<M>(
     Box::new(move |world, store| register_persistent_system(world, store, name, system))
 }
 
-/// Build the [`UpdateRegistrar`] behind `add_system`, `add_system_if` and
-/// `add_scene_system`: `system` runs in [`SimSet::ScriptUpdate`] while `gate`
-/// holds. Each builder method composes its gate from a state condition
-/// (`state_is_playing`, or `state_runs_scenes` for scene systems).
-pub(crate) fn system_registrar<M, MG>(
+/// `system` in [`SimSet::ScriptUpdate`], run while `gate` holds. The named
+/// registrars below choose the gate, so both builders share one rule.
+fn system_registrar<M, MG>(
     system: impl IntoSystem<(), (), M> + Send + 'static,
     gate: impl SystemCondition<MG> + Send + 'static,
 ) -> UpdateRegistrar {
     Box::new(move |schedule| {
         schedule.add_systems(system.run_if(gate).in_set(SimSet::ScriptUpdate));
     })
+}
+
+/// `add_system`: runs while `Playing`.
+pub(crate) fn playing_system<M>(
+    system: impl IntoSystem<(), (), M> + Send + 'static,
+) -> UpdateRegistrar {
+    system_registrar(system, state_is_playing)
+}
+
+/// `add_system_if`: runs while `Playing` and `condition` holds.
+pub(crate) fn playing_system_if<M, MC>(
+    system: impl IntoSystem<(), (), M> + Send + 'static,
+    condition: impl SystemCondition<MC> + Send + 'static,
+) -> UpdateRegistrar {
+    system_registrar(system, state_is_playing.and_then(condition))
+}
+
+/// `add_scene_system`: runs while `scene` is active, in `Setup` (a loading
+/// scene) as well as `Playing`.
+pub(crate) fn scene_system<M>(
+    scene: &'static str,
+    system: impl IntoSystem<(), (), M> + Send + 'static,
+) -> UpdateRegistrar {
+    system_registrar(system, state_runs_scenes.and_then(in_scene(scene)))
 }
 
 /// Build the [`ObserverRegistrar`] behind `add_observer`: a global observer,

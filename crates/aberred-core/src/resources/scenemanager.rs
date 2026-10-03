@@ -27,6 +27,9 @@ pub struct SceneManager {
     pub active_scene: Option<String>,
     /// Initial scene name (set by `EngineBuilder`).
     pub initial_scene: Option<String>,
+    /// Scene active during `Setup` while assets load (`EngineBuilder::loading_scene`).
+    /// During `Setup` it is the only switch target.
+    pub loading_scene: Option<String>,
 }
 
 impl SceneManager {

@@ -245,13 +245,14 @@ impl EngineBuilder {
                 world,
                 std::mem::take(&mut init.scenes),
                 init.initial_scene.take(),
+                init.loading_scene.map(str::to_owned),
             );
-            if let Some(loading) = init.loading_scene {
+            if init.loading_scene.is_some() {
                 register_persistent_system(
                     world,
                     &mut systems_store,
                     hook_keys::ENTER_SETUP,
-                    scene_enter_loading(loading),
+                    scene_enter_loading,
                 );
             }
 
@@ -304,14 +305,9 @@ impl EngineBuilder {
         let has_lua = false;
         Self::register_logic_systems(init, world)?;
         Self::spawn_observers(world, has_lua, std::mem::take(&mut init.extra_observers));
-        Self::enter_setup(world);
-        Self::build_logic_schedules(std::mem::take(&mut init.extra_systems), world, has_lua)
-    }
-
-    /// Enter `Setup`: runs the setup hook and enters the loading scene.
-    fn enter_setup(world: &mut World) {
         world.resource_mut::<NextGameState>().set(GameStates::Setup);
         world.trigger(GameStateChangedEvent {});
+        Self::build_logic_schedules(std::mem::take(&mut init.extra_systems), world, has_lua)
     }
 
     pub(crate) fn spawn_observers(

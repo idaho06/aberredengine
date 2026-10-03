@@ -48,6 +48,7 @@ fn scene_world(scenes: &[&str]) -> World {
         &mut world,
         scenes.iter().map(|name| name.to_string()),
         scenes.first().map(|name| name.to_string()),
+        None,
     );
 
     let switch = world.register_system(scene_switch_system);
