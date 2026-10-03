@@ -42,9 +42,9 @@ use std::path::PathBuf;
 
 use crate::engine_app::{
     EngineBuilder, HookRegistrar, LogicInit, ObserverRegistrar, UpdateRegistrar, apply_tick_input,
-    conditional_system_registrar, drain_logic_messages, hold_back_deterministic_setup_input,
-    hook_registrar, in_envelope, observer_registrar, run_sim_tick, scene_observer_registrar,
-    system_registrar,
+    conditional_system_registrar, drain_logic_messages, ensure_main_scene,
+    hold_back_deterministic_setup_input, hook_registrar, in_envelope, observer_registrar,
+    run_sim_tick, scene_observer_registrar, system_registrar,
 };
 use aberred_core::events::scene::{SceneEntered, SceneExited};
 use aberred_core::protocol::audio::{AudioCmd, AudioMessage};
@@ -284,7 +284,14 @@ impl TestWorldBuilder {
     /// `EngineBuilder` functions `logic_thread_main` calls, in the same
     /// order.
     pub fn build(mut self) -> Result<TestWorld, aberred_core::error::EngineError> {
-        let use_scene_manager = !self.scenes.is_empty();
+        #[cfg(feature = "lua")]
+        let has_lua = self.lua_script.is_some();
+        #[cfg(not(feature = "lua"))]
+        let has_lua = false;
+        let driven_elsewhere =
+            has_lua || self.enter_play_hook.is_some() || self.switch_scene_hook.is_some();
+        let use_scene_manager =
+            ensure_main_scene(&mut self.scenes, &mut self.initial_scene, driven_elsewhere);
 
         let (_tx_logic, rx_logic) = unbounded::<LogicMsg>();
         let (tx_render, rx_render) = unbounded::<RenderMsg>();
@@ -317,11 +324,6 @@ impl TestWorldBuilder {
             stub_audio: true,
             audio_stub_ends: None,
         };
-
-        #[cfg(feature = "lua")]
-        let has_lua = init.lua_script.is_some();
-        #[cfg(not(feature = "lua"))]
-        let has_lua = false;
 
         let mut world = EngineBuilder::setup_logic_world(&mut init)?;
         let (audio_cmds, audio_msgs_tx) = init

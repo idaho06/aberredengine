@@ -154,11 +154,13 @@ type SceneTeardown = (
 ///
 /// Reads the target from `WorldSignals["scene"]` and checks it first: an
 /// unregistered name logs an error and leaves the current scene untouched.
-/// Otherwise it triggers [`SceneExited`] for the old scene while its entities are
-/// still alive, despawns non-[`Persistent`] entities, resets tracked groups to the
-/// persistent ones, records the old scene's name under [`sk::PREVIOUS_SCENE`], makes
-/// the new scene active, and finally triggers [`SceneEntered`], so entities its
-/// observers spawn belong to the new scene.
+/// Otherwise, when a scene is active, it tears that scene down: it triggers
+/// [`SceneExited`] while the scene's entities are still alive, despawns
+/// non-[`Persistent`] entities, resets tracked groups to the persistent ones and
+/// records the old scene's name under [`sk::PREVIOUS_SCENE`]. Entering the first
+/// scene tears nothing down, so what was spawned before it (during `Setup`)
+/// survives. Then it makes the new scene active and triggers [`SceneEntered`], so
+/// entities its observers spawn belong to the new scene.
 pub fn scene_switch_system(world: &mut World, state: &mut SystemState<SceneTeardown>) {
     debug!("scene_switch_system: System called!");
 
@@ -194,15 +196,14 @@ pub fn scene_switch_system(world: &mut World, state: &mut SystemState<SceneTeard
         state.get_mut(world).expect(
             "the logic world holds the WorldSignals, TrackedGroups and SceneManager resources",
         );
-    scene_cleanup.despawn_all(&mut commands);
-
-    // Clear entity registrations for despawned (non-persistent) entities
-    world_signals.clear_non_persistent_entities(&scene_cleanup.persistent_set());
-
-    tracked_groups.reset_to_persistent();
-    world_signals.clear_group_counts();
-
     if let Some(prev) = &previous {
+        scene_cleanup.despawn_all(&mut commands);
+
+        // Clear entity registrations for despawned (non-persistent) entities
+        world_signals.clear_non_persistent_entities(&scene_cleanup.persistent_set());
+
+        tracked_groups.reset_to_persistent();
+        world_signals.clear_group_counts();
         world_signals.set_string(sk::PREVIOUS_SCENE, &**prev);
     }
 
@@ -486,6 +487,23 @@ mod tests {
         world.run_system_once(scene_switch_system).unwrap();
 
         assert_eq!(world.resource::<SeenEvents>().0, ["enter level from None"]);
+    }
+
+    /// Teardown runs only when a scene is left: entering the first scene keeps
+    /// what was spawned before it (e.g. during Setup) and its tracked groups.
+    #[test]
+    fn first_scene_entered_keeps_what_was_spawned_before_it() {
+        let (mut world, spawned_before) = world_in_menu_switching_to("level");
+        world.resource_mut::<SceneManager>().active_scene = None;
+
+        world.run_system_once(scene_switch_system).unwrap();
+
+        assert!(world.get_entity(spawned_before).is_ok());
+        assert!(world.resource::<TrackedGroups>().has_group("enemies"));
+        assert_eq!(
+            world.resource::<SceneManager>().active_scene.as_deref(),
+            Some("level")
+        );
     }
 
     #[test]

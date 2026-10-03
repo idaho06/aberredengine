@@ -547,7 +547,7 @@ fn my_enter(_: On<SceneEntered>, mut commands: Commands) {
 
 #### Scene-scoped systems and observers
 
-With `.add_scene()`, every scene has a persistent scene entity. Each scene switch triggers `SceneExited` for the old scene, then `SceneEntered` for the new one, both targeted at that entity:
+With `.add_scene()`, every scene has a persistent scene entity. A Rust game that registers no scene (and no `.initial_scene()`) runs in an implicit scene named `"main"` (`signal_keys::MAIN_SCENE`), so these methods work with `"main"` too. Each scene switch triggers `SceneExited` for the old scene, then `SceneEntered` for the new one, both targeted at that entity:
 
 - `SceneExited { scene, name, next }` fires before the old scene is torn down: its entities are still alive.
 - `SceneEntered { scene, name, previous }` fires after the teardown, so entities its observers spawn belong to the new scene. It also fires for the initial scene, with `previous: None`.
@@ -1439,6 +1439,8 @@ When the `scene_switch_system` runs, it performs these steps in order:
 6. **Write `previous_scene`** — the old active scene name is stored in `WorldSignals["previous_scene"]`
 7. **Set active scene** — updates `SceneManager.active_scene` to the new scene name
 8. **Trigger `SceneEntered`** — the new scene's enter observers run, typically spawning entities and setting up initial state; what they spawn belongs to the new scene
+
+Steps 2–6 tear down the scene being left, so they run only when a scene is active. Entering the first scene skips them: entities spawned before it (during Setup) survive into it.
 
 The new scene's `.add_scene_system()` systems start running on the next sim tick.
 

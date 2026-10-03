@@ -56,7 +56,7 @@ impl EngineBuilder {
         aberred_core::protocol::shutdown::install_panic_hook();
         log::info!("Hello, world! This is the Aberred Engine!");
 
-        let use_scene_manager = !self.scenes.is_empty();
+        let use_scene_manager = self.ensure_main_scene();
 
         self.validate_builder(use_scene_manager)?;
         let config = self.load_config()?;

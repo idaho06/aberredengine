@@ -28,6 +28,11 @@ pub const MOVING: &str = "moving";
 /// `movement` each frame. Read by animation rules and exposed to Lua callbacks.
 pub const SPEED_SQ: &str = "speed_sq";
 
+/// The scene a Rust game without `EngineBuilder::add_scene` runs in: the engine
+/// registers and enters it, so scene events, `in_scene` and scene systems work.
+/// Unrelated to [`DEFAULT_SCENE`], the switch target used when [`SCENE`] is unset.
+pub const MAIN_SCENE: &str = "main";
+
 /// The scene name used as fallback when `SCENE` has not been set.
 pub const DEFAULT_SCENE: &str = "menu";
 

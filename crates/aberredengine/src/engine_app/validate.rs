@@ -1,8 +1,35 @@
 use super::builder::EngineBuilder;
 use aberred_core::error::EngineError;
+use aberred_core::resources::signal_keys as sk;
 use aberred_core::resources::worldsignals::MAX_GROUP_NAME_LEN;
 
+/// Registers and enters [`sk::MAIN_SCENE`] when nothing else drives scenes:
+/// no `.add_scene()`, no `.initial_scene()`, and no `driven_elsewhere` (Lua or
+/// raw hooks). Returns whether the game uses the scene manager. Shared by
+/// `EngineBuilder::try_run` and `TestWorldBuilder::build`.
+pub(crate) fn ensure_main_scene(
+    scenes: &mut Vec<String>,
+    initial_scene: &mut Option<String>,
+    driven_elsewhere: bool,
+) -> bool {
+    if scenes.is_empty() && initial_scene.is_none() && !driven_elsewhere {
+        scenes.push(sk::MAIN_SCENE.to_owned());
+        *initial_scene = Some(sk::MAIN_SCENE.to_owned());
+    }
+    !scenes.is_empty()
+}
+
 impl EngineBuilder {
+    /// See [`ensure_main_scene`]; returns whether the game uses the scene
+    /// manager. Runs before validation, so `.add_scene_system("main", ..)` and
+    /// friends validate against it.
+    pub(super) fn ensure_main_scene(&mut self) -> bool {
+        let driven_elsewhere = self.has_lua_script()
+            || self.enter_play_hook.is_some()
+            || self.switch_scene_hook.is_some();
+        ensure_main_scene(&mut self.scenes, &mut self.initial_scene, driven_elsewhere)
+    }
+
     pub(super) fn validate_builder(&self, use_scene_manager: bool) -> Result<(), EngineError> {
         self.validate_lua_conflicts(use_scene_manager)?;
         self.validate_scene_manager(use_scene_manager)?;

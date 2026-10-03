@@ -658,7 +658,9 @@ fn golden_replay_rust_scene_matches_checked_in_trail() {
     // spawns no `CollisionRule` entity for that system to act on. It also
     // hashes every `Entity::to_bits()`, and resources are entities, so
     // inserting a new logic-world resource shifts later ids and changes it.
-    const GOLDEN_HASH: u64 = 0x6d2e_60cd_267e_b9a4;
+    // The scenario registers no scene, so it runs in the implicit "main"
+    // scene: its SceneManager and scene entity are part of the hash too.
+    const GOLDEN_HASH: u64 = 0xff21_e9f4_ecce_6ca5;
     let actual = golden_scenario_final_hash(42);
     assert_eq!(
         actual, GOLDEN_HASH,

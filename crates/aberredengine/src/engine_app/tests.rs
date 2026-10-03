@@ -21,6 +21,7 @@ use aberred_core::resources::drawable_snapshot::DrawableSnapshot;
 use aberred_core::resources::gameconfig::GameConfig;
 use aberred_core::resources::gamestate::{GameState, GameStates};
 use aberred_core::resources::input::InputState;
+use aberred_core::resources::signal_keys as sk;
 use aberred_core::resources::systemsstore::SystemsStore;
 use aberred_core::systems::scene_dispatch::WorldDrawCtx;
 use aberred_render::resources::scene_table::GuiCtx;
@@ -611,14 +612,15 @@ fn test_initial_scene_without_scenes() {
 
 /// Mirrors `try_run`'s own call (`use_scene_manager = !scenes.is_empty()`)
 /// without continuing into config loading / window creation.
-fn validate(builder: &EngineBuilder) -> Result<(), EngineError> {
-    builder.validate_builder(!builder.scenes.is_empty())
+fn validate(builder: &mut EngineBuilder) -> Result<(), EngineError> {
+    let use_scene_manager = builder.ensure_main_scene();
+    builder.validate_builder(use_scene_manager)
 }
 
 #[test]
 fn record_and_play_replay_together_are_rejected() {
     let err = validate(
-        &EngineBuilder::new()
+        &mut EngineBuilder::new()
             .deterministic(1)
             .record_replay("out.replay", "v1")
             .play_replay("in.replay"),
@@ -632,7 +634,7 @@ fn record_and_play_replay_together_are_rejected() {
 
 #[test]
 fn recording_a_replay_requires_a_deterministic_seed() {
-    let err = validate(&EngineBuilder::new().record_replay("out.replay", "v1")).unwrap_err();
+    let err = validate(&mut EngineBuilder::new().record_replay("out.replay", "v1")).unwrap_err();
     assert!(
         matches!(err, EngineError::RecordReplayRequiresDeterministic),
         "{err}"
@@ -642,7 +644,7 @@ fn recording_a_replay_requires_a_deterministic_seed() {
 #[test]
 fn playing_a_replay_rejects_an_explicit_seed() {
     let err = validate(
-        &EngineBuilder::new()
+        &mut EngineBuilder::new()
             .deterministic(1)
             .play_replay("in.replay"),
     )
@@ -656,15 +658,15 @@ fn playing_a_replay_rejects_an_explicit_seed() {
 #[test]
 fn valid_replay_and_scene_setups_pass_validation() {
     validate(
-        &EngineBuilder::new()
+        &mut EngineBuilder::new()
             .deterministic(1)
             .record_replay("out.replay", "v1"),
     )
     .unwrap();
-    validate(&EngineBuilder::new().play_replay("in.replay")).unwrap();
-    validate(&EngineBuilder::new().deterministic(1)).unwrap();
+    validate(&mut EngineBuilder::new().play_replay("in.replay")).unwrap();
+    validate(&mut EngineBuilder::new().deterministic(1)).unwrap();
     validate(
-        &EngineBuilder::new()
+        &mut EngineBuilder::new()
             .add_scene("menu")
             .add_scene("level")
             .initial_scene("level"),
@@ -677,18 +679,18 @@ fn track_group_rejects_names_too_long_for_a_signal_key() {
     use aberred_core::resources::worldsignals::MAX_GROUP_NAME_LEN;
 
     let too_long = "g".repeat(MAX_GROUP_NAME_LEN + 1);
-    let err = validate(&EngineBuilder::new().track_group(too_long.clone())).unwrap_err();
+    let err = validate(&mut EngineBuilder::new().track_group(too_long.clone())).unwrap_err();
     assert!(
         matches!(&err, EngineError::GroupNameTooLong { name, .. } if *name == too_long),
         "{err}"
     );
-    validate(&EngineBuilder::new().track_group("g".repeat(MAX_GROUP_NAME_LEN))).unwrap();
+    validate(&mut EngineBuilder::new().track_group("g".repeat(MAX_GROUP_NAME_LEN))).unwrap();
 }
 
 #[test]
 fn initial_scene_not_registered_lists_every_registered_scene() {
     let err = validate(
-        &EngineBuilder::new()
+        &mut EngineBuilder::new()
             .add_scene("menu")
             .add_scene("level")
             .initial_scene("credits"),
@@ -704,6 +706,22 @@ fn initial_scene_not_registered_lists_every_registered_scene() {
 }
 
 fn scene_tick() {}
+
+#[test]
+fn a_builder_without_scenes_enters_an_implicit_main_scene() {
+    let mut builder = EngineBuilder::new().add_scene_system(sk::MAIN_SCENE, scene_tick);
+    validate(&mut builder).unwrap();
+    assert_eq!(builder.scenes, [sk::MAIN_SCENE]);
+    assert_eq!(builder.initial_scene.as_deref(), Some(sk::MAIN_SCENE));
+}
+
+#[cfg(feature = "lua")]
+#[test]
+fn a_lua_builder_gets_no_implicit_main_scene() {
+    let mut builder = EngineBuilder::new().with_lua("assets/scripts/main.lua");
+    validate(&mut builder).unwrap();
+    assert!(builder.scenes.is_empty());
+}
 fn on_level_entered(_: On<SceneEntered>) {}
 fn on_level_exited(_: On<SceneExited>) {}
 fn level_gui(_: &mut GuiCtx) {}
@@ -714,13 +732,13 @@ fn level_world_draw(_: &mut WorldDrawCtx) {}
 /// render callbacks needs no entry (`render_system` skips a missing key).
 #[test]
 fn scene_render_callbacks_land_on_their_scene() {
-    let builder = EngineBuilder::new()
+    let mut builder = EngineBuilder::new()
         .add_scene_gui("level", level_gui)
         .add_scene("menu")
         .add_scene("level")
         .add_scene_world_draw("level", level_world_draw)
         .initial_scene("menu");
-    validate(&builder).unwrap();
+    validate(&mut builder).unwrap();
 
     let table = builder.render_scene_table();
     let level = table.get("level").expect("level has render callbacks");
@@ -751,8 +769,8 @@ fn scene_scoped_methods_reject_an_unregistered_scene() {
             "add_scene_world_draw",
         ),
     ];
-    for (builder, expected_method) in cases {
-        match validate(&builder).unwrap_err() {
+    for (mut builder, expected_method) in cases {
+        match validate(&mut builder).unwrap_err() {
             EngineError::SceneNotRegistered {
                 method,
                 name,
@@ -770,7 +788,7 @@ fn scene_scoped_methods_reject_an_unregistered_scene() {
 #[test]
 fn scene_scoped_methods_accept_a_registered_scene() {
     validate(
-        &EngineBuilder::new()
+        &mut EngineBuilder::new()
             .add_scene("menu")
             .initial_scene("menu")
             .add_scene_system("menu", scene_tick)
@@ -783,7 +801,8 @@ fn scene_scoped_methods_accept_a_registered_scene() {
 #[cfg(feature = "lua")]
 #[test]
 fn deterministic_seed_conflicts_with_lua() {
-    let err = validate(&EngineBuilder::new().with_lua("main.lua").deterministic(1)).unwrap_err();
+    let err =
+        validate(&mut EngineBuilder::new().with_lua("main.lua").deterministic(1)).unwrap_err();
     assert!(
         matches!(err, EngineError::LuaConflictsWithDeterministic),
         "{err}"
@@ -794,13 +813,13 @@ fn deterministic_seed_conflicts_with_lua() {
 #[test]
 fn replay_record_or_play_conflicts_with_lua() {
     let record = validate(
-        &EngineBuilder::new()
+        &mut EngineBuilder::new()
             .with_lua("main.lua")
             .record_replay("out.replay", "v1"),
     )
     .unwrap_err();
     let play = validate(
-        &EngineBuilder::new()
+        &mut EngineBuilder::new()
             .with_lua("main.lua")
             .play_replay("in.replay"),
     )
@@ -816,7 +835,7 @@ fn validation_reports_the_earliest_conflict_first() {
     // lua + scenes + seed: the Lua/SceneManager conflict wins over the
     // Lua/deterministic one.
     let err = validate(
-        &EngineBuilder::new()
+        &mut EngineBuilder::new()
             .with_lua("main.lua")
             .deterministic(1)
             .add_scene("menu")
@@ -830,7 +849,7 @@ fn validation_reports_the_earliest_conflict_first() {
 
     // record + play + lua: the record/play conflict wins over the Lua one.
     let err = validate(
-        &EngineBuilder::new()
+        &mut EngineBuilder::new()
             .with_lua("main.lua")
             .record_replay("out.replay", "v1")
             .play_replay("in.replay"),
@@ -857,7 +876,7 @@ fn lua_conflict_names_the_first_user_hook_for_every_hook() {
         ),
     ];
     for (builder, expected) in cases {
-        let err = validate(&builder.with_lua("main.lua")).unwrap_err();
+        let err = validate(&mut builder.with_lua("main.lua")).unwrap_err();
         assert!(
             matches!(err, EngineError::LuaConflictsWithHooks { hook } if hook == expected),
             "{expected}: {err}"
@@ -890,7 +909,7 @@ fn first_user_hook_latches_the_first_on_hook_called() {
 #[test]
 fn with_lua_combines_with_add_system() {
     validate(
-        &EngineBuilder::new()
+        &mut EngineBuilder::new()
             .with_lua("main.lua")
             .add_system(bump_ran),
     )

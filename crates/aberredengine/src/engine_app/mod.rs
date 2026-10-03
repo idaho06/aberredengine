@@ -133,3 +133,5 @@ pub(crate) use registrar::{
 };
 #[cfg(any(test, feature = "test-support"))]
 pub(crate) use replay::{ReplayPlayer, ReplayRecorder, validate_replay_header};
+#[cfg(any(test, feature = "test-support"))]
+pub(crate) use validate::ensure_main_scene;

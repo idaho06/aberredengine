@@ -32,6 +32,7 @@ use aberredengine::core::resources::input::InputState;
 use aberredengine::core::resources::loaded_assets::LoadedAssets;
 use aberredengine::core::resources::pending_assets::PendingAssets;
 use aberredengine::core::resources::signal_intents::SignalIntent;
+use aberredengine::core::resources::signal_keys as sk;
 use aberredengine::core::resources::worldsignals::WorldSignals;
 use aberredengine::core::systems::GameCtx;
 use aberredengine::core::systems::asset_loader::AssetLoader;
@@ -653,6 +654,28 @@ fn scene_enter_and_exit_observers_fire_only_for_their_scene() {
         tw.world.resource::<SceneLog>().0,
         ["enter b", "exit b -> a", "enter b"]
     );
+}
+
+/// A builder with neither scenes nor Lua enters an implicit `"main"` scene:
+/// `SceneEntered` fires once and `"main"` scene systems run.
+#[test]
+fn a_builder_without_scenes_enters_the_main_scene() {
+    let mut tw = TestWorld::builder()
+        .add_observer(log_scene_entered)
+        .add_scene_system(sk::MAIN_SCENE, count_scene_ticks)
+        .build()
+        .expect("build should succeed");
+    tw.world.init_resource::<SceneLog>();
+    tw.world.init_resource::<SceneTicks>();
+    tw.tick_to_play(DT, 8);
+    let before = tw.world.resource::<SceneTicks>().0;
+    tw.tick(3, DT);
+
+    assert_eq!(
+        tw.world.resource::<SceneLog>().0,
+        ["enter main (entity main) from None"]
+    );
+    assert_eq!(tw.world.resource::<SceneTicks>().0 - before, 3);
 }
 
 #[derive(Resource, Default)]
