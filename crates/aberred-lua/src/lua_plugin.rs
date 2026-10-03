@@ -505,8 +505,8 @@ pub fn switch_scene(
     let scene = scene_state
         .world_signals
         .get_string(sk::SCENE)
-        .map(str::to_owned)
-        .unwrap_or_else(|| sk::DEFAULT_SCENE.to_string());
+        .unwrap_or(sk::DEFAULT_SCENE)
+        .to_owned();
 
     // Call Lua on_switch_scene function if it exists
     if lua_runtime.has_function("on_switch_scene")

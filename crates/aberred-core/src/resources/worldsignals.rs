@@ -109,10 +109,9 @@ impl SignalsRead for SignalSnapshot {
         self.entities.get(key).copied().map(Entity::from_bits)
     }
     fn get_group_count(&self, group_name: &str) -> Option<i32> {
-        // Counts come from non-negative i32 integers, so the conversion never fails.
-        self.group_counts
-            .get(group_name)
-            .and_then(|&count| i32::try_from(count).ok())
+        // The snapshot stores the integer signal `as u32`; `as i32` inverts that
+        // exactly, so both sides answer the same for every value.
+        self.group_counts.get(group_name).map(|&count| count as i32)
     }
 }
 
@@ -601,6 +600,7 @@ mod tests {
         assert!(signals.has_flag("paused"));
         assert_eq!(signals.get_entity("player"), Some(player));
         assert_eq!(signals.get_group_count("enemies"), Some(3));
+        assert_eq!(signals.get_group_count("debt"), Some(-2));
 
         assert_eq!(signals.get_scalar("missing"), None);
         assert_eq!(signals.get_integer("missing"), None);
@@ -620,6 +620,7 @@ mod tests {
         ws.set_flag("paused");
         ws.set_entity("player", player);
         ws.set_group_count("enemies", 3);
+        ws.set_group_count("debt", -2);
 
         assert_signal_reads(&ws, player);
         assert_signal_reads(&*ws.snapshot(), player);

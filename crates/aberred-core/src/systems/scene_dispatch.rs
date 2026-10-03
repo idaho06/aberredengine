@@ -194,8 +194,8 @@ pub fn scene_switch_system(
     let scene_name = ctx
         .world_signals
         .get_string(sk::SCENE)
-        .map(str::to_owned)
-        .unwrap_or_else(|| sk::DEFAULT_SCENE.to_string());
+        .unwrap_or(sk::DEFAULT_SCENE)
+        .to_owned();
     let Some(on_enter) = scene_manager.get(&scene_name).map(|scene| scene.on_enter) else {
         error!(
             "scene_switch_system: No scene registered for '{}'; staying in the current scene. Registered scenes: {:?}",
