@@ -42,7 +42,6 @@ use crate::systems::lua_commands::{
     process_gameconfig_command, process_group_command, process_input_command,
     process_render_command, process_signal_command, translate_asset_command,
 };
-use aberred_core::math::Vec2;
 use aberred_core::resources::camera2d::Camera2D;
 use aberred_core::resources::signal_keys as sk;
 use aberred_core::resources::worldsignals::WorldSignals;
@@ -109,13 +108,8 @@ pub fn setup(
     mut scripting: ScriptingContext,
 ) {
     // Default camera. Needed to start the engine before entering play state
-    // The camera will be overridden later in the scene setup. Offset centers
-    // on the internal render resolution (same default `setup_world` uses).
-    let camera = Camera2D::new(
-        Vec2::ZERO,
-        Vec2::new(screen_size.w as f32 * 0.5, screen_size.h as f32 * 0.5),
-    );
-    commands.insert_resource(Camera2DRes(camera));
+    // The camera will be overridden later in the scene setup.
+    commands.insert_resource(Camera2DRes(Camera2D::screen_centered(&screen_size)));
 
     let lua_runtime = &scripting.lua_runtime;
 
@@ -808,11 +802,9 @@ mod tests {
         let mut world = new_drain_test_world();
         world.insert_resource(WorldTime::default());
         world.insert_resource(InputState::default());
-        world.insert_resource(ScreenSize { w: 800, h: 600 });
-        world.insert_resource(Camera2DRes(Camera2D::new(
-            Vec2::ZERO,
-            Vec2::new(400.0, 300.0),
-        )));
+        let screen = ScreenSize { w: 800, h: 600 };
+        world.insert_resource(screen);
+        world.insert_resource(Camera2DRes(Camera2D::screen_centered(&screen)));
         world.insert_resource(NextGameState::default());
         world
     }

@@ -1013,17 +1013,19 @@ EngineBuilder::new()
 
 ### Camera
 
-`Camera2DRes` is pre-inserted by the engine with `target` at the origin and `offset` at half the render resolution (center-screen). If you need a different initial position, request `ResMut<Camera2DRes>` and overwrite it — use `ScreenSize` (a logic-side resource) rather than a live raylib handle for the resolution, since `RaylibAccess` isn't available here:
+`Camera2DRes` is pre-inserted by the engine with `Camera2D::screen_centered(&screen)`: `target` at the origin and `offset` at half the render resolution (center-screen). If you need a different initial position, request `ResMut<Camera2DRes>` and overwrite it — use `ScreenSize` (a logic-side resource) rather than a live raylib handle for the resolution, since `RaylibAccess` isn't available here:
 
 ```rust
 use aberredengine::prelude::*;
 
 fn setup_camera(mut camera: ResMut<Camera2DRes>, screen: Res<ScreenSize>) {
-    camera.0 = Camera2D::new(Vec2::ZERO, Vec2::new(screen.w as f32 * 0.5, screen.h as f32 * 0.5));
+    // Look at (512, 256) from the screen center, zoomed in 2×
+    camera.0 = Camera2D::screen_centered(&screen).with_zoom(2.0);
+    camera.0.target = Vec2::new(512.0, 256.0);
 }
 ```
 
-`offset` is the screen point the camera looks through. `target` is the world position it looks at. `Camera2D::new` starts at zoom 1 with no rotation; chain `.with_zoom(z)` or `.with_rotation(degrees)` to change them.
+`offset` is the screen point the camera looks through. `target` is the world position it looks at. `Camera2D::new(target, offset)` and `Camera2D::screen_centered` start at zoom 1 with no rotation; chain `.with_zoom(z)` or `.with_rotation(degrees)` to change them.
 
 #### Following an entity
 

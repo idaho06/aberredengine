@@ -21,7 +21,6 @@ use aberred_core::error::EngineError;
 use aberred_core::events::gamestate::GameStateChangedEvent;
 use aberred_core::events::gamestate::observe_gamestate_change_event;
 use aberred_core::events::switchdebug::switch_debug_observer;
-use aberred_core::math::Vec2;
 use aberred_core::protocol::endpoints::RenderTx;
 #[cfg(any(test, feature = "test-support"))]
 use aberred_core::protocol::endpoints::setup_audio_stub;
@@ -110,10 +109,11 @@ impl EngineBuilder {
         }
         world.insert_resource(tracked_groups);
         world.insert_resource(CollisionRuleIndex::default());
-        world.insert_resource(ScreenSize {
+        let screen = ScreenSize {
             w: render_width as i32,
             h: render_height as i32,
-        });
+        };
+        world.insert_resource(screen);
         world.insert_resource(WindowSize {
             w: init.window_w,
             h: init.window_h,
@@ -165,10 +165,7 @@ impl EngineBuilder {
         world.insert_resource(FontMetricsWarnCache::default());
         world.insert_resource(TextureDimsStore::default());
         world.insert_resource(Messages::<RenderAssetCmd>::default());
-        world.insert_resource(Camera2DRes(Camera2D::new(
-            Vec2::ZERO,
-            Vec2::new(render_width as f32 * 0.5, render_height as f32 * 0.5),
-        )));
+        world.insert_resource(Camera2DRes(Camera2D::screen_centered(&screen)));
         world.insert_resource(AnimationStore::default());
         world.insert_resource(PostProcessShader::new());
         world.insert_resource(CameraFollowConfig::default());

@@ -41,6 +41,15 @@ impl Camera2D {
         }
     }
 
+    /// A camera looking at the world origin from the center of `screen`, with zoom 1
+    /// and no rotation. This is the camera the engine starts with.
+    pub fn screen_centered(screen: &ScreenSize) -> Self {
+        Self::new(
+            Vec2::ZERO,
+            Vec2::new(screen.w as f32 * 0.5, screen.h as f32 * 0.5),
+        )
+    }
+
     /// Sets the zoom factor (1 is unscaled).
     pub fn with_zoom(mut self, zoom: f32) -> Self {
         self.zoom = zoom;
@@ -117,6 +126,12 @@ mod tests {
         let c = Camera2D::new(Vec2::new(1.0, 2.0), Vec2::new(320.0, 180.0));
         assert_eq!(c.zoom, 1.0);
         assert_eq!(c.rotation, 0.0);
+    }
+
+    #[test]
+    fn screen_centered_looks_at_the_origin_from_the_screen_center() {
+        let c = Camera2D::screen_centered(&ScreenSize { w: 640, h: 360 });
+        assert_eq!(c, Camera2D::new(Vec2::ZERO, Vec2::new(320.0, 180.0)));
     }
 
     #[test]
