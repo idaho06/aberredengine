@@ -49,6 +49,7 @@ pub mod guiinputstate;
 pub mod guitheme;
 pub mod input;
 pub mod input_bindings;
+pub mod loaded_assets;
 pub mod mapdata;
 pub mod pending_assets;
 pub mod postprocessshader;

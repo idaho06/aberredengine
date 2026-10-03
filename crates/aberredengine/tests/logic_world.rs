@@ -27,6 +27,7 @@ use aberredengine::core::protocol::tick_input::TickInput;
 use aberredengine::core::resources::fontmetrics::{FontMetrics, GlyphMetrics};
 use aberredengine::core::resources::gamestate::{GameState, GameStates, NextGameState};
 use aberredengine::core::resources::input::InputState;
+use aberredengine::core::resources::loaded_assets::LoadedAssets;
 use aberredengine::core::resources::pending_assets::PendingAssets;
 use aberredengine::core::resources::signal_intents::SignalIntent;
 use aberredengine::core::resources::worldsignals::WorldSignals;
@@ -712,4 +713,54 @@ fn a_setup_hook_requesting_playing_still_waits_for_its_loads() {
     tw.deliver_logic_msg(texture_reply());
     tw.tick(1, DT);
     assert_eq!(state(&tw), GameStates::Playing);
+}
+
+/// `LoadedAssets` follows the replies: successful loads add a key, failures
+/// don't, and removals, renames and unloads take keys away.
+#[test]
+fn loaded_assets_follow_load_remove_rename_and_unload_replies() {
+    let mut tw = TestWorld::new();
+    let loaded =
+        |tw: &TestWorld, kind, key| tw.world.resource::<LoadedAssets>().contains(kind, key);
+
+    tw.deliver_texture_dims("player", 8, 8);
+    tw.deliver_logic_msg(LogicMsg::ShaderLoaded { key: "glow".into() });
+    tw.deliver_logic_msg(LogicMsg::AssetLoadFailed {
+        kind: AssetKind::Font,
+        key: "arcade".into(),
+        error: "missing".into(),
+    });
+    assert!(loaded(&tw, AssetKind::Texture, "player"));
+    assert!(loaded(&tw, AssetKind::Shader, "glow"));
+    assert!(!loaded(&tw, AssetKind::Font, "arcade"));
+
+    tw.deliver_logic_msg(LogicMsg::TextureRenamed {
+        old_key: "player".into(),
+        new_key: "hero".into(),
+    });
+    assert!(loaded(&tw, AssetKind::Texture, "hero"));
+    tw.deliver_logic_msg(LogicMsg::TextureRemoved { key: "hero".into() });
+    assert!(!loaded(&tw, AssetKind::Texture, "hero"));
+
+    for msg in [
+        AudioMessage::FxLoaded { id: "jump".into() },
+        AudioMessage::FxLoaded { id: "coin".into() },
+        AudioMessage::MusicLoaded { id: "bgm".into() },
+    ] {
+        tw.audio_msgs_tx.send(msg).unwrap();
+    }
+    tw.tick(1, DT);
+    assert!(loaded(&tw, AssetKind::Sound, "jump"));
+    assert!(loaded(&tw, AssetKind::Music, "bgm"));
+
+    tw.audio_msgs_tx
+        .send(AudioMessage::FxUnloaded { id: "jump".into() })
+        .unwrap();
+    tw.audio_msgs_tx
+        .send(AudioMessage::MusicUnloadedAll)
+        .unwrap();
+    tw.tick(1, DT);
+    assert!(!loaded(&tw, AssetKind::Sound, "jump"));
+    assert!(loaded(&tw, AssetKind::Sound, "coin"));
+    assert!(!loaded(&tw, AssetKind::Music, "bgm"));
 }

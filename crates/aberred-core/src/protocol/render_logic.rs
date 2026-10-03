@@ -9,7 +9,7 @@
 //! See `src/protocol/endpoints.rs` for the bridge resources holding the
 //! endpoints.
 
-use crate::protocol::asset_kind::{AssetKind, LoadOutcome};
+use crate::protocol::asset_kind::{AssetChange, AssetKind, LoadOutcome};
 use crate::protocol::render_assets::RenderAssetCmd;
 use crate::resources::debugoverlayconfig::DebugOverlayConfig;
 use crate::resources::fontmetrics::FontMetrics;
@@ -99,6 +99,47 @@ impl LogicMsg {
             }
             _ => None,
         }
+    }
+
+    /// How this message changes the set of loaded render assets, or `None`
+    /// if it doesn't (a failed load, or a message that isn't about assets).
+    pub fn asset_change(&self) -> Option<AssetChange> {
+        let (kind, key) = match self {
+            Self::TextureLoaded { key, .. } => (AssetKind::Texture, key),
+            Self::FontLoaded { key, .. } => (AssetKind::Font, key),
+            Self::ShaderLoaded { key } => (AssetKind::Shader, key),
+            Self::TextureRemoved { key } => {
+                return Some(AssetChange::Removed {
+                    kind: AssetKind::Texture,
+                    key: key.clone(),
+                });
+            }
+            Self::FontRemoved { key } => {
+                return Some(AssetChange::Removed {
+                    kind: AssetKind::Font,
+                    key: key.clone(),
+                });
+            }
+            Self::TextureRenamed { old_key, new_key } => {
+                return Some(renamed(AssetKind::Texture, old_key, new_key));
+            }
+            Self::FontRenamed { old_key, new_key } => {
+                return Some(renamed(AssetKind::Font, old_key, new_key));
+            }
+            _ => return None,
+        };
+        Some(AssetChange::Loaded {
+            kind,
+            key: key.clone(),
+        })
+    }
+}
+
+fn renamed(kind: AssetKind, old_key: &str, new_key: &str) -> AssetChange {
+    AssetChange::Renamed {
+        kind,
+        old_key: old_key.to_owned(),
+        new_key: new_key.to_owned(),
     }
 }
 

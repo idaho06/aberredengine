@@ -49,6 +49,25 @@ impl LoadOutcome {
     }
 }
 
+/// How one reply from the render or audio thread changes the set of loaded
+/// assets. Returned by `LogicMsg::asset_change` and
+/// `AudioMessage::asset_change`; applied by `LoadedAssets::apply`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AssetChange {
+    /// `key` finished loading.
+    Loaded { kind: AssetKind, key: String },
+    /// `key` was removed or unloaded.
+    Removed { kind: AssetKind, key: String },
+    /// A loaded `old_key` now lives under `new_key`.
+    Renamed {
+        kind: AssetKind,
+        old_key: String,
+        new_key: String,
+    },
+    /// Every asset of `kind` was unloaded.
+    Cleared(AssetKind),
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -137,6 +156,93 @@ mod tests {
                 Some(LoadOutcome::failed(kind, key, "e")),
                 "{cmd:?}"
             );
+        }
+    }
+
+    #[test]
+    fn replies_map_to_their_change_in_loaded_assets() {
+        use AssetChange::*;
+        use AssetKind::*;
+        let cases = [
+            (
+                LogicMsg::FontLoaded {
+                    key: k(),
+                    metrics: Default::default(),
+                }
+                .asset_change(),
+                Some(Loaded {
+                    kind: Font,
+                    key: k(),
+                }),
+            ),
+            (
+                LogicMsg::ShaderLoaded { key: k() }.asset_change(),
+                Some(Loaded {
+                    kind: Shader,
+                    key: k(),
+                }),
+            ),
+            (
+                LogicMsg::TextureRemoved { key: k() }.asset_change(),
+                Some(Removed {
+                    kind: Texture,
+                    key: k(),
+                }),
+            ),
+            (
+                LogicMsg::FontRemoved { key: k() }.asset_change(),
+                Some(Removed {
+                    kind: Font,
+                    key: k(),
+                }),
+            ),
+            (
+                LogicMsg::FontRenamed {
+                    old_key: k(),
+                    new_key: "n".into(),
+                }
+                .asset_change(),
+                Some(Renamed {
+                    kind: Font,
+                    old_key: k(),
+                    new_key: "n".into(),
+                }),
+            ),
+            (
+                LogicMsg::AssetLoadFailed {
+                    kind: Texture,
+                    key: k(),
+                    error: "e".into(),
+                }
+                .asset_change(),
+                None,
+            ),
+            (
+                AudioMessage::MusicLoaded { id: k() }.asset_change(),
+                Some(Loaded {
+                    kind: Music,
+                    key: k(),
+                }),
+            ),
+            (
+                AudioMessage::FxUnloaded { id: k() }.asset_change(),
+                Some(Removed {
+                    kind: Sound,
+                    key: k(),
+                }),
+            ),
+            (
+                AudioMessage::FxUnloadedAll.asset_change(),
+                Some(Cleared(Sound)),
+            ),
+            (
+                AudioMessage::MusicUnloadedAll.asset_change(),
+                Some(Cleared(Music)),
+            ),
+            (AudioMessage::MusicFinished { id: k() }.asset_change(), None),
+        ];
+        for (actual, expected) in cases {
+            assert_eq!(actual, expected);
         }
     }
 

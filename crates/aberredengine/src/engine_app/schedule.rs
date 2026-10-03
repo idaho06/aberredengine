@@ -13,7 +13,7 @@ use aberred_core::error::EngineError;
 use aberred_core::resources::drawable_snapshot::build_drawable_snapshot;
 use aberred_core::systems::animation::animation;
 use aberred_core::systems::animation::animation_controller;
-use aberred_core::systems::asset_tracking::settle_audio_loads;
+use aberred_core::systems::asset_tracking::track_audio_asset_replies;
 use aberred_core::systems::audio_bridge::{
     forward_audio_cmds, land_audio_stats, poll_audio_messages, update_bevy_audio_cmds,
     update_bevy_audio_messages,
@@ -86,7 +86,7 @@ pub enum SimSet {
     Spawn,
     /// Audio message pump (`update_bevy_audio_cmds` -> `poll_audio_messages`
     /// -> `update_bevy_audio_messages` -> `land_audio_stats` +
-    /// `settle_audio_loads`, kept as an explicit `.chain()`). Audio commands
+    /// `track_audio_asset_replies`, kept as an explicit `.chain()`). Audio commands
     /// are forwarded at the end of `Bookkeeping`.
     AudioPump,
     /// User `add_system` systems. Lua's
@@ -285,7 +285,7 @@ impl EngineBuilder {
                 update_bevy_audio_cmds,
                 poll_audio_messages,
                 update_bevy_audio_messages,
-                (land_audio_stats, settle_audio_loads),
+                (land_audio_stats, track_audio_asset_replies),
             )
                 .chain()
                 .in_set(SimSet::AudioPump),

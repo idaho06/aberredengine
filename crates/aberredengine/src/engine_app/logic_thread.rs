@@ -26,6 +26,7 @@ use aberred_core::resources::fontmetrics::FontMetricsStore;
 use aberred_core::resources::gameconfig::GameConfig;
 use aberred_core::resources::gamestate::{GameState, GameStates};
 use aberred_core::resources::input::InputState;
+use aberred_core::resources::loaded_assets::LoadedAssets;
 use aberred_core::resources::rawinput::ImguiCaptureMirror;
 use aberred_core::resources::screensize::ScreenSize;
 use aberred_core::resources::signal_intents::SignalIntents;
@@ -272,6 +273,7 @@ pub(crate) fn drain_logic_messages(
     let disconnected = aberred_core::pacing::drain_channel(rx_logic, |msg| {
         // Settled after the match, so observers of the load event see the
         // reply's data already stored.
+        let change = msg.asset_change();
         let settled = msg.load_reply();
         match msg {
             LogicMsg::ScreenSize { w, h } => {
@@ -292,7 +294,8 @@ pub(crate) fn drain_logic_messages(
                     .insert(key, width, height);
             }
             // No logic-side store mirrors shaders, and a failed load leaves
-            // the stores untouched; both only settle their pending load.
+            // the stores untouched; both only go through the shared
+            // asset_change/load_reply handling below.
             LogicMsg::ShaderLoaded { .. } | LogicMsg::AssetLoadFailed { .. } => {}
             LogicMsg::TextureRemoved { key } => {
                 world.resource_mut::<TextureDimsStore>().remove(&key);
@@ -332,6 +335,9 @@ pub(crate) fn drain_logic_messages(
             LogicMsg::ReplayControl(ReplayControl::FastForward(on)) => {
                 world.resource_mut::<ReplayRuntimeState>().fast_forward = on;
             }
+        }
+        if let Some(change) = change {
+            world.resource_mut::<LoadedAssets>().apply(change);
         }
         if let Some(outcome) = settled {
             settle_load(world, outcome);
@@ -820,6 +826,7 @@ mod tests {
         let mut world = World::new();
         world.init_resource::<FontMetricsStore>();
         world.init_resource::<PendingAssets>();
+        world.init_resource::<LoadedAssets>();
 
         let first = drain_logic_messages(None, &rx_logic, &mut world, false);
         assert_eq!(first, DrainOutcome::default());
@@ -885,6 +892,7 @@ mod tests {
         let mut world = World::new();
         world.init_resource::<FontMetricsStore>();
         world.init_resource::<PendingAssets>();
+        world.init_resource::<LoadedAssets>();
         world.init_resource::<TextureDimsStore>();
         world.init_resource::<DebugOverlayConfig>();
         world.init_resource::<ReplayRuntimeState>();
@@ -1185,6 +1193,7 @@ mod tests {
         world.insert_resource(game_state);
         world.insert_resource(TextureDimsStore::default());
         world.insert_resource(PendingAssets::default());
+        world.insert_resource(LoadedAssets::default());
         world.insert_resource(DeterminismTaint::default());
         world
     }

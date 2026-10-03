@@ -655,8 +655,10 @@ fn golden_replay_rust_scene_matches_checked_in_trail() {
     // (`.before(collision_detector)`), so registering or reordering any
     // system in the deterministic single-threaded executor's per-tick
     // sequence changes this hash, even for a scenario (like this one) that
-    // spawns no `CollisionRule` entity for that system to act on.
-    const GOLDEN_HASH: u64 = 0xbd1d_3bb4_95c8_14fd;
+    // spawns no `CollisionRule` entity for that system to act on. It also
+    // hashes every `Entity::to_bits()`, and resources are entities, so
+    // inserting a new logic-world resource shifts later ids and changes it.
+    const GOLDEN_HASH: u64 = 0x6d2e_60cd_267e_b9a4;
     let actual = golden_scenario_final_hash(42);
     assert_eq!(
         actual, GOLDEN_HASH,

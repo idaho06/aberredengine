@@ -48,7 +48,7 @@
 //! - `aberred-audio`: audio thread implementation; `crate::systems::audio_bridge`: event polling
 use bevy_ecs::message::Message;
 
-use crate::protocol::asset_kind::{AssetKind, LoadOutcome};
+use crate::protocol::asset_kind::{AssetChange, AssetKind, LoadOutcome};
 
 /// Commands sent *to* the audio thread
 #[derive(Message, Debug, Clone)]
@@ -152,5 +152,27 @@ impl AudioMessage {
             }
             _ => None,
         }
+    }
+
+    /// How this message changes the set of loaded audio assets, or `None`
+    /// if it doesn't (a failed load, playback, stats).
+    pub fn asset_change(&self) -> Option<AssetChange> {
+        let loaded = |kind, id: &String| AssetChange::Loaded {
+            kind,
+            key: id.clone(),
+        };
+        let removed = |kind, id: &String| AssetChange::Removed {
+            kind,
+            key: id.clone(),
+        };
+        Some(match self {
+            Self::FxLoaded { id } => loaded(AssetKind::Sound, id),
+            Self::MusicLoaded { id } => loaded(AssetKind::Music, id),
+            Self::FxUnloaded { id } => removed(AssetKind::Sound, id),
+            Self::MusicUnloaded { id } => removed(AssetKind::Music, id),
+            Self::FxUnloadedAll => AssetChange::Cleared(AssetKind::Sound),
+            Self::MusicUnloadedAll => AssetChange::Cleared(AssetKind::Music),
+            _ => return None,
+        })
     }
 }
