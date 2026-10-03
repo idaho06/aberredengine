@@ -16,7 +16,7 @@
 //! - [`land_audio_stats`] reads `AudioMessage::Stats` out of the queue into
 //!   the logic-world `AudioStats` resource, for the F11 perf panel.
 
-use crate::protocol::audio::{AudioCmd, AudioMessage, AudioWire};
+use crate::protocol::audio::{AudioCmd, AudioMessage};
 use crate::protocol::endpoints::AudioBridge;
 use crate::resources::thread_stats::AudioStats;
 use bevy_ecs::prelude::Messages;
@@ -56,7 +56,7 @@ pub fn forward_audio_cmds(
     crate::tracy::tracy_span!("forward_audio_cmds");
     for cmd in reader.read() {
         // Forward clone to crossbeam channel; ignore send error on shutdown
-        let _ = bridge.tx_cmd.send(AudioWire::Cmd(cmd.clone()));
+        let _ = bridge.tx_cmd.send(cmd.clone());
     }
 }
 

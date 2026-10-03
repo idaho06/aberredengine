@@ -1,9 +1,9 @@
 //! [`audio_thread`] runs on its own OS thread, owns the Raylib audio
-//! device, and processes [`AudioWire`] messages, emitting [`AudioMessage`]
+//! device, and processes [`AudioCmd`] messages, emitting [`AudioMessage`]
 //! responses (see the crate root docs for how this fits into the engine).
 //!
 //! The bridge functions that run on the LOGIC (sim) thread to shuttle
-//! [`AudioWire`]/[`AudioMessage`] across the channel -- and never touch
+//! [`AudioCmd`]/[`AudioMessage`] across the channel -- and never touch
 //! `AudioStore`/`PlayingFx`/`MusicTrack`, which are internal to this module's
 //! `World` and never cross into the sim world -- live in
 //! `aberred_core::systems::audio_bridge`, not here.
@@ -30,7 +30,7 @@ mod world;
 
 pub use world::audio_thread;
 
-use aberred_core::protocol::audio::{AudioMessage, AudioWire};
+use aberred_core::protocol::audio::{AudioCmd, AudioMessage};
 use aberred_core::protocol::endpoints::insert_audio_bridge_resources;
 use bevy_ecs::world::World;
 use crossbeam_channel::unbounded;
@@ -48,7 +48,7 @@ use crossbeam_channel::unbounded;
 /// Lives in `aberred-audio`, not `aberred-core`, because [`audio_thread`]
 /// owns a Raylib audio device -- `aberred-core` cannot depend on Raylib.
 pub fn setup_audio(world: &mut World, audio_hz: f64) {
-    let (tx_cmd, rx_cmd) = unbounded::<AudioWire>();
+    let (tx_cmd, rx_cmd) = unbounded::<AudioCmd>();
     let (tx_msg, rx_msg) = unbounded::<AudioMessage>();
 
     let handle = std::thread::spawn(move || audio_thread(rx_cmd, tx_msg, audio_hz));

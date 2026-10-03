@@ -1,7 +1,7 @@
 //! Global shutdown flag + panic hook.
 //!
 //! Ordinary shutdown is purely message-based: `RenderMsg::Quit`,
-//! `LogicMsg::Shutdown`, and `AudioWire::Shutdown` remain the primary,
+//! `LogicMsg::Shutdown`, and closing the audio command channel remain the primary,
 //! ordering-preserving path (they let each thread drain intents / tear down
 //! audio / drop `LuaRuntime` before exiting) and this module does not
 //! replace them. The gap this module closes is the *emergency* path: a
