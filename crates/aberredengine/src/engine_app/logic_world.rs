@@ -45,7 +45,6 @@ use aberred_core::resources::loaded_assets::LoadedAssets;
 use aberred_core::resources::pending_assets::PendingAssets;
 use aberred_core::resources::postprocessshader::PostProcessShader;
 use aberred_core::resources::rawinput::{ImguiCaptureMirror, PrevRawSnapshot};
-use aberred_core::resources::scenemanager::SceneManager;
 use aberred_core::resources::screensize::ScreenSize;
 use aberred_core::resources::signal_intents::SignalIntents;
 use aberred_core::resources::sim_rng::SimRng;
@@ -59,7 +58,7 @@ use aberred_core::resources::worldtime::WorldTime;
 use aberred_core::systems::gamestate::{clean_all_entities, quit_game};
 use aberred_core::systems::rust_collision::rust_collision_observer;
 use aberred_core::systems::scene_dispatch::{
-    scene_enter_play, scene_switch_system, spawn_scene_entities,
+    insert_scene_manager, scene_enter_play, scene_switch_system,
 };
 use aberred_core::systems::timer::timer_observer;
 
@@ -227,13 +226,11 @@ impl EngineBuilder {
         }
 
         if use_scene_manager {
-            let mut scene_manager = SceneManager::new();
-            scene_manager.initial_scene = init.initial_scene.take();
-            for name in init.scenes.drain(..) {
-                scene_manager.insert(name);
-            }
-            world.insert_resource(scene_manager);
-            spawn_scene_entities(world);
+            insert_scene_manager(
+                world,
+                std::mem::take(&mut init.scenes),
+                init.initial_scene.take(),
+            );
 
             register_persistent_system(
                 world,

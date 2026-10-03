@@ -20,10 +20,9 @@ use rustc_hash::FxHashMap;
 /// read/write this to validate switch targets and track which scene is active.
 #[derive(Resource, Default)]
 pub struct SceneManager {
-    /// Registered scene names, each with its persistent scene entity once
-    /// [`spawn_scene_entities`](crate::systems::scene_dispatch::spawn_scene_entities)
-    /// has run.
-    scenes: FxHashMap<String, Option<Entity>>,
+    /// Registered scene names, each with its persistent scene entity (see
+    /// [`insert_scene_manager`](crate::systems::scene_dispatch::insert_scene_manager)).
+    scenes: FxHashMap<String, Entity>,
     /// Currently active scene name (set by `scene_switch_system`).
     pub active_scene: Option<String>,
     /// Initial scene name (set by `EngineBuilder`).
@@ -36,27 +35,16 @@ impl SceneManager {
         Self::default()
     }
 
-    /// Register a scene under the given name.
-    pub fn insert(&mut self, name: impl Into<String>) {
-        self.scenes.entry(name.into()).or_default();
-    }
-
-    /// Whether a scene named `name` is registered.
-    pub fn contains(&self, name: &str) -> bool {
-        self.scenes.contains_key(name)
+    /// Register a scene under the given name, standing for `entity`.
+    pub(crate) fn insert(&mut self, name: impl Into<String>, entity: Entity) {
+        self.scenes.insert(name.into(), entity);
     }
 
     /// The persistent entity standing for the scene `name`, which
     /// [`SceneEntered`](crate::events::scene::SceneEntered)/[`SceneExited`](crate::events::scene::SceneExited)
     /// target. `None` for an unregistered name.
     pub fn scene_entity(&self, name: &str) -> Option<Entity> {
-        self.scenes.get(name).copied().flatten()
-    }
-
-    pub(crate) fn set_scene_entity(&mut self, name: &str, entity: Entity) {
-        if let Some(slot) = self.scenes.get_mut(name) {
-            *slot = Some(entity);
-        }
+        self.scenes.get(name).copied()
     }
 
     /// Returns a sorted list of registered scene names (for error messages).
@@ -87,9 +75,9 @@ mod tests {
     #[test]
     fn scene_names_sorted() {
         let mut sm = SceneManager::new();
-        sm.insert("level2");
-        sm.insert("menu");
-        sm.insert("level1");
+        sm.insert("level2", Entity::PLACEHOLDER);
+        sm.insert("menu", Entity::PLACEHOLDER);
+        sm.insert("level1", Entity::PLACEHOLDER);
         let names = sm.scene_names();
         assert_eq!(names, vec!["level1", "level2", "menu"]);
     }

@@ -1,22 +1,21 @@
 use std::path::PathBuf;
 
-use bevy_ecs::observer::Observer;
 use bevy_ecs::prelude::*;
 use bevy_ecs::system::IntoObserverSystem;
 
 use super::registrar::{
     HookRegistrar, ObserverRegistrar, UpdateRegistrar, conditional_system_registrar,
-    hook_registrar, scene_observer_registrar, system_registrar,
+    hook_registrar, observer_registrar, scene_observer_registrar, system_registrar,
 };
 #[cfg(any(doc, feature = "lua"))] // doc links, and with_lua's update hook
 use super::schedule::SimSet;
-use aberred_core::components::persistent::Persistent;
 use aberred_core::events::scene::{SceneEntered, SceneExited};
 use aberred_core::resources::systemsstore as hook_keys;
 #[cfg(feature = "lua")]
 use aberred_core::systems::gamestate::state_is_playing;
 use aberred_core::systems::scene_dispatch::{WorldDrawCallback, in_scene};
-use aberred_render::resources::scene_table::{GuiCallback, RenderSceneTable};
+use aberred_render::resources::scene_table::{GuiCallback, RenderSceneTable, SceneRender};
+use rustc_hash::FxHashMap;
 
 /// Builder for bootstrapping the engine.
 ///
@@ -38,10 +37,9 @@ pub struct EngineBuilder {
     pub(super) update_hook: Option<UpdateRegistrar>,
     pub(super) switch_scene_hook: Option<HookRegistrar>,
     pub(super) scenes: Vec<String>,
-    /// `.add_scene_gui()` registrations, joined into the render table by scene name.
-    pub(super) scene_guis: Vec<(&'static str, GuiCallback)>,
-    /// `.add_scene_world_draw()` registrations, joined into the render table by scene name.
-    pub(super) scene_world_draws: Vec<(&'static str, WorldDrawCallback)>,
+    /// `.add_scene_gui()`/`.add_scene_world_draw()` registrations: the render
+    /// thread's per-scene callback table.
+    pub(super) scene_render: FxHashMap<String, SceneRender>,
     pub(super) initial_scene: Option<String>,
     /// Group names from `.track_group()`, tracked across scene switches.
     pub(super) tracked_groups: Vec<String>,
@@ -84,8 +82,7 @@ impl EngineBuilder {
             update_hook: None,
             switch_scene_hook: None,
             scenes: Vec::new(),
-            scene_guis: Vec::new(),
-            scene_world_draws: Vec::new(),
+            scene_render: FxHashMap::default(),
             initial_scene: None,
             tracked_groups: Vec::new(),
             extra_systems: Vec::new(),
@@ -179,7 +176,7 @@ impl EngineBuilder {
     /// # Scene-scoped (transient) observers
     ///
     /// If you need an observer that is only active within a specific scene, spawn
-    /// it from the scene's [`SceneEntered`] observer **without** the [`Persistent`] component:
+    /// it from the scene's [`SceneEntered`] observer **without** the [`Persistent`](aberred_core::components::persistent::Persistent) component:
     ///
     /// ```rust,ignore
     /// fn my_scene_enter(_: On<SceneEntered>, mut commands: Commands) {
@@ -259,14 +256,11 @@ impl EngineBuilder {
     ///
     /// As [`add_scene_system`](Self::add_scene_system).
     pub fn on_scene_enter<B: Bundle, M>(
-        mut self,
+        self,
         scene: &'static str,
         observer: impl IntoObserverSystem<SceneEntered, B, M>,
     ) -> Self {
-        self.scene_refs.push(("on_scene_enter", scene));
-        self.extra_observers
-            .push(scene_observer_registrar(scene, observer));
-        self
+        self.on_scene_event("on_scene_enter", scene, observer)
     }
 
     /// Observe [`SceneExited`] for the scene `scene` only.
@@ -278,11 +272,20 @@ impl EngineBuilder {
     ///
     /// As [`add_scene_system`](Self::add_scene_system).
     pub fn on_scene_exit<B: Bundle, M>(
-        mut self,
+        self,
         scene: &'static str,
         observer: impl IntoObserverSystem<SceneExited, B, M>,
     ) -> Self {
-        self.scene_refs.push(("on_scene_exit", scene));
+        self.on_scene_event("on_scene_exit", scene, observer)
+    }
+
+    fn on_scene_event<E: EntityEvent, B: Bundle, M>(
+        mut self,
+        method: &'static str,
+        scene: &'static str,
+        observer: impl IntoObserverSystem<E, B, M>,
+    ) -> Self {
+        self.scene_refs.push((method, scene));
         self.extra_observers
             .push(scene_observer_registrar(scene, observer));
         self
@@ -323,7 +326,7 @@ impl EngineBuilder {
 
     /// Add a persistent observer for a custom (or engine) event.
     ///
-    /// The observer is spawned with the [`Persistent`] component and therefore
+    /// The observer is spawned with the [`Persistent`](aberred_core::components::persistent::Persistent) component and therefore
     /// survives scene transitions. The observer function's first parameter must
     /// be `On<E>` where `E` is the event type.
     ///
@@ -348,10 +351,7 @@ impl EngineBuilder {
         mut self,
         observer: impl IntoObserverSystem<E, B, M>,
     ) -> Self {
-        self.extra_observers
-            .push(Box::new(move |world: &mut World| {
-                world.spawn((Observer::new(observer), Persistent));
-            }));
+        self.extra_observers.push(observer_registrar(observer));
         self
     }
 
@@ -361,7 +361,7 @@ impl EngineBuilder {
     /// [`SceneEntered`]/[`SceneExited`] ([`on_scene_enter`](Self::on_scene_enter),
     /// [`on_scene_exit`](Self::on_scene_exit), [`add_observer`](Self::add_observer)) and
     /// from systems gated on it ([`add_scene_system`](Self::add_scene_system)). Each
-    /// switch despawns every non-[`Persistent`] entity. Use with
+    /// switch despawns every non-[`Persistent`](aberred_core::components::persistent::Persistent) entity. Use with
     /// [`.initial_scene()`](Self::initial_scene) to specify which scene starts first.
     ///
     /// # Errors (at `.run()`/`.try_run()`)
@@ -388,7 +388,10 @@ impl EngineBuilder {
     /// As [`add_scene_system`](Self::add_scene_system).
     pub fn add_scene_gui(mut self, scene: &'static str, gui: GuiCallback) -> Self {
         self.scene_refs.push(("add_scene_gui", scene));
-        self.scene_guis.push((scene, gui));
+        self.scene_render
+            .entry(scene.to_owned())
+            .or_default()
+            .gui_callback = Some(gui);
         self
     }
 
@@ -404,25 +407,17 @@ impl EngineBuilder {
     /// As [`add_scene_system`](Self::add_scene_system).
     pub fn add_scene_world_draw(mut self, scene: &'static str, draw: WorldDrawCallback) -> Self {
         self.scene_refs.push(("add_scene_world_draw", scene));
-        self.scene_world_draws.push((scene, draw));
+        self.scene_render
+            .entry(scene.to_owned())
+            .or_default()
+            .world_draw_callback = Some(draw);
         self
     }
 
     /// The render thread's per-scene callback table: one entry per scene with
     /// a `.add_scene_gui()` or `.add_scene_world_draw()` callback.
     pub(super) fn render_scene_table(&self) -> RenderSceneTable {
-        let mut table = RenderSceneTable::default();
-        for &(scene, gui) in &self.scene_guis {
-            table.0.entry(scene.to_owned()).or_default().gui_callback = Some(gui);
-        }
-        for &(scene, draw) in &self.scene_world_draws {
-            table
-                .0
-                .entry(scene.to_owned())
-                .or_default()
-                .world_draw_callback = Some(draw);
-        }
-        table
+        RenderSceneTable(self.scene_render.clone())
     }
 
     /// Set the initial scene for [`SceneManager`](aberred_core::resources::scenemanager::SceneManager)-based games.

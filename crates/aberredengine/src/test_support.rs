@@ -43,9 +43,9 @@ use std::path::PathBuf;
 use crate::engine_app::{
     EngineBuilder, HookRegistrar, LogicInit, ObserverRegistrar, UpdateRegistrar, apply_tick_input,
     conditional_system_registrar, drain_logic_messages, hold_back_deterministic_setup_input,
-    hook_registrar, in_envelope, run_sim_tick, scene_observer_registrar, system_registrar,
+    hook_registrar, in_envelope, observer_registrar, run_sim_tick, scene_observer_registrar,
+    system_registrar,
 };
-use aberred_core::components::persistent::Persistent;
 use aberred_core::events::scene::{SceneEntered, SceneExited};
 use aberred_core::protocol::audio::{AudioCmd, AudioMessage};
 use aberred_core::protocol::raw_input::RawDeviceSnapshot;
@@ -226,10 +226,7 @@ impl TestWorldBuilder {
         mut self,
         observer: impl IntoObserverSystem<E, B, M>,
     ) -> Self {
-        self.extra_observers
-            .push(Box::new(move |world: &mut World| {
-                world.spawn((Observer::new(observer), Persistent));
-            }));
+        self.extra_observers.push(observer_registrar(observer));
         self
     }
 

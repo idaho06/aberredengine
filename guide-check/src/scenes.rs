@@ -19,6 +19,7 @@ mod scene_callbacks {
 
     fn register(builder: EngineBuilder) -> EngineBuilder { // GLUE
         builder.on_scene_enter("a", enter).add_scene_system("a", update).on_scene_exit("a", exit) // GLUE
+            .add_scene_gui("a", my_gui).add_scene_world_draw("a", my_world_draw) // GLUE
     } // GLUE
 
     mod switch { // GLUE
@@ -73,7 +74,6 @@ mod imgui_gui_callback {
             // handle save
         }
     }
-
 
     fn register() -> EngineBuilder { // GLUE
     EngineBuilder::new() // GLUE

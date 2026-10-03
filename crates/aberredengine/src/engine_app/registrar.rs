@@ -3,6 +3,7 @@ use bevy_ecs::system::IntoObserverSystem;
 
 use super::logic_world::register_persistent_system;
 use super::schedule::SimSet;
+use aberred_core::components::persistent::Persistent;
 use aberred_core::resources::scenemanager::SceneManager;
 use aberred_core::resources::systemsstore::SystemsStore;
 use aberred_core::systems::gamestate::state_is_playing;
@@ -57,6 +58,16 @@ pub(crate) fn conditional_system_registrar<M, MC>(
                 .run_if(condition)
                 .in_set(SimSet::ScriptUpdate),
         );
+    })
+}
+
+/// Build the [`ObserverRegistrar`] behind `add_observer`: a global observer,
+/// spawned [`Persistent`] so scene switches keep it.
+pub(crate) fn observer_registrar<E: Event, B: Bundle, M>(
+    observer: impl IntoObserverSystem<E, B, M>,
+) -> ObserverRegistrar {
+    Box::new(move |world| {
+        world.spawn((Observer::new(observer), Persistent));
     })
 }
 

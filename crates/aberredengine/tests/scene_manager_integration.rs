@@ -6,13 +6,12 @@
 
 use aberredengine::core::events::scene::{SceneEntered, SceneExited};
 use aberredengine::core::resources::group::TrackedGroups;
-use aberredengine::core::resources::input::InputState;
 use aberredengine::core::resources::scenemanager::SceneManager;
+use aberredengine::core::resources::signal_keys as sk;
 use aberredengine::core::resources::systemsstore::SystemsStore;
 use aberredengine::core::resources::worldsignals::WorldSignals;
-use aberredengine::core::resources::worldtime::WorldTime;
 use aberredengine::core::systems::scene_dispatch::{
-    scene_enter_play, scene_switch_poll, scene_switch_system, spawn_scene_entities,
+    insert_scene_manager, scene_enter_play, scene_switch_poll, scene_switch_system,
 };
 use bevy_ecs::message::MessageReader;
 use bevy_ecs::prelude::*;
@@ -21,7 +20,6 @@ use bevy_ecs::system::SystemState;
 
 use aberredengine::core::components::persistent::{CleanableEntity, Persistent};
 use aberredengine::core::protocol::audio::AudioCmd;
-use aberredengine::core::resources::gamestate::{GameState, NextGameState};
 
 use aberredengine::core::testing::insert_game_ctx_resources;
 
@@ -43,21 +41,14 @@ impl SceneLog {
 fn scene_world(scenes: &[&str]) -> World {
     let mut world = World::new();
     insert_game_ctx_resources(&mut world);
-    world.insert_resource(WorldTime::default().with_time_scale(1.0));
     world.insert_resource(TrackedGroups::default());
     world.insert_resource(SystemsStore::new());
-    world.insert_resource(GameState::new());
-    world.insert_resource(NextGameState::new());
-    world.insert_resource(InputState::default());
     world.init_resource::<SceneLog>();
-
-    let mut scene_manager = SceneManager::new();
-    scene_manager.initial_scene = scenes.first().map(|name| name.to_string());
-    for name in scenes {
-        scene_manager.insert(*name);
-    }
-    world.insert_resource(scene_manager);
-    spawn_scene_entities(&mut world);
+    insert_scene_manager(
+        &mut world,
+        scenes.iter().map(|name| name.to_string()),
+        scenes.first().map(|name| name.to_string()),
+    );
 
     let switch = world.register_system(scene_switch_system);
     world.entity_mut(switch.entity()).insert(Persistent);
@@ -90,7 +81,7 @@ fn enter_play(world: &mut World) {
 fn switch_to(world: &mut World, target: &str) {
     world
         .resource_mut::<WorldSignals>()
-        .set_string("scene", target);
+        .set_string(sk::SCENE, target);
     world.run_system_once(scene_switch_system).unwrap();
     world.flush();
 }

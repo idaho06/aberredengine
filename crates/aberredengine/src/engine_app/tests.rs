@@ -723,10 +723,10 @@ fn scene_render_callbacks_land_on_their_scene() {
     validate(&builder).unwrap();
 
     let table = builder.render_scene_table();
-    let level = table.0.get("level").expect("level has render callbacks");
+    let level = table.get("level").expect("level has render callbacks");
     assert!(level.gui_callback.is_some());
     assert!(level.world_draw_callback.is_some());
-    assert!(!table.0.contains_key("menu"));
+    assert!(table.get("menu").is_none());
 }
 
 #[test]

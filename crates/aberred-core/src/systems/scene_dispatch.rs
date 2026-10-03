@@ -5,7 +5,7 @@
 //!
 //! - [`scene_switch_system`] — engine-owned scene transition: [`SceneExited`] → teardown →
 //!   [`SceneEntered`]
-//! - [`spawn_scene_entities`] — spawns the persistent [`SceneName`] entity the scene events target
+//! - [`insert_scene_manager`] — inserts [`SceneManager`] and spawns the persistent [`SceneName`] entity the scene events target
 //! - [`in_scene`] — run condition: true while the named scene is active
 //! - [`scene_switch_poll`] — polls `WorldSignals["switch_scene"]` and triggers a scene transition
 //! - [`scene_enter_play`] — one-shot system that seeds the initial scene and triggers the first switch
@@ -168,27 +168,27 @@ pub fn scene_switch_system(world: &mut World, state: &mut SystemState<SceneTeard
         .unwrap_or(sk::DEFAULT_SCENE)
         .into();
     let scene_manager = world.resource::<SceneManager>();
-    if !scene_manager.contains(&scene_name) {
+    let Some(entered) = scene_manager.scene_entity(&scene_name) else {
         error!(
             "scene_switch_system: No scene registered for '{}'; staying in the current scene. Registered scenes: {:?}",
             scene_name,
             scene_manager.scene_names()
         );
         return;
-    }
-    let entered_entity = scene_manager.scene_entity(&scene_name);
-    let previous: Option<Arc<str>> = scene_manager.active_scene.as_deref().map(Arc::from);
-    let exited_entity = previous
+    };
+    let exited = scene_manager
+        .active_scene
         .as_deref()
-        .and_then(|prev| scene_manager.scene_entity(prev));
+        .and_then(|prev| Some((Arc::<str>::from(prev), scene_manager.scene_entity(prev)?)));
 
-    if let (Some(prev), Some(scene)) = (&previous, exited_entity) {
+    if let Some((prev, scene)) = &exited {
         world.trigger(SceneExited {
-            scene,
+            scene: *scene,
             name: prev.clone(),
             next: scene_name.clone(),
         });
     }
+    let previous = exited.map(|(prev, _)| prev);
 
     let (mut commands, scene_cleanup, mut world_signals, mut tracked_groups, mut scene_manager) =
         state.get_mut(world).expect(
@@ -202,45 +202,38 @@ pub fn scene_switch_system(world: &mut World, state: &mut SystemState<SceneTeard
     tracked_groups.reset_to_persistent();
     world_signals.clear_group_counts();
 
-    if let Some(prev) = scene_manager.active_scene.take() {
-        world_signals.set_string(sk::PREVIOUS_SCENE, prev);
+    if let Some(prev) = &previous {
+        world_signals.set_string(sk::PREVIOUS_SCENE, &**prev);
     }
 
     info!("scene_switch_system: Entering scene '{}'", scene_name);
     scene_manager.active_scene = Some(scene_name.to_string());
     state.apply(world);
 
-    if let Some(scene) = entered_entity {
-        world.trigger(SceneEntered {
-            scene,
-            name: scene_name,
-            previous,
-        });
-    }
+    world.trigger(SceneEntered {
+        scene: entered,
+        name: scene_name,
+        previous,
+    });
 }
 
-/// Spawns one [`Persistent`] scene entity carrying [`SceneName`] for every scene
-/// registered in [`SceneManager`] that has none yet, and records it there
-/// ([`SceneManager::scene_entity`]).
-///
-/// [`SceneEntered`]/[`SceneExited`] target these entities, so the builder calls this
-/// right after inserting the [`SceneManager`].
-pub fn spawn_scene_entities(world: &mut World) {
-    let scene_manager = world.resource::<SceneManager>();
-    let missing: Vec<String> = scene_manager
-        .scene_names()
-        .into_iter()
-        .filter(|name| scene_manager.scene_entity(name).is_none())
-        .map(str::to_owned)
-        .collect();
-    for name in missing {
+/// Inserts the [`SceneManager`] resource with `scenes` registered, spawning one
+/// [`Persistent`] scene entity carrying [`SceneName`] per scene, which
+/// [`SceneEntered`]/[`SceneExited`] target ([`SceneManager::scene_entity`]).
+pub fn insert_scene_manager(
+    world: &mut World,
+    scenes: impl IntoIterator<Item = String>,
+    initial_scene: Option<String>,
+) {
+    let mut scene_manager = SceneManager::new();
+    scene_manager.initial_scene = initial_scene;
+    for name in scenes {
         let entity = world
             .spawn((SceneName(Arc::from(name.as_str())), Persistent))
             .id();
-        world
-            .resource_mut::<SceneManager>()
-            .set_scene_entity(&name, entity);
+        scene_manager.insert(name, entity);
     }
+    world.insert_resource(scene_manager);
 }
 
 /// Run condition: true while `name` is the active [`SceneManager`] scene.
@@ -355,15 +348,11 @@ mod tests {
     fn world_in_menu_switching_to(target: &str) -> (World, Entity) {
         let mut world = World::new();
         insert_game_ctx_resources(&mut world);
-        let mut scene_manager = SceneManager::new();
-        scene_manager.insert("menu");
-        scene_manager.insert("level");
-        scene_manager.active_scene = Some("menu".to_owned());
-        world.insert_resource(scene_manager);
+        insert_scene_manager(&mut world, ["menu".into(), "level".into()], None);
+        world.resource_mut::<SceneManager>().active_scene = Some("menu".to_owned());
         let mut groups = TrackedGroups::default();
         groups.add_group("enemies");
         world.insert_resource(groups);
-        spawn_scene_entities(&mut world);
         world
             .resource_mut::<WorldSignals>()
             .set_string(sk::SCENE, target);
