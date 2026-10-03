@@ -1,6 +1,5 @@
 use std::path::PathBuf;
 
-use aberred_core::math::Vec2;
 use bevy_ecs::prelude::*;
 use crossbeam_channel::{bounded, unbounded};
 use raylib::ffi::TraceLogLevel;
@@ -300,20 +299,11 @@ fn snapshot_publish_reuses_buffer_capacity_and_shrinks_correctly() {
     use aberred_core::components::sprite::Sprite;
     use aberred_core::components::zindex::ZIndex;
     use aberred_core::resources::drawable_snapshot::MapSpriteEntry;
-    use std::sync::Arc;
 
     fn sprite_entry(id: u32) -> MapSpriteEntry {
         MapSpriteEntry {
             entity: Entity::from_raw_u32(id).unwrap(),
-            sprite: Sprite {
-                tex_key: Arc::from(""),
-                width: 0.0,
-                height: 0.0,
-                offset: Vec2::default(),
-                origin: Vec2::default(),
-                flip_h: false,
-                flip_v: false,
-            },
+            sprite: Sprite::new("", 0.0, 0.0),
             position: MapPosition::new(0.0, 0.0),
             z_index: ZIndex(0.0),
             scale: None,

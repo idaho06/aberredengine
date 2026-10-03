@@ -165,15 +165,10 @@ impl EngineBuilder {
         world.insert_resource(FontMetricsWarnCache::default());
         world.insert_resource(TextureDimsStore::default());
         world.insert_resource(Messages::<RenderAssetCmd>::default());
-        world.insert_resource(Camera2DRes(Camera2D {
-            target: Vec2 { x: 0.0, y: 0.0 },
-            offset: Vec2 {
-                x: render_width as f32 * 0.5,
-                y: render_height as f32 * 0.5,
-            },
-            rotation: 0.0,
-            zoom: 1.0,
-        }));
+        world.insert_resource(Camera2DRes(Camera2D::new(
+            Vec2::ZERO,
+            Vec2::new(render_width as f32 * 0.5, render_height as f32 * 0.5),
+        )));
         world.insert_resource(AnimationStore::default());
         world.insert_resource(PostProcessShader::new());
         world.insert_resource(CameraFollowConfig::default());

@@ -116,15 +116,7 @@ fn spawn_and_collide_fires_rust_collision_rule() {
 fn present_publishes_spawned_sprite_in_snapshot() {
     let mut tw = TestWorld::new();
 
-    let sprite = Sprite {
-        tex_key: "player".into(),
-        width: 16.0,
-        height: 16.0,
-        offset: Default::default(),
-        origin: Default::default(),
-        flip_h: false,
-        flip_v: false,
-    };
+    let sprite = Sprite::new("player", 16.0, 16.0);
     let entity = tw
         .world
         .spawn((sprite, MapPosition::new(3.0, 4.0), ZIndex(2.0)))

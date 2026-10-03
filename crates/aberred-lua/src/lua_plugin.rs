@@ -111,15 +111,10 @@ pub fn setup(
     // Default camera. Needed to start the engine before entering play state
     // The camera will be overridden later in the scene setup. Offset centers
     // on the internal render resolution (same default `setup_world` uses).
-    let camera = Camera2D {
-        target: Vec2 { x: 0.0, y: 0.0 },
-        offset: Vec2 {
-            x: screen_size.w as f32 * 0.5,
-            y: screen_size.h as f32 * 0.5,
-        },
-        rotation: 0.0,
-        zoom: 1.0,
-    };
+    let camera = Camera2D::new(
+        Vec2::ZERO,
+        Vec2::new(screen_size.w as f32 * 0.5, screen_size.h as f32 * 0.5),
+    );
     commands.insert_resource(Camera2DRes(camera));
 
     let lua_runtime = &scripting.lua_runtime;
@@ -571,7 +566,6 @@ mod tests {
     use aberred_core::components::sprite::Sprite;
     use bevy_ecs::message::Messages;
     use bevy_ecs::system::{RunSystemOnce, SystemState};
-    use std::sync::Arc;
 
     /// Builds a [`World`] with all resources [`drain_common_commands`] depends on.
     fn new_drain_test_world() -> World {
@@ -679,18 +673,7 @@ mod tests {
         let mut world = new_drain_test_world();
 
         let entity = world
-            .spawn((
-                Sprite {
-                    tex_key: Arc::from("old_tex"),
-                    width: 16.0,
-                    height: 16.0,
-                    offset: Vec2::default(),
-                    origin: Vec2::default(),
-                    flip_h: false,
-                    flip_v: false,
-                },
-                Animation::new("idle"),
-            ))
+            .spawn((Sprite::new("old_tex", 16.0, 16.0), Animation::new("idle")))
             .id();
 
         {
@@ -826,12 +809,10 @@ mod tests {
         world.insert_resource(WorldTime::default());
         world.insert_resource(InputState::default());
         world.insert_resource(ScreenSize { w: 800, h: 600 });
-        world.insert_resource(Camera2DRes(Camera2D {
-            target: Vec2 { x: 0.0, y: 0.0 },
-            offset: Vec2 { x: 400.0, y: 300.0 },
-            rotation: 0.0,
-            zoom: 1.0,
-        }));
+        world.insert_resource(Camera2DRes(Camera2D::new(
+            Vec2::ZERO,
+            Vec2::new(400.0, 300.0),
+        )));
         world.insert_resource(NextGameState::default());
         world
     }

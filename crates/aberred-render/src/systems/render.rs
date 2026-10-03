@@ -1433,15 +1433,7 @@ mod screen_draw_buffer_tests {
     fn sprite_item_with_entity(z: f32, entity: Entity) -> ScreenDrawItem {
         ScreenDrawItem::Sprite(ScreenSpriteBufferItem {
             entity,
-            sprite: Sprite {
-                tex_key: std::sync::Arc::from("tex"),
-                width: 1.0,
-                height: 1.0,
-                offset: Vec2::ZERO,
-                origin: Vec2::ZERO,
-                flip_h: false,
-                flip_v: false,
-            },
+            sprite: Sprite::new("tex", 1.0, 1.0),
             z_index: ZIndex(z),
             pos: ScreenPosition::new(0.0, 0.0),
             maybe_tint: None,

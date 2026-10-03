@@ -887,6 +887,7 @@ mod tests {
     use crate::components::lua_on_tween_finished::LuaOnTweenFinished;
     use aberred_core::components::animation::Animation;
     use aberred_core::components::guiinteractable::GuiInteractable;
+    use aberred_core::components::sprite::Sprite;
     use aberred_core::testing::approx_eq;
 
     #[test]
@@ -1231,16 +1232,8 @@ mod tests {
         );
     }
 
-    fn test_sprite(tex_key: &str) -> aberred_core::components::sprite::Sprite {
-        aberred_core::components::sprite::Sprite {
-            tex_key: tex_key.into(),
-            width: 16.0,
-            height: 16.0,
-            offset: Vec2::ZERO,
-            origin: Vec2::ZERO,
-            flip_h: false,
-            flip_v: false,
-        }
+    fn test_sprite(tex_key: &str) -> Sprite {
+        Sprite::new(tex_key, 16.0, 16.0)
     }
 
     #[test]
@@ -1476,15 +1469,7 @@ mod tests {
         let mut store = AnimationStore::default();
         store.animations.insert(
             "run".to_string(),
-            AnimationResource {
-                tex_key: "run_sheet".into(),
-                position: Vec2::ZERO,
-                horizontal_displacement: 16.0,
-                vertical_displacement: 0.0,
-                frame_count: 4,
-                fps: 10.0,
-                looped: true,
-            },
+            AnimationResource::new("run_sheet", 16.0, 4, 10.0),
         );
         let mut world = World::new();
         let mut signals = WorldSignals::default();
@@ -1510,9 +1495,7 @@ mod tests {
             (anim.frame_index, anim.elapsed_time, anim.finished),
             (0, 0.0, false)
         );
-        let sprite = world
-            .get::<aberred_core::components::sprite::Sprite>(e)
-            .unwrap();
+        let sprite = world.get::<Sprite>(e).unwrap();
         assert_eq!(&*sprite.tex_key, "run_sheet");
 
         // A key missing from the store still switches the animation but keeps the texture.
@@ -1526,9 +1509,7 @@ mod tests {
             }],
         );
         assert_eq!(world.get::<Animation>(e).unwrap().animation_key, "unknown");
-        let sprite = world
-            .get::<aberred_core::components::sprite::Sprite>(e)
-            .unwrap();
+        let sprite = world.get::<Sprite>(e).unwrap();
         assert_eq!(&*sprite.tex_key, "run_sheet");
     }
 
@@ -1561,9 +1542,7 @@ mod tests {
             (anim.frame_index, anim.elapsed_time, anim.finished),
             (0, 0.0, false)
         );
-        let sprite = world
-            .get::<aberred_core::components::sprite::Sprite>(e)
-            .unwrap();
+        let sprite = world.get::<Sprite>(e).unwrap();
         assert_eq!((sprite.flip_h, sprite.flip_v), (true, false));
     }
 

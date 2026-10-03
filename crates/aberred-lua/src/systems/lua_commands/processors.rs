@@ -145,18 +145,11 @@ pub fn process_camera_command(commands: &mut Commands, cmd: CameraCmd) {
             rotation,
             zoom,
         } => {
-            commands.insert_resource(Camera2DRes(Camera2D {
-                target: Vec2 {
-                    x: target_x,
-                    y: target_y,
-                },
-                offset: Vec2 {
-                    x: offset_x,
-                    y: offset_y,
-                },
-                rotation,
-                zoom,
-            }));
+            commands.insert_resource(Camera2DRes(
+                Camera2D::new(Vec2::new(target_x, target_y), Vec2::new(offset_x, offset_y))
+                    .with_rotation(rotation)
+                    .with_zoom(zoom),
+            ));
         }
     }
 }
@@ -604,15 +597,10 @@ pub fn process_animation_command(anim_store: &mut AnimationStore, cmd: Animation
         } => {
             anim_store.insert(
                 id.clone(),
-                AnimationResource {
-                    tex_key: Arc::from(tex_key),
-                    position: Vec2 { x: pos_x, y: pos_y },
-                    horizontal_displacement,
-                    vertical_displacement,
-                    frame_count,
-                    fps,
-                    looped,
-                },
+                AnimationResource::new(tex_key, horizontal_displacement, frame_count, fps)
+                    .with_position(Vec2::new(pos_x, pos_y))
+                    .with_vertical_displacement(vertical_displacement)
+                    .with_looped(looped),
             );
             debug!(
                 "Registered animation '{}' ({} frames, {} fps)",

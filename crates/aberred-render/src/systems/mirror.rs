@@ -531,15 +531,7 @@ mod mirror_tests {
     fn make_map_sprite_entry(entity: Entity, z_index: f32) -> MapSpriteEntry {
         MapSpriteEntry {
             entity,
-            sprite: Sprite {
-                tex_key: "test".into(),
-                width: 16.0,
-                height: 16.0,
-                offset: Vec2::ZERO,
-                origin: Vec2::ZERO,
-                flip_h: false,
-                flip_v: false,
-            },
+            sprite: Sprite::new("test", 16.0, 16.0),
             position: MapPosition::from_vec(Vec2::new(1.0, 2.0)),
             z_index: ZIndex(z_index),
             scale: None,
@@ -870,15 +862,7 @@ mod mirror_tests {
     fn make_screen_sprite_entry(entity: Entity, z_index: f32) -> ScreenSpriteEntry {
         ScreenSpriteEntry {
             entity,
-            sprite: Sprite {
-                tex_key: "test".into(),
-                width: 16.0,
-                height: 16.0,
-                offset: Vec2::ZERO,
-                origin: Vec2::ZERO,
-                flip_h: false,
-                flip_v: false,
-            },
+            sprite: Sprite::new("test", 16.0, 16.0),
             position: ScreenPosition::new(1.0, 2.0),
             z_index: ZIndex(z_index),
             tint: None,

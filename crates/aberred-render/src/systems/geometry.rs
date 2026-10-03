@@ -277,21 +277,9 @@ mod tests {
     use super::*;
     use aberred_core::math::Vec2;
     use aberred_core::testing::approx_eq;
-    use std::sync::Arc;
 
     fn make_sprite(w: f32, h: f32, origin_x: f32, origin_y: f32) -> Sprite {
-        Sprite {
-            tex_key: Arc::from("test"),
-            width: w,
-            height: h,
-            offset: Vec2 { x: 0.0, y: 0.0 },
-            origin: Vec2 {
-                x: origin_x,
-                y: origin_y,
-            },
-            flip_h: false,
-            flip_v: false,
-        }
+        Sprite::new("test", w, h).with_origin(Vec2::new(origin_x, origin_y))
     }
 
     // --- Anchor preservation tests ---

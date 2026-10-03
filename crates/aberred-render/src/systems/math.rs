@@ -116,12 +116,9 @@ pub(super) fn camera2d_to_raylib(c: Camera2D) -> raylib::prelude::Camera2D {
 }
 
 pub(super) fn camera2d_from_raylib(c: raylib::prelude::Camera2D) -> Camera2D {
-    Camera2D {
-        target: vec2_from_raylib(c.target),
-        offset: vec2_from_raylib(c.offset),
-        rotation: c.rotation,
-        zoom: c.zoom,
-    }
+    Camera2D::new(vec2_from_raylib(c.target), vec2_from_raylib(c.offset))
+        .with_rotation(c.rotation)
+        .with_zoom(c.zoom)
 }
 
 pub(super) fn vec2_to_raylib(v: Vec2) -> raylib::prelude::Vector2 {
@@ -171,12 +168,9 @@ mod tests {
 
     #[test]
     fn camera2d_round_trips_through_raylib() {
-        let c = Camera2D {
-            target: Vec2::new(1.0, 2.0),
-            offset: Vec2::new(3.0, 4.0),
-            rotation: 45.0,
-            zoom: 2.0,
-        };
+        let c = Camera2D::new(Vec2::new(1.0, 2.0), Vec2::new(3.0, 4.0))
+            .with_rotation(45.0)
+            .with_zoom(2.0);
         let rc = camera2d_to_raylib(c);
         let back = camera2d_from_raylib(rc);
         assert_eq!(c, back);
@@ -225,12 +219,11 @@ mod tests {
 
         // Field-by-field, not just a round trip: a symmetric target/offset
         // swap would still round-trip.
-        let c = camera2d_to_raylib(Camera2D {
-            target: Vec2::new(1.0, 2.0),
-            offset: Vec2::new(3.0, 4.0),
-            rotation: 45.0,
-            zoom: 2.0,
-        });
+        let c = camera2d_to_raylib(
+            Camera2D::new(Vec2::new(1.0, 2.0), Vec2::new(3.0, 4.0))
+                .with_rotation(45.0)
+                .with_zoom(2.0),
+        );
         assert_eq!((c.target.x, c.target.y), (1.0, 2.0));
         assert_eq!((c.offset.x, c.offset.y), (3.0, 4.0));
         assert_eq!((c.rotation, c.zoom), (45.0, 2.0));
@@ -258,12 +251,7 @@ mod tests {
 
     #[test]
     fn screen_to_world2d_raylib_projects_through_the_camera() {
-        let camera = Camera2D {
-            target: Vec2::new(100.0, 50.0),
-            offset: Vec2::new(10.0, 20.0),
-            rotation: 0.0,
-            zoom: 2.0,
-        };
+        let camera = Camera2D::new(Vec2::new(100.0, 50.0), Vec2::new(10.0, 20.0)).with_zoom(2.0);
         let world = screen_to_world2d_raylib(raylib::prelude::Vector2::new(30.0, 40.0), &camera);
         // (screen - offset) / zoom + target
         assert_eq!((world.x, world.y), (110.0, 60.0));

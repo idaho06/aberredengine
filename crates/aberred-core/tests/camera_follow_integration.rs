@@ -23,15 +23,10 @@ use aberred_core::testing::approx_eq;
 // ---------------------------------------------------------------------------
 
 fn make_camera(target_x: f32, target_y: f32) -> Camera2DRes {
-    Camera2DRes(Camera2D {
-        target: Vec2 {
-            x: target_x,
-            y: target_y,
-        },
-        offset: Vec2 { x: 160.0, y: 120.0 },
-        rotation: 0.0,
-        zoom: 1.0,
-    })
+    Camera2DRes(Camera2D::new(
+        Vec2::new(target_x, target_y),
+        Vec2::new(160.0, 120.0),
+    ))
 }
 
 fn setup_world() -> World {
@@ -524,12 +519,9 @@ fn bounds_clamp_far_edge() {
 fn bounds_clamp_respects_zoom() {
     let mut world = setup_world();
     // Set zoom = 2.0 → half viewport in world units = 160/2=80, 120/2=60
-    world.insert_resource(Camera2DRes(Camera2D {
-        target: Vec2 { x: 0.0, y: 0.0 },
-        offset: Vec2 { x: 160.0, y: 120.0 },
-        rotation: 0.0,
-        zoom: 2.0,
-    }));
+    world.insert_resource(Camera2DRes(
+        Camera2D::new(Vec2::ZERO, Vec2::new(160.0, 120.0)).with_zoom(2.0),
+    ));
     {
         let mut cfg = world.resource_mut::<CameraFollowConfig>();
         cfg.mode = FollowMode::Instant;
@@ -632,12 +624,9 @@ fn zero_width_bounds_center_x() {
 #[test]
 fn extreme_zoom_out_centers_camera_when_viewport_exceeds_bounds() {
     let mut world = setup_world();
-    world.insert_resource(Camera2DRes(Camera2D {
-        target: Vec2 { x: 0.0, y: 0.0 },
-        offset: Vec2 { x: 160.0, y: 120.0 },
-        rotation: 0.0,
-        zoom: 0.1,
-    }));
+    world.insert_resource(Camera2DRes(
+        Camera2D::new(Vec2::ZERO, Vec2::new(160.0, 120.0)).with_zoom(0.1),
+    ));
     {
         let mut cfg = world.resource_mut::<CameraFollowConfig>();
         cfg.mode = FollowMode::Instant;

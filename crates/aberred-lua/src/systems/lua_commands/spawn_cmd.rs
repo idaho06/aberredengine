@@ -4,8 +4,6 @@
 //! - [`process_clone_command`] – clone an existing entity with optional overrides
 //! - [`apply_components`] – shared helper that applies all `SpawnCmd` fields to an entity
 
-use std::sync::Arc;
-
 use aberred_core::math::Vec2;
 use bevy_ecs::prelude::*;
 
@@ -287,21 +285,12 @@ fn apply_render_components(
     shadow: Option<(f32, f32, u8, u8, u8, u8)>,
 ) {
     if let Some(sprite_data) = sprite {
-        entity_commands.insert(Sprite {
-            tex_key: Arc::from(sprite_data.tex_key),
-            width: sprite_data.width,
-            height: sprite_data.height,
-            origin: Vec2 {
-                x: sprite_data.origin_x,
-                y: sprite_data.origin_y,
-            },
-            offset: Vec2 {
-                x: sprite_data.offset_x,
-                y: sprite_data.offset_y,
-            },
-            flip_h: sprite_data.flip_h,
-            flip_v: sprite_data.flip_v,
-        });
+        entity_commands.insert(
+            Sprite::new(sprite_data.tex_key, sprite_data.width, sprite_data.height)
+                .with_origin(Vec2::new(sprite_data.origin_x, sprite_data.origin_y))
+                .with_offset(Vec2::new(sprite_data.offset_x, sprite_data.offset_y))
+                .with_flip(sprite_data.flip_h, sprite_data.flip_v),
+        );
     }
     if let Some(z) = zindex {
         entity_commands.insert(ZIndex(z));

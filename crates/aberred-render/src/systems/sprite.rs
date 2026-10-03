@@ -82,15 +82,10 @@ mod tests {
     use aberred_core::math::Vec2;
 
     fn sprite(flip_h: bool, flip_v: bool) -> Sprite {
-        Sprite {
-            tex_key: std::sync::Arc::from("atlas"),
-            width: 16.0,
-            height: 24.0,
-            offset: Vec2::new(32.0, 48.0),
-            origin: Vec2::new(8.0, 12.0),
-            flip_h,
-            flip_v,
-        }
+        Sprite::new("atlas", 16.0, 24.0)
+            .with_offset(Vec2::new(32.0, 48.0))
+            .with_origin(Vec2::new(8.0, 12.0))
+            .with_flip(flip_h, flip_v)
     }
 
     fn xywh(r: Rectangle) -> (f32, f32, f32, f32) {
