@@ -22,7 +22,9 @@ use aberred_core::systems::camera_follow::camera_follow_system;
 use aberred_core::systems::collision_detector::collision_detector;
 use aberred_core::systems::dynamictext_size::dynamictext_size_system;
 use aberred_core::systems::entity_registrations::prune_dead_entity_registrations;
-use aberred_core::systems::gamestate::{check_pending_state, quit_flag_poll, state_is_playing};
+use aberred_core::systems::gamestate::{
+    check_pending_state, finish_setup, quit_flag_poll, state_is_playing,
+};
 use aberred_core::systems::gridlayout::gridlayout_spawn_system;
 use aberred_core::systems::group::update_group_counts_system;
 use aberred_core::systems::gui_hit_test::gui_hit_test_system;
@@ -79,11 +81,13 @@ pub enum SimSet {
     /// `WorldSignals`, before anything this tick reads them.
     ApplyIntents,
     /// One-shot spawns reacting to `Added<T>` (menu/gridlayout/tilemap) and
-    /// game-state bookkeeping (`check_pending_state`).
+    /// game-state transitions (`check_pending_state`; `Setup` → `Playing`
+    /// is applied at the end of `Bookkeeping` instead).
     Spawn,
-    /// Audio command/message pump (`update_bevy_audio_cmds` ->
-    /// `forward_audio_cmds` -> `poll_audio_messages` ->
-    /// `update_bevy_audio_messages`, kept as an explicit `.chain()`).
+    /// Audio message pump (`update_bevy_audio_cmds` -> `poll_audio_messages`
+    /// -> `update_bevy_audio_messages` -> `land_audio_stats` +
+    /// `settle_audio_loads`, kept as an explicit `.chain()`). Audio commands
+    /// are forwarded at the end of `Bookkeeping`.
     AudioPump,
     /// User `add_system` systems. Lua's
     /// `on_update_<scene>` is dispatched separately, from
@@ -108,7 +112,11 @@ pub enum SimSet {
     /// scene lifecycle polling.
     Drain,
     /// Tail-of-tick housekeeping: signal bindings, text sizing, input
-    /// binding change notification, and (for Lua games) `lua_plugin::update`.
+    /// binding change notification, (for Lua games) `lua_plugin::update`,
+    /// then the render and audio command forwarders and `finish_setup`. A
+    /// custom system placed here that queues asset loads must run
+    /// `.before(forward_render_asset_cmds)`, or its loads are counted a tick
+    /// late.
     Bookkeeping,
 }
 
@@ -275,7 +283,6 @@ impl EngineBuilder {
         sim.add_systems(
             (
                 update_bevy_audio_cmds,
-                forward_audio_cmds,
                 poll_audio_messages,
                 update_bevy_audio_messages,
                 (land_audio_stats, settle_audio_loads),
@@ -514,6 +521,20 @@ impl EngineBuilder {
         sim.add_systems(
             forward_render_asset_cmds
                 .after(update_bevy_render_asset_cmds)
+                .in_set(SimSet::Bookkeeping),
+        );
+        // The audio forwarder follows the render one, after every producer
+        // of the tick (the Lua drains are `.before(update_bevy_render_asset_cmds)`),
+        // and `finish_setup` follows both, so it sees this tick's loads of
+        // both kinds in `PendingAssets`.
+        sim.add_systems(
+            forward_audio_cmds
+                .after(forward_render_asset_cmds)
+                .in_set(SimSet::Bookkeeping),
+        );
+        sim.add_systems(
+            finish_setup
+                .after(forward_audio_cmds)
                 .in_set(SimSet::Bookkeeping),
         );
     }

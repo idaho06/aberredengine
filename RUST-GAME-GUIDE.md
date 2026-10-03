@@ -377,7 +377,7 @@ Setup ──→ Playing ──→ Quitting
           scene switches
 ```
 
-1. **Setup** — The engine calls the `setup` hook once, on the logic thread. Load assets here (textures, fonts, sounds, shaders, animations) — see [Section 4](#4-loading-assets) for how texture/font/shader loading works. Omit `.on_setup()` if you have nothing to load. Once the hook has run, the engine moves to `Playing` on its own; a hook that requests another state through `ResMut<NextGameState>` (e.g. `GameStates::Quitting`) overrides that.
+1. **Setup** — The engine calls the `setup` hook once, on the logic thread. Load assets here (textures, fonts, sounds, shaders, animations) — see [Section 4](#4-loading-assets) for how texture/font/shader loading works. Omit `.on_setup()` if you have nothing to load. Once the hook has run, the engine moves to `Playing` on its own, as soon as every load queued so far has been answered (see [Waiting for loads](#waiting-for-loads)); a failed load counts as answered. A hook that requests `Playing` itself waits the same way. A hook that requests another state through `ResMut<NextGameState>` (e.g. `GameStates::Quitting`) gets it at once.
 2. **Playing** — The engine transitions to playing, calls `enter_play` (or the initial scene's `on_enter`), then runs your `.add_system()` systems (and the active scene's `on_update`) once per sim tick.
 3. **Scene switches** — With the SceneManager, setting the `"switch_scene"` flag on `WorldSignals` runs the exit→enter sequence on the next sim tick. With raw hooks, only a `MenuAction::SetScene` menu item runs the `switch_scene` hook; nothing polls the flag in a pure-Rust game unless you register a poll system (see below).
 4. **Quitting** — When the game state becomes `GameStates::Quitting` (via `NextGameState::set(GameStates::Quitting)`, `ctx.world_signals.request_quit()`, or a `MenuAction::QuitGame` menu item) or the window is closed, the engine shuts down. Scene, timer, phase, collision and menu callbacks use `request_quit()`, since `GameCtx` has no `NextGameState`.
@@ -693,7 +693,7 @@ EngineBuilder::new()
     // …
 ```
 
-Loads count no matter how they were queued: through `AssetLoader`, a raw `MessageWriter<RenderAssetCmd>`/`MessageWriter<AudioCmd>`, a map spawn or a tilemap. Loading the same key twice counts twice and is answered twice.
+Setup waits for `PendingAssets` to empty (see [Game lifecycle](#game-lifecycle)). Loads count no matter how they were queued: through `AssetLoader`, a raw `MessageWriter<RenderAssetCmd>`/`MessageWriter<AudioCmd>`, a map spawn or a tilemap. Loading the same key twice counts twice and is answered twice.
 
 The subsections below show the underlying `RenderAssetCmd`/`AudioCmd` variants; write any that `AssetLoader` has no helper for through `assets.render()`/`assets.audio()`.
 
@@ -1124,7 +1124,7 @@ fn setup(mut assets: AssetLoader, mut anim_store: ResMut<AnimationStore>) {
 }
 ```
 
-Entities that reference `"player"`/`"arcade"`/`"glow"` can be spawned right away in `on_enter_play`/the initial scene's `on_enter` — they just won't render anything until the render thread's uploads land a tick or two later. Check `AssetLoader::is_texture_loaded`/`texture_size` (or the `TextureDimsStore`/`FontMetricsStore` patterns from the Textures/Fonts subsections above) only if your own logic needs the actual dimensions/metrics before then.
+Setup waits for these loads, so they're ready by `on_enter_play`/the initial scene's `on_enter`. Assets loaded later, during `Playing`, follow the load-then-use gap described in the Textures/Fonts subsections.
 
 ---
 

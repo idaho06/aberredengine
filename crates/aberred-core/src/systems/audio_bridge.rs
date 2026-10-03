@@ -10,7 +10,7 @@
 //! - [`update_bevy_audio_messages`] advances the ECS message queue so newly
 //!   written messages become readable by message subscribers.
 //! - [`forward_audio_cmds`] forwards ECS `AudioCmd` messages to the audio
-//!   thread via the `AudioBridge` sender.
+//!   thread via the `AudioBridge` sender, at the end of the sim tick.
 //! - [`update_bevy_audio_cmds`] advances the ECS message queue for `AudioCmd`
 //!   so same-frame readers can observe writes.
 //! - [`land_audio_stats`] reads `AudioMessage::Stats` out of the queue into
@@ -51,6 +51,8 @@ pub fn update_bevy_audio_messages(mut msgs: ResMut<Messages<AudioMessage>>) {
 
 /// Forward ECS AudioCmd messages to the audio thread via the AudioBridge
 /// sender, recording each load in [`PendingAssets`] until its reply arrives.
+/// Runs at the end of the sim tick, after every engine system that queues
+/// audio commands.
 pub fn forward_audio_cmds(
     bridge: Res<AudioBridge>,
     mut reader: bevy_ecs::prelude::MessageReader<AudioCmd>,

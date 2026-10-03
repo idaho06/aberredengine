@@ -611,3 +611,105 @@ fn asset_loaded_observers_see_the_texture_dims() {
     });
     assert_eq!(tw.world.resource::<LoadLog>().0, ["Some((16, 24))"]);
 }
+
+fn state(tw: &TestWorld) -> GameStates {
+    tw.world.resource::<GameState>().get().clone()
+}
+
+/// A `TestWorld` whose setup hook queues one texture and one sound, ticked
+/// until both loads are pending.
+fn loading_world() -> TestWorld {
+    let mut tw = TestWorld::builder()
+        .on_setup(|mut assets: AssetLoader| {
+            assets.load_texture("player", "player.png");
+            assets.load_sound("jump", "jump.wav");
+        })
+        .build()
+        .unwrap();
+    tw.tick(4, DT);
+    assert_eq!(tw.world.resource::<PendingAssets>().len(), 2);
+    tw
+}
+
+fn texture_reply() -> LogicMsg {
+    LogicMsg::TextureLoaded {
+        key: "player".into(),
+        width: 8,
+        height: 8,
+    }
+}
+
+/// Setup lasts while loads are pending and ends with the tick that settles
+/// the last one; here the last reply is the texture's.
+#[test]
+fn setup_waits_for_loads_and_ends_with_the_last_render_reply() {
+    let mut tw = loading_world();
+    assert_eq!(state(&tw), GameStates::Setup);
+
+    tw.audio_msgs_tx
+        .send(AudioMessage::FxLoaded { id: "jump".into() })
+        .unwrap();
+    tw.tick(1, DT);
+    assert_eq!(
+        state(&tw),
+        GameStates::Setup,
+        "the texture is still loading"
+    );
+
+    tw.deliver_logic_msg(texture_reply());
+    tw.tick(1, DT);
+    assert_eq!(state(&tw), GameStates::Playing);
+}
+
+/// Same timing when the last reply is the sound's: audio replies settle in
+/// `SimSet::AudioPump`, before `finish_setup` at the end of the tick.
+#[test]
+fn setup_ends_with_the_last_audio_reply_on_the_same_tick() {
+    let mut tw = loading_world();
+    tw.deliver_logic_msg(texture_reply());
+    tw.tick(1, DT);
+    assert_eq!(state(&tw), GameStates::Setup, "the sound is still loading");
+
+    tw.audio_msgs_tx
+        .send(AudioMessage::FxLoaded { id: "jump".into() })
+        .unwrap();
+    tw.tick(1, DT);
+    assert_eq!(state(&tw), GameStates::Playing);
+}
+
+/// A failed load is answered too, so it doesn't hold Setup.
+#[test]
+fn a_failed_load_does_not_block_setup() {
+    let mut tw = loading_world();
+    tw.audio_msgs_tx
+        .send(AudioMessage::FxLoadFailed {
+            id: "jump".into(),
+            error: "missing".into(),
+        })
+        .unwrap();
+    tw.deliver_logic_msg(LogicMsg::AssetLoadFailed {
+        kind: AssetKind::Texture,
+        key: "player".into(),
+        error: "missing".into(),
+    });
+    tw.tick(1, DT);
+    assert_eq!(state(&tw), GameStates::Playing);
+}
+
+/// A setup hook that requests `Playing` itself waits for its loads too.
+#[test]
+fn a_setup_hook_requesting_playing_still_waits_for_its_loads() {
+    let mut tw = TestWorld::builder()
+        .on_setup(|mut assets: AssetLoader, mut next: ResMut<NextGameState>| {
+            assets.load_texture("player", "player.png");
+            next.set(GameStates::Playing);
+        })
+        .build()
+        .unwrap();
+    tw.tick(4, DT);
+    assert_eq!(state(&tw), GameStates::Setup);
+
+    tw.deliver_logic_msg(texture_reply());
+    tw.tick(1, DT);
+    assert_eq!(state(&tw), GameStates::Playing);
+}

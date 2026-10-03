@@ -16,22 +16,46 @@ use crate::events::gamestate::GameStateChangedEvent;
 use crate::protocol::endpoints::RenderTx;
 use crate::protocol::render_logic::RenderMsg;
 use crate::resources::gamestate::{GameState, GameStates, NextGameState, NextGameStates};
+use crate::resources::pending_assets::PendingAssets;
 use crate::resources::signal_keys as sk;
 use crate::resources::worldsignals::WorldSignals;
 use bevy_ecs::prelude::*;
 use log::info;
 
 /// If a state transition is pending, trigger a `GameStateChangedEvent`.
+///
+/// `Setup` → `Playing` is left to [`finish_setup`], which waits for the
+/// queued asset loads. A request for any other state (e.g. `Quitting` from
+/// the setup hook) applies here at once.
 pub fn check_pending_state(
     mut commands: Commands,
-    //game_state: ResMut<crate::resources::gamestate::GameState>,
-    next_state: ResMut<NextGameState>,
+    next_state: Res<NextGameState>,
+    state: Res<GameState>,
 ) {
-    // Check if there is a pending state change
-    if let NextGameStates::Pending(_new_state) = next_state.get() {
-        // If there is, trigger the GameStateChangedEvent
+    if matches!(next_state.get(), NextGameStates::Pending(_)) && !ends_setup(&state, &next_state) {
         commands.trigger(GameStateChangedEvent {});
     }
+}
+
+/// Applies a requested `Setup` → `Playing` transition once [`PendingAssets`]
+/// is empty, whether the engine or the setup hook made the request. Runs
+/// last in the sim tick, after both asset forwarders, so every load queued
+/// so far (including this tick's) is counted.
+pub fn finish_setup(
+    mut commands: Commands,
+    next_state: Res<NextGameState>,
+    state: Res<GameState>,
+    pending: Res<PendingAssets>,
+) {
+    if ends_setup(&state, &next_state) && pending.is_empty() {
+        commands.trigger(GameStateChangedEvent {});
+    }
+}
+
+/// Whether the pending request is the `Setup` → `Playing` transition.
+fn ends_setup(state: &GameState, next_state: &NextGameState) -> bool {
+    *state.get() == GameStates::Setup
+        && *next_state.get() == NextGameStates::Pending(GameStates::Playing)
 }
 
 /// Returns true when the current game state is `Playing`.
@@ -79,6 +103,7 @@ pub fn clean_all_entities(mut commands: Commands, scene_cleanup: SceneCleanup) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::protocol::asset_kind::AssetKind;
     use bevy_ecs::system::RunSystemOnce;
 
     /// Number of `GameStateChangedEvent`s observed.
@@ -91,6 +116,7 @@ mod tests {
         let mut world = World::new();
         world.init_resource::<GameState>();
         world.insert_resource(next);
+        world.init_resource::<PendingAssets>();
         world.init_resource::<ChangedCount>();
         world.add_observer(
             |_trigger: On<GameStateChangedEvent>, mut count: ResMut<ChangedCount>| {
@@ -120,6 +146,61 @@ mod tests {
         // Clearing the pending value is the observer's job, not this system's.
         let ns = world.resource::<NextGameState>();
         assert_eq!(*ns.get(), NextGameStates::Pending(GameStates::Playing));
+    }
+
+    /// A world in `Setup` with `next` requested and, if `loading`, one
+    /// texture load pending.
+    fn setup_world(next: GameStates, loading: bool) -> World {
+        let mut requested = NextGameState::new();
+        requested.set(next);
+        let mut world = world_with_next_state(requested);
+        world.resource_mut::<GameState>().set(GameStates::Setup);
+        if loading {
+            world
+                .resource_mut::<PendingAssets>()
+                .queue(AssetKind::Texture, "player");
+        }
+        world
+    }
+
+    #[test]
+    fn check_pending_state_leaves_the_end_of_setup_to_finish_setup() {
+        let mut world = setup_world(GameStates::Playing, false);
+        tick_check_pending_state(&mut world);
+        assert_eq!(world.resource::<ChangedCount>().0, 0);
+    }
+
+    #[test]
+    fn finish_setup_waits_for_pending_loads() {
+        let mut world = setup_world(GameStates::Playing, true);
+
+        world.run_system_once(finish_setup).unwrap();
+        assert_eq!(world.resource::<ChangedCount>().0, 0, "still loading");
+        assert_eq!(
+            *world.resource::<NextGameState>().get(),
+            NextGameStates::Pending(GameStates::Playing),
+            "the request is kept, not dropped"
+        );
+
+        world
+            .resource_mut::<PendingAssets>()
+            .settle(AssetKind::Texture, "player");
+        world.run_system_once(finish_setup).unwrap();
+        assert_eq!(world.resource::<ChangedCount>().0, 1);
+    }
+
+    #[test]
+    fn finish_setup_ignores_other_requests() {
+        let mut world = setup_world(GameStates::Quitting, false);
+        world.run_system_once(finish_setup).unwrap();
+        assert_eq!(world.resource::<ChangedCount>().0, 0);
+    }
+
+    #[test]
+    fn leaving_setup_for_another_state_does_not_wait() {
+        let mut world = setup_world(GameStates::Quitting, true);
+        tick_check_pending_state(&mut world);
+        assert_eq!(world.resource::<ChangedCount>().0, 1);
     }
 
     #[test]
