@@ -35,6 +35,7 @@ pub use aberred_core::components::phase::{Phase, PhaseCallbackFns};
 pub use aberred_core::components::rigidbody::RigidBody;
 pub use aberred_core::components::rotation::Rotation;
 pub use aberred_core::components::scale::Scale;
+pub use aberred_core::components::scene::SceneName;
 pub use aberred_core::components::screenposition::ScreenPosition;
 pub use aberred_core::components::signalbinding::SignalBinding;
 pub use aberred_core::components::signals::Signals;
@@ -48,6 +49,7 @@ pub use aberred_core::components::zindex::ZIndex;
 pub use aberred_core::events::animation::AnimationFinishedEvent;
 pub use aberred_core::events::asset::{AssetLoadFailed, AssetLoaded};
 pub use aberred_core::events::input::InputAction;
+pub use aberred_core::events::scene::{SceneEntered, SceneExited};
 pub use aberred_core::events::tween::TweenFinishedEvent;
 
 pub use aberred_core::protocol::asset_kind::AssetKind;
@@ -75,7 +77,7 @@ pub use aberred_core::resources::worldtime::WorldTime;
 pub use aberred_core::systems::GameCtx;
 pub use aberred_core::systems::asset_loader::{AssetError, AssetLoader};
 pub use aberred_core::systems::gamestate::state_is_playing;
-pub use aberred_core::systems::scene_dispatch::{WorldDraw, WorldDrawCtx};
+pub use aberred_core::systems::scene_dispatch::{WorldDraw, WorldDrawCtx, in_scene};
 
 pub use crate::render::*;
 

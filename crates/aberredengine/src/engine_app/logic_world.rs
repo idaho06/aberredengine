@@ -59,7 +59,9 @@ use aberred_core::resources::worldtime::WorldTime;
 use aberred_core::systems::gamestate::{clean_all_entities, quit_game};
 use aberred_core::systems::rust_collision::rust_collision_observer;
 use aberred_core::systems::scene_dispatch::SceneLogic;
-use aberred_core::systems::scene_dispatch::{scene_enter_play, scene_switch_system};
+use aberred_core::systems::scene_dispatch::{
+    scene_enter_play, scene_switch_system, spawn_scene_entities,
+};
 use aberred_core::systems::timer::timer_observer;
 
 #[cfg(feature = "lua")]
@@ -239,6 +241,7 @@ impl EngineBuilder {
                 );
             }
             world.insert_resource(scene_manager);
+            spawn_scene_entities(world);
 
             register_persistent_system(
                 world,

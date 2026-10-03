@@ -13,10 +13,12 @@ use aberredengine::core::components::collision::{BoxSides, CollisionRule};
 use aberredengine::core::components::dynamictext::DynamicText;
 use aberredengine::core::components::group::Group;
 use aberredengine::core::components::mapposition::MapPosition;
+use aberredengine::core::components::scene::SceneName;
 use aberredengine::core::components::sprite::Sprite;
 use aberredengine::core::components::zindex::ZIndex;
 use aberredengine::core::events::asset::{AssetLoadFailed, AssetLoaded};
 use aberredengine::core::events::input::InputAction;
+use aberredengine::core::events::scene::{SceneEntered, SceneExited};
 use aberredengine::core::math::Color;
 use aberredengine::core::protocol::asset_kind::AssetKind;
 use aberredengine::core::protocol::audio::AudioMessage;
@@ -33,6 +35,7 @@ use aberredengine::core::resources::signal_intents::SignalIntent;
 use aberredengine::core::resources::worldsignals::WorldSignals;
 use aberredengine::core::systems::GameCtx;
 use aberredengine::core::systems::asset_loader::AssetLoader;
+use aberredengine::core::systems::scene_dispatch::in_scene;
 use aberredengine::engine_app::SimSet;
 use aberredengine::raylib::ffi::KeyboardKey;
 use aberredengine::test_support::TestWorld;
@@ -523,6 +526,86 @@ fn track_group_survives_a_scene_switch() {
         Some(1),
         "count is published again after the switch"
     );
+}
+
+#[derive(Resource, Default)]
+struct SceneLog(Vec<String>);
+
+fn log_scene_entered(ev: On<SceneEntered>, names: Query<&SceneName>, mut log: ResMut<SceneLog>) {
+    let target = names.get(ev.scene).map(|n| &*n.0).unwrap_or("?");
+    log.0.push(format!(
+        "enter {} (entity {target}) from {:?}",
+        ev.name,
+        ev.previous.as_deref()
+    ));
+}
+
+fn log_scene_exited(ev: On<SceneExited>, mut log: ResMut<SceneLog>) {
+    log.0.push(format!("exit {} -> {}", ev.name, ev.next));
+}
+
+/// The real SceneManager wiring spawns a scene entity per scene and triggers
+/// `SceneEntered` for the initial scene, then `SceneExited`/`SceneEntered` on
+/// every switch.
+#[test]
+fn scene_switches_trigger_scene_events() {
+    let mut tw = TestWorld::builder()
+        .add_scene("a", empty_scene())
+        .add_scene("b", empty_scene())
+        .initial_scene("a")
+        .add_observer(log_scene_entered)
+        .add_observer(log_scene_exited)
+        .build()
+        .expect("build should succeed");
+    tw.world.init_resource::<SceneLog>();
+    tw.tick_to_play(DT, 8);
+
+    tw.world.resource_mut::<WorldSignals>().request_scene("b");
+    tw.tick(2, DT);
+
+    assert_eq!(
+        tw.world.resource::<SceneLog>().0,
+        [
+            "enter a (entity a) from None",
+            "exit a -> b",
+            "enter b (entity b) from Some(\"a\")",
+        ]
+    );
+}
+
+#[derive(Resource, Default)]
+struct SceneTicks(u32);
+
+fn count_scene_ticks(mut ticks: ResMut<SceneTicks>) {
+    ticks.0 += 1;
+}
+
+/// A system gated on `in_scene("b")` runs only while `b` is active.
+#[test]
+fn in_scene_gates_a_system_to_its_scene() {
+    let mut tw = TestWorld::builder()
+        .add_scene("a", empty_scene())
+        .add_scene("b", empty_scene())
+        .initial_scene("a")
+        .configure_schedule(|schedule| {
+            schedule.add_systems(
+                count_scene_ticks
+                    .run_if(in_scene("b"))
+                    .in_set(SimSet::ScriptUpdate),
+            );
+        })
+        .build()
+        .expect("build should succeed");
+    tw.world.init_resource::<SceneTicks>();
+    tw.tick_to_play(DT, 8);
+    tw.tick(3, DT);
+    assert_eq!(tw.world.resource::<SceneTicks>().0, 0, "not in scene b yet");
+
+    tw.world.resource_mut::<WorldSignals>().request_scene("b");
+    tw.tick(1, DT); // the switch lands at the end of this tick
+    tw.tick(3, DT);
+
+    assert_eq!(tw.world.resource::<SceneTicks>().0, 3);
 }
 
 #[derive(Resource, Default)]

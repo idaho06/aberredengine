@@ -12,6 +12,7 @@
 //! - [`gui_interactable`] – GUI interactable (button/image) click events
 //! - [`input`] – input action events (key press/release)
 //! - [`menu`] – menu selection events
+//! - [`scene`] – scene enter/exit events (`SceneEntered`/`SceneExited`)
 //! - [`switchdebug`] – toggle debug rendering and diagnostics on/off (F11, stays logic-side)
 //!
 //! Lua timer events live in `aberred-lua`; the render thread's F10
@@ -26,6 +27,7 @@ pub mod gamestate;
 pub mod gui_interactable;
 pub mod input;
 pub mod menu;
+pub mod scene;
 pub mod spawnmap;
 pub mod switchdebug;
 pub mod timer;

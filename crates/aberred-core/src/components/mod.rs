@@ -30,6 +30,7 @@
 //! - [`rigidbody`] – simple kinematic body storing velocity
 //! - [`rotation`] – rotation angle in degrees
 //! - [`scale`] – 2D scale factor for sprites
+//! - [`scene`] – the name carried by each registered scene's persistent entity
 //! - [`screenposition`] – screen-space position for UI elements
 //! - [`signalbinding`] – binds UI text to signal values for reactive updates
 //! - [`signals`] – per-entity signal storage for cross-system communication
@@ -72,6 +73,7 @@ pub mod position2d;
 pub mod rigidbody;
 pub mod rotation;
 pub mod scale;
+pub mod scene;
 pub mod screenposition;
 pub mod shadow;
 pub mod signalbinding;

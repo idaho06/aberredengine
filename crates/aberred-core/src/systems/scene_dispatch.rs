@@ -7,7 +7,10 @@
 //!   the render-side half (`gui_callback`/`world_draw_callback`) lives in
 //!   `aberred-render`'s `SceneRender`, joined by scene name in the facade's
 //!   combined `SceneDescriptor`.
-//! - [`scene_switch_system`] — engine-owned scene transition: despawn → on_exit → on_enter
+//! - [`scene_switch_system`] — engine-owned scene transition: [`SceneExited`] → despawn →
+//!   on_exit → on_enter → [`SceneEntered`]
+//! - [`spawn_scene_entities`] — spawns the persistent [`SceneName`] entity the scene events target
+//! - [`in_scene`] — run condition: true while the named scene is active
 //! - [`scene_update_system`] — per-frame dispatch to the active scene's `on_update`
 //! - [`scene_switch_poll`] — polls `WorldSignals["switch_scene"]` and triggers a scene transition
 //! - [`scene_enter_play`] — one-shot system that seeds the initial scene and triggers the first switch
@@ -27,10 +30,15 @@
 //! - [`crate::resources::scenemanager::SceneManager`] — the registry resource
 //! - `aberredengine::EngineBuilder::add_scene` — builder method for registration
 
+use std::sync::Arc;
+
 use bevy_ecs::prelude::*;
+use bevy_ecs::system::SystemState;
 use log::{debug, error, info};
 
-use crate::components::persistent::SceneCleanup;
+use crate::components::persistent::{Persistent, SceneCleanup};
+use crate::components::scene::SceneName;
+use crate::events::scene::{SceneEntered, SceneExited};
 use crate::math::{Color, Vec2};
 use crate::resources::appstate::AppState;
 use crate::resources::camera2d::Camera2D;
@@ -180,22 +188,29 @@ pub struct SceneLogic {
 ///
 /// Reads the target from `WorldSignals["scene"]` and checks it first: an
 /// unregistered name logs an error and leaves the current scene untouched.
-/// Otherwise it despawns non-[`Persistent`](crate::components::persistent::Persistent) entities, resets tracked groups to the persistent ones,
-/// runs the old scene's `on_exit`, records `WorldSignals["previous_scene"]`,
-/// and enters the new scene.
+/// Otherwise it triggers [`SceneExited`] for the old scene while its entities are
+/// still alive, despawns non-[`Persistent`] entities, resets tracked groups to the
+/// persistent ones, runs the old scene's `on_exit`, records its name under
+/// [`sk::PREVIOUS_SCENE`], enters the new scene (`on_enter`), and
+/// finally triggers [`SceneEntered`], so entities its observers spawn belong to the
+/// new scene.
 pub fn scene_switch_system(
-    mut ctx: GameCtx,
-    scene_cleanup: SceneCleanup,
-    mut tracked_groups: ResMut<TrackedGroups>,
-    mut scene_manager: ResMut<SceneManager>,
+    world: &mut World,
+    state: &mut SystemState<(
+        GameCtx,
+        SceneCleanup,
+        ResMut<TrackedGroups>,
+        ResMut<SceneManager>,
+    )>,
 ) {
     debug!("scene_switch_system: System called!");
 
-    let scene_name = ctx
-        .world_signals
+    let scene_name: Arc<str> = world
+        .resource::<WorldSignals>()
         .get_string(sk::SCENE)
         .unwrap_or(sk::DEFAULT_SCENE)
-        .to_owned();
+        .into();
+    let scene_manager = world.resource::<SceneManager>();
     let Some(on_enter) = scene_manager.get(&scene_name).map(|scene| scene.on_enter) else {
         error!(
             "scene_switch_system: No scene registered for '{}'; staying in the current scene. Registered scenes: {:?}",
@@ -204,7 +219,23 @@ pub fn scene_switch_system(
         );
         return;
     };
+    let entered_entity = scene_manager.scene_entity(&scene_name);
+    let previous: Option<Arc<str>> = scene_manager.active_scene.as_deref().map(Arc::from);
+    let exited_entity = previous
+        .as_deref()
+        .and_then(|prev| scene_manager.scene_entity(prev));
 
+    if let (Some(prev), Some(scene)) = (&previous, exited_entity) {
+        world.trigger(SceneExited {
+            scene,
+            name: prev.clone(),
+            next: scene_name.clone(),
+        });
+    }
+
+    let (mut ctx, scene_cleanup, mut tracked_groups, mut scene_manager) = state
+        .get_mut(world)
+        .expect("the logic world holds the GameCtx, TrackedGroups and SceneManager resources");
     scene_cleanup.despawn_all(&mut ctx.commands);
 
     // Clear entity registrations for despawned (non-persistent) entities
@@ -219,12 +250,58 @@ pub fn scene_switch_system(
         if let Some(on_exit) = scene_manager.get(&prev).and_then(|scene| scene.on_exit) {
             on_exit(&mut ctx);
         }
-        ctx.world_signals.set_string("previous_scene", prev);
+        ctx.world_signals.set_string(sk::PREVIOUS_SCENE, prev);
     }
 
     info!("scene_switch_system: Entering scene '{}'", scene_name);
-    scene_manager.active_scene = Some(scene_name);
+    scene_manager.active_scene = Some(scene_name.to_string());
     on_enter(&mut ctx);
+    state.apply(world);
+
+    if let Some(scene) = entered_entity {
+        world.trigger(SceneEntered {
+            scene,
+            name: scene_name,
+            previous,
+        });
+    }
+}
+
+/// Spawns one [`Persistent`] scene entity carrying [`SceneName`] for every scene
+/// registered in [`SceneManager`] that has none yet, and records it there
+/// ([`SceneManager::scene_entity`]).
+///
+/// [`SceneEntered`]/[`SceneExited`] target these entities, so the builder calls this
+/// right after inserting the [`SceneManager`].
+pub fn spawn_scene_entities(world: &mut World) {
+    let scene_manager = world.resource::<SceneManager>();
+    let missing: Vec<String> = scene_manager
+        .scene_names()
+        .into_iter()
+        .filter(|name| scene_manager.scene_entity(name).is_none())
+        .map(str::to_owned)
+        .collect();
+    for name in missing {
+        let entity = world
+            .spawn((SceneName(Arc::from(name.as_str())), Persistent))
+            .id();
+        world
+            .resource_mut::<SceneManager>()
+            .set_scene_entity(&name, entity);
+    }
+}
+
+/// Run condition: true while `name` is the active [`SceneManager`] scene.
+///
+/// False when no [`SceneManager`] exists (no `.add_scene()`, or a Lua game).
+///
+/// ```ignore
+/// builder.add_system(hud.run_if(in_scene("level01")))
+/// ```
+pub fn in_scene(name: &'static str) -> impl FnMut(Option<Res<SceneManager>>) -> bool + Clone {
+    move |scene_manager| {
+        scene_manager.is_some_and(|scenes| scenes.active_scene.as_deref() == Some(name))
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -306,7 +383,7 @@ pub fn scene_enter_play(
 mod tests {
     use super::*;
     use crate::testing::insert_game_ctx_resources;
-    use bevy_ecs::system::RunSystemOnce;
+    use bevy_ecs::system::{IntoObserverSystem, RunSystemOnce};
 
     #[derive(Default)]
     struct RecordedLines(Vec<(Vec2, Vec2)>);
@@ -373,11 +450,169 @@ mod tests {
         let mut groups = TrackedGroups::default();
         groups.add_group("enemies");
         world.insert_resource(groups);
+        spawn_scene_entities(&mut world);
         world
             .resource_mut::<WorldSignals>()
             .set_string(sk::SCENE, target);
         let menu_entity = world.spawn_empty().id();
         (world, menu_entity)
+    }
+
+    /// A global observer that survives scene switches, spawned the way
+    /// `EngineBuilder::add_observer` does.
+    fn add_global_observer<E: Event, B: Bundle, M>(
+        world: &mut World,
+        observer: impl IntoObserverSystem<E, B, M>,
+    ) {
+        world.spawn((Observer::new(observer), Persistent));
+    }
+
+    /// Scene events seen by the test observers, in trigger order.
+    #[derive(Resource, Default)]
+    struct SeenEvents(Vec<String>);
+
+    fn record_scene_events(world: &mut World) {
+        world.init_resource::<SeenEvents>();
+        add_global_observer(
+            world,
+            |ev: On<SceneExited>, mut seen: ResMut<SeenEvents>| {
+                seen.0.push(format!("exit {} -> {}", ev.name, ev.next));
+            },
+        );
+        add_global_observer(
+            world,
+            |ev: On<SceneEntered>, mut seen: ResMut<SeenEvents>| {
+                seen.0.push(format!(
+                    "enter {} from {:?}",
+                    ev.name,
+                    ev.previous.as_deref()
+                ));
+            },
+        );
+    }
+
+    #[test]
+    fn switch_triggers_exited_then_entered_with_names() {
+        let (mut world, _) = world_in_menu_switching_to("level");
+        record_scene_events(&mut world);
+        world.run_system_once(scene_switch_system).unwrap();
+
+        assert_eq!(
+            world.resource::<SeenEvents>().0,
+            ["exit menu -> level", "enter level from Some(\"menu\")"]
+        );
+        assert_eq!(
+            world
+                .resource::<WorldSignals>()
+                .get_string(sk::PREVIOUS_SCENE),
+            Some("menu")
+        );
+    }
+
+    #[test]
+    fn scene_events_target_the_scene_entity() {
+        let (mut world, _) = world_in_menu_switching_to("level");
+        let scenes = world.resource::<SceneManager>();
+        let (menu, level) = (
+            scenes.scene_entity("menu").unwrap(),
+            scenes.scene_entity("level").unwrap(),
+        );
+        assert_eq!(world.get::<SceneName>(level).map(|n| &*n.0), Some("level"));
+        assert!(world.get::<Persistent>(level).is_some());
+        world.init_resource::<SeenEvents>();
+        world
+            .entity_mut(menu)
+            .observe(|_: On<SceneExited>, mut seen: ResMut<SeenEvents>| {
+                seen.0.push("menu exited".into());
+            });
+        world
+            .entity_mut(level)
+            .observe(|_: On<SceneEntered>, mut seen: ResMut<SeenEvents>| {
+                seen.0.push("level entered".into());
+            });
+
+        world.run_system_once(scene_switch_system).unwrap();
+
+        assert_eq!(
+            world.resource::<SeenEvents>().0,
+            ["menu exited", "level entered"]
+        );
+    }
+
+    #[test]
+    fn exit_observer_sees_the_old_scene_alive() {
+        let (mut world, menu_entity) = world_in_menu_switching_to("level");
+        world.init_resource::<SeenEvents>();
+        add_global_observer(
+            &mut world,
+            move |_: On<SceneExited>, q: Query<Entity>, mut seen: ResMut<SeenEvents>| {
+                seen.0.push(format!("alive {}", q.contains(menu_entity)));
+            },
+        );
+
+        world.run_system_once(scene_switch_system).unwrap();
+
+        assert_eq!(world.resource::<SeenEvents>().0, ["alive true"]);
+        assert!(
+            world.get_entity(menu_entity).is_err(),
+            "despawned afterwards"
+        );
+    }
+
+    #[derive(Component)]
+    struct SpawnedOnEnter;
+
+    #[test]
+    fn enter_observer_spawns_survive_the_switch() {
+        let (mut world, _) = world_in_menu_switching_to("level");
+        add_global_observer(&mut world, |_: On<SceneEntered>, mut commands: Commands| {
+            commands.spawn(SpawnedOnEnter);
+        });
+
+        world.run_system_once(scene_switch_system).unwrap();
+
+        let spawned = world.query::<&SpawnedOnEnter>().iter(&world).count();
+        assert_eq!(spawned, 1);
+    }
+
+    #[test]
+    fn first_scene_entered_has_no_previous() {
+        let (mut world, _) = world_in_menu_switching_to("level");
+        world.resource_mut::<SceneManager>().active_scene = None;
+        record_scene_events(&mut world);
+
+        world.run_system_once(scene_switch_system).unwrap();
+
+        assert_eq!(world.resource::<SeenEvents>().0, ["enter level from None"]);
+    }
+
+    #[test]
+    fn unknown_target_triggers_no_scene_event() {
+        let (mut world, _) = world_in_menu_switching_to("nope");
+        record_scene_events(&mut world);
+
+        world.run_system_once(scene_switch_system).unwrap();
+
+        assert!(world.resource::<SeenEvents>().0.is_empty());
+    }
+
+    #[test]
+    fn in_scene_holds_only_for_the_active_scene() {
+        let (mut world, _) = world_in_menu_switching_to("level");
+        let check =
+            |world: &mut World, name: &'static str| world.run_system_once(in_scene(name)).unwrap();
+        assert!(check(&mut world, "menu"));
+        assert!(!check(&mut world, "level"));
+
+        world.run_system_once(scene_switch_system).unwrap();
+        assert!(!check(&mut world, "menu"));
+        assert!(check(&mut world, "level"));
+    }
+
+    #[test]
+    fn in_scene_is_false_without_a_scene_manager() {
+        let mut world = World::new();
+        assert!(!world.run_system_once(in_scene("menu")).unwrap());
     }
 
     #[test]

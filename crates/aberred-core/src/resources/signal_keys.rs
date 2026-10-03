@@ -13,6 +13,9 @@ pub const QUIT_GAME: &str = "quit_game";
 /// String: holds the name of the currently active scene.
 pub const SCENE: &str = "scene";
 
+/// String: holds the name of the scene active before the last scene switch.
+pub const PREVIOUS_SCENE: &str = "previous_scene";
+
 /// Flag: set on an entity's `Signals` component when its non-looped animation
 /// reaches the last frame. Cleared when the animation restarts.
 pub const ANIMATION_ENDED: &str = "animation_ended";

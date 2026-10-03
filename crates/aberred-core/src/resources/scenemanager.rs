@@ -11,7 +11,7 @@
 //! - [`crate::systems::scene_dispatch`] — the systems that read this resource
 //! - `aberredengine::EngineBuilder::add_scene` — builder registration
 
-use bevy_ecs::prelude::Resource;
+use bevy_ecs::prelude::{Entity, Resource};
 use rustc_hash::FxHashMap;
 
 use crate::systems::scene_dispatch::SceneLogic;
@@ -23,6 +23,9 @@ use crate::systems::scene_dispatch::SceneLogic;
 #[derive(Resource)]
 pub struct SceneManager {
     scenes: FxHashMap<String, SceneLogic>,
+    /// Each scene's persistent entity, filled by
+    /// [`spawn_scene_entities`](crate::systems::scene_dispatch::spawn_scene_entities).
+    entities: FxHashMap<String, Entity>,
     /// Currently active scene name (set by `scene_switch_system`).
     pub active_scene: Option<String>,
     /// Initial scene name (set by `EngineBuilder`).
@@ -34,6 +37,7 @@ impl SceneManager {
     pub fn new() -> Self {
         Self {
             scenes: FxHashMap::default(),
+            entities: FxHashMap::default(),
             active_scene: None,
             initial_scene: None,
         }
@@ -47,6 +51,17 @@ impl SceneManager {
     /// Look up a scene's logic callbacks by name.
     pub fn get(&self, name: &str) -> Option<&SceneLogic> {
         self.scenes.get(name)
+    }
+
+    /// The persistent entity standing for the scene `name`, which
+    /// [`SceneEntered`](crate::events::scene::SceneEntered)/[`SceneExited`](crate::events::scene::SceneExited)
+    /// target. `None` for an unregistered name.
+    pub fn scene_entity(&self, name: &str) -> Option<Entity> {
+        self.entities.get(name).copied()
+    }
+
+    pub(crate) fn set_scene_entity(&mut self, name: &str, entity: Entity) {
+        self.entities.insert(name.to_owned(), entity);
     }
 
     /// Returns a sorted list of registered scene names (for error messages).
