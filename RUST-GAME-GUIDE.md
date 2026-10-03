@@ -1152,6 +1152,8 @@ When `WorldSignals` has a value for key `"score"`, the text automatically update
 
 ### Component constructor quick reference
 
+`Sprite`, `Camera2D`, `AnimationResource` and the GUI theme types (`GuiTheme`, `GuiNinePatch`, `GuiButtonSkin`, `GuiProgressBarSkin`) are `#[non_exhaustive]`: build them with their constructors (or `Default` plus field assignment for `GuiTheme`), not struct literals, so the engine can add fields without breaking your game. Their fields stay public to read and write.
+
 | Component | Constructor |
 |-----------|-------------|
 | `MapPosition` | `MapPosition::new(x, y)` |

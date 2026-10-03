@@ -12,6 +12,7 @@ use bevy_ecs::prelude::Component;
 
 #[derive(Component, Clone, Debug, PartialEq)]
 /// Describes how to render a textured quad for an entity.
+#[non_exhaustive]
 pub struct Sprite {
     /// Texture identifier used to look up the GPU resource.
     pub tex_key: Arc<str>,

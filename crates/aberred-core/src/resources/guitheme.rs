@@ -23,6 +23,7 @@ pub const DEFAULT_GUI_THEME_KEY: &str = "default";
 /// Nine-patch metadata for one themed visual: a texture region plus border
 /// offsets in pixels, mapping 1:1 onto raylib's `NPatchInfo`.
 #[derive(Clone, Debug, Default)]
+#[non_exhaustive]
 pub struct GuiNinePatch {
     pub tex_key: Arc<str>,
     pub source: Rect,
@@ -65,6 +66,7 @@ impl GuiNinePatch {
 /// unset, so a game that wants a flat look doesn't have to call
 /// `engine.set_gui_theme_button` once per state.
 #[derive(Clone, Debug, Default)]
+#[non_exhaustive]
 pub struct GuiButtonSkin {
     pub normal: GuiNinePatch,
     pub hover: Option<GuiNinePatch>,
@@ -133,6 +135,7 @@ impl GuiButtonSkin {
 /// background). `engine.set_gui_theme_progress_bar` with `part = "track"`
 /// sets `track`, and `part = "fill"` sets `fill`.
 #[derive(Clone, Debug, Default)]
+#[non_exhaustive]
 pub struct GuiProgressBarSkin {
     /// Background track drawn at the full bar size. `None` = no background.
     pub track: Option<GuiNinePatch>,
@@ -165,6 +168,7 @@ impl GuiProgressBarSkin {
 /// Not a `Resource` itself — stored by name inside [`GuiThemeStore`], which
 /// is the actual resource.
 #[derive(Clone, Debug)]
+#[non_exhaustive]
 pub struct GuiTheme {
     pub panel: GuiNinePatch,
     pub button: Option<GuiButtonSkin>,

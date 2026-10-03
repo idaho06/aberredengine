@@ -14,6 +14,7 @@ use crate::resources::screensize::ScreenSize;
 /// 2D camera parameters: world position (`target`), screen anchor
 /// (`offset`), rotation in degrees, and zoom.
 #[derive(Debug, Clone, Copy, PartialEq)]
+#[non_exhaustive]
 pub struct Camera2D {
     pub target: Vec2,
     pub offset: Vec2,

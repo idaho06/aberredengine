@@ -29,6 +29,7 @@ impl AnimationStore {
 /// animation system interprets them to advance frames and compute per-frame
 /// positions.
 #[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
 pub struct AnimationResource {
     /// Texture key in `aberred_render::resources::texturestore::TextureStore`.
     pub tex_key: Arc<str>,
