@@ -1,8 +1,7 @@
 //! Lua-based phase state machine component.
 //!
-//! [`LuaPhase`] is the Lua-flavoured alias of the shared generic
-//! [`Phase`] component, using callback function names
-//! instead of Rust function pointers.
+//! [`LuaPhase`] is a per-entity state machine whose phases name Lua callback
+//! functions.
 //!
 //! # How It Works
 //!
@@ -42,7 +41,8 @@
 //! end
 //! ```
 
-use aberred_core::components::phase::Phase;
+use bevy_ecs::prelude::Component;
+use rustc_hash::FxHashMap;
 
 /// Callback function names for a single phase.
 #[derive(Clone, Debug, Default)]
@@ -55,9 +55,47 @@ pub struct PhaseCallbacks {
     pub on_exit: Option<String>,
 }
 
-/// Lua-based phase state machine component.
-///
-/// Unlike the default Rust [`Phase`] component which
-/// stores function pointers, this alias stores callback function names that
-/// are looked up and called in the Lua runtime.
-pub type LuaPhase = Phase<PhaseCallbacks>;
+/// Lua-based phase state machine component, processed by
+/// [`lua_phase_system`](crate::systems::luaphase::lua_phase_system).
+#[derive(Clone, Debug, Component)]
+pub struct LuaPhase {
+    /// The current phase label (e.g., "idle", "playing").
+    pub current: String,
+    /// The phase before the last transition, if any.
+    pub previous: Option<String>,
+    /// Set to request a transition to a new phase. Cleared after processing.
+    pub next: Option<String>,
+    /// Seconds elapsed since entering the current phase.
+    pub time_in_phase: f32,
+    /// Whether to call on_enter on the first frame.
+    pub needs_enter_callback: bool,
+    /// Map of phase name → callback function names.
+    pub phases: FxHashMap<String, PhaseCallbacks>,
+}
+
+impl LuaPhase {
+    /// Create a new LuaPhase with the given initial phase and phase definitions.
+    pub fn new(
+        initial_phase: impl Into<String>,
+        phases: FxHashMap<String, PhaseCallbacks>,
+    ) -> Self {
+        Self {
+            current: initial_phase.into(),
+            previous: None,
+            next: None,
+            time_in_phase: 0.0,
+            needs_enter_callback: true,
+            phases,
+        }
+    }
+
+    /// Get the callbacks for the current phase.
+    pub fn current_callbacks(&self) -> Option<&PhaseCallbacks> {
+        self.phases.get(&self.current)
+    }
+
+    /// Get the callbacks for a specific phase.
+    pub fn get_callbacks(&self, phase: &str) -> Option<&PhaseCallbacks> {
+        self.phases.get(phase)
+    }
+}

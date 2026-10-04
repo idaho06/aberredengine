@@ -13,8 +13,9 @@
 //!
 //! 1. If `needs_enter_callback` is set, call the on_enter function for current phase
 //! 2. If `next` is set (transition requested):
-//!    - Call on_exit for old phase
 //!    - Swap phases, reset time
+//!    - Call on_exit for the old phase (looked up by the old name; `current`
+//!      is already the new phase)
 //!    - Call on_enter for new phase
 //! 3. Call on_update for current phase
 //! 4. Increment `time_in_phase` by delta
@@ -37,7 +38,7 @@ use bevy_ecs::prelude::*;
 use bevy_ecs::system::Local;
 use mlua::prelude::*;
 
-use crate::components::luaphase::LuaPhase;
+use crate::components::luaphase::{LuaPhase, PhaseCallbacks};
 use crate::resources::lua_runtime::{LuaPhaseSnapshot, LuaRuntime, PhaseCmd};
 use crate::systems::lua_commands::{
     ContextQueries, DrainScope, EffectCmdBufs, EntityCmdQueries, build_entity_context,
@@ -49,9 +50,6 @@ use aberred_core::resources::input::InputState;
 use aberred_core::resources::systemsstore::SystemsStore;
 use aberred_core::resources::worldsignals::WorldSignals;
 use aberred_core::resources::worldtime::WorldTime;
-use aberred_core::systems::phase_core::{
-    PhaseRunner, apply_callback_transitions, run_phase_callbacks,
-};
 use log::{error, warn};
 
 fn build_phase_context(
@@ -134,6 +132,177 @@ fn call_phase_exit(lua_runtime: &LuaRuntime, fn_name: &str, ctx_table: &LuaTable
     lua_runtime.call_named(fn_name, "Phase", |func| func.call::<()>(ctx_table.clone()));
 }
 
+/// Lifecycle dispatcher for [`run_phase_callbacks`].
+///
+/// [`call_enter`](Self::call_enter), [`call_update`](Self::call_update), and
+/// [`call_exit`](Self::call_exit) map directly to the three phase lifecycle
+/// events. Returning `Some(next_phase)` from `call_enter` or `call_update`
+/// requests a transition to `next_phase`; returning `None` leaves the entity in
+/// its current phase.
+pub(crate) trait PhaseRunner {
+    /// Run the current phase's enter callback.
+    fn call_enter(
+        &mut self,
+        entity: Entity,
+        phase: &LuaPhase,
+        callbacks: &PhaseCallbacks,
+    ) -> Option<String>;
+
+    /// Run the current phase's per-frame update callback.
+    fn call_update(
+        &mut self,
+        entity: Entity,
+        phase: &LuaPhase,
+        callbacks: &PhaseCallbacks,
+        delta: f32,
+    ) -> Option<String>;
+
+    /// Run the previous phase's exit callback after a transition swap.
+    fn call_exit(&mut self, entity: Entity, phase: &LuaPhase, callbacks: &PhaseCallbacks);
+}
+
+/// Run one frame of phase lifecycle processing for every [`LuaPhase`] entity.
+///
+/// For each entity this function:
+/// 1. Fires `on_enter` if `needs_enter_callback` is set.
+/// 2. Applies any already-queued `phase.next` transition, including `on_exit` for
+///    the old phase and `on_enter` for the new one.
+/// 3. Runs the current phase's `on_update` callback.
+/// 4. Adds `delta` to `time_in_phase`.
+///
+/// Any phase name returned by any of the above callbacks is collected into
+/// `callback_transitions` for deferred application via [`apply_callback_transitions`].
+///
+/// `entity_scratch` pre-collects entity IDs before the mutation-heavy loop so the
+/// query is not iterated while individual entities are being re-fetched and
+/// mutated.
+pub(crate) fn run_phase_callbacks(
+    phase_query: &mut Query<(Entity, &mut LuaPhase)>,
+    delta: f32,
+    callback_transitions: &mut Vec<(Entity, String)>,
+    entity_scratch: &mut Vec<Entity>,
+    runner: &mut impl PhaseRunner,
+) {
+    entity_scratch.extend(phase_query.iter().map(|(entity, _)| entity));
+
+    for entity in entity_scratch.iter().copied() {
+        // Borrow isolation: each `get()` scope must end before a later `get_mut()`
+        // on the same query, so immutable reads are wrapped in short blocks.
+        let needs_enter = {
+            let Ok((_, phase)) = phase_query.get(entity) else {
+                continue;
+            };
+            phase.needs_enter_callback
+        };
+
+        if needs_enter {
+            if let Ok((_, mut phase)) = phase_query.get_mut(entity) {
+                phase.needs_enter_callback = false;
+            }
+
+            let enter_transition = {
+                let Ok((_, phase)) = phase_query.get(entity) else {
+                    continue;
+                };
+                phase
+                    .current_callbacks()
+                    .and_then(|callbacks| runner.call_enter(entity, phase, callbacks))
+            };
+
+            if let Some(next_phase) = enter_transition {
+                callback_transitions.push((entity, next_phase));
+            }
+        }
+
+        let pending_transition = {
+            let Ok((_, mut phase)) = phase_query.get_mut(entity) else {
+                continue;
+            };
+            phase.next.take()
+        };
+
+        if let Some(next_phase) = pending_transition {
+            let old_phase = {
+                let Ok((_, mut phase)) = phase_query.get_mut(entity) else {
+                    continue;
+                };
+                let old_phase = std::mem::replace(&mut phase.current, next_phase);
+                phase.previous = Some(old_phase.clone());
+                phase.time_in_phase = 0.0;
+                old_phase
+            };
+
+            // exit called after swap: phase.current is already the new phase,
+            // callbacks are looked up by old phase name
+            let Ok((_, phase)) = phase_query.get(entity) else {
+                continue;
+            };
+            if let Some(callbacks) = phase.get_callbacks(&old_phase) {
+                runner.call_exit(entity, phase, callbacks);
+            }
+
+            let enter_transition = {
+                let Ok((_, phase)) = phase_query.get(entity) else {
+                    continue;
+                };
+                phase
+                    .current_callbacks()
+                    .and_then(|callbacks| runner.call_enter(entity, phase, callbacks))
+            };
+
+            if let Some(next_phase) = enter_transition {
+                callback_transitions.push((entity, next_phase));
+            }
+        }
+
+        let update_transition = {
+            let Ok((_, phase)) = phase_query.get(entity) else {
+                continue;
+            };
+            phase
+                .current_callbacks()
+                .and_then(|callbacks| runner.call_update(entity, phase, callbacks, delta))
+        };
+
+        if let Some(next_phase) = update_transition {
+            callback_transitions.push((entity, next_phase));
+        }
+
+        if let Ok((_, mut phase)) = phase_query.get_mut(entity) {
+            phase.time_in_phase += delta;
+        }
+    }
+}
+
+/// Store a callback-requested phase change in [`LuaPhase::next`].
+///
+/// Callback returns are not applied inline inside [`run_phase_callbacks`]; they are
+/// queued first so the current entity-loop pass finishes before the transition is
+/// picked up by the next phase-processing step.
+pub(crate) fn queue_phase_transition(
+    phase_query: &mut Query<(Entity, &mut LuaPhase)>,
+    entity: Entity,
+    next_phase: String,
+) {
+    if let Ok((_, mut phase)) = phase_query.get_mut(entity) {
+        phase.next = Some(next_phase);
+    }
+}
+
+/// Drain callback-requested transitions after the entity loop completes.
+///
+/// Deferring this step avoids mutating phase state in the middle of
+/// [`run_phase_callbacks`], which would otherwise make callback-triggered
+/// transitions re-enter the lifecycle flow during the same pass.
+pub(crate) fn apply_callback_transitions(
+    phase_query: &mut Query<(Entity, &mut LuaPhase)>,
+    callback_transitions: &mut Vec<(Entity, String)>,
+) {
+    for (entity, next_phase) in callback_transitions.drain(..) {
+        queue_phase_transition(phase_query, entity, next_phase);
+    }
+}
+
 struct LuaPhaseRunner<'a, 'w, 's> {
     lua_runtime: &'a LuaRuntime,
     input_table: &'a LuaTable,
@@ -141,14 +310,12 @@ struct LuaPhaseRunner<'a, 'w, 's> {
     cmd_queries: &'a EntityCmdQueries<'w, 's>,
 }
 
-impl<'a, 'w, 's> PhaseRunner<crate::components::luaphase::PhaseCallbacks>
-    for LuaPhaseRunner<'a, 'w, 's>
-{
+impl<'a, 'w, 's> PhaseRunner for LuaPhaseRunner<'a, 'w, 's> {
     fn call_enter(
         &mut self,
         entity: Entity,
         lua_phase: &LuaPhase,
-        callbacks: &crate::components::luaphase::PhaseCallbacks,
+        callbacks: &PhaseCallbacks,
     ) -> Option<String> {
         let fn_name = callbacks.on_enter.as_deref()?;
 
@@ -178,7 +345,7 @@ impl<'a, 'w, 's> PhaseRunner<crate::components::luaphase::PhaseCallbacks>
         &mut self,
         entity: Entity,
         lua_phase: &LuaPhase,
-        callbacks: &crate::components::luaphase::PhaseCallbacks,
+        callbacks: &PhaseCallbacks,
         delta: f32,
     ) -> Option<String> {
         let fn_name = callbacks.on_update.as_deref()?;
@@ -206,12 +373,7 @@ impl<'a, 'w, 's> PhaseRunner<crate::components::luaphase::PhaseCallbacks>
         }
     }
 
-    fn call_exit(
-        &mut self,
-        entity: Entity,
-        lua_phase: &LuaPhase,
-        callbacks: &crate::components::luaphase::PhaseCallbacks,
-    ) {
+    fn call_exit(&mut self, entity: Entity, lua_phase: &LuaPhase, callbacks: &PhaseCallbacks) {
         let Some(fn_name) = callbacks.on_exit.as_deref() else {
             return;
         };
@@ -321,9 +483,9 @@ pub fn lua_phase_system(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::components::luaphase::PhaseCallbacks;
     use aberred_core::testing::approx_eq;
     use bevy_ecs::system::RunSystemOnce;
+    use rustc_hash::FxHashMap;
 
     /// Minimal world for `lua_phase_system`: exactly the resources its
     /// params read, plus a fresh `LuaRuntime`.
@@ -370,7 +532,7 @@ mod tests {
                 .expect("Failed to load Lua phase callback");
         }
 
-        let mut phases = rustc_hash::FxHashMap::default();
+        let mut phases = FxHashMap::default();
         phases.insert("idle".into(), PhaseCallbacks::default());
         phases.insert(
             "moving".into(),
@@ -398,5 +560,119 @@ mod tests {
                 .expect("exit time signal"),
             0.0
         ));
+    }
+
+    /// Lua callbacks that log each call as `kind:ctx.phase:fn name` into the
+    /// global `calls`; `idle_up` returns the global `go_to` (nil by default).
+    const RECORDING_CALLBACKS: &str = r#"
+        calls = {}
+        local function log(kind, ctx, name)
+            table.insert(calls, kind .. ":" .. ctx.phase .. ":" .. name)
+        end
+        function idle_in(ctx, input) log("enter", ctx, "idle_in") end
+        function idle_up(ctx, input, dt) log("update", ctx, "idle_up") return go_to end
+        function idle_out(ctx) log("exit", ctx, "idle_out") end
+        function run_in(ctx, input) log("enter", ctx, "run_in") end
+        function run_up(ctx, input, dt) log("update", ctx, "run_up") end
+    "#;
+
+    /// World with [`RECORDING_CALLBACKS`] loaded and one `LuaPhase` entity in
+    /// `idle` (with `idle`/`run` phases).
+    fn make_recording_world(delta: f32) -> (World, Entity) {
+        let mut world = make_lua_phase_world(delta);
+        world
+            .non_send::<LuaRuntime>()
+            .lua()
+            .load(RECORDING_CALLBACKS)
+            .exec()
+            .expect("Failed to load recording callbacks");
+
+        let mut phases = FxHashMap::default();
+        phases.insert(
+            "idle".into(),
+            PhaseCallbacks {
+                on_enter: Some("idle_in".into()),
+                on_update: Some("idle_up".into()),
+                on_exit: Some("idle_out".into()),
+            },
+        );
+        phases.insert(
+            "run".into(),
+            PhaseCallbacks {
+                on_enter: Some("run_in".into()),
+                on_update: Some("run_up".into()),
+                on_exit: None,
+            },
+        );
+        let entity = world.spawn(LuaPhase::new("idle", phases)).id();
+        (world, entity)
+    }
+
+    /// Returns and clears the calls logged by [`RECORDING_CALLBACKS`].
+    fn take_calls(world: &World) -> Vec<String> {
+        world
+            .non_send::<LuaRuntime>()
+            .lua()
+            .load("local c = calls; calls = {}; return c")
+            .eval()
+            .expect("calls should be a list of strings")
+    }
+
+    /// Lifecycle order: first-run enter, then update; a queued `next` swaps
+    /// first, so exit sees the new `current` but runs the old phase's
+    /// callback, then enter and update run for the new phase.
+    #[test]
+    fn lua_phase_lifecycle_order() {
+        let (mut world, entity) = make_recording_world(0.25);
+
+        tick_lua_phases(&mut world);
+        assert_eq!(
+            take_calls(&world),
+            ["enter:idle:idle_in", "update:idle:idle_up"]
+        );
+
+        tick_lua_phases(&mut world);
+        assert_eq!(
+            take_calls(&world),
+            ["update:idle:idle_up"],
+            "enter fires only once"
+        );
+
+        world.get_mut::<LuaPhase>(entity).unwrap().next = Some("run".into());
+        tick_lua_phases(&mut world);
+        assert_eq!(
+            take_calls(&world),
+            ["exit:run:idle_out", "enter:run:run_in", "update:run:run_up"]
+        );
+
+        let phase = world.get::<LuaPhase>(entity).unwrap();
+        assert_eq!(phase.previous.as_deref(), Some("idle"));
+        assert!(phase.next.is_none());
+        assert!(approx_eq(phase.time_in_phase, 0.25));
+    }
+
+    /// A transition returned by `on_update` is queued into `next` and applied
+    /// on the following tick, not the current one.
+    #[test]
+    fn lua_phase_returned_transition_applies_next_tick() {
+        let (mut world, entity) = make_recording_world(0.25);
+        world
+            .non_send::<LuaRuntime>()
+            .lua()
+            .globals()
+            .set("go_to", "run")
+            .expect("set go_to");
+
+        tick_lua_phases(&mut world);
+        take_calls(&world);
+        let phase = world.get::<LuaPhase>(entity).unwrap();
+        assert_eq!(phase.current, "idle");
+        assert_eq!(phase.next.as_deref(), Some("run"));
+
+        tick_lua_phases(&mut world);
+        assert_eq!(
+            take_calls(&world),
+            ["exit:run:idle_out", "enter:run:run_in", "update:run:run_up"]
+        );
     }
 }

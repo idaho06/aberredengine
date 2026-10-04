@@ -300,10 +300,10 @@ The previous section covers how Lua calls *into* Rust. This section covers the o
 
 ### Phase System
 
-`lua_phase_system` runs once per sim tick over every `LuaPhase` entity (`LuaPhase` is the generic `Phase<C>` component specialized over `PhaseCallbacks` — named Lua function strings instead of Rust fn pointers). Per entity, in phase-lifecycle order:
+`lua_phase_system` runs once per sim tick over every `LuaPhase` entity (a Lua-owned component whose `PhaseCallbacks` hold named Lua function strings). Per entity, in phase-lifecycle order:
 
-1. If `needs_enter_callback` is set (freshly spawned, or a transition just completed), call `phase_on_enter` — `(ctx, input)`, with `ctx.previous_phase` populated.
-2. If a transition to a new phase is pending, call the *old* phase's `phase_on_exit` — `(ctx)` only, no `input` — then swap `current`/`previous`, reset `time_in_phase` to 0, and call the *new* phase's `phase_on_enter`.
+1. If `needs_enter_callback` is set (freshly spawned), call `phase_on_enter` — `(ctx, input)`, with `ctx.previous_phase` populated.
+2. If a transition to a new phase is pending, swap `current`/`previous` and reset `time_in_phase` to 0, then call the *old* phase's `phase_on_exit` — `(ctx)` only, no `input`; its ctx already reports the new phase — and the *new* phase's `phase_on_enter`.
 3. Call `phase_on_update` — `(ctx, input, dt)`.
 4. `time_in_phase` accumulates by `dt` regardless of whether a callback ran.
 

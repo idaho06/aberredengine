@@ -1,10 +1,7 @@
 //! Rust-based phase state machine component.
 //!
-//! [`Phase`] is the shared generic phase-state storage used by both the
-//! Rust callback path and the Lua callback path. The default
-//! `Phase<PhaseCallbackFns>` form is the Rust-facing component, while
-//! `LuaPhase` (`aberred_lua::components::luaphase`) is a type alias over the same
-//! storage with Lua callback names.
+//! [`Phase`] is the generic phase-state storage of the Rust callback path. The
+//! default `Phase<PhaseCallbackFns>` form is the Rust-facing component.
 //!
 //! # How It Works
 //!
@@ -102,9 +99,7 @@ impl std::fmt::Debug for PhaseCallbackFns {
 ///
 /// The default `Phase` type stores Rust function pointers via
 /// [`PhaseCallbackFns`] and is processed by
-/// [`phase_system`](crate::systems::phase::phase_system). The Lua-facing
-/// `LuaPhase` (`aberred_lua::components::luaphase`) alias reuses this same storage with
-/// a different callback payload type.
+/// [`phase_system`](crate::systems::phase::phase_system).
 #[derive(Clone, Component)]
 pub struct Phase<C = PhaseCallbackFns> {
     /// The current phase label (e.g., "idle", "playing").

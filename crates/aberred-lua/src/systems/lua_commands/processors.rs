@@ -10,11 +10,12 @@ use aberred_core::resources::camera2d::Camera2D;
 use bevy_ecs::prelude::*;
 use log::{debug, warn};
 
+use crate::components::luaphase::LuaPhase;
 use crate::resources::lua_runtime::{
     AnimationCmd, AssetCmd, AudioLuaCmd, CameraCmd, CameraFollowCmd, GameConfigCmd, GroupCmd,
     InputCmd, PhaseCmd, RenderCmd, SignalCmd,
 };
-use aberred_core::components::phase::Phase;
+use crate::systems::luaphase::queue_phase_transition;
 use aberred_core::components::shadow::Shadow;
 use aberred_core::math::{Color, Rect};
 use aberred_core::protocol::audio::AudioCmd;
@@ -31,7 +32,6 @@ use aberred_core::resources::input_bindings::{InputBindings, binding_from_str};
 use aberred_core::resources::postprocessshader::PostProcessShader;
 use aberred_core::resources::texturefilter::TextureFilter;
 use aberred_core::resources::worldsignals::WorldSignals;
-use aberred_core::systems::phase_core::queue_phase_transition;
 
 /// Process a single audio command from Lua and write to the audio command channel.
 pub fn process_audio_command(audio_cmd_writer: &mut MessageWriter<AudioCmd>, cmd: AudioLuaCmd) {
@@ -155,10 +155,7 @@ pub fn process_camera_command(commands: &mut Commands, cmd: CameraCmd) {
 }
 
 /// Process a single phase command from Lua and apply it to the appropriate entity.
-pub fn process_phase_command<C>(phase_query: &mut Query<(Entity, &mut Phase<C>)>, cmd: PhaseCmd)
-where
-    C: Send + Sync + 'static,
-{
+pub fn process_phase_command(phase_query: &mut Query<(Entity, &mut LuaPhase)>, cmd: PhaseCmd) {
     match cmd {
         PhaseCmd::TransitionTo { entity_id, phase } => {
             if let Some(entity) = super::entity_cmd::resolve_entity(entity_id) {

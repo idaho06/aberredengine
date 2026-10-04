@@ -1,11 +1,9 @@
-//! Shared phase lifecycle runner used by both the Rust and Lua phase systems.
+//! Phase lifecycle runner used by the Rust phase system.
 //!
 //! [`run_phase_callbacks`] owns the backend-agnostic control flow for
 //! [`Phase<C>`](crate::components::phase::Phase) state machines. The concrete
-//! systems supply a [`PhaseRunner`] implementation that maps the three lifecycle
-//! stages to the appropriate backend: `RustPhaseRunner` calls Rust function
-//! pointers directly, while `LuaPhaseRunner` resolves named Lua callbacks and
-//! runs them through the scripting runtime.
+//! system supplies a [`PhaseRunner`] implementation that maps the three lifecycle
+//! stages to its backend: `RustPhaseRunner` calls Rust function pointers directly.
 
 use bevy_ecs::prelude::*;
 
@@ -13,10 +11,8 @@ use crate::components::phase::Phase;
 
 /// Backend-specific lifecycle dispatcher for the shared phase update loop.
 ///
-/// `C` is the callback payload stored inside [`Phase<C>`]. In the Rust phase
-/// path this is [`PhaseCallbackFns`](crate::components::phase::PhaseCallbackFns),
-/// while the Lua phase path uses
-/// `PhaseCallbacks` (`aberred_lua::components::luaphase`).
+/// `C` is the callback payload stored inside [`Phase<C>`]; in the Rust phase
+/// path this is [`PhaseCallbackFns`](crate::components::phase::PhaseCallbackFns).
 ///
 /// [`call_enter`](Self::call_enter), [`call_update`](Self::call_update), and
 /// [`call_exit`](Self::call_exit) map directly to the three phase lifecycle
