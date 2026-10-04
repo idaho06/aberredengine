@@ -1,6 +1,6 @@
 //! Lua-priority shadow systems.
 //!
-//! The bulk of the engine's systems now live in `aberred_core::systems`
+//! The bulk of the engine's systems live in `aberred_core::systems`
 //! (re-exported as `aberredengine::core::systems`). This module holds two
 //! "shadow" modules (`collision_rule_index`, `mapspawn`) that re-export one
 //! function per module unconditionally from core, then override it under

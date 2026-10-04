@@ -564,11 +564,8 @@ pub fn menu_selection_observer(
     if menu.on_select_callback.is_some() {
         return;
     }
+    // A menu without `MenuActions` is handled by `MenuSelected` observers.
     let Some(menu_actions) = menu_actions else {
-        warn!(
-            "menu_selection_observer: No MenuActions found for item_id {:?}",
-            event.item_id
-        );
         return;
     };
 

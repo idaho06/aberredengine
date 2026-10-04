@@ -166,10 +166,7 @@ mod tests {
     fn hovered_when_cursor_inside_and_mouse_up() {
         let mut world = new_world();
         let btn = spawn_interactable(&mut world, 10.0, 10.0, 50.0, 20.0, 0.0);
-        world.resource_mut::<InputState>().mouse_x = 20.0;
-        world.resource_mut::<InputState>().mouse_y = 15.0;
-
-        tick(&mut world);
+        mouse_frame(&mut world, 20.0, 15.0, false);
 
         assert_eq!(
             world.get::<GuiInteractable>(btn).unwrap().state,
@@ -181,14 +178,7 @@ mod tests {
     fn pressed_when_cursor_inside_and_mouse_down() {
         let mut world = new_world();
         let btn = spawn_interactable(&mut world, 10.0, 10.0, 50.0, 20.0, 0.0);
-        {
-            let mut input = world.resource_mut::<InputState>();
-            input.mouse_x = 20.0;
-            input.mouse_y = 15.0;
-            input.mouse_left_button.active = true;
-        }
-
-        tick(&mut world);
+        mouse_frame(&mut world, 20.0, 15.0, true);
 
         assert_eq!(
             world.get::<GuiInteractable>(btn).unwrap().state,
@@ -200,14 +190,7 @@ mod tests {
     fn normal_when_cursor_outside_regardless_of_mouse_button() {
         let mut world = new_world();
         let btn = spawn_interactable(&mut world, 10.0, 10.0, 50.0, 20.0, 0.0);
-        {
-            let mut input = world.resource_mut::<InputState>();
-            input.mouse_x = 999.0;
-            input.mouse_y = 999.0;
-            input.mouse_left_button.active = true;
-        }
-
-        tick(&mut world);
+        mouse_frame(&mut world, 999.0, 999.0, true);
 
         assert_eq!(
             world.get::<GuiInteractable>(btn).unwrap().state,
@@ -236,7 +219,7 @@ mod tests {
     }
 
     #[test]
-    fn click_fires_on_release_while_inside() {
+    fn release_inside_consumes_click() {
         let mut world = new_world();
         let btn = spawn_interactable(&mut world, 10.0, 10.0, 50.0, 20.0, 0.0);
 
@@ -282,13 +265,7 @@ mod tests {
         let mut world = new_world();
         let low = spawn_interactable(&mut world, 0.0, 0.0, 100.0, 100.0, 5.0);
         let high = spawn_interactable(&mut world, 0.0, 0.0, 100.0, 100.0, 10.0);
-        {
-            let mut input = world.resource_mut::<InputState>();
-            input.mouse_x = 50.0;
-            input.mouse_y = 50.0;
-        }
-
-        tick(&mut world);
+        mouse_frame(&mut world, 50.0, 50.0, false);
 
         assert_eq!(
             world.get::<GuiInteractable>(high).unwrap().state,
@@ -307,13 +284,7 @@ mod tests {
         let second_spawned = spawn_interactable(&mut world, 0.0, 0.0, 100.0, 100.0, 5.0);
         let lower_id = first_spawned.min(second_spawned);
         let higher_id = first_spawned.max(second_spawned);
-        {
-            let mut input = world.resource_mut::<InputState>();
-            input.mouse_x = 50.0;
-            input.mouse_y = 50.0;
-        }
-
-        tick(&mut world);
+        mouse_frame(&mut world, 50.0, 50.0, false);
 
         assert_eq!(
             world.get::<GuiInteractable>(lower_id).unwrap().state,
@@ -331,13 +302,7 @@ mod tests {
         let mut world = new_world();
         let btn = spawn_interactable(&mut world, 10.0, 10.0, 50.0, 20.0, 0.0);
         world.get_mut::<GuiInteractable>(btn).unwrap().state = GuiWidgetState::Disabled;
-        {
-            let mut input = world.resource_mut::<InputState>();
-            input.mouse_x = 20.0;
-            input.mouse_y = 15.0;
-        }
-
-        tick(&mut world);
+        mouse_frame(&mut world, 20.0, 15.0, false);
 
         assert_eq!(
             world.get::<GuiInteractable>(btn).unwrap().state,
@@ -350,15 +315,7 @@ mod tests {
         let mut world = new_world();
         let btn = spawn_interactable(&mut world, 10.0, 10.0, 50.0, 20.0, 0.0);
         world.get_mut::<GuiInteractable>(btn).unwrap().state = GuiWidgetState::Disabled;
-        {
-            let mut input = world.resource_mut::<InputState>();
-            input.mouse_x = 20.0;
-            input.mouse_y = 15.0;
-            input.mouse_left_button.active = true;
-            input.mouse_left_button.just_pressed = true;
-        }
-
-        tick(&mut world);
+        mouse_frame(&mut world, 20.0, 15.0, true);
 
         assert!(world.resource::<GuiInputState>().click_consumed_this_frame);
         assert_eq!(
@@ -379,26 +336,13 @@ mod tests {
                 ZIndex(0.0),
             ))
             .id();
-        {
-            let mut input = world.resource_mut::<InputState>();
-            input.mouse_x = 20.0;
-            input.mouse_y = 15.0;
-            input.mouse_left_button.active = true;
-            input.mouse_left_button.just_pressed = true;
-        }
-        tick(&mut world);
+        mouse_frame(&mut world, 20.0, 15.0, true);
         assert_eq!(
             world.get::<GuiInteractable>(img).unwrap().state,
             GuiWidgetState::Pressed
         );
 
-        {
-            let mut input = world.resource_mut::<InputState>();
-            input.mouse_left_button.active = false;
-            input.mouse_left_button.just_pressed = false;
-            input.mouse_left_button.just_released = true;
-        }
-        tick(&mut world);
+        mouse_frame(&mut world, 20.0, 15.0, false);
 
         assert_eq!(
             world.get::<GuiInteractable>(img).unwrap().state,

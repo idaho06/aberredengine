@@ -8,7 +8,6 @@
 use aberred_core::components::menu::Menu;
 use aberred_core::events::menu::MenuSelected;
 use bevy_ecs::prelude::*;
-use log::{error, warn};
 
 /// Calls the selected menu's Lua `on_select_callback` with a ctx table of
 /// `menu_id`, `item_id` and `item_index`.
@@ -25,17 +24,13 @@ pub fn lua_menu_selection_observer(
     else {
         return;
     };
-    if !lua_runtime.has_function(callback_name) {
-        warn!(target: "lua", "menu callback '{}' not found", callback_name);
-        return;
-    }
-    let lua_ctx = lua_runtime.lua().create_table().unwrap();
-    lua_ctx.set("menu_id", event.entity.to_bits()).unwrap();
-    lua_ctx.set("item_id", event.item_id.as_str()).unwrap();
-    lua_ctx.set("item_index", event.index).unwrap();
-    if let Err(e) = lua_runtime.call_function::<_, ()>(callback_name, lua_ctx) {
-        error!(target: "lua", "Error in menu callback '{}': {}", callback_name, e);
-    }
+    lua_runtime.call_named(callback_name, "Menu", |f| {
+        let lua_ctx = lua_runtime.lua().create_table()?;
+        lua_ctx.set("menu_id", event.entity.to_bits())?;
+        lua_ctx.set("item_id", event.item_id.as_str())?;
+        lua_ctx.set("item_index", event.index)?;
+        f.call::<()>(lua_ctx)
+    });
 }
 
 #[cfg(test)]
