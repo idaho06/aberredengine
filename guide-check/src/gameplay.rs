@@ -177,25 +177,18 @@ mod menus {
     ctx.commands.spawn((menu, actions));
     } // GLUE
 
-    fn spawn_with_callback(ctx: &mut GameCtx, menu: Menu) { // GLUE
-    use aberredengine::core::components::menu::MenuRustCallback;
+    fn spawn_with_observer(mut commands: Commands, menu: Menu) { // GLUE
     use aberredengine::prelude::*;
 
-    fn on_menu_select(menu_entity: Entity, item_id: &str, item_index: usize, ctx: &mut GameCtx) {
-        match item_id {
-            "start" => {
-                ctx.world_signals.request_scene("level01");
-            }
-            "quit" => {
-                ctx.world_signals.request_quit();
-            }
+    fn on_menu_select(ev: On<MenuSelected>, mut signals: ResMut<WorldSignals>) {
+        match ev.item_id.as_str() {
+            "start" => signals.request_scene("level01"),
+            "quit" => signals.request_quit(),
             _ => {}
         }
     }
 
-    ctx.commands.spawn((
-        menu.with_on_rust_callback(on_menu_select),
-    ));
+    commands.spawn(menu).observe(on_menu_select);
     } // GLUE
 
     use aberredengine::prelude::*;

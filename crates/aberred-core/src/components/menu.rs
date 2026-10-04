@@ -5,33 +5,16 @@
 //! - [`MenuItem`] – describes a single menu entry (label, position, etc.)
 //! - [`MenuActions`] – maps menu item IDs to actions like scene switching
 //! - [`MenuAction`] – the action to perform when a menu item is selected
-//! - [`MenuRustCallback`] – Rust fn-pointer type for menu selection callbacks
 //!
 //! See [`crate::systems::menu`] for the menu spawn, input, and selection systems.
+//! A confirmed item triggers [`MenuSelected`](crate::events::menu::MenuSelected)
+//! on the menu entity.
 
 use crate::math::Vec2;
 use bevy_ecs::prelude::{Component, Entity};
 use rustc_hash::FxHashMap;
 
 use crate::math::Color;
-use crate::systems::GameCtx;
-
-/// Type alias for a Rust menu selection callback.
-///
-/// Stored on the [`Menu`] component and called when any item is selected.
-///
-/// # Arguments
-///
-/// - `menu_entity` — the entity holding the [`Menu`] component
-/// - `item_id`     — the ID string of the selected item
-/// - `item_index`  — 0-based index of the selected item in `menu.items`
-/// - `ctx`         — full ECS access (commands, queries, resources)
-///
-/// # Related
-///
-/// - [`crate::systems::GameCtx`] – bundled ECS access passed to the callback
-/// - [`crate::systems::menu::menu_selection_observer`] – dispatches to this callback
-pub type MenuRustCallback = for<'w, 's> fn(Entity, &str, usize, &mut GameCtx<'w, 's>);
 
 /// A single item within a [`Menu`].
 ///
@@ -76,11 +59,9 @@ pub struct Menu {
     pub origin: Vec2,
     /// Whether to use screen-space positioning (true) or world-space (false).
     pub use_screen_space: bool,
-    /// Optional Lua callback invoked when any item is selected.
+    /// Optional Lua callback invoked when any item is selected. When set, it
+    /// replaces [`MenuActions`] dispatch.
     pub on_select_callback: Option<String>,
-    /// Optional Rust fn-pointer callback invoked when any item is selected.
-    /// Priority: Lua callback → Rust callback → [`MenuActions`].
-    pub on_rust_callback: Option<MenuRustCallback>,
     /// Maximum number of visible items (None = show all).
     pub visible_count: Option<usize>,
     /// Index of first visible item when scrolling.
@@ -123,7 +104,6 @@ impl Menu {
             origin,
             use_screen_space,
             on_select_callback: None,
-            on_rust_callback: None,
             visible_count: None,
             scroll_offset: 0,
             top_indicator_entity: None,
@@ -151,10 +131,6 @@ impl Menu {
     }
     pub fn with_on_select_callback(mut self, callback: impl Into<String>) -> Self {
         self.on_select_callback = Some(callback.into());
-        self
-    }
-    pub fn with_on_rust_callback(mut self, callback: MenuRustCallback) -> Self {
-        self.on_rust_callback = Some(callback);
         self
     }
     pub fn with_visible_count(mut self, count: usize) -> Self {

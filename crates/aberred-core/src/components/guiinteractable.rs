@@ -31,9 +31,8 @@ pub enum GuiWidgetState {
 /// Type alias for a Rust click callback, widget-agnostic (shared by
 /// `GuiButton` and `GuiImage`).
 ///
-/// Mirrors [`MenuRustCallback`](super::menu::MenuRustCallback)'s shape: the
-/// click edge itself is the signal, so no raw input access is needed beyond
-/// `GameCtx`'s existing commands/queries/resources.
+/// The click edge itself is the signal, so no raw input access is needed
+/// beyond `GameCtx`'s existing commands/queries/resources.
 pub type GuiRustCallback = for<'w, 's> fn(Entity, &mut GameCtx<'w, 's>);
 
 /// Hit-test/click state shared by every clickable GUI widget (`GuiButton`,

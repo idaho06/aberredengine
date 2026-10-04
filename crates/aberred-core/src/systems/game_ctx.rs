@@ -19,7 +19,7 @@
 //! # Related
 //!
 //! - [`crate::components::collision::CollisionCallback`] – fn-pointer type for collision callbacks
-//! - [`crate::components::menu::MenuRustCallback`] – fn-pointer type for menu callbacks
+//! - [`crate::components::guiinteractable::GuiRustCallback`] – fn-pointer type for GUI click callbacks
 
 use bevy_ecs::prelude::*;
 use bevy_ecs::system::SystemParam;
@@ -54,8 +54,8 @@ use crate::resources::worldtime::WorldTime;
 /// Provides commands, a complete set of component queries, and the most
 /// commonly needed resources. All Rust callback types —
 /// [`CollisionCallback`](crate::components::collision::CollisionCallback),
-/// [`MenuRustCallback`](crate::components::menu::MenuRustCallback),
-/// and the scene callbacks — receive `&mut GameCtx`.
+/// and [`GuiRustCallback`](crate::components::guiinteractable::GuiRustCallback)
+/// — receive `&mut GameCtx`.
 ///
 /// If your system takes `&mut GameCtx` alongside its own component query,
 /// check whether `GameCtx` already covers that component first — borrow it

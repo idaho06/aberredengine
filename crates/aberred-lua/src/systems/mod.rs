@@ -1,10 +1,11 @@
 //! Lua-callback systems, observers, and command dispatch.
 //!
 //! See the crate root doc comment for the sim/logic-world boundary this
-//! crate sits at. `lua_menu`/`lua_gui_interactable_click`/
+//! crate sits at. `lua_gui_interactable_click`/
 //! `lua_collision_rule_index`/`lua_mapspawn` are the Lua-priority bodies the
 //! facade's same-named shadow modules re-export under
-//! `#[cfg(feature = "lua")]`.
+//! `#[cfg(feature = "lua")]`. `lua_menu`'s observer runs alongside core's
+//! `menu_selection_observer` when the game runs a Lua script.
 
 pub mod lua_animation_finished;
 pub mod lua_collision;

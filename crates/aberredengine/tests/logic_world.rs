@@ -13,8 +13,10 @@ use aberredengine::core::components::collision::{BoxSides, CollisionRule};
 use aberredengine::core::components::dynamictext::DynamicText;
 use aberredengine::core::components::group::Group;
 use aberredengine::core::components::mapposition::MapPosition;
+use aberredengine::core::components::menu::{Menu, MenuAction, MenuActions};
 use aberredengine::core::components::phase::Phase;
 use aberredengine::core::components::scene::SceneName;
+use aberredengine::core::components::signals::Signals;
 use aberredengine::core::components::sprite::Sprite;
 use aberredengine::core::components::timer::Timer;
 use aberredengine::core::components::zindex::ZIndex;
@@ -23,7 +25,7 @@ use aberredengine::core::events::input::InputAction;
 use aberredengine::core::events::phase::{PhaseEntered, PhaseExited};
 use aberredengine::core::events::scene::{SceneEntered, SceneExited};
 use aberredengine::core::events::timer::TimerFired;
-use aberredengine::core::math::Color;
+use aberredengine::core::math::{Color, Vec2};
 use aberredengine::core::protocol::asset_kind::AssetKind;
 use aberredengine::core::protocol::audio::AudioMessage;
 use aberredengine::core::protocol::raw_input::RawDeviceSnapshot;
@@ -35,6 +37,7 @@ use aberredengine::core::resources::gamestate::{GameState, GameStates, NextGameS
 use aberredengine::core::resources::input::InputState;
 use aberredengine::core::resources::loaded_assets::LoadedAssets;
 use aberredengine::core::resources::pending_assets::PendingAssets;
+use aberredengine::core::resources::scenemanager::SceneManager;
 use aberredengine::core::resources::signal_intents::SignalIntent;
 use aberredengine::core::resources::signal_keys as sk;
 use aberredengine::core::resources::worldsignals::WorldSignals;
@@ -1173,4 +1176,38 @@ fn hooks_and_systems_may_return_result() {
     let signals = tw.world.resource::<WorldSignals>();
     assert!(signals.has_flag("setup_ran"));
     assert!(signals.has_flag("system_ran"));
+}
+
+/// Confirming a `MenuActions::SetScene` item in a Rust-only game (no
+/// `.with_lua()`, whatever the `lua` feature) switches scenes in the tick
+/// that resolves the press.
+#[test]
+fn menu_set_scene_switches_in_the_confirming_tick_without_lua() {
+    let mut tw = TestWorld::builder()
+        .add_scene("a")
+        .add_scene("b")
+        .initial_scene("a")
+        .build()
+        .expect("build should succeed");
+    tw.tick_to_play(DT, 8);
+    tw.world.spawn((
+        Menu::new(&[("go", "Go")], Vec2::ZERO, "f", 12.0, 10.0, true),
+        Signals::default(),
+        MenuActions::new().with("go", MenuAction::SetScene("b".into())),
+    ));
+    tw.tick(1, DT);
+
+    let mut raw = RawDeviceSnapshot {
+        window_w: 800,
+        window_h: 600,
+        ..Default::default()
+    };
+    raw.set_key(KeyboardKey::KEY_SPACE as u32);
+    tw.send_input(raw);
+    tw.tick(1, DT);
+
+    assert_eq!(
+        tw.world.resource::<SceneManager>().active_scene.as_deref(),
+        Some("b")
+    );
 }

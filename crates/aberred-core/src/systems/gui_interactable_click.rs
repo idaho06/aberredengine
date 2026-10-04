@@ -3,9 +3,7 @@
 //! [`gui_interactable_click_observer`] reacts to [`GuiInteractableClickEvent`]
 //! (triggered by `gui_hit_test_system`) and resolves the callback chain on
 //! the clicked entity's `GuiInteractable`: Lua name first, Rust fn-pointer
-//! second — mirroring
-//! [`menu_selection_observer`](crate::systems::menu::menu_selection_observer)'s
-//! existing priority chain. This same observer dispatches clicks for
+//! second. This same observer dispatches clicks for
 //! `GuiButton`, `GuiImage`, and any other widget carrying
 //! `GuiInteractable`.
 

@@ -49,6 +49,7 @@ pub use aberred_core::components::zindex::ZIndex;
 pub use aberred_core::events::animation::AnimationFinishedEvent;
 pub use aberred_core::events::asset::{AssetLoadFailed, AssetLoaded};
 pub use aberred_core::events::input::InputAction;
+pub use aberred_core::events::menu::MenuSelected;
 pub use aberred_core::events::phase::{PhaseEntered, PhaseExited};
 pub use aberred_core::events::scene::{SceneEntered, SceneExited};
 pub use aberred_core::events::timer::TimerFired;

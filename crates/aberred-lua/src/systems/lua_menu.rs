@@ -1,74 +1,124 @@
-//! Lua-priority menu selection dispatch.
+//! Lua menu selection callbacks.
 //!
-//! Shadows `aberred_core::systems::menu::menu_selection_observer` with a
-//! variant that checks the menu's `on_select_callback` (Lua) first, falling
-//! back to its Rust fn-pointer callback, then `MenuActions` --
-//! `aberred-core` cannot name `LuaRuntime`. Re-exported by
-//! the facade's `systems::menu` under `#[cfg(feature = "lua")]`.
+//! [`lua_menu_selection_observer`] calls a menu's `on_select_callback` (a Lua
+//! function name) when one of its items is confirmed. `aberred-core`'s
+//! `menu_selection_observer` skips such menus, so their `MenuActions` don't
+//! run. The engine registers this observer only when a Lua script is set.
 
-use aberred_core::components::menu::{Menu, MenuActions};
+use aberred_core::components::menu::Menu;
 use aberred_core::events::menu::MenuSelected;
-use aberred_core::resources::gamestate::NextGameState;
-use aberred_core::resources::systemsstore::SystemsStore;
-use aberred_core::systems::GameCtx;
 use bevy_ecs::prelude::*;
-use log::{debug, error, warn};
+use log::{error, warn};
 
-/// Executes the action associated with a selected menu item.
-///
-/// Priority chain: Lua callback → Rust callback → `MenuActions`.
-pub fn menu_selection_observer(
+/// Calls the selected menu's Lua `on_select_callback` with a ctx table of
+/// `menu_id`, `item_id` and `item_index`.
+pub fn lua_menu_selection_observer(
     trigger: On<MenuSelected>,
-    menus: Query<(&Menu, Option<&MenuActions>)>,
-    mut next_game_state: ResMut<NextGameState>,
-    systems_store: Res<SystemsStore>,
-    mut ctx: GameCtx,
+    menus: Query<&Menu>,
     lua_runtime: NonSend<crate::resources::lua_runtime::LuaRuntime>,
 ) {
     let event = trigger.event();
-    debug!(
-        "menu_selection_observer: Received MenuSelected for menu {:?}, item_id={}",
-        event.entity, event.item_id
-    );
-
-    let Ok((menu, menu_actions_opt)) = menus.get(event.entity) else {
-        warn!(
-            "menu_selection_observer: Menu entity {:?} not found",
-            event.entity
-        );
+    let Some(callback_name) = menus
+        .get(event.entity)
+        .ok()
+        .and_then(|menu| menu.on_select_callback.as_deref())
+    else {
         return;
     };
+    if !lua_runtime.has_function(callback_name) {
+        warn!(target: "lua", "menu callback '{}' not found", callback_name);
+        return;
+    }
+    let lua_ctx = lua_runtime.lua().create_table().unwrap();
+    lua_ctx.set("menu_id", event.entity.to_bits()).unwrap();
+    lua_ctx.set("item_id", event.item_id.as_str()).unwrap();
+    lua_ctx.set("item_index", event.index).unwrap();
+    if let Err(e) = lua_runtime.call_function::<_, ()>(callback_name, lua_ctx) {
+        error!(target: "lua", "Error in menu callback '{}': {}", callback_name, e);
+    }
+}
 
-    // Priority 1: Lua callback
-    if let Some(ref callback_name) = menu.on_select_callback {
-        if lua_runtime.has_function(callback_name) {
-            // Build context table
-            let lua_ctx = lua_runtime.lua().create_table().unwrap();
-            lua_ctx.set("menu_id", event.entity.to_bits()).unwrap();
-            lua_ctx.set("item_id", event.item_id.as_str()).unwrap();
-            lua_ctx.set("item_index", event.index).unwrap();
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::resources::lua_runtime::LuaRuntime;
+    use aberred_core::components::menu::{MenuAction, MenuActions};
+    use aberred_core::math::Vec2;
+    use aberred_core::resources::gamestate::NextGameState;
+    use aberred_core::resources::signal_keys as sk;
+    use aberred_core::resources::systemsstore::SystemsStore;
+    use aberred_core::resources::worldsignals::WorldSignals;
+    use aberred_core::systems::menu::menu_selection_observer;
 
-            if let Err(e) = lua_runtime.call_function::<_, ()>(callback_name, lua_ctx) {
-                error!(target: "lua", "Error in menu callback '{}': {}", callback_name, e);
-            }
-        } else {
-            warn!(target: "lua", "menu callback '{}' not found", callback_name);
+    /// Both menu observers, as the engine registers them in a Lua game.
+    fn setup_world() -> World {
+        let mut world = World::new();
+        world.init_resource::<WorldSignals>();
+        world.init_resource::<NextGameState>();
+        world.insert_resource(SystemsStore::default());
+        let lua = LuaRuntime::new().expect("LuaRuntime::new");
+        lua.lua()
+            .load("function on_menu_select(ctx) menu_selected_item = ctx.item_id .. ':' .. ctx.item_index end")
+            .exec()
+            .expect("failed to load Lua function");
+        world.insert_non_send(lua);
+        world.add_observer(menu_selection_observer);
+        world.add_observer(lua_menu_selection_observer);
+        world
+    }
+
+    fn spawn_play_menu(world: &mut World, lua_callback: bool) -> Entity {
+        let mut menu = Menu::new(&[("play", "Play")], Vec2::ZERO, "f", 12.0, 10.0, true);
+        if lua_callback {
+            menu = menu.with_on_select_callback("on_menu_select");
         }
-        return;
+        let actions = MenuActions::new().with("play", MenuAction::SetScene("level01".into()));
+        world.spawn((menu, actions)).id()
     }
 
-    // Priority 2: Rust callback
-    if let Some(cb) = menu.on_rust_callback {
-        cb(event.entity, &event.item_id, event.index, &mut ctx);
-        return;
+    fn select_play(world: &mut World, menu: Entity) {
+        world.trigger(MenuSelected {
+            entity: menu,
+            item_id: "play".to_string(),
+            index: 0,
+        });
+        world.flush();
     }
 
-    // Priority 3: MenuActions
-    aberred_core::systems::menu::dispatch_menu_action(
-        menu_actions_opt,
-        event,
-        &mut ctx,
-        &mut next_game_state,
-        &systems_store,
-    );
+    fn lua_selected_item(world: &World) -> Option<String> {
+        world
+            .non_send::<LuaRuntime>()
+            .lua()
+            .globals()
+            .get("menu_selected_item")
+            .unwrap()
+    }
+
+    fn record_observed(_trigger: On<MenuSelected>, mut ws: ResMut<WorldSignals>) {
+        ws.set_flag("observed");
+    }
+
+    #[test]
+    fn lua_callback_replaces_menu_actions_and_observers_still_run() {
+        let mut world = setup_world();
+        let menu = spawn_play_menu(&mut world, true);
+        world.entity_mut(menu).observe(record_observed);
+        select_play(&mut world, menu);
+        assert_eq!(lua_selected_item(&world).as_deref(), Some("play:0"));
+        let ws = world.resource::<WorldSignals>();
+        assert_eq!(ws.get_string(sk::SCENE), None, "MenuActions skipped");
+        assert!(ws.has_flag("observed"));
+    }
+
+    #[test]
+    fn without_a_lua_callback_menu_actions_run() {
+        let mut world = setup_world();
+        let menu = spawn_play_menu(&mut world, false);
+        select_play(&mut world, menu);
+        assert_eq!(lua_selected_item(&world), None);
+        assert_eq!(
+            world.resource::<WorldSignals>().get_string(sk::SCENE),
+            Some("level01")
+        );
+    }
 }

@@ -4,9 +4,10 @@
 //! - [`menu_spawn_system`] – spawns menu item entities when a [`Menu`] is added
 //! - [`menu_despawn`] – despawns menu entities and their items
 //! - [`menu_controller_observer`] – handles input to navigate and select items
-//! - [`menu_selection_observer`] – performs actions when items are selected
+//! - [`menu_selection_observer`] – performs [`MenuActions`] when items are selected
 //!
-//! Callbacks receive `&mut `[`GameCtx`] for full ECS access.
+//! Game code reacts to a confirmed item by observing
+//! [`MenuSelected`] on the menu entity.
 
 use std::sync::Arc;
 
@@ -30,7 +31,7 @@ use crate::resources::signal_keys as sk;
 use crate::resources::systemsstore as hook_keys;
 use crate::resources::systemsstore::SystemsStore;
 use crate::resources::texturedims::TextureDimsStore;
-use crate::systems::GameCtx;
+use crate::resources::worldsignals::WorldSignals;
 use bevy_ecs::prelude::*;
 use log::{debug, warn};
 
@@ -533,70 +534,37 @@ fn reposition_menu_items(commands: &mut Commands, menu: &Menu) {
     }
 }
 
-/// Executes the action associated with a selected menu item.
+/// Executes the [`MenuAction`] associated with a selected menu item.
 ///
-/// Priority chain: Rust callback → [`MenuActions`].
-///
-/// If the menu has an `on_rust_callback`, invokes it with the menu entity, item ID,
-/// item index, and full ECS access via [`GameCtx`].
-///
-/// Otherwise, looks up the [`MenuAction`] for the selected item and performs it:
-/// - [`MenuAction::SetScene`] – triggers scene switch
+/// - [`MenuAction::SetScene`] – switches scene in the same tick, by running
+///   the registered `switch_scene` system directly
 /// - [`MenuAction::QuitGame`] – transitions to quitting state
 /// - [`MenuAction::Noop`] – does nothing
 ///
-/// The facade's `aberredengine::systems::menu` module shadows this with a
-/// variant that checks `on_select_callback` (Lua) first, under
-/// `#[cfg(feature = "lua")]` -- `aberred-core` cannot name `LuaRuntime`.
+/// Menus with a Lua callback name (`on_select_callback`) are skipped: the Lua
+/// layer's observer calls that function instead of the actions. Observers of
+/// [`MenuSelected`] run in addition to either; don't combine [`MenuActions`]
+/// with an observer for the same item.
 pub fn menu_selection_observer(
     trigger: On<MenuSelected>,
     menus: Query<(&Menu, Option<&MenuActions>)>,
+    mut world_signals: ResMut<WorldSignals>,
     mut next_game_state: ResMut<NextGameState>,
     systems_store: Res<SystemsStore>,
-    mut ctx: GameCtx,
+    mut commands: Commands,
 ) {
     let event = trigger.event();
-    debug!(
-        "menu_selection_observer: Received MenuSelected for menu {:?}, item_id={}",
-        event.entity, event.item_id
-    );
-
-    let Ok((menu, menu_actions_opt)) = menus.get(event.entity) else {
+    let Ok((menu, menu_actions)) = menus.get(event.entity) else {
         warn!(
             "menu_selection_observer: Menu entity {:?} not found",
             event.entity
         );
         return;
     };
-
-    // Priority 1: Rust callback
-    if let Some(cb) = menu.on_rust_callback {
-        cb(event.entity, &event.item_id, event.index, &mut ctx);
+    if menu.on_select_callback.is_some() {
         return;
     }
-
-    // Priority 2: MenuActions
-    dispatch_menu_action(
-        menu_actions_opt,
-        event,
-        &mut ctx,
-        &mut next_game_state,
-        &systems_store,
-    );
-}
-
-/// `pub` (not `pub(crate)`) so the facade's Lua-priority
-/// `menu_selection_observer` (which cannot live in core -- it names
-/// `LuaRuntime`) can still reach `MenuActions` dispatch for its priority-3
-/// fallback.
-pub fn dispatch_menu_action(
-    menu_actions_opt: Option<&MenuActions>,
-    event: &MenuSelected,
-    ctx: &mut GameCtx,
-    next_game_state: &mut ResMut<NextGameState>,
-    systems_store: &Res<SystemsStore>,
-) {
-    let Some(menu_actions) = menu_actions_opt else {
+    let Some(menu_actions) = menu_actions else {
         warn!(
             "menu_selection_observer: No MenuActions found for item_id {:?}",
             event.item_id
@@ -605,20 +573,16 @@ pub fn dispatch_menu_action(
     };
 
     debug!(
-        "menu_selection_observer: Found MenuActions, looking up action for item_id={}",
-        event.item_id
+        "menu_selection_observer: item_id={} on menu {:?}",
+        event.item_id, event.entity
     );
     match menu_actions.get(&event.item_id) {
         MenuAction::SetScene(scene_name) => {
-            debug!(
-                "menu_selection_observer: SetScene action found, scene_name={}",
-                scene_name
-            );
-            ctx.world_signals.set_string(sk::SCENE, scene_name.clone());
+            world_signals.set_string(sk::SCENE, scene_name.clone());
             // Every engine-built game registers switch_scene (the scene manager's or Lua's);
             // a bare world without one logs instead of panicking.
             match systems_store.get(hook_keys::SWITCH_SCENE) {
-                Some(switch_scene) => ctx.commands.run_system(*switch_scene),
+                Some(switch_scene) => commands.run_system(*switch_scene),
                 None => log::error!(
                     "menu action SetScene('{scene_name}'): no switch_scene system is registered \
                      (the scene manager and Lua both register one); ignoring"
@@ -628,9 +592,7 @@ pub fn dispatch_menu_action(
         MenuAction::QuitGame => {
             next_game_state.set(Quitting);
         }
-        MenuAction::Noop => {
-            // Do nothing
-        }
+        MenuAction::Noop => {}
     }
 }
 
@@ -639,7 +601,6 @@ mod tests {
     use super::*;
     use crate::math::{Color, Vec2};
     use crate::resources::gamestate::{GameStates, NextGameStates};
-    use crate::resources::worldsignals::WorldSignals;
     use bevy_ecs::message::Messages;
     use bevy_ecs::system::RunSystemOnce;
 
@@ -1014,9 +975,9 @@ mod tests {
         );
     }
 
-    fn record_rust_callback(_menu: Entity, id: &str, index: usize, ctx: &mut GameCtx) {
-        ctx.world_signals
-            .set_string("rust_cb", format!("{id}:{index}"));
+    fn record_on_signals(trigger: On<MenuSelected>, mut ws: ResMut<WorldSignals>) {
+        let e = trigger.event();
+        ws.set_string("observed", format!("{}:{}", e.item_id, e.index));
     }
 
     fn mark_switch_scene(mut ws: ResMut<WorldSignals>) {
@@ -1026,7 +987,7 @@ mod tests {
     /// World wired for `menu_selection_observer`, with a registered switch_scene hook.
     fn selection_world() -> World {
         let mut world = World::new();
-        crate::testing::insert_game_ctx_resources(&mut world);
+        world.init_resource::<WorldSignals>();
         world.init_resource::<NextGameState>();
         let mut store = SystemsStore::default();
         store.insert(
@@ -1073,21 +1034,28 @@ mod tests {
     }
 
     #[test]
-    fn selection_prefers_the_rust_callback_over_menu_actions() {
+    fn a_menu_observer_runs_alongside_menu_actions() {
+        let mut world = selection_world();
+        let menu = world.spawn((three_items(), actions())).id();
+        world.entity_mut(menu).observe(record_on_signals);
+        select(&mut world, menu, "play");
+        let ws = world.resource::<WorldSignals>();
+        assert_eq!(ws.get_string("observed"), Some("play:0"));
+        assert_eq!(ws.get_string(sk::SCENE), Some("level01"));
+    }
+
+    #[test]
+    fn a_menu_with_a_lua_callback_name_skips_menu_actions() {
         let mut world = selection_world();
         let menu = world
             .spawn((
-                three_items().with_on_rust_callback(record_rust_callback),
+                three_items().with_on_select_callback("on_select"),
                 actions(),
             ))
             .id();
         select(&mut world, menu, "play");
         let ws = world.resource::<WorldSignals>();
-        assert_eq!(ws.get_string("rust_cb"), Some("play:0"));
-        assert!(
-            ws.get_string(sk::SCENE).is_none(),
-            "MenuActions not consulted"
-        );
+        assert!(ws.get_string(sk::SCENE).is_none() && !ws.has_flag("switch_hook_ran"));
     }
 
     #[test]
@@ -1130,7 +1098,7 @@ mod tests {
     fn set_scene_without_a_switch_scene_hook_logs_instead_of_panicking() {
         // A Rust-only game with no Lua, no scene manager and no custom switch hook.
         let mut world = World::new();
-        crate::testing::insert_game_ctx_resources(&mut world);
+        world.init_resource::<WorldSignals>();
         world.init_resource::<NextGameState>();
         world.insert_resource(SystemsStore::default());
         world.add_observer(menu_selection_observer);

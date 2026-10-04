@@ -452,7 +452,7 @@ fn test_build_logic_schedules_runs_phase_system_first() {
     let (ids, _) = logic_schedule_type_ids(false);
     let phase = sim_index(&ids, phase_system);
     assert!(sim_index(&ids, apply_signal_intents) < phase);
-    assert!(phase < sim_index(&ids, crate::systems::menu::menu_spawn_system));
+    assert!(phase < sim_index(&ids, aberred_core::systems::menu::menu_spawn_system));
     assert!(phase < sim_index(&ids, input_simple_controller));
     assert!(phase < sim_index(&ids, collision_detector));
 }

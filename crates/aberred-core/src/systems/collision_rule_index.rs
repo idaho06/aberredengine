@@ -27,9 +27,7 @@ use crate::resources::collision_rule_index::CollisionRuleIndex;
 /// Rust-bucket dirty-check + rebuild, shared by this module's own
 /// `rebuild_collision_rule_index` and the facade's Lua-aware variant
 /// (`aberredengine::systems::collision_rule_index`, which cannot live in
-/// core -- it also indexes `LuaCollisionRule`) -- mirrors
-/// `crate::systems::menu::dispatch_menu_action`'s role as a shared tail
-/// called from both a core system and its facade shadow, so the dirty-check
+/// core -- it also indexes `LuaCollisionRule`), so the dirty-check
 /// invariant ("`RemovedComponents` must be drained every call, dirty check
 /// or not") lives in exactly one place instead of two copies that could
 /// drift apart.

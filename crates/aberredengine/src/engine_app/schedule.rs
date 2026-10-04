@@ -4,7 +4,6 @@ use bevy_ecs::schedule::SingleThreadedExecutor;
 use super::builder::EngineBuilder;
 use super::registrar::UpdateRegistrar;
 use crate::systems::collision_rule_index::rebuild_collision_rule_index;
-use crate::systems::menu::menu_spawn_system;
 use aberred_core::components::mapposition::MapPosition;
 use aberred_core::components::rotation::Rotation;
 use aberred_core::components::scale::Scale;
@@ -37,6 +36,7 @@ use aberred_core::systems::gui_spawn::{
 use aberred_core::systems::inputaccelerationcontroller::input_acceleration_controller;
 use aberred_core::systems::inputsimplecontroller::input_simple_controller;
 use aberred_core::systems::logic_bridge::{forward_render_asset_cmds, send_drawable_snapshot};
+use aberred_core::systems::menu::menu_spawn_system;
 use aberred_core::systems::mousecontroller::mouse_controller;
 use aberred_core::systems::movement::movement;
 use aberred_core::systems::particleemitter::particle_emitter_system;

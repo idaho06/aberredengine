@@ -2,9 +2,7 @@
 //!
 //! Shadows [`aberred_core::systems::gui_interactable_click::gui_interactable_click_observer`]
 //! with a variant that checks the entity's named Lua callback first, falling
-//! back to its Rust fn-pointer callback -- mirrors
-//! `aberred_core::systems::menu::menu_selection_observer`'s existing
-//! priority chain. Re-exported by
+//! back to its Rust fn-pointer callback. Re-exported by
 //! the facade's `systems::gui_interactable_click` under `#[cfg(feature = "lua")]`.
 
 use aberred_core::events::gui_interactable::GuiInteractableClickEvent;

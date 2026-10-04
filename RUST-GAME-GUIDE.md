@@ -1482,7 +1482,7 @@ Scene transitions work by running the `scene_switch_system` as a one-shot system
 
 **Approaches:**
 
-**1. Menu-driven (recommended):** Use `MenuAction::SetScene("level01")` — the menu system calls `commands.run_system()` internally via `dispatch_menu_action`.
+**1. Menu-driven (recommended):** Use `MenuAction::SetScene("level01")` — the menu selection observer calls `commands.run_system()` internally, so the switch lands in the same tick.
 
 **2. Flag-based from systems and observers:** Call `WorldSignals::request_scene(name)`, which sets the target scene name and the `sk::SWITCH_SCENE` flag. The engine's `scene_switch_poll` system (registered automatically for every Rust game) picks up the flag each sim tick and triggers the transition:
 
@@ -1810,7 +1810,6 @@ let menu = Menu::new(
 |--------|-------------|
 | `.with_colors(normal, selected)` | Set normal and selected item colors |
 | `.with_selection_sound("key")` | Play a sound on selection change |
-| `.with_on_rust_callback(fn)` | Set a Rust callback for selection |
 | `.with_visible_count(n)` | Limit visible items (enables scrolling) |
 | `.with_cursor(entity)` | Attach a cursor entity to the selection |
 
@@ -1831,40 +1830,34 @@ ctx.commands.spawn((menu, actions));
 
 | Variant | Effect |
 |---------|--------|
-| `SetScene(String)` | Triggers a scene switch (calls `commands.run_system()` internally) |
+| `SetScene(String)` | Switches scene in the same tick (calls `commands.run_system()` internally) |
 | `QuitGame` | Transitions to quitting state |
 | `Noop` | Does nothing |
 
-**2. Rust callback:** For custom logic, use `.with_on_rust_callback()`:
+**2. Observe `MenuSelected`:** For custom logic, observe `MenuSelected` on the menu entity. It carries the menu `entity`, the selected `item_id` and its `index` in `Menu::items`:
 
 ```rust
-use aberredengine::core::components::menu::MenuRustCallback;
 use aberredengine::prelude::*;
 
-fn on_menu_select(menu_entity: Entity, item_id: &str, item_index: usize, ctx: &mut GameCtx) {
-    match item_id {
-        "start" => {
-            ctx.world_signals.request_scene("level01");
-        }
-        "quit" => {
-            ctx.world_signals.request_quit();
-        }
+fn on_menu_select(ev: On<MenuSelected>, mut signals: ResMut<WorldSignals>) {
+    match ev.item_id.as_str() {
+        "start" => signals.request_scene("level01"),
+        "quit" => signals.request_quit(),
         _ => {}
     }
 }
 
-ctx.commands.spawn((
-    menu.with_on_rust_callback(on_menu_select),
-));
+commands.spawn(menu).observe(on_menu_select);
 ```
 
-**Callback priority:** When an item is selected, the engine checks in order:
+A global observer registered with `EngineBuilder::add_observer` sees every menu's selections; filter by `ev.entity` or a marker component.
 
-1. **Lua callback** (`on_select_callback`) — only with `lua` feature
-2. **Rust callback** (`on_rust_callback`)
-3. **MenuActions** (declarative)
+**Dispatch order:** When an item is confirmed, the engine triggers `MenuSelected`, and then:
 
-The first match wins; later options are skipped.
+1. **Lua callback** (`on_select_callback`, only in games that run Lua) — when set, `MenuActions` is skipped.
+2. **MenuActions** (declarative).
+
+`MenuSelected` observers always run, alongside either. Don't combine `MenuActions` with an observer for the same item, or both act on it.
 
 **Navigation:** Up/down arrows move selection. `action_1` or `action_2` confirms. With `.with_visible_count(n)`, the menu shows at most `n` items at a time with bounded navigation and auto-scrolling.
 
