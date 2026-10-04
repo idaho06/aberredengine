@@ -1,18 +1,16 @@
-//! Rebuilds [`CollisionRuleIndex`] whenever `CollisionRule`/`LuaCollisionRule`
-//! entities are added, changed, or removed.
+//! Rebuilds a [`RuleIndex<T>`] whenever `T` rule entities are added,
+//! changed, or removed.
 //!
-//! Runs in `SimSet::Collision`, `.before(collision_detector)`, so the index
-//! reflects this tick's rules (including ones spawned this same tick via
-//! `SimSet::Spawn`) before any `CollisionEvent` fires.
+//! `rebuild_rule_index::<CollisionRule>` always runs in `SimSet::Collision`,
+//! `.before(collision_detector)`, so the index reflects this tick's rules
+//! (including ones spawned this same tick via `SimSet::Spawn`) before any
+//! `CollisionEvent` fires. A Lua game adds `rebuild_rule_index` for its own
+//! rule component in the same slot.
 //!
 //! Full rebuild on any change -- rules are few and changes are rare (scene
 //! switch spawn/despawn), so incremental bucket maintenance isn't worth the
 //! complexity. Steady-state cost is one or two empty change-detection
 //! queries.
-//!
-//! Two separate fn definitions under `#[cfg(feature = "lua")]`/
-//! `#[cfg(not(feature = "lua"))]` (bevy `SystemParam`s can't be
-//! conditionally compiled inline) sharing [`RuleBuckets::rebuild`](crate::resources::collision_rule_index).
 //!
 //! `Changed<T>` alone (no `Added<T>`) is enough to catch newly-added rules:
 //! bevy's `ComponentTicks::new` sets both `added` and `changed` to the
@@ -21,50 +19,31 @@
 
 use bevy_ecs::prelude::*;
 
-use crate::components::collision::CollisionRule;
-use crate::resources::collision_rule_index::CollisionRuleIndex;
+use crate::resources::collision_rule_index::{RuleGroups, RuleIndex};
 
-/// Rust-bucket dirty-check + rebuild, shared by this module's own
-/// `rebuild_collision_rule_index` and the facade's Lua-aware variant
-/// (`aberredengine::systems::collision_rule_index`, which cannot live in
-/// core -- it also indexes `LuaCollisionRule`), so the dirty-check
-/// invariant ("`RemovedComponents` must be drained every call, dirty check
-/// or not") lives in exactly one place instead of two copies that could
-/// drift apart.
-pub fn rebuild_rust_bucket(
-    index: &mut CollisionRuleIndex,
-    changed_rust: Query<(), Changed<CollisionRule>>,
-    mut removed_rust: RemovedComponents<CollisionRule>,
-    all_rust: Query<(Entity, &CollisionRule)>,
+/// Rebuilds [`RuleIndex<T>`] from every `T` entity when one changed or was
+/// removed since the last run.
+pub fn rebuild_rule_index<T: RuleGroups>(
+    mut index: ResMut<RuleIndex<T>>,
+    changed: Query<(), Changed<T>>,
+    mut removed: RemovedComponents<T>,
+    rules: Query<(Entity, &T)>,
 ) {
-    // Read removals first: `||` would skip draining the reader whenever
-    // `changed_rust` is non-empty, replaying those removals next tick.
-    let any_removed = removed_rust.read().count() > 0;
-    let rust_dirty = any_removed || !changed_rust.is_empty();
-
-    if rust_dirty {
-        index
-            .rust
-            .rebuild(all_rust.iter().map(|(e, r)| (e, &r.group_a, &r.group_b)));
+    // Drain the removal reader on every run, dirty or not, or its cursor
+    // falls behind and replays removals next tick. Read it first: `||`
+    // would skip the drain whenever `changed` is non-empty.
+    let any_removed = removed.read().count() > 0;
+    if any_removed || !changed.is_empty() {
+        index.rebuild(rules.iter());
     }
-}
-
-/// Rust-only rebuild. The facade's `aberredengine::systems::collision_rule_index`
-/// module shadows this with a variant that also indexes `LuaCollisionRule`
-/// under `#[cfg(feature = "lua")]` -- `aberred-core` cannot name that type.
-pub fn rebuild_collision_rule_index(
-    mut index: ResMut<CollisionRuleIndex>,
-    changed_rust: Query<(), Changed<CollisionRule>>,
-    removed_rust: RemovedComponents<CollisionRule>,
-    all_rust: Query<(Entity, &CollisionRule)>,
-) {
-    rebuild_rust_bucket(&mut index, changed_rust, removed_rust, all_rust);
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::components::collision::CollisionCallback;
+    use crate::components::collision::CollisionRule;
+    use crate::resources::collision_rule_index::CollisionRuleIndex;
 
     fn dummy_callback(
         _a: Entity,
@@ -83,7 +62,7 @@ mod tests {
 
     fn run_rebuild(world: &mut World) {
         let mut schedule = Schedule::default();
-        schedule.add_systems(rebuild_collision_rule_index);
+        schedule.add_systems(rebuild_rule_index::<CollisionRule>);
         schedule.run(world);
     }
 
@@ -101,8 +80,8 @@ mod tests {
         run_rebuild(&mut world);
 
         let index = world.resource::<CollisionRuleIndex>();
-        assert_eq!(index.rust_bucket("ball", "brick").unwrap().as_slice(), &[e]);
-        assert_eq!(index.rust_bucket("brick", "ball").unwrap().as_slice(), &[e]);
+        assert_eq!(index.bucket("ball", "brick").unwrap(), &[e]);
+        assert_eq!(index.bucket("brick", "ball").unwrap(), &[e]);
     }
 
     #[test]
@@ -120,7 +99,7 @@ mod tests {
         assert!(
             world
                 .resource::<CollisionRuleIndex>()
-                .rust_bucket("ball", "brick")
+                .bucket("ball", "brick")
                 .is_some()
         );
 
@@ -130,7 +109,7 @@ mod tests {
         assert!(
             world
                 .resource::<CollisionRuleIndex>()
-                .rust_bucket("ball", "brick")
+                .bucket("ball", "brick")
                 .is_none()
         );
     }
@@ -157,10 +136,8 @@ mod tests {
         run_rebuild(&mut world);
 
         let index = world.resource::<CollisionRuleIndex>();
-        let bucket = index.rust_bucket("a", "b").unwrap();
-        let mut sorted = bucket.to_vec();
-        sorted.sort_unstable();
-        assert_eq!(bucket.as_slice(), sorted.as_slice());
+        let bucket = index.bucket("a", "b").unwrap();
+        assert!(bucket.is_sorted());
         assert!(bucket.contains(&e1) && bucket.contains(&e2));
     }
 }

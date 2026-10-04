@@ -3,7 +3,7 @@ use bevy_ecs::schedule::SingleThreadedExecutor;
 
 use super::builder::EngineBuilder;
 use super::registrar::UpdateRegistrar;
-use crate::systems::collision_rule_index::rebuild_collision_rule_index;
+use aberred_core::components::collision::CollisionRule;
 use aberred_core::components::mapposition::MapPosition;
 use aberred_core::components::rotation::Rotation;
 use aberred_core::components::scale::Scale;
@@ -19,6 +19,7 @@ use aberred_core::systems::audio_bridge::{
 };
 use aberred_core::systems::camera_follow::camera_follow_system;
 use aberred_core::systems::collision_detector::collision_detector;
+use aberred_core::systems::collision_rule_index::rebuild_rule_index;
 use aberred_core::systems::dynamictext_size::dynamictext_size_system;
 use aberred_core::systems::entity_registrations::prune_dead_entity_registrations;
 use aberred_core::systems::gamestate::{
@@ -58,6 +59,8 @@ use aberred_render::systems::render_system;
 
 #[cfg(feature = "lua")]
 use crate::systems::mapspawn::process_lua_map_commands;
+#[cfg(feature = "lua")]
+use aberred_lua::components::luacollision::LuaCollisionRule;
 #[cfg(feature = "lua")]
 use aberred_lua::systems::lua_setup_entity::lua_setup_entity_system;
 #[cfg(feature = "lua")]
@@ -364,7 +367,7 @@ impl EngineBuilder {
                 .in_set(SimSet::Transforms),
         );
         sim.add_systems(
-            rebuild_collision_rule_index
+            rebuild_rule_index::<CollisionRule>
                 .before(collision_detector)
                 .in_set(SimSet::Collision),
         );
@@ -412,6 +415,11 @@ impl EngineBuilder {
 
         #[cfg(feature = "lua")]
         if has_lua {
+            sim.add_systems(
+                rebuild_rule_index::<LuaCollisionRule>
+                    .before(collision_detector)
+                    .in_set(SimSet::Collision),
+            );
             sim.add_systems(
                 update_group_counts_system
                     .before(lua_phase_system)

@@ -22,7 +22,6 @@ use crate::components::globaltransform2d::GlobalTransform2D;
 use crate::components::group::Group;
 use crate::components::mapposition::MapPosition;
 use crate::math::Rect;
-use smallvec::SmallVec;
 
 /// Resolve the world position of an entity.
 ///
@@ -91,7 +90,7 @@ pub fn resolve_groups<'q>(
 /// and `lua_collision_observer` (`aberred-lua`), which query different rule
 /// components.
 pub fn find_matching_rule<'q, R>(
-    bucket: &SmallVec<[Entity; 2]>,
+    bucket: &[Entity],
     lookup: impl Fn(Entity) -> Option<(&'q str, &'q str, R)>,
     a: Entity,
     b: Entity,

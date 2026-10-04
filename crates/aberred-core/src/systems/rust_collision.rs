@@ -75,7 +75,7 @@ pub fn rust_collision_observer(
         None => return,
     };
 
-    let Some(bucket) = index.rust_bucket(ga, gb) else {
+    let Some(bucket) = index.bucket(ga, gb) else {
         return;
     };
 

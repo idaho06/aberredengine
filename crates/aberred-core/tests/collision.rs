@@ -1,7 +1,7 @@
 //! Integration tests for Rust `CollisionRule` dispatch.
 //!
 //! Runs the collision pipeline end to end in an ECS world:
-//! `rebuild_collision_rule_index` -> `collision_detector` ->
+//! `rebuild_rule_index::<CollisionRule>` -> `collision_detector` ->
 //! `rust_collision_observer`, then checks which rule callbacks fired and with
 //! which arguments (group matching, entity ordering, contact sides, and
 //! lowest-entity-wins when several rules cover the same pair).
@@ -16,7 +16,7 @@ use aberred_core::components::signals::Signals;
 use aberred_core::resources::collision_rule_index::CollisionRuleIndex;
 use aberred_core::systems::GameCtx;
 use aberred_core::systems::collision_detector::collision_detector;
-use aberred_core::systems::collision_rule_index::rebuild_collision_rule_index;
+use aberred_core::systems::collision_rule_index::rebuild_rule_index;
 use aberred_core::systems::rust_collision::rust_collision_observer;
 use aberred_core::testing::insert_game_ctx_resources;
 
@@ -30,7 +30,7 @@ fn make_world() -> World {
 
 fn tick_collision_detector(world: &mut World) {
     let mut schedule = Schedule::default();
-    schedule.add_systems(rebuild_collision_rule_index.before(collision_detector));
+    schedule.add_systems(rebuild_rule_index::<CollisionRule>.before(collision_detector));
     schedule.add_systems(collision_detector);
     schedule.run(world);
 }

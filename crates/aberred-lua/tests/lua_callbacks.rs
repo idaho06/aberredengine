@@ -15,18 +15,17 @@ use aberred_core::components::ttl::Ttl;
 use aberred_core::events::collision::CollisionEvent;
 use aberred_core::protocol::audio::AudioCmd;
 use aberred_core::resources::animationstore::AnimationStore;
-use aberred_core::resources::collision_rule_index::CollisionRuleIndex;
 use aberred_core::resources::input::InputState;
 use aberred_core::resources::systemsstore::SystemsStore;
 use aberred_core::resources::worldsignals::WorldSignals;
 use aberred_core::resources::worldtime::WorldTime;
 use aberred_core::systems::collision_detector::collision_detector;
-use aberred_lua::components::luacollision::LuaCollisionRule;
+use aberred_core::systems::collision_rule_index::rebuild_rule_index;
+use aberred_lua::components::luacollision::{LuaCollisionRule, LuaCollisionRuleIndex};
 use aberred_lua::components::luaphase::{LuaPhase, PhaseCallbacks};
 use aberred_lua::components::luatimer::LuaTimer;
 use aberred_lua::resources::lua_runtime::LuaRuntime;
 use aberred_lua::systems::lua_collision::lua_collision_observer;
-use aberred_lua::systems::lua_collision_rule_index::rebuild_collision_rule_index;
 use aberred_lua::systems::luaphase::lua_phase_system;
 use aberred_lua::systems::luatimer::{lua_timer_observer, update_lua_timers};
 
@@ -43,15 +42,15 @@ fn make_lua_callback_world(delta: f32) -> World {
     world.init_resource::<Messages<AudioCmd>>();
     world.insert_resource(SystemsStore::new());
     world.insert_resource(AnimationStore::default());
-    world.insert_resource(CollisionRuleIndex::default());
+    world.insert_resource(LuaCollisionRuleIndex::default());
     world.insert_non_send(LuaRuntime::new().expect("LuaRuntime::new"));
     world
 }
 
-/// Lua-aware rule-index rebuild, then collision detection.
+/// Lua rule-index rebuild, then collision detection.
 fn tick_collision_detector(world: &mut World) {
     let mut schedule = Schedule::default();
-    schedule.add_systems(rebuild_collision_rule_index.before(collision_detector));
+    schedule.add_systems(rebuild_rule_index::<LuaCollisionRule>.before(collision_detector));
     schedule.add_systems(collision_detector);
     schedule.run(world);
 }

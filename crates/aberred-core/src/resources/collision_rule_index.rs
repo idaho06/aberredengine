@@ -1,23 +1,32 @@
 //! Index of collision rules by unordered group pair.
 //!
-//! Both collision observers ([`rust_collision_observer`](crate::systems::rust_collision::rust_collision_observer),
-//! `lua_collision_observer` in `aberred-lua`)
-//! used to linearly scan every rule entity for every `CollisionEvent`. This
-//! resource pre-filters that scan down to the (small) bucket of rules
-//! actually covering the colliding pair's groups, keyed by an unordered pair
-//! normalized so `(a, b)` and `(b, a)` collide to the same bucket.
+//! A collision observer scans only the (small) bucket of rules covering the
+//! colliding pair's groups instead of every rule entity, keyed by an
+//! unordered pair normalized so `(a, b)` and `(b, a)` share a bucket.
 //!
-//! Rebuilt from scratch by
-//! [`rebuild_collision_rule_index`](crate::systems::collision_rule_index::rebuild_collision_rule_index)
-//! whenever `CollisionRule`/`LuaCollisionRule` entities change (rules are
-//! few and changes are rare -- spawn/despawn on scene switch -- so a full
-//! rebuild is simpler than incremental maintenance and not worth the extra
-//! bookkeeping). Each bucket is sorted by `Entity` so "first match wins"
-//! becomes deterministic instead of query-iteration order.
+//! [`RuleIndex<T>`] is generic over the rule component ([`RuleGroups`]), so
+//! `aberred-lua` indexes its own rule component with the same type and the
+//! same rebuild system,
+//! [`rebuild_rule_index`](crate::systems::collision_rule_index::rebuild_rule_index).
+//! The index is rebuilt from scratch whenever a rule changes (rules are few
+//! and changes are rare -- spawn/despawn on scene switch -- so a full rebuild
+//! is simpler than incremental maintenance). Each bucket is sorted by
+//! `Entity` so "first match wins" is deterministic instead of
+//! query-iteration order.
 
-use bevy_ecs::prelude::{Entity, Resource};
+use std::marker::PhantomData;
+
+use bevy_ecs::prelude::{Component, Entity, Resource};
 use rustc_hash::FxHashMap;
 use smallvec::SmallVec;
+
+use crate::components::collision::CollisionRule;
+
+/// A rule component matched by a pair of group names.
+pub trait RuleGroups: Component {
+    /// The rule's `(group_a, group_b)`.
+    fn groups(&self) -> (&str, &str);
+}
 
 /// Normalizes an unordered group-name pair so `(a, b)` and `(b, a)` produce
 /// the same key. Borrows rather than allocates, so a per-`CollisionEvent`
@@ -26,95 +35,64 @@ pub(crate) fn normalize_pair<'a>(a: &'a str, b: &'a str) -> (&'a str, &'a str) {
     if a <= b { (a, b) } else { (b, a) }
 }
 
-/// Rule entities bucketed by normalized group pair, for one rule kind
-/// (Rust or Lua). Not generic over the rule's callback payload -- a plain
-/// non-generic map is all either kind needs, and keeping this as its own
-/// small type (rather than a bare `FxHashMap` field) is what lets
-/// [`CollisionRuleIndex`] hold two instances without hand-duplicating
-/// `is_empty`/`bucket` for each.
+/// `T` rule entities by unordered group pair.
 ///
 /// Nested (lesser group -> greater group -> rules) rather than keyed by a
 /// `(String, String)` tuple: std's `HashMap` can't look a tuple of `String`s
 /// up by a tuple of `&str`s, but each level alone looks up by `&str`.
-#[derive(Default)]
-pub struct RuleBuckets(FxHashMap<String, FxHashMap<String, SmallVec<[Entity; 2]>>>);
+#[derive(Resource)]
+pub struct RuleIndex<T: RuleGroups> {
+    buckets: FxHashMap<String, FxHashMap<String, SmallVec<[Entity; 2]>>>,
+    rule: PhantomData<fn() -> T>,
+}
 
-impl RuleBuckets {
-    fn is_empty(&self) -> bool {
-        self.0.is_empty()
+/// Index of [`CollisionRule`] entities, read by
+/// [`rust_collision_observer`](crate::systems::rust_collision::rust_collision_observer).
+pub type CollisionRuleIndex = RuleIndex<CollisionRule>;
+
+impl<T: RuleGroups> Default for RuleIndex<T> {
+    fn default() -> Self {
+        Self {
+            buckets: FxHashMap::default(),
+            rule: PhantomData,
+        }
+    }
+}
+
+impl<T: RuleGroups> RuleIndex<T> {
+    /// Whether no rule is indexed.
+    pub fn is_empty(&self) -> bool {
+        self.buckets.is_empty()
     }
 
-    fn bucket(&self, ga: &str, gb: &str) -> Option<&SmallVec<[Entity; 2]>> {
+    /// Rule entities covering the given (unordered) group pair, sorted by
+    /// `Entity` for deterministic first-match.
+    pub fn bucket(&self, ga: &str, gb: &str) -> Option<&[Entity]> {
         let (lo, hi) = normalize_pair(ga, gb);
-        self.0.get(lo)?.get(hi)
+        self.buckets.get(lo)?.get(hi).map(|v| v.as_slice())
     }
 
     /// Clears and refills from `rules`, sorting each resulting sub-bucket by
     /// `Entity` so "first match wins" is deterministic.
-    ///
-    /// `pub`, not `pub(crate)`: the facade's Lua-aware
-    /// `aberredengine::systems::collision_rule_index::rebuild_collision_rule_index`
-    /// calls this directly on `CollisionRuleIndex::lua`, since that variant
-    /// (indexing `LuaCollisionRule`) cannot live in `aberred-core`.
-    pub fn rebuild<'a>(&mut self, rules: impl Iterator<Item = (Entity, &'a String, &'a String)>) {
-        self.0.clear();
-        for (entity, group_a, group_b) in rules {
+    pub(crate) fn rebuild<'a>(&mut self, rules: impl Iterator<Item = (Entity, &'a T)>) {
+        self.buckets.clear();
+        for (entity, rule) in rules {
+            let (group_a, group_b) = rule.groups();
             let (lo, hi) = normalize_pair(group_a, group_b);
-            self.0
+            self.buckets
                 .entry(lo.to_owned())
                 .or_default()
                 .entry(hi.to_owned())
                 .or_default()
                 .push(entity);
         }
-        for entities in self.0.values_mut().flat_map(|inner| inner.values_mut()) {
+        for entities in self
+            .buckets
+            .values_mut()
+            .flat_map(|inner| inner.values_mut())
+        {
             entities.sort_unstable();
         }
-    }
-}
-
-/// Maps an unordered group pair to the rule entities covering it. Two
-/// [`RuleBuckets`] fields (rather than a generic type param) keep this one
-/// resource and avoid monomorphizing the rebuild system; `lua` is
-/// `#[cfg(feature = "lua")]`.
-#[derive(Resource, Default)]
-pub struct CollisionRuleIndex {
-    /// `pub`, not `pub(crate)`: the facade's Lua-aware `rebuild_collision_rule_index`
-    /// (which cannot live in `aberred-core` -- it names `LuaCollisionRule`)
-    /// writes this field directly.
-    #[cfg(feature = "lua")]
-    pub lua: RuleBuckets,
-    pub rust: RuleBuckets,
-}
-
-impl CollisionRuleIndex {
-    /// Whether there are no rules registered at all (either kind) -- cheaper
-    /// equivalent of the old `rules.is_empty()` early-return check.
-    pub fn is_empty(&self) -> bool {
-        self.rust.is_empty() && self.lua_is_empty()
-    }
-
-    #[cfg(feature = "lua")]
-    fn lua_is_empty(&self) -> bool {
-        self.lua.is_empty()
-    }
-
-    #[cfg(not(feature = "lua"))]
-    fn lua_is_empty(&self) -> bool {
-        true
-    }
-
-    /// Rust rule entities covering the given (unordered) group pair, sorted
-    /// by `Entity` for deterministic first-match.
-    pub fn rust_bucket(&self, ga: &str, gb: &str) -> Option<&SmallVec<[Entity; 2]>> {
-        self.rust.bucket(ga, gb)
-    }
-
-    /// Lua rule entities covering the given (unordered) group pair, sorted
-    /// by `Entity` for deterministic first-match.
-    #[cfg(feature = "lua")]
-    pub fn lua_bucket(&self, ga: &str, gb: &str) -> Option<&SmallVec<[Entity; 2]>> {
-        self.lua.bucket(ga, gb)
     }
 }
 
@@ -137,19 +115,27 @@ mod tests {
     }
 
     #[test]
-    fn rust_bucket_missing_key_is_none() {
+    fn bucket_missing_key_is_none() {
         let index = CollisionRuleIndex::default();
-        assert!(index.rust_bucket("a", "b").is_none());
+        assert!(index.bucket("a", "b").is_none());
     }
 
     #[test]
-    fn rust_bucket_found_regardless_of_query_order() {
+    fn bucket_found_regardless_of_query_order() {
         let mut index = CollisionRuleIndex::default();
         let e = Entity::from_bits(1);
-        let (a, b) = ("a".to_string(), "b".to_string());
-        index.rust.rebuild(std::iter::once((e, &a, &b)));
+        fn noop(
+            _: Entity,
+            _: Entity,
+            _: &crate::components::collision::BoxSides,
+            _: &crate::components::collision::BoxSides,
+            _: &mut crate::systems::GameCtx,
+        ) {
+        }
+        let rule = CollisionRule::rust("a", "b", noop);
+        index.rebuild(std::iter::once((e, &rule)));
         assert!(!index.is_empty());
-        assert_eq!(index.rust_bucket("a", "b").unwrap().as_slice(), &[e]);
-        assert_eq!(index.rust_bucket("b", "a").unwrap().as_slice(), &[e]);
+        assert_eq!(index.bucket("a", "b").unwrap(), &[e]);
+        assert_eq!(index.bucket("b", "a").unwrap(), &[e]);
     }
 }

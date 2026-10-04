@@ -51,6 +51,7 @@ use bevy_ecs::prelude::*;
 use smallvec::SmallVec;
 
 use crate::math::Rect;
+use crate::resources::collision_rule_index::RuleGroups;
 use crate::systems::GameCtx;
 
 /// Callback type for Rust collision rules.
@@ -118,6 +119,12 @@ impl CollisionRule<CollisionCallback> {
         callback: CollisionCallback,
     ) -> Self {
         Self::new(group_a, group_b, callback)
+    }
+}
+
+impl<C: Send + Sync + 'static> RuleGroups for CollisionRule<C> {
+    fn groups(&self) -> (&str, &str) {
+        (&self.group_a, &self.group_b)
     }
 }
 

@@ -26,6 +26,7 @@
 
 use std::sync::Arc;
 
+use aberred_core::resources::collision_rule_index::{RuleGroups, RuleIndex};
 use bevy_ecs::prelude::*;
 
 /// Collision rule that invokes a Lua callback function.
@@ -63,3 +64,13 @@ impl LuaCollisionRule {
         }
     }
 }
+
+impl RuleGroups for LuaCollisionRule {
+    fn groups(&self) -> (&str, &str) {
+        (&self.group_a, &self.group_b)
+    }
+}
+
+/// Index of [`LuaCollisionRule`] entities, rebuilt by core's
+/// `rebuild_rule_index::<LuaCollisionRule>` and read by `lua_collision_observer`.
+pub type LuaCollisionRuleIndex = RuleIndex<LuaCollisionRule>;

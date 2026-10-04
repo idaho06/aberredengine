@@ -1259,3 +1259,30 @@ fn gui_click_observer_fires_once_without_lua() {
 
     assert_eq!(tw.world.resource::<ClickCount>().0, 1);
 }
+
+/// A Lua game indexes `LuaCollisionRule`s through the real sim schedule:
+/// `with_lua()` inserts `LuaCollisionRuleIndex` and registers its rebuild.
+#[cfg(feature = "lua")]
+#[test]
+fn lua_game_indexes_lua_collision_rules() {
+    use aberredengine::lua::components::luacollision::{LuaCollisionRule, LuaCollisionRuleIndex};
+
+    let script =
+        std::env::temp_dir().join(format!("aberred_lua_rule_index_{}.lua", std::process::id()));
+    std::fs::write(&script, "-- empty game script\n").unwrap();
+    let mut tw = TestWorld::builder()
+        .with_lua(&script)
+        .build()
+        .expect("build should succeed");
+    std::fs::remove_file(&script).ok();
+    tw.tick_to_play(DT, 8);
+
+    let rule = tw
+        .world
+        .spawn(LuaCollisionRule::new("ball", "brick", "on_hit"))
+        .id();
+    tw.tick(1, DT);
+
+    let index = tw.world.resource::<LuaCollisionRuleIndex>();
+    assert_eq!(index.bucket("brick", "ball"), Some(&[rule][..]));
+}

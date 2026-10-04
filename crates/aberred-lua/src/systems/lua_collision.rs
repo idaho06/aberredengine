@@ -39,7 +39,7 @@
 use bevy_ecs::prelude::*;
 use bevy_ecs::system::SystemParam;
 
-use crate::components::luacollision::LuaCollisionRule;
+use crate::components::luacollision::{LuaCollisionRule, LuaCollisionRuleIndex};
 use crate::components::luaphase::LuaPhase;
 use crate::resources::lua_runtime::{
     CtxOccupancy, LuaRuntime, OccMask, PhaseCmd, SignalsCtxTables, clear_table,
@@ -55,7 +55,6 @@ use aberred_core::components::signals::Signals;
 use aberred_core::events::collision::CollisionEvent;
 use aberred_core::protocol::audio::AudioCmd;
 use aberred_core::resources::animationstore::AnimationStore;
-use aberred_core::resources::collision_rule_index::CollisionRuleIndex;
 use aberred_core::resources::systemsstore::SystemsStore;
 use aberred_core::resources::worldsignals::WorldSignals;
 use aberred_core::systems::collision::{
@@ -69,7 +68,7 @@ pub struct LuaCollisionObserverParams<'w, 's> {
     pub commands: Commands<'w, 's>,
     pub groups: Query<'w, 's, &'static Group>,
     pub lua_rules: Query<'w, 's, &'static LuaCollisionRule>,
-    pub index: Res<'w, CollisionRuleIndex>,
+    pub index: Res<'w, LuaCollisionRuleIndex>,
     pub box_colliders: Query<'w, 's, &'static BoxCollider>,
     pub luaphase_query: Query<'w, 's, (Entity, &'static mut LuaPhase)>,
     pub entity_cmds: EntityCmdQueries<'w, 's>,
@@ -100,7 +99,7 @@ pub fn lua_collision_observer(
         None => return,
     };
 
-    let Some(bucket) = params.index.lua_bucket(ga, gb) else {
+    let Some(bucket) = params.index.bucket(ga, gb) else {
         return;
     };
 

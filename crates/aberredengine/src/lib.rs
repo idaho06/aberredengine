@@ -41,9 +41,9 @@ pub mod render {
 }
 
 // Module-style re-export of the Lua crate: `aberredengine::lua::resources::...`,
-// etc. Mirrors the `core` re-export above. The two Lua-priority
-// shadow systems (`systems::{collision_rule_index,mapspawn}`) are
-// unaffected -- those paths never moved into `aberred-lua`.
+// etc. Mirrors the `core` re-export above. The Lua-priority shadow
+// system `systems::mapspawn` is unaffected -- that path never moved into
+// `aberred-lua`.
 #[cfg(feature = "lua")]
 pub use aberred_lua as lua;
 
