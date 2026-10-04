@@ -30,16 +30,26 @@ mod timers {
     }
 
     fn register(builder: EngineBuilder) -> EngineBuilder { // GLUE
-        builder.add_observer(on_spawner_timer) // GLUE
+        builder.add_observer(on_spawner_timer).add_observer(end_invulnerability) // GLUE
     } // GLUE
 
-    fn spawn_one_shot(mut commands: Commands) { // GLUE
-        commands.spawn(Timer::new(5.0)).observe(one_shot); // GLUE
-    } // GLUE
+    #[derive(Component)]
+    struct Invulnerable;
 
-    fn one_shot(ev: On<TimerFired>, mut commands: Commands, mut audio: MessageWriter<AudioCmd>) {
-        audio.write(AudioCmd::PlayFx { id: "explosion".into() });
-        commands.entity(ev.entity).remove::<Timer>();
+    // Three seconds of invulnerability for the player
+    fn grant_invulnerability(commands: &mut Commands, player: Entity) {
+        commands.entity(player).insert((Invulnerable, Timer::once(3.0)));
+    }
+
+    // Registered once with `EngineBuilder::add_observer`
+    fn end_invulnerability(
+        ev: On<TimerFired>,
+        invulnerable: Query<(), With<Invulnerable>>,
+        mut commands: Commands,
+    ) {
+        if invulnerable.contains(ev.entity) {
+            commands.entity(ev.entity).remove::<Invulnerable>();
+        }
     }
 }
 

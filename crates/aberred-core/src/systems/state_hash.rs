@@ -29,7 +29,7 @@ use crate::components::rotation::Rotation;
 use crate::components::scale::Scale;
 use crate::components::screenposition::ScreenPosition;
 use crate::components::signals::Signals;
-use crate::components::timer::Timer;
+use crate::components::timer::{Timer, TimerMode};
 use crate::components::ttl::Ttl;
 use crate::components::tween::{Easing, LoopMode, Tween, TweenValue};
 use crate::protocol::replay::ReplayHasher;
@@ -212,6 +212,10 @@ pub fn hash_world_state(world: &World) -> u64 {
         hash_optional(&mut h, e.get::<Timer>(), |h, c| {
             h.write_f32(c.duration);
             h.write_f32(c.elapsed);
+            h.write_u8(match c.mode {
+                TimerMode::Repeat => 0,
+                TimerMode::Once => 1,
+            });
         });
         hash_optional(&mut h, e.get::<Ttl>(), |h, c| {
             h.write_f32(c.remaining);
@@ -399,6 +403,9 @@ mod tests {
             }),
             ("Timer.elapsed", |w, e| {
                 w.get_mut::<Timer>(e).unwrap().elapsed = 0.5
+            }),
+            ("Timer.mode", |w, e| {
+                w.get_mut::<Timer>(e).unwrap().mode = TimerMode::Once
             }),
             ("Ttl", |w, e| w.get_mut::<Ttl>(e).unwrap().remaining = 4.0),
             ("Animation.key", |w, e| {

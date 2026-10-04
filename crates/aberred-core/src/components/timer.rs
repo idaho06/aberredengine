@@ -1,9 +1,9 @@
-//! Repeating countdown timer component.
+//! Countdown timer component (repeating or one-shot).
 //!
 //! [`update_timers`](crate::systems::timer::update_timers) accumulates elapsed
 //! time on every [`Timer`] each sim tick. When `elapsed >= duration`, it triggers
 //! a [`TimerFired`](crate::events::timer::TimerFired) event targeted at the
-//! entity, and the timer resets by subtracting the duration.
+//! entity, then applies the timer's [`TimerMode`].
 //!
 //! # Usage
 //!
@@ -29,17 +29,31 @@
 
 use bevy_ecs::prelude::Component;
 
-/// Repeating countdown timer.
+/// What a [`Timer`] does after it fires.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum TimerMode {
+    /// Reset by subtracting `duration` (not zeroing, for timing accuracy) and
+    /// fire again every `duration` seconds.
+    #[default]
+    Repeat,
+    /// Fire once, then remove the `Timer` component (the entity is kept).
+    /// `TimerFired` observers still see the `Timer`, and a new `Timer` an
+    /// observer inserts is kept.
+    Once,
+}
+
+/// Countdown timer.
 ///
-/// Fires a [`TimerFired`](crate::events::timer::TimerFired) event every
-/// `duration` seconds. `elapsed` is reset by subtracting `duration` (not zeroed)
-/// for timing accuracy.
+/// Fires a [`TimerFired`](crate::events::timer::TimerFired) event when
+/// `elapsed >= duration`; see [`TimerMode`] for what happens next.
 #[derive(Component, Clone, Copy, Debug)]
 pub struct Timer {
     /// Total duration in seconds before the timer fires.
     pub duration: f32,
     /// Elapsed time since last reset.
     pub elapsed: f32,
+    /// Whether the timer repeats or fires once.
+    pub mode: TimerMode,
 }
 
 impl Timer {
@@ -48,6 +62,15 @@ impl Timer {
         Timer {
             duration,
             elapsed: 0.0,
+            mode: TimerMode::Repeat,
+        }
+    }
+
+    /// Create a timer that fires once after `duration` seconds, then removes itself.
+    pub fn once(duration: f32) -> Self {
+        Timer {
+            mode: TimerMode::Once,
+            ..Timer::new(duration)
         }
     }
 

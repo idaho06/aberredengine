@@ -1298,7 +1298,7 @@ When `WorldSignals` has a value for key `"score"`, the text automatically update
 | `InputControlled` | `InputControlled::symmetric(speed)` (fields `up_velocity`, `down_velocity`, `left_velocity`, `right_velocity` for per-direction speeds) |
 | `AccelerationControlled` | `AccelerationControlled::symmetric(accel)` |
 | `MouseControlled` | `MouseControlled { follow_x: true, follow_y: true }` |
-| `Timer` | `Timer::new(duration_secs)` — triggers `TimerFired` on its entity every `duration_secs`; see §7.1 |
+| `Timer` | `Timer::new(duration_secs)` (repeating) or `Timer::once(duration_secs)` — triggers `TimerFired` on its entity; see §7.1 |
 | `Phase` | `Phase::new("initial_phase", phases)` where `phases: FxHashMap<String, PhaseCallbackFns>` |
 | `CollisionRule` | `CollisionRule::rust("group_a", "group_b", callback)` — use `::rust()` for Rust callbacks; see §7.3 |
 | `Tween<MapPosition>` | `Tween::position(from: Vec2, to: Vec2, duration)` |
@@ -1576,7 +1576,7 @@ The callback types — phases, collisions and menus — receive `&mut GameCtx` (
 
 **Source:** `aberred-core/src/components/timer.rs`, `aberred-core/src/systems/timer.rs`, `aberred-core/src/events/timer.rs`
 
-`Timer` is a repeating countdown component. When `elapsed >= duration`, it triggers a `TimerFired` event on its entity and resets by subtracting `duration` (not zeroing) for timing accuracy. It fires at most once per sim tick.
+`Timer` is a countdown component. When `elapsed >= duration`, it triggers a `TimerFired` event on its entity, at most once per sim tick. `Timer::new` repeats, resetting by subtracting `duration` (not zeroing) for timing accuracy.
 
 **Creating a timer:**
 
@@ -1610,12 +1610,26 @@ fn on_spawner_timer(
 }
 ```
 
-**One-shot pattern:** Timers repeat. To fire once, remove the `Timer` in a per-entity observer (`.observe(one_shot)`):
+**One-shot timers:** `Timer::once(duration)` (`TimerMode::Once`) fires once, then removes its `Timer` component. The entity stays, so a one-shot fits a temporary state on a long-lived entity. Observers still see the `Timer` while handling the event, and a new `Timer` an observer inserts is kept, so one-shots can chain:
 
 ```rust
-fn one_shot(ev: On<TimerFired>, mut commands: Commands, mut audio: MessageWriter<AudioCmd>) {
-    audio.write(AudioCmd::PlayFx { id: "explosion".into() });
-    commands.entity(ev.entity).remove::<Timer>();
+#[derive(Component)]
+struct Invulnerable;
+
+// Three seconds of invulnerability for the player
+fn grant_invulnerability(commands: &mut Commands, player: Entity) {
+    commands.entity(player).insert((Invulnerable, Timer::once(3.0)));
+}
+
+// Registered once with `EngineBuilder::add_observer`
+fn end_invulnerability(
+    ev: On<TimerFired>,
+    invulnerable: Query<(), With<Invulnerable>>,
+    mut commands: Commands,
+) {
+    if invulnerable.contains(ev.entity) {
+        commands.entity(ev.entity).remove::<Invulnerable>();
+    }
 }
 ```
 

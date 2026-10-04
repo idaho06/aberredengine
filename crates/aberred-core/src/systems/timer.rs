@@ -11,15 +11,14 @@
 
 use bevy_ecs::prelude::*;
 
-use crate::components::timer::Timer;
+use crate::components::timer::{Timer, TimerMode};
 use crate::events::timer::TimerFired;
 use crate::resources::worldtime::WorldTime;
 
 /// Advance all [`Timer`] components and trigger [`TimerFired`] when they expire.
 ///
 /// Accumulates delta time on each timer and fires when `elapsed >= duration`,
-/// at most once per tick. The timer resets by subtracting duration, keeping the
-/// overshoot for consistent periodic timing.
+/// at most once per tick, then applies the timer's [`TimerMode`].
 pub fn update_timers(
     world_time: Res<WorldTime>,
     mut query: Query<(Entity, &mut Timer)>,
@@ -29,8 +28,29 @@ pub fn update_timers(
         timer.elapsed += world_time.delta;
         if timer.elapsed >= timer.duration {
             commands.trigger(TimerFired { entity });
-            timer.reset();
+            match timer.mode {
+                TimerMode::Repeat => timer.reset(),
+                TimerMode::Once => {
+                    commands
+                        .entity(entity)
+                        .queue_silenced(remove_spent_once_timer);
+                }
+            }
         }
+    }
+}
+
+/// Removes the entity's `Timer` if it is still the spent one-shot timer.
+///
+/// Runs after the [`TimerFired`] observers, so they see the `Timer`. The guard keeps
+/// a fresh `Timer` an observer inserted in its place, and `queue_silenced` ignores
+/// an entity an observer despawned.
+fn remove_spent_once_timer(mut entity: EntityWorldMut) {
+    if entity
+        .get::<Timer>()
+        .is_some_and(|t| t.mode == TimerMode::Once && t.elapsed >= t.duration)
+    {
+        entity.remove::<Timer>();
     }
 }
 
@@ -146,5 +166,63 @@ mod tests {
 
         assert_eq!(fired(&world), [entity]);
         assert!(approx_eq(world.get::<Timer>(entity).unwrap().elapsed, 1.5));
+    }
+
+    #[test]
+    fn once_timer_fires_once_then_loses_its_timer() {
+        let mut world = observed_world(1.0);
+        let entity = world.spawn(Timer::once(0.5)).id();
+
+        tick_timers(&mut world);
+        tick_timers(&mut world);
+
+        assert_eq!(fired(&world), [entity]);
+        assert!(world.get::<Timer>(entity).is_none());
+        assert!(world.get_entity(entity).is_ok(), "the entity survives");
+    }
+
+    #[test]
+    fn once_timer_observer_sees_the_timer_and_may_despawn() {
+        let mut world = world_with_delta(1.0);
+        world.add_observer(
+            |ev: On<TimerFired>, timers: Query<&Timer>, mut commands: Commands| {
+                assert_eq!(timers.get(ev.entity).unwrap().mode, TimerMode::Once);
+                commands.entity(ev.entity).despawn();
+            },
+        );
+        world.flush();
+        let entity = world.spawn(Timer::once(0.5)).id();
+
+        tick_timers(&mut world); // the removal after a despawn must not panic
+
+        assert!(world.get_entity(entity).is_err());
+    }
+
+    #[test]
+    fn once_timer_observer_can_rearm_a_new_timer() {
+        let mut world = world_with_delta(1.0);
+        world.add_observer(|ev: On<TimerFired>, mut commands: Commands| {
+            commands.entity(ev.entity).insert(Timer::once(2.0));
+        });
+        world.flush();
+        let entity = world.spawn(Timer::once(0.5)).id();
+
+        tick_timers(&mut world);
+
+        let timer = world
+            .get::<Timer>(entity)
+            .expect("the re-armed timer must survive the spent timer's removal");
+        assert_eq!(timer.duration, 2.0);
+    }
+
+    #[test]
+    fn repeat_timer_keeps_firing() {
+        let mut world = observed_world(1.0);
+        let entity = world.spawn(Timer::new(0.5)).id();
+
+        tick_timers(&mut world);
+        tick_timers(&mut world);
+
+        assert_eq!(fired(&world), [entity, entity]);
     }
 }
