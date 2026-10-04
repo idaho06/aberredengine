@@ -5,15 +5,15 @@
 //! back to its Rust fn-pointer callback. Re-exported by
 //! the facade's `systems::gui_interactable_click` under `#[cfg(feature = "lua")]`.
 
-use aberred_core::events::gui_interactable::GuiInteractableClickEvent;
+use aberred_core::events::gui_interactable::GuiClicked;
 use aberred_core::systems::GameCtx;
 use bevy_ecs::prelude::*;
 use log::warn;
 
-/// Reacts to `GuiInteractableClickEvent`; dispatches to the entity's named
+/// Reacts to `GuiClicked`; dispatches to the entity's named
 /// Lua callback first, falling back to its Rust fn-pointer callback.
 pub fn gui_interactable_click_observer(
-    trigger: On<GuiInteractableClickEvent>,
+    trigger: On<GuiClicked>,
     mut ctx: GameCtx,
     lua_runtime: bevy_ecs::system::NonSend<crate::resources::lua_runtime::LuaRuntime>,
 ) {
@@ -93,7 +93,7 @@ mod tests {
             .id();
 
         tick(&mut world);
-        world.trigger(GuiInteractableClickEvent { entity: button });
+        world.trigger(GuiClicked { entity: button });
         world.flush();
 
         assert!(

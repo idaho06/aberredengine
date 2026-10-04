@@ -25,7 +25,7 @@ Each widget type follows the same pipeline:
        ↓
 3. gui_layout_system  — parent ScreenPosition + child GuiOffset → child ScreenPosition
        ↓
-4. gui_hit_test_system — cursor + ZIndex → GuiWidgetState; fires GuiInteractableClickEvent
+4. gui_hit_test_system — cursor + ZIndex → GuiWidgetState; fires GuiClicked
        ↓
 5. gui_image_state_sync_system — GuiWidgetState → Sprite.offset (for GuiImage only)
        ↓
@@ -636,21 +636,21 @@ for widgets not built through `GuiButton`/`GuiImage`.
    id, so the winner is deterministic regardless of Bevy's (unstable) query iteration order.
 3. If the winner is `Disabled`, it still consumes the click (sets
    `GuiInputState.click_consumed_this_frame = true`, blocking anything beneath it in the Z stack)
-   but its state is never touched, and `GuiInteractableClickEvent` never fires for it. Otherwise,
+   but its state is never touched, and `GuiClicked` never fires for it. Otherwise,
    set the winner's state to `Pressed` (mouse button down) or `Hovered` (up); every non-winner,
    non-`Disabled` interactable resets to `Normal`.
 4. For a non-`Disabled` winner, on press-then-release-inside: fire
-   `GuiInteractableClickEvent { entity }` and set `GuiInputState.click_consumed_this_frame = true`
+   `GuiClicked { entity }` and set `GuiInputState.click_consumed_this_frame = true`
    to prevent the click from hitting anything else this frame.
 
 `Disabled` widgets participate in hit-testing (they block clicks below them in the Z stack), but
-neither promote past `Disabled` nor ever cause `GuiInteractableClickEvent` to fire — the "disabled
+neither promote past `Disabled` nor ever cause `GuiClicked` to fire — the "disabled
 buttons don't click" behavior is enforced here, in the hit-test step, not in the click observer
 described below.
 
 ### Click callbacks
 
-`gui_interactable_click_observer` reacts to `GuiInteractableClickEvent` (which, per above, never
+`gui_interactable_click_observer` reacts to `GuiClicked` (which, per above, never
 fires for a `Disabled` widget) and resolves a callback chain on the clicked entity's
 `GuiInteractable`. There are **two implementations**, selected by the facade's feature-gated
 shadow module (`crates/aberredengine/src/systems/gui_interactable_click.rs`):

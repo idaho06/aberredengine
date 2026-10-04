@@ -1,6 +1,6 @@
 //! GUI interactable click dispatch.
 //!
-//! [`gui_interactable_click_observer`] reacts to [`GuiInteractableClickEvent`]
+//! [`gui_interactable_click_observer`] reacts to [`GuiClicked`]
 //! (triggered by `gui_hit_test_system`) and resolves the callback chain on
 //! the clicked entity's `GuiInteractable`: Lua name first, Rust fn-pointer
 //! second. This same observer dispatches clicks for
@@ -10,17 +10,17 @@
 use bevy_ecs::prelude::*;
 use log::warn;
 
-use crate::events::gui_interactable::GuiInteractableClickEvent;
+use crate::events::gui_interactable::GuiClicked;
 use crate::systems::GameCtx;
 
-/// Reacts to `GuiInteractableClickEvent`; dispatches to the entity's Rust
+/// Reacts to `GuiClicked`; dispatches to the entity's Rust
 /// fn-pointer callback.
 ///
 /// The facade's `aberredengine::systems::gui_interactable_click` module
 /// shadows this with a Lua-name-first variant under `#[cfg(feature =
 /// "lua")]` -- `aberred-core` cannot name `LuaRuntime`, so the Lua-priority
 /// dispatch lives there instead.
-pub fn gui_interactable_click_observer(trigger: On<GuiInteractableClickEvent>, mut ctx: GameCtx) {
+pub fn gui_interactable_click_observer(trigger: On<GuiClicked>, mut ctx: GameCtx) {
     let event = trigger.event();
     let Ok(interactable) = ctx.gui_interactables.get(event.entity) else {
         warn!(
@@ -68,7 +68,7 @@ mod tests {
             .id();
 
         tick(&mut world);
-        world.trigger(GuiInteractableClickEvent { entity: button });
+        world.trigger(GuiClicked { entity: button });
         world.flush();
 
         assert!(
@@ -85,7 +85,7 @@ mod tests {
         world.despawn(bogus);
 
         tick(&mut world);
-        world.trigger(GuiInteractableClickEvent { entity: bogus });
+        world.trigger(GuiClicked { entity: bogus });
         world.flush();
     }
 
@@ -100,7 +100,7 @@ mod tests {
             .id();
 
         tick(&mut world);
-        world.trigger(GuiInteractableClickEvent { entity: image });
+        world.trigger(GuiClicked { entity: image });
         world.flush();
 
         assert!(

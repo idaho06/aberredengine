@@ -126,7 +126,7 @@ fn observer_receives_event_payload() {
 }
 
 // Systems trigger events via `Commands::trigger` (input -> `InputEvent`,
-// GUI hit-test -> `GuiInteractableClickEvent`); `pump_render_msgs` relies on
+// GUI hit-test -> `GuiClicked`); `pump_render_msgs` relies on
 // the observer running as soon as the command queue is applied.
 #[test]
 fn commands_trigger_fires_observer_on_apply() {

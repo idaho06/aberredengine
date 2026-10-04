@@ -1,22 +1,20 @@
-//! GUI interactable click events.
+//! GUI click events.
 //!
-//! [`GuiInteractableClickEvent`] is triggered when any clickable GUI widget
-//! (`GuiButton`, `GuiImage`, or any other widget carrying `GuiInteractable`) is
-//! released while still inside its bounds, having been `Pressed` the
-//! preceding frame. The GUI counterpart of [`MenuSelected`](super::menu::MenuSelected).
-//! `gui_interactable_click_observer` dispatches the matching Lua/Rust
-//! callback chain for the clicked entity.
+//! `gui_hit_test_system` triggers a [`GuiClicked`] on a clickable GUI widget
+//! (`GuiButton`, `GuiImage`, or any other widget carrying `GuiInteractable`)
+//! when it is released while still inside its bounds, having been `Pressed`
+//! the preceding frame. Observe it per widget
+//! (`commands.spawn(..).observe(handler)`) or globally (`add_observer(handler)`).
+//! The GUI counterpart of [`MenuSelected`](super::menu::MenuSelected).
 
 use bevy_ecs::prelude::*;
 
-/// Event triggered when a `GuiInteractable`'s press-then-release-inside
-/// transition is detected by `gui_hit_test_system`.
-///
-/// Observed by `gui_interactable_click_observer`, which dispatches the
-/// Lua/Rust callback chain.
-#[derive(Event, Debug, Clone)]
-pub struct GuiInteractableClickEvent {
-    /// The entity that was clicked (a `GuiButton`, `GuiImage`, or any other
-    /// `GuiInteractable`-carrying widget).
+/// Triggered on a `GuiInteractable` widget when it is clicked
+/// (press, then release inside).
+#[derive(EntityEvent, Clone, Copy, Debug)]
+pub struct GuiClicked {
+    /// The clicked widget (a `GuiButton`, `GuiImage`, or any other
+    /// `GuiInteractable`-carrying entity).
+    #[event_target]
     pub entity: Entity,
 }

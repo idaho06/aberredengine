@@ -4,7 +4,7 @@
 //! [`GuiInteractable`]'s [`GuiWidgetState`] from cursor position + the raw
 //! left mouse button, picks the highest-`ZIndex` interactable under the
 //! cursor as the sole interaction target (others stay `Normal`), and
-//! triggers [`GuiInteractableClickEvent`] on a press-then-release-inside
+//! triggers [`GuiClicked`] on a press-then-release-inside
 //! transition. Any clickable GUI widget that carries `GuiInteractable`
 //! (including `GuiButton` and `GuiImage`) goes through this same system.
 //!
@@ -21,7 +21,7 @@ use bevy_ecs::prelude::*;
 use crate::components::guiinteractable::{GuiInteractable, GuiWidgetState};
 use crate::components::screenposition::ScreenPosition;
 use crate::components::zindex::ZIndex;
-use crate::events::gui_interactable::GuiInteractableClickEvent;
+use crate::events::gui_interactable::GuiClicked;
 use crate::math::{Rect, Vec2};
 use crate::resources::guiinputstate::GuiInputState;
 use crate::resources::input::InputState;
@@ -106,7 +106,7 @@ pub fn gui_hit_test_system(
         };
 
         if pressed_this_pass && released {
-            commands.trigger(GuiInteractableClickEvent { entity });
+            commands.trigger(GuiClicked { entity });
             gui_input.click_consumed_this_frame = true;
         }
     }
@@ -139,6 +139,27 @@ mod tests {
                 ZIndex(z),
             ))
             .id()
+    }
+
+    #[derive(Resource, Default)]
+    struct Clicks(Vec<Entity>);
+
+    fn record_click(trigger: On<GuiClicked>, mut clicks: ResMut<Clicks>) {
+        clicks.0.push(trigger.event().entity);
+    }
+
+    /// One frame of mouse input at (`x`, `y`) with the button `down` or not.
+    fn mouse_frame(world: &mut World, x: f32, y: f32, down: bool) {
+        {
+            let mut input = world.resource_mut::<InputState>();
+            input.mouse_x = x;
+            input.mouse_y = y;
+            let button = &mut input.mouse_left_button;
+            let was_down = button.active;
+            button.clear_edge();
+            button.apply_edge(was_down, down);
+        }
+        tick(world);
     }
 
     #[test]
@@ -199,28 +220,14 @@ mod tests {
         let mut world = new_world();
         let btn = spawn_interactable(&mut world, 10.0, 10.0, 50.0, 20.0, 0.0);
 
-        // Frame 1: press inside.
-        {
-            let mut input = world.resource_mut::<InputState>();
-            input.mouse_x = 20.0;
-            input.mouse_y = 15.0;
-            input.mouse_left_button.active = true;
-        }
-        tick(&mut world);
+        mouse_frame(&mut world, 20.0, 15.0, true);
         assert_eq!(
             world.get::<GuiInteractable>(btn).unwrap().state,
             GuiWidgetState::Pressed
         );
 
-        // Frame 2: drag outside while still held.
-        {
-            let mut input = world.resource_mut::<InputState>();
-            input.mouse_x = 999.0;
-            input.mouse_y = 999.0;
-            // still held
-            input.mouse_left_button.active = true;
-        }
-        tick(&mut world);
+        // Drag outside while still held.
+        mouse_frame(&mut world, 999.0, 999.0, true);
         assert_eq!(
             world.get::<GuiInteractable>(btn).unwrap().state,
             GuiWidgetState::Normal,
@@ -233,30 +240,41 @@ mod tests {
         let mut world = new_world();
         let btn = spawn_interactable(&mut world, 10.0, 10.0, 50.0, 20.0, 0.0);
 
-        // Frame 1: press inside.
-        {
-            let mut input = world.resource_mut::<InputState>();
-            input.mouse_x = 20.0;
-            input.mouse_y = 15.0;
-            input.mouse_left_button.active = true;
-            input.mouse_left_button.just_pressed = true;
-        }
-        tick(&mut world);
-
-        // Frame 2: release inside.
-        {
-            let mut input = world.resource_mut::<InputState>();
-            input.mouse_left_button.active = false;
-            input.mouse_left_button.just_pressed = false;
-            input.mouse_left_button.just_released = true;
-        }
-        tick(&mut world);
+        mouse_frame(&mut world, 20.0, 15.0, true);
+        mouse_frame(&mut world, 20.0, 15.0, false);
 
         assert_eq!(
             world.get::<GuiInteractable>(btn).unwrap().state,
             GuiWidgetState::Hovered
         );
         assert!(world.resource::<GuiInputState>().click_consumed_this_frame);
+    }
+
+    #[test]
+    fn a_widget_observer_sees_gui_clicked_on_release_inside_only() {
+        let mut world = new_world();
+        world.init_resource::<Clicks>();
+        let btn = spawn_interactable(&mut world, 10.0, 10.0, 50.0, 20.0, 0.0);
+        let other = spawn_interactable(&mut world, 100.0, 10.0, 50.0, 20.0, 0.0);
+        world.entity_mut(btn).observe(record_click);
+        world.entity_mut(other).observe(record_click);
+
+        mouse_frame(&mut world, 20.0, 15.0, true);
+        mouse_frame(&mut world, 20.0, 15.0, false);
+        assert_eq!(
+            world.resource::<Clicks>().0,
+            [btn],
+            "press-then-release inside"
+        );
+
+        mouse_frame(&mut world, 20.0, 15.0, true);
+        mouse_frame(&mut world, 999.0, 999.0, true);
+        mouse_frame(&mut world, 999.0, 999.0, false);
+        assert_eq!(
+            world.resource::<Clicks>().0,
+            [btn],
+            "drag-off does not click"
+        );
     }
 
     #[test]

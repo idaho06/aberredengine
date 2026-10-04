@@ -2083,9 +2083,9 @@ the parent's `ScreenPosition` plus `GuiOffset`.
 
 **Click events:** clicks dispatch primarily through the per-widget `GuiInteractable.on_rust_callback` /
 `on_click_callback` (Lua name) shown above. For cross-cutting logic that doesn't belong to one specific
-widget (analytics, a UI click sound), you can additionally observe `GuiInteractableClickEvent { entity }`
-(`aberred-core/src/events/gui_interactable.rs`) the same way as `AnimationFinishedEvent`/`TweenFinishedEvent<T>` above —
-register it once with `EngineBuilder::add_observer`; it fires for any `GuiInteractable`-carrying widget
+widget (analytics, a UI click sound), you can additionally observe `GuiClicked { entity }`
+(`aberred-core/src/events/gui_interactable.rs`), either per widget (`.observe(handler)` on the widget entity) or
+once with `EngineBuilder::add_observer`; it fires for any `GuiInteractable`-carrying widget
 (`GuiButton` or `GuiImage`) on a press-then-release-inside.
 
 ### 7.8 Particle Emitters
