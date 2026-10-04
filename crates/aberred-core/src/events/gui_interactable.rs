@@ -3,7 +3,7 @@
 //! [`GuiInteractableClickEvent`] is triggered when any clickable GUI widget
 //! (`GuiButton`, `GuiImage`, or any other widget carrying `GuiInteractable`) is
 //! released while still inside its bounds, having been `Pressed` the
-//! preceding frame. Mirrors [`MenuSelectionEvent`](super::menu::MenuSelectionEvent).
+//! preceding frame. The GUI counterpart of [`MenuSelected`](super::menu::MenuSelected).
 //! `gui_interactable_click_observer` dispatches the matching Lua/Rust
 //! callback chain for the clicked entity.
 

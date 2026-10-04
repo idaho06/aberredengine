@@ -19,7 +19,7 @@ use crate::components::signals::Signals;
 use crate::components::sprite::Sprite;
 use crate::components::zindex::ZIndex;
 use crate::events::input::{InputAction, InputEvent};
-use crate::events::menu::MenuSelectionEvent;
+use crate::events::menu::MenuSelected;
 use crate::math::Vec2;
 use crate::protocol::audio::AudioCmd;
 use crate::protocol::render_assets::RenderAssetCmd;
@@ -336,7 +336,7 @@ pub fn menu_despawn(
 /// Handles input events to navigate menus and confirm selections.
 ///
 /// Responds to secondary direction inputs (arrow keys) to move selection
-/// and action buttons to confirm. Triggers [`MenuSelectionEvent`] when
+/// and action buttons to confirm. Triggers [`MenuSelected`] when
 /// an item is selected.
 ///
 /// When `visible_count` is set, navigation is bounded (no wrap-around) and
@@ -410,17 +410,18 @@ pub fn menu_controller_observer(
             }
             InputAction::Action1 | InputAction::Action2 => {
                 if let Some(item) = menu.items.get(menu.selected_index) {
-                    let selected_id = item.id.clone();
+                    let item_id = item.id.clone();
                     debug!(
-                        "menu_controller_observer: Selection confirmed! item_id={}, triggering MenuSelectionEvent",
-                        selected_id
+                        "menu_controller_observer: Selection confirmed! item_id={}, triggering MenuSelected",
+                        item_id
                     );
                     signals.remove_flag("waiting_selection");
                     menu.active = false;
-                    signals.set_string("selected_item", selected_id.clone());
-                    commands.trigger(MenuSelectionEvent {
-                        menu: entity,
-                        item_id: selected_id,
+                    signals.set_string("selected_item", item_id.clone());
+                    commands.trigger(MenuSelected {
+                        entity,
+                        item_id,
+                        index: menu.selected_index,
                     });
                 }
             }
@@ -548,7 +549,7 @@ fn reposition_menu_items(commands: &mut Commands, menu: &Menu) {
 /// variant that checks `on_select_callback` (Lua) first, under
 /// `#[cfg(feature = "lua")]` -- `aberred-core` cannot name `LuaRuntime`.
 pub fn menu_selection_observer(
-    trigger: On<MenuSelectionEvent>,
+    trigger: On<MenuSelected>,
     menus: Query<(&Menu, Option<&MenuActions>)>,
     mut next_game_state: ResMut<NextGameState>,
     systems_store: Res<SystemsStore>,
@@ -556,26 +557,21 @@ pub fn menu_selection_observer(
 ) {
     let event = trigger.event();
     debug!(
-        "menu_selection_observer: Received MenuSelectionEvent for menu {:?}, item_id={}",
-        event.menu, event.item_id
+        "menu_selection_observer: Received MenuSelected for menu {:?}, item_id={}",
+        event.entity, event.item_id
     );
 
-    let Ok((menu, menu_actions_opt)) = menus.get(event.menu) else {
+    let Ok((menu, menu_actions_opt)) = menus.get(event.entity) else {
         warn!(
             "menu_selection_observer: Menu entity {:?} not found",
-            event.menu
+            event.entity
         );
         return;
     };
 
     // Priority 1: Rust callback
     if let Some(cb) = menu.on_rust_callback {
-        let item_index = menu
-            .items
-            .iter()
-            .position(|item| item.id == event.item_id)
-            .unwrap_or(0);
-        cb(event.menu, &event.item_id, item_index, &mut ctx);
+        cb(event.entity, &event.item_id, event.index, &mut ctx);
         return;
     }
 
@@ -595,7 +591,7 @@ pub fn menu_selection_observer(
 /// fallback.
 pub fn dispatch_menu_action(
     menu_actions_opt: Option<&MenuActions>,
-    event: &MenuSelectionEvent,
+    event: &MenuSelected,
     ctx: &mut GameCtx,
     next_game_state: &mut ResMut<NextGameState>,
     systems_store: &Res<SystemsStore>,
@@ -663,11 +659,11 @@ mod tests {
     }
 
     #[derive(Resource, Default)]
-    struct Selections(Vec<(Entity, String)>);
+    struct Selections(Vec<(Entity, String, usize)>);
 
-    fn record_selection(trigger: On<MenuSelectionEvent>, mut s: ResMut<Selections>) {
+    fn record_selection(trigger: On<MenuSelected>, mut s: ResMut<Selections>) {
         let e = trigger.event();
-        s.0.push((e.menu, e.item_id.clone()));
+        s.0.push((e.entity, e.item_id.clone(), e.index));
     }
 
     /// Spawns `menu`, runs `menu_spawn_system`, and wires the input controller.
@@ -907,7 +903,10 @@ mod tests {
         );
 
         press(&mut world, InputAction::Action1);
-        assert_eq!(world.resource::<Selections>().0, [(menu, "b".to_string())]);
+        assert_eq!(
+            world.resource::<Selections>().0,
+            [(menu, "b".to_string(), 1)]
+        );
         let signals = world.get::<Signals>(menu).unwrap();
         assert!(!signals.has_flag("waiting_selection"));
         assert_eq!(signals.get_string("selected_item"), Some("b"));
@@ -921,6 +920,22 @@ mod tests {
             "an inactive menu ignores input"
         );
         assert_eq!(world.get::<Menu>(menu).unwrap().selected_index, 1);
+    }
+
+    #[test]
+    fn confirming_triggers_menu_selected_on_the_menu_entity_with_the_index() {
+        // `spawn_menu` records globally; this adds a per-menu observer, so
+        // each confirm is recorded once by each.
+        let (mut world, menu) = spawn_menu(five_items());
+        world.entity_mut(menu).observe(record_selection);
+        world.flush();
+
+        press(&mut world, InputAction::SecondaryDirectionDown);
+        press(&mut world, InputAction::SecondaryDirectionDown);
+        press(&mut world, InputAction::Action1);
+
+        let c = (menu, "c".to_string(), 2);
+        assert_eq!(world.resource::<Selections>().0, [c.clone(), c]);
     }
 
     #[test]
@@ -1024,9 +1039,17 @@ mod tests {
     }
 
     fn select(world: &mut World, menu: Entity, item: &str) {
-        world.trigger(MenuSelectionEvent {
-            menu,
+        let index = world
+            .get::<Menu>(menu)
+            .unwrap()
+            .items
+            .iter()
+            .position(|i| i.id == item)
+            .expect("select: item is in the menu");
+        world.trigger(MenuSelected {
+            entity: menu,
             item_id: item.to_string(),
+            index,
         });
         world.flush();
     }

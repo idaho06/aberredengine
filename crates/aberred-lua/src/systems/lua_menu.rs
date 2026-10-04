@@ -7,7 +7,7 @@
 //! the facade's `systems::menu` under `#[cfg(feature = "lua")]`.
 
 use aberred_core::components::menu::{Menu, MenuActions};
-use aberred_core::events::menu::MenuSelectionEvent;
+use aberred_core::events::menu::MenuSelected;
 use aberred_core::resources::gamestate::NextGameState;
 use aberred_core::resources::systemsstore::SystemsStore;
 use aberred_core::systems::GameCtx;
@@ -18,7 +18,7 @@ use log::{debug, error, warn};
 ///
 /// Priority chain: Lua callback → Rust callback → `MenuActions`.
 pub fn menu_selection_observer(
-    trigger: On<MenuSelectionEvent>,
+    trigger: On<MenuSelected>,
     menus: Query<(&Menu, Option<&MenuActions>)>,
     mut next_game_state: ResMut<NextGameState>,
     systems_store: Res<SystemsStore>,
@@ -27,14 +27,14 @@ pub fn menu_selection_observer(
 ) {
     let event = trigger.event();
     debug!(
-        "menu_selection_observer: Received MenuSelectionEvent for menu {:?}, item_id={}",
-        event.menu, event.item_id
+        "menu_selection_observer: Received MenuSelected for menu {:?}, item_id={}",
+        event.entity, event.item_id
     );
 
-    let Ok((menu, menu_actions_opt)) = menus.get(event.menu) else {
+    let Ok((menu, menu_actions_opt)) = menus.get(event.entity) else {
         warn!(
             "menu_selection_observer: Menu entity {:?} not found",
-            event.menu
+            event.entity
         );
         return;
     };
@@ -44,15 +44,9 @@ pub fn menu_selection_observer(
         if lua_runtime.has_function(callback_name) {
             // Build context table
             let lua_ctx = lua_runtime.lua().create_table().unwrap();
-            lua_ctx.set("menu_id", event.menu.to_bits()).unwrap();
-            lua_ctx.set("item_id", event.item_id.clone()).unwrap();
-
-            let item_index = menu
-                .items
-                .iter()
-                .position(|item| item.id == event.item_id)
-                .unwrap_or(0);
-            lua_ctx.set("item_index", item_index).unwrap();
+            lua_ctx.set("menu_id", event.entity.to_bits()).unwrap();
+            lua_ctx.set("item_id", event.item_id.as_str()).unwrap();
+            lua_ctx.set("item_index", event.index).unwrap();
 
             if let Err(e) = lua_runtime.call_function::<_, ()>(callback_name, lua_ctx) {
                 error!(target: "lua", "Error in menu callback '{}': {}", callback_name, e);
@@ -65,12 +59,7 @@ pub fn menu_selection_observer(
 
     // Priority 2: Rust callback
     if let Some(cb) = menu.on_rust_callback {
-        let item_index = menu
-            .items
-            .iter()
-            .position(|item| item.id == event.item_id)
-            .unwrap_or(0);
-        cb(event.menu, &event.item_id, item_index, &mut ctx);
+        cb(event.entity, &event.item_id, event.index, &mut ctx);
         return;
     }
 

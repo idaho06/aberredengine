@@ -4,7 +4,7 @@
 //! Lua callback → Rust callback → `MenuActions`.
 
 use aberredengine::core::components::menu::{Menu, MenuAction, MenuActions, MenuRustCallback};
-use aberredengine::core::events::menu::MenuSelectionEvent;
+use aberredengine::core::events::menu::MenuSelected;
 use aberredengine::core::resources::gamestate::{GameState, NextGameState};
 use aberredengine::core::resources::systemsstore::SystemsStore;
 use aberredengine::core::resources::worldsignals::WorldSignals;
@@ -90,9 +90,10 @@ fn rust_callback_invoked_with_correct_args() {
     CALLBACK_ARGS.with(|args| *args.borrow_mut() = None);
 
     // Trigger selection of the second item ("options", index 1)
-    world.trigger(MenuSelectionEvent {
-        menu: menu_entity,
+    world.trigger(MenuSelected {
+        entity: menu_entity,
         item_id: "options".to_string(),
+        index: 1,
     });
 
     // Verify callback was called with correct item_id and index
@@ -133,9 +134,10 @@ fn menu_actions_work_without_callback() {
     world.flush();
 
     // Trigger "start" → should SetScene
-    world.trigger(MenuSelectionEvent {
-        menu: menu_entity,
+    world.trigger(MenuSelected {
+        entity: menu_entity,
         item_id: "start".to_string(),
+        index: 0,
     });
 
     assert_eq!(
@@ -192,9 +194,10 @@ fn rust_callback_takes_priority_over_menu_actions() {
 
     PRIORITY_CALLED.with(|c| c.set(false));
 
-    world.trigger(MenuSelectionEvent {
-        menu: menu_entity,
+    world.trigger(MenuSelected {
+        entity: menu_entity,
         item_id: "start".to_string(),
+        index: 0,
     });
 
     // Rust callback should have run
@@ -224,9 +227,10 @@ fn no_callback_no_actions_does_nothing() {
     world.flush();
 
     // This should not panic — it just logs a warning
-    world.trigger(MenuSelectionEvent {
-        menu: menu_entity,
+    world.trigger(MenuSelected {
+        entity: menu_entity,
         item_id: "item1".to_string(),
+        index: 0,
     });
 
     // No signals should have been set
@@ -270,17 +274,20 @@ fn callback_receives_correct_indices() {
     INDEX_CAPTURE.with(|v| v.borrow_mut().clear());
 
     // Trigger each item
-    world.trigger(MenuSelectionEvent {
-        menu: menu_entity,
+    world.trigger(MenuSelected {
+        entity: menu_entity,
         item_id: "a".to_string(),
+        index: 0,
     });
-    world.trigger(MenuSelectionEvent {
-        menu: menu_entity,
+    world.trigger(MenuSelected {
+        entity: menu_entity,
         item_id: "c".to_string(),
+        index: 2,
     });
-    world.trigger(MenuSelectionEvent {
-        menu: menu_entity,
+    world.trigger(MenuSelected {
+        entity: menu_entity,
         item_id: "b".to_string(),
+        index: 1,
     });
 
     INDEX_CAPTURE.with(|v| {
@@ -324,9 +331,10 @@ fn unknown_item_id_defaults_to_index_zero() {
 
     UNKNOWN_INDEX.with(|c| c.set(999));
 
-    world.trigger(MenuSelectionEvent {
-        menu: menu_entity,
+    world.trigger(MenuSelected {
+        entity: menu_entity,
         item_id: "nonexistent".to_string(),
+        index: 0,
     });
 
     assert_eq!(UNKNOWN_INDEX.with(|c| c.get()), 0);
@@ -381,9 +389,10 @@ fn lua_callback_takes_priority_over_rust_callback() {
 
     RUST_CB_CALLED.with(|c| c.set(false));
 
-    world.trigger(MenuSelectionEvent {
-        menu: menu_entity,
+    world.trigger(MenuSelected {
+        entity: menu_entity,
         item_id: "play".to_string(),
+        index: 0,
     });
 
     // Lua had priority → Rust callback should NOT have been called
