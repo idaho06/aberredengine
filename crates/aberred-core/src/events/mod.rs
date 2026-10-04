@@ -12,6 +12,7 @@
 //! - [`gui_interactable`] – GUI interactable (button/image) click events
 //! - [`input`] – input action events (key press/release)
 //! - [`menu`] – menu selection events
+//! - [`phase`] – phase enter/exit events (`PhaseEntered`/`PhaseExited`)
 //! - [`scene`] – scene enter/exit events (`SceneEntered`/`SceneExited`)
 //! - [`switchdebug`] – toggle debug rendering and diagnostics on/off (F11, stays logic-side)
 //!
@@ -27,6 +28,7 @@ pub mod gamestate;
 pub mod gui_interactable;
 pub mod input;
 pub mod menu;
+pub mod phase;
 pub mod scene;
 pub mod spawnmap;
 pub mod switchdebug;

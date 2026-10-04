@@ -18,7 +18,6 @@
 //!
 //! # Related
 //!
-//! - [`crate::components::phase::PhaseEnterFn`] etc. – fn-pointer types for phase callbacks
 //! - [`crate::components::collision::CollisionCallback`] – fn-pointer type for collision callbacks
 //! - [`crate::components::menu::MenuRustCallback`] – fn-pointer type for menu callbacks
 
@@ -54,7 +53,6 @@ use crate::resources::worldtime::WorldTime;
 ///
 /// Provides commands, a complete set of component queries, and the most
 /// commonly needed resources. All Rust callback types —
-/// [`PhaseEnterFn`](crate::components::phase::PhaseEnterFn),
 /// [`CollisionCallback`](crate::components::collision::CollisionCallback),
 /// [`MenuRustCallback`](crate::components::menu::MenuRustCallback),
 /// and the scene callbacks — receive `&mut GameCtx`.

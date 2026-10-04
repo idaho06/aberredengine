@@ -55,108 +55,54 @@ mod timers {
 
 // 7.2 Phase State Machines
 mod phase_state_machines {
-    use rustc_hash::FxHashMap; // GLUE
 
     use aberredengine::prelude::*;
 
-    // Called when entering a phase. Return Some("phase") to immediately chain-transition.
-    type PhaseEnterFn = fn(Entity, &mut GameCtx, &InputState) -> Option<String>;
+    #[derive(Component)]
+    struct Player;
 
-    // Called once per sim tick while in a phase. Return Some("phase") to transition.
-    type PhaseUpdateFn = fn(Entity, &mut GameCtx, &InputState, f32) -> Option<String>;
+    fn spawn_player(mut commands: Commands) {
+        commands.spawn((
+            Player,
+            MapPosition::new(100.0, 200.0),
+            RigidBody::default(),
+            // ... sprite, collider, etc ...
+            Phase::new("idle"),
+        ));
+    }
 
-    // Called when exiting a phase. No return — the transition is already committed.
-    type PhaseExitFn = fn(Entity, &mut GameCtx);
+    // Registered with `EngineBuilder::add_system`; runs once per sim tick
+    fn player_phases(
+        mut players: Query<(&mut Phase, &mut RigidBody), With<Player>>,
+        input: Res<InputState>,
+    ) {
+        for (mut phase, mut rb) in &mut players {
+            let next = match phase.current.as_str() {
+                "idle" if input.action(InputAction::Action1).just_pressed => {
+                    rb.velocity.y = -400.0;
+                    "jumping"
+                }
+                "jumping" if rb.velocity.y > 0.0 => "falling",
+                "falling" if rb.velocity.y == 0.0 => "idle",
+                _ => continue,
+            };
+            phase.next = Some(next.into());
+        }
+    }
 
-    fn same_as_engine( // GLUE
-        e: PhaseEnterFn, u: PhaseUpdateFn, x: PhaseExitFn, // GLUE
-    ) -> PhaseCallbackFns { // GLUE
-        PhaseCallbackFns { on_enter: Some(e), on_update: Some(u), on_exit: Some(x) } // GLUE
+    fn register(builder: EngineBuilder) -> EngineBuilder { // GLUE
+        builder.add_system(player_phases).add_observer(on_player_phase_entered) // GLUE
     } // GLUE
 
-    fn spawn_player(ctx: &mut GameCtx) { // GLUE
-    use aberredengine::prelude::*;
-    use rustc_hash::FxHashMap;
-
-    let mut phases = FxHashMap::default();
-
-    phases.insert("idle".to_string(), PhaseCallbackFns {
-        on_enter: Some(idle_enter),
-        on_update: Some(idle_update),
-        on_exit: None,
-    });
-
-    phases.insert("jumping".to_string(), PhaseCallbackFns {
-        on_enter: Some(jumping_enter),
-        on_update: Some(jumping_update),
-        on_exit: Some(jumping_exit),
-    });
-
-    phases.insert("falling".to_string(), PhaseCallbackFns {
-        on_enter: None,
-        on_update: Some(falling_update),
-        on_exit: None,
-    });
-
-    ctx.commands.spawn((
-        MapPosition::new(100.0, 200.0),
-        // ... sprite, rigidbody, etc ...
-        Phase::new("idle", phases),
-    ));
-    } // GLUE
-
-    fn falling_only() { // GLUE
-    let mut phases = FxHashMap::default(); // GLUE
-    // Equivalent to the "falling" entry above — only on_update is set
-    phases.insert("falling".to_string(), PhaseCallbackFns {
-        on_update: Some(falling_update),
-        ..Default::default()
-    });
-    } // GLUE
-
-    use aberredengine::prelude::*;
-
-    fn idle_enter(_entity: Entity, _ctx: &mut GameCtx, _input: &InputState) -> Option<String> {
-        None // stay in idle
-    }
-
-    fn idle_update(entity: Entity, ctx: &mut GameCtx, input: &InputState, _dt: f32) -> Option<String> {
-        if input.action(InputAction::Action1).just_pressed {
-            // Apply jump velocity
-            if let Ok(mut rb) = ctx.rigid_bodies.get_mut(entity) {
-                rb.velocity.y = -400.0;
-            }
-            return Some("jumping".to_string());
+    // Registered once with `EngineBuilder::add_observer`
+    fn on_player_phase_entered(
+        ev: On<PhaseEntered>,
+        players: Query<(), With<Player>>,
+        mut audio: MessageWriter<AudioCmd>,
+    ) {
+        if players.contains(ev.entity) && &*ev.name == "jumping" {
+            audio.write(AudioCmd::PlayFx { id: "jump".into() });
         }
-        None
-    }
-
-    fn jumping_enter(_entity: Entity, ctx: &mut GameCtx, _input: &InputState) -> Option<String> {
-        ctx.audio.write(AudioCmd::PlayFx { id: "jump".into() });
-        None
-    }
-
-    fn jumping_update(entity: Entity, ctx: &mut GameCtx, _input: &InputState, _dt: f32) -> Option<String> {
-        if let Ok(rb) = ctx.rigid_bodies.get(entity)
-            && rb.velocity.y > 0.0
-        {
-            return Some("falling".to_string());
-        }
-        None
-    }
-
-    fn jumping_exit(_entity: Entity, _ctx: &mut GameCtx) {
-        // cleanup if needed
-    }
-
-    fn falling_update(entity: Entity, ctx: &mut GameCtx, _input: &InputState, _dt: f32) -> Option<String> {
-        // Transition back to idle when landing (detected by some condition)
-        if let Ok(rb) = ctx.rigid_bodies.get(entity)
-            && rb.velocity.y == 0.0
-        {
-            return Some("idle".to_string());
-        }
-        None
     }
 }
 

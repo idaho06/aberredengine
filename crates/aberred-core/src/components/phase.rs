@@ -1,155 +1,85 @@
-//! Rust-based phase state machine component.
+//! Phase state machine component.
 //!
-//! [`Phase`] is the generic phase-state storage of the Rust callback path. The
-//! default `Phase<PhaseCallbackFns>` form is the Rust-facing component.
+//! [`Phase`] is a per-entity state machine over string-labeled phases. It holds
+//! data only: [`phase_system`](crate::systems::phase::phase_system) applies
+//! requested transitions and triggers
+//! [`PhaseEntered`](crate::events::phase::PhaseEntered) /
+//! [`PhaseExited`](crate::events::phase::PhaseExited). Per-phase behavior is
+//! ordinary systems that match on [`Phase::current`] and request transitions by
+//! setting [`Phase::next`], plus observers of those events.
 //!
-//! # How It Works
-//!
-//! 1. Entity is spawned with a `Phase` containing phase definitions
-//! 2. The `phase_system` runs each frame:
-//!    - Looks up the current phase's callback function pointers
-//!    - Calls the Rust callbacks with `(entity, &mut PhaseCtx, &InputState, ...)`
-//!    - Callbacks can return `Some(phase_name)` to request a transition
-//! 3. Transitions can also be requested externally via `phase.next = Some("...")`
-//!
-//! # Callback Signatures
-//!
-//! ```ignore
-//! fn my_enter(entity: Entity, ctx: &mut GameCtx, input: &InputState) -> Option<String> {
-//!     // Return Some("next_phase") to transition, or None to stay
-//!     None
-//! }
-//!
-//! fn my_update(entity: Entity, ctx: &mut GameCtx, input: &InputState, dt: f32) -> Option<String> {
-//!     if dt > 3.0 { Some("timeout".into()) } else { None }
-//! }
-//!
-//! fn my_exit(entity: Entity, ctx: &mut GameCtx) {
-//!     // Cleanup when leaving this phase
-//! }
-//! ```
+//! Phase names are never validated: a `next` that no system matches on switches to
+//! a phase that does nothing. See [`phase_system`](crate::systems::phase::phase_system)
+//! for when transitions apply and the events fire.
 //!
 //! # Usage
 //!
 //! ```ignore
-//! use rustc_hash::FxHashMap;
+//! commands.spawn(Phase::new("idle"));
 //!
-//! let mut phases = FxHashMap::default();
-//! phases.insert("idle".into(), PhaseCallbackFns {
-//!     on_enter: Some(idle_enter),
-//!     on_update: Some(idle_update),
-//!     on_exit: None,
-//! });
-//! phases.insert("moving".into(), PhaseCallbackFns {
-//!     on_enter: None,
-//!     on_update: Some(moving_update),
-//!     on_exit: Some(moving_exit),
-//! });
-//!
-//! commands.entity(my_entity).insert(Phase::new("idle", phases));
+//! fn idle_system(mut phases: Query<&mut Phase, With<Player>>, input: Res<InputState>) {
+//!     for mut phase in &mut phases {
+//!         if phase.current == "idle" && input.action(InputAction::Action1).just_pressed {
+//!             phase.next = Some("jumping".into());
+//!         }
+//!     }
+//! }
 //! ```
 //!
 //! # Related
 //!
-//! - [`crate::systems::phase::phase_system`] – system that processes phase transitions and callbacks
-//! - [`crate::systems::GameCtx`] – bundled ECS access passed to phase callbacks
+//! - [`crate::systems::phase::phase_system`] – applies transitions and triggers the events
+//! - [`crate::events::phase`] – `PhaseEntered` / `PhaseExited`
 //! - `aberred_lua::components::luaphase::LuaPhase` – Lua equivalent
 
-use bevy_ecs::prelude::{Component, Entity};
-use rustc_hash::FxHashMap;
+use bevy_ecs::prelude::Component;
 
-use crate::resources::input::InputState;
-use crate::systems::GameCtx;
-
-/// Callback for entering a phase. Returns `Some(phase_name)` to immediately
-/// transition, or `None` to stay in the current phase.
-pub type PhaseEnterFn = for<'w, 's> fn(Entity, &mut GameCtx<'w, 's>, &InputState) -> Option<String>;
-
-/// Callback for each frame while in a phase. Receives delta time as the last
-/// argument. Returns `Some(phase_name)` to transition, or `None` to stay.
-pub type PhaseUpdateFn =
-    for<'w, 's> fn(Entity, &mut GameCtx<'w, 's>, &InputState, f32) -> Option<String>;
-
-/// Callback for exiting a phase. No return value — the transition is already
-/// committed.
-pub type PhaseExitFn = for<'w, 's> fn(Entity, &mut GameCtx<'w, 's>);
-
-/// Rust function-pointer callbacks for a single phase.
-#[derive(Clone, Copy, Default)]
-pub struct PhaseCallbackFns {
-    /// Function to call when entering this phase.
-    pub on_enter: Option<PhaseEnterFn>,
-    /// Function to call each frame while in this phase.
-    pub on_update: Option<PhaseUpdateFn>,
-    /// Function to call when exiting this phase.
-    pub on_exit: Option<PhaseExitFn>,
-}
-
-impl std::fmt::Debug for PhaseCallbackFns {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("PhaseCallbackFns")
-            .field("on_enter", &self.on_enter.map(|_| "fn(...)"))
-            .field("on_update", &self.on_update.map(|_| "fn(...)"))
-            .field("on_exit", &self.on_exit.map(|_| "fn(...)"))
-            .finish()
-    }
-}
-
-/// Generic phase state machine component.
-///
-/// The default `Phase` type stores Rust function pointers via
-/// [`PhaseCallbackFns`] and is processed by
-/// [`phase_system`](crate::systems::phase::phase_system).
-#[derive(Clone, Component)]
-pub struct Phase<C = PhaseCallbackFns> {
+/// Per-entity phase state machine; see the [module docs](self).
+#[derive(Clone, Debug, Component)]
+pub struct Phase {
     /// The current phase label (e.g., "idle", "playing").
     pub current: String,
     /// The phase before the last transition, if any.
     pub previous: Option<String>,
-    /// Set to request a transition to a new phase. Cleared after processing.
+    /// Set to request a transition to a new phase. Applied, then cleared, on the
+    /// next run of `phase_system`.
     pub next: Option<String>,
     /// Seconds elapsed since entering the current phase.
     pub time_in_phase: f32,
-    /// Whether to call on_enter on the first frame.
-    pub needs_enter_callback: bool,
-    /// Map of phase name → callback function pointers.
-    pub phases: FxHashMap<String, C>,
+    /// Whether the initial phase's enter has fired.
+    pub(crate) entered: bool,
 }
 
-impl<C> Phase<C> {
-    /// Create a new Phase with the given initial phase and phase definitions.
-    pub fn new(initial_phase: impl Into<String>, phases: FxHashMap<String, C>) -> Self {
+impl Phase {
+    /// Create a phase state machine starting in `initial_phase`.
+    pub fn new(initial_phase: impl Into<String>) -> Self {
         Self {
             current: initial_phase.into(),
             previous: None,
             next: None,
             time_in_phase: 0.0,
-            needs_enter_callback: true,
-            phases,
+            entered: false,
         }
     }
 
-    /// Get the callbacks for the current phase.
-    pub fn current_callbacks(&self) -> Option<&C> {
-        self.phases.get(&self.current)
+    /// Marks the initial phase as entered. Returns `true` only on the first call,
+    /// when the caller fires the initial enter. For phase runners only: calling it
+    /// from game code suppresses the initial `PhaseEntered`.
+    #[doc(hidden)]
+    pub fn begin(&mut self) -> bool {
+        !std::mem::replace(&mut self.entered, true)
     }
 
-    /// Get the callbacks for a specific phase.
-    pub fn get_callbacks(&self, phase: &str) -> Option<&C> {
-        self.phases.get(phase)
-    }
-}
-
-impl<C> std::fmt::Debug for Phase<C> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Phase")
-            .field("current", &self.current)
-            .field("previous", &self.previous)
-            .field("next", &self.next)
-            .field("time_in_phase", &self.time_in_phase)
-            .field("needs_enter_callback", &self.needs_enter_callback)
-            .field("phases", &self.phases.keys().collect::<Vec<_>>())
-            .finish()
+    /// Applies a requested transition: `previous = current`, `current = next`,
+    /// `time_in_phase = 0`. Returns the old phase name, or `None` (and changes
+    /// nothing) when no transition is requested.
+    #[doc(hidden)]
+    pub fn apply_next(&mut self) -> Option<String> {
+        let next = self.next.take()?;
+        let old = std::mem::replace(&mut self.current, next);
+        self.previous = Some(old.clone());
+        self.time_in_phase = 0.0;
+        Some(old)
     }
 }
 
@@ -158,24 +88,31 @@ mod tests {
     use super::*;
 
     #[test]
-    fn new_arms_enter_callback_for_initial_phase() {
-        let phase: Phase<u8> = Phase::new("idle", FxHashMap::default());
-        assert_eq!(phase.current, "idle");
-        assert!(phase.needs_enter_callback);
-        assert!(phase.previous.is_none() && phase.next.is_none());
-        assert_eq!(phase.time_in_phase, 0.0);
+    fn begin_is_true_only_once() {
+        let mut phase = Phase::new("idle");
+        assert!(phase.begin());
+        assert!(!phase.begin());
     }
 
     #[test]
-    fn current_callbacks_follow_current_phase() {
-        let mut phases = FxHashMap::default();
-        phases.insert("idle".to_string(), 1u8);
-        phases.insert("run".to_string(), 2u8);
-        let mut phase = Phase::new("idle", phases);
-        assert_eq!(phase.current_callbacks(), Some(&1));
-        phase.current = "run".into();
-        assert_eq!(phase.current_callbacks(), Some(&2));
-        phase.current = "missing".into();
-        assert_eq!(phase.current_callbacks(), None);
+    fn apply_next_without_next_is_a_no_op() {
+        let mut phase = Phase::new("idle");
+        phase.time_in_phase = 1.0;
+        assert_eq!(phase.apply_next(), None);
+        assert_eq!(phase.current, "idle");
+        assert!(phase.previous.is_none());
+        assert_eq!(phase.time_in_phase, 1.0);
+    }
+
+    #[test]
+    fn apply_next_swaps_and_resets_time() {
+        let mut phase = Phase::new("idle");
+        phase.time_in_phase = 1.0;
+        phase.next = Some("run".into());
+        assert_eq!(phase.apply_next().as_deref(), Some("idle"));
+        assert_eq!(phase.current, "run");
+        assert_eq!(phase.previous.as_deref(), Some("idle"));
+        assert!(phase.next.is_none());
+        assert_eq!(phase.time_in_phase, 0.0);
     }
 }

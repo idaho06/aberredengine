@@ -5,7 +5,7 @@
 //!
 //! # Purpose
 //!
-//! This enables game logic (especially [`Phase`](crate::components::phase::Phase) callbacks)
+//! This enables game logic (e.g. systems driving a [`Phase`](crate::components::phase::Phase))
 //! to react to group population changes, such as:
 //! - Detecting when all "ball" entities are gone → lose a life
 //! - Detecting when all "brick" entities are destroyed → level complete

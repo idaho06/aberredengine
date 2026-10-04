@@ -26,7 +26,7 @@
 //! - [`menu`] – menu spawning, input handling, and selection
 //! - [`mousecontroller`] – update entity positions based on mouse position
 //! - [`movement`] – integrate positions from rigid body velocities and time
-//! - [`phase`] – process Rust phase state machine transitions and callbacks
+//! - [`phase`] – apply phase state machine transitions and trigger phase events
 //! - [`rust_collision`] – Rust-native collision observer and callback dispatch
 //! - [`scene_dispatch`] – scene switch and update systems for `SceneManager`-based games
 //! - [`signal_intents`] – apply buffered `SignalIntent`s queued by render-side scene callbacks
@@ -72,7 +72,6 @@ pub mod mousecontroller;
 pub mod movement;
 pub mod particleemitter;
 pub mod phase;
-pub mod phase_core;
 pub mod propagate_transforms;
 pub mod render_assets;
 pub mod rust_collision;

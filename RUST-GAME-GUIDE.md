@@ -19,7 +19,7 @@ Built-in systems:
 - **Scene management** — named scenes with enter/update/exit, GUI, and world-draw callbacks plus auto-despawn
 - **Tweens** — position, rotation, and scale interpolation with easing and loop modes
 - **Timers** — repeating or one-shot countdown timers that trigger a `TimerFired` event
-- **Phase state machines** — per-entity state machines with enter/update/exit callbacks
+- **Phase state machines** — per-entity state machines over named phases, with `PhaseEntered`/`PhaseExited` events
 - **Parent-child hierarchy** — recursive transform propagation (position, rotation, scale)
 
 ---
@@ -38,7 +38,6 @@ edition = "2024"
 
 [dependencies]
 aberredengine = { path = "../aberredengine/crates/aberredengine", default-features = false }
-rustc-hash = "2.1"   # FxHashMap, for Phase::new (Section 7.2)
 log = "0.4"          # log::info!/warn!/error! from your own code
 env_logger = "0.11"  # prints the engine's and your log output
 ```
@@ -141,7 +140,7 @@ The engine owns the main loop. You configure it through `EngineBuilder` and supp
 
 The engine runs **three separate ECS worlds on three threads**: render (the main thread — owns the raylib window and GPU resources), logic/sim (a spawned thread — this is where **all your game code runs**), and audio (a spawned thread, talked to via message queues you already use for sound/music). Understanding this is required to use the rest of this guide correctly.
 
-- **Every hook and callback you write — `on_setup`, scene observers and systems (`.on_scene_enter()`/`.on_scene_exit()`/`.add_scene_system()`), systems added via `.add_system()`/`.configure_schedule()`, `Phase`/`CollisionRule` callbacks, and observers (`.add_observer()`, `.observe()`, e.g. on `TimerFired`) — runs on the LOGIC thread**, once per **sim tick**. Sim ticks happen at a configurable rate (`[simulation] hz` in `config.ini`, default 240) **decoupled from your render frame rate** — a sim tick is not the same thing as a rendered frame. `dt` is always the fixed constant `1.0 / hz` (scaled by `WorldTime.time_scale`), never a measured wall-clock value — a render stall does not spike `dt` or replay missed ticks, it simply dilates game time until the stall clears, and sim ticks keep running throughout.
+- **Every hook and callback you write — `on_setup`, scene observers and systems (`.on_scene_enter()`/`.on_scene_exit()`/`.add_scene_system()`), systems added via `.add_system()`/`.configure_schedule()`, `CollisionRule` callbacks, and observers (`.add_observer()`, `.observe()`, e.g. on `TimerFired`) — runs on the LOGIC thread**, once per **sim tick**. Sim ticks happen at a configurable rate (`[simulation] hz` in `config.ini`, default 240) **decoupled from your render frame rate** — a sim tick is not the same thing as a rendered frame. `dt` is always the fixed constant `1.0 / hz` (scaled by `WorldTime.time_scale`), never a measured wall-clock value — a render stall does not spike `dt` or replay missed ticks, it simply dilates game time until the stall clears, and sim ticks keep running throughout.
 - **Scene GUI and world-draw callbacks (`.add_scene_gui()`/`.add_scene_world_draw()`) are the one exception** — they run on the RENDER thread, inside the render pass itself. This is why they take a context struct (`GuiCtx`/`WorldDrawCtx`) of read-only snapshots instead of live, mutable `WorldSignals` — see below.
 - **A direct consequence**: logic-thread code (everything in the first bullet) can **never** take `RaylibAccess`, `NonSend<FontStore>`, `NonSend<ShaderStore>`, or `Res<TextureStore>` as a system parameter — those resources only exist in the render world. A logic-side system that requests one panics the first time it runs: Bevy checks a system's resources when the system runs, not when the schedule is built. There is no escape hatch to register a custom system on the render thread. This is why asset loading (Section 4) goes through a message queue instead of calling `rl.load_texture(...)` directly inside `setup()`.
 
@@ -364,7 +363,7 @@ Setup ──→ Playing ──→ Quitting
 1. **Setup** — The engine calls the `setup` hook once, on the logic thread. Load assets here (textures, fonts, sounds, shaders, animations) — see [Section 4](#4-loading-assets) for how texture/font/shader loading works. Omit `.on_setup()` if you have nothing to load. With `.loading_scene(name)`, that scene is entered right after the hook and stays active until Setup ends. Once the hook has run, the engine moves to `Playing` on its own, as soon as every load queued so far has been answered (see [Waiting for loads](#waiting-for-loads)); a failed load counts as answered. A hook that requests `Playing` itself waits the same way. A hook that requests another state through `ResMut<NextGameState>` (e.g. `GameStates::Quitting`) gets it at once.
 2. **Playing** — The engine transitions to playing, enters the initial scene (triggering `SceneEntered`), then runs your `.add_system()` systems (and the active scene's `.add_scene_system()` systems) once per sim tick.
 3. **Scene switches** — `WorldSignals::request_scene(name)` (which sets the `"switch_scene"` flag) runs the exit→enter sequence on the next sim tick; a `MenuAction::SetScene` menu item switches right away.
-4. **Quitting** — When the game state becomes `GameStates::Quitting` (via `NextGameState::set(GameStates::Quitting)`, `WorldSignals::request_quit()`, or a `MenuAction::QuitGame` menu item) or the window is closed, the engine shuts down. Phase, collision and menu callbacks use `ctx.world_signals.request_quit()`, since `GameCtx` has no `NextGameState`; observers and systems can take `ResMut<WorldSignals>` or `ResMut<NextGameState>` directly.
+4. **Quitting** — When the game state becomes `GameStates::Quitting` (via `NextGameState::set(GameStates::Quitting)`, `WorldSignals::request_quit()`, or a `MenuAction::QuitGame` menu item) or the window is closed, the engine shuts down. Collision and menu callbacks use `ctx.world_signals.request_quit()`, since `GameCtx` has no `NextGameState`; observers and systems can take `ResMut<WorldSignals>` or `ResMut<NextGameState>` directly.
 
 ### Builder method reference
 
@@ -652,7 +651,7 @@ This is useful for automated testing (replay a fixed input script, assert on the
 - `WorldTime` doesn't advance during Setup (in every mode): `elapsed` and `frame_count` are `0` on the first `Playing` tick, and `delta` stays `0` until then.
 - A replay records and plays back from the first `Playing` tick; Setup runs live, loads included, in both.
 - In deterministic mode, input that arrives during Setup is held back. Key and mouse samples are dropped, so F10/F11 do nothing while loading. GUI intents and the latest screen size are applied on the first `Playing` tick.
-- Engine systems that don't use `delta` still run during Setup: collision rules, Rust phase `on_update`, group counts. Spawn gameplay entities in the initial scene's `SceneEntered` observer, not in the setup hook, so a longer Setup can't change them.
+- Engine systems that don't use `delta` still run during Setup: collision rules, `phase_system` (phase events), group counts. Spawn gameplay entities in the initial scene's `SceneEntered` observer, not in the setup hook, so a longer Setup can't change them.
 
 **Assets load during Setup.** A load finishes at a wall-clock time, so a deterministic game can't change its loaded assets while `Playing`:
 
@@ -1299,7 +1298,7 @@ When `WorldSignals` has a value for key `"score"`, the text automatically update
 | `AccelerationControlled` | `AccelerationControlled::symmetric(accel)` |
 | `MouseControlled` | `MouseControlled { follow_x: true, follow_y: true }` |
 | `Timer` | `Timer::new(duration_secs)` (repeating) or `Timer::once(duration_secs)` — triggers `TimerFired` on its entity; see §7.1 |
-| `Phase` | `Phase::new("initial_phase", phases)` where `phases: FxHashMap<String, PhaseCallbackFns>` |
+| `Phase` | `Phase::new("initial_phase")` — set `next` to transition; triggers `PhaseEntered`/`PhaseExited`; see §7.2 |
 | `CollisionRule` | `CollisionRule::rust("group_a", "group_b", callback)` — use `::rust()` for Rust callbacks; see §7.3 |
 | `Tween<MapPosition>` | `Tween::position(from: Vec2, to: Vec2, duration)` |
 | `Tween<Rotation>` | `Tween::rotation(from_degrees, to_degrees, duration)` |
@@ -1568,9 +1567,9 @@ fn update(time: Res<WorldTime>, input: Res<InputState>) {
 
 ## 7. Gameplay Systems
 
-The engine provides several gameplay systems: **timers**, **phase state machines**, **collision rules**, **menus**, animation/tween-finished events, and GUI widgets. A timer is a data-only **component** that triggers an **event**, which you handle with an ordinary observer. Phases, collision rules and menus follow a callback pattern: a **component** attached to an entity, a **callback type** (Rust function pointer), and a **context SystemParam** providing full ECS access.
+The engine provides several gameplay systems: **timers**, **phase state machines**, **collision rules**, **menus**, animation/tween-finished events, and GUI widgets. Timers and phases are data-only **components** that trigger **events**, which you handle with ordinary observers and systems. Collision rules and menus follow a callback pattern: a **component** attached to an entity, a **callback type** (Rust function pointer), and a **context SystemParam** providing full ECS access.
 
-The callback types — phases, collisions and menus — receive `&mut GameCtx` (`aberred-core/src/systems/game_ctx.rs`), which provides commands, mutable/write queries, read-only queries, and key resources including `world_signals`, `app_state`, `audio`, `world_time`, `config`, `post_process`, `camera_follow`, `input_bindings`, and `sim_rng` (the RNG deterministic-mode games must draw from for anything that needs to reproduce — see [Determinism and replay](#determinism-and-replay)). `GameCtx` runs on the logic thread and has **no direct texture access** — if a callback needs texture data, load it via `RenderAssetCmd` and read back dimensions from `TextureDimsStore` (see [Section 4](#4-loading-assets)). Callbacks have full ECS access otherwise.
+The callback types — collisions and menus — receive `&mut GameCtx` (`aberred-core/src/systems/game_ctx.rs`), which provides commands, mutable/write queries, read-only queries, and key resources including `world_signals`, `app_state`, `audio`, `world_time`, `config`, `post_process`, `camera_follow`, `input_bindings`, and `sim_rng` (the RNG deterministic-mode games must draw from for anything that needs to reproduce — see [Determinism and replay](#determinism-and-replay)). `GameCtx` runs on the logic thread and has **no direct texture access** — if a callback needs texture data, load it via `RenderAssetCmd` and read back dimensions from `TextureDimsStore` (see [Section 4](#4-loading-assets)). Callbacks have full ECS access otherwise.
 
 ### 7.1 Timers
 
@@ -1635,69 +1634,69 @@ fn end_invulnerability(
 
 ### 7.2 Phase State Machines
 
-**Source:** `aberred-core/src/components/phase.rs`, `aberred-core/src/systems/phase.rs`
+**Source:** `aberred-core/src/components/phase.rs`, `aberred-core/src/systems/phase.rs`, `aberred-core/src/events/phase.rs`
 
-`Phase` is a per-entity state machine. Each entity has a current phase (a string label) and a map of phase names to callback function pointers.
-
-`on_update` runs once per sim tick (configurable `[simulation] hz` in `config.ini`, default 240 — see [Threading Model](#threading-model-what-your-code-can-access)), with `dt` as the fixed sim period (`1.0 / hz`, scaled by `time_scale`), and keeps ticking through render stalls. This can mean more updates than rendered frames if `hz` exceeds your display's refresh rate — treat one-shot effects (playing a sound on enter, etc.) as guarded by `on_enter`/edge conditions, not by assuming one call per visible frame.
-
-**Callback signatures:**
+`Phase` is a per-entity state machine over string-labeled phases. It holds data only. Per-phase behavior is an ordinary system that matches on `phase.current`, and a transition is a write to `phase.next`:
 
 ```rust
 use aberredengine::prelude::*;
 
-// Called when entering a phase. Return Some("phase") to immediately chain-transition.
-type PhaseEnterFn = fn(Entity, &mut GameCtx, &InputState) -> Option<String>;
+#[derive(Component)]
+struct Player;
 
-// Called once per sim tick while in a phase. Return Some("phase") to transition.
-type PhaseUpdateFn = fn(Entity, &mut GameCtx, &InputState, f32) -> Option<String>;
+fn spawn_player(mut commands: Commands) {
+    commands.spawn((
+        Player,
+        MapPosition::new(100.0, 200.0),
+        RigidBody::default(),
+        // ... sprite, collider, etc ...
+        Phase::new("idle"),
+    ));
+}
 
-// Called when exiting a phase. No return — the transition is already committed.
-type PhaseExitFn = fn(Entity, &mut GameCtx);
+// Registered with `EngineBuilder::add_system`; runs once per sim tick
+fn player_phases(
+    mut players: Query<(&mut Phase, &mut RigidBody), With<Player>>,
+    input: Res<InputState>,
+) {
+    for (mut phase, mut rb) in &mut players {
+        let next = match phase.current.as_str() {
+            "idle" if input.action(InputAction::Action1).just_pressed => {
+                rb.velocity.y = -400.0;
+                "jumping"
+            }
+            "jumping" if rb.velocity.y > 0.0 => "falling",
+            "falling" if rb.velocity.y == 0.0 => "idle",
+            _ => continue,
+        };
+        phase.next = Some(next.into());
+    }
+}
 ```
 
-**Creating a phase state machine:**
+The engine's `phase_system` applies transitions and triggers two events on the phase's entity:
+
+- `PhaseEntered { entity, name, previous }` fires once for the initial phase (`previous` is `None`) on the entity's first sim tick, and again after every transition.
+- `PhaseExited { entity, name, next }` fires for the old phase right before the new phase's `PhaseEntered`.
+
+Their observers run after the swap, so `phase.current` is already the new phase in both events of a transition; read the phase from `ev.name`. One-shot effects such as a sound on entering a phase belong in an observer, not in the per-tick system:
 
 ```rust
-use aberredengine::prelude::*;
-use rustc_hash::FxHashMap;
-
-let mut phases = FxHashMap::default();
-
-phases.insert("idle".to_string(), PhaseCallbackFns {
-    on_enter: Some(idle_enter),
-    on_update: Some(idle_update),
-    on_exit: None,
-});
-
-phases.insert("jumping".to_string(), PhaseCallbackFns {
-    on_enter: Some(jumping_enter),
-    on_update: Some(jumping_update),
-    on_exit: Some(jumping_exit),
-});
-
-phases.insert("falling".to_string(), PhaseCallbackFns {
-    on_enter: None,
-    on_update: Some(falling_update),
-    on_exit: None,
-});
-
-ctx.commands.spawn((
-    MapPosition::new(100.0, 200.0),
-    // ... sprite, rigidbody, etc ...
-    Phase::new("idle", phases),
-));
+// Registered once with `EngineBuilder::add_observer`
+fn on_player_phase_entered(
+    ev: On<PhaseEntered>,
+    players: Query<(), With<Player>>,
+    mut audio: MessageWriter<AudioCmd>,
+) {
+    if players.contains(ev.entity) && &*ev.name == "jumping" {
+        audio.write(AudioCmd::PlayFx { id: "jump".into() });
+    }
+}
 ```
 
-`PhaseCallbackFns` derives `Default` (all callbacks `None`), so you can use `..Default::default()` when only some callbacks are needed:
+As with timers (§7.1), observe one entity with `.observe(handler)` or many with one global observer filtered by a marker component.
 
-```rust
-// Equivalent to the "falling" entry above — only on_update is set
-phases.insert("falling".to_string(), PhaseCallbackFns {
-    on_update: Some(falling_update),
-    ..Default::default()
-});
-```
+**Transitions:** `phase_system` applies a `next` on its next run: it sets `previous` to the old phase, `current` to the new one, resets `time_in_phase` to 0, and triggers `PhaseExited` then `PhaseEntered`. A `next` set by an observer of either event applies on the following run, so chained transitions advance one per sim tick. Phase names are never validated: `phase.next = Some("jumpin".into())` switches to a phase no system handles, and the entity silently does nothing.
 
 **Phase fields:**
 
@@ -1705,59 +1704,8 @@ phases.insert("falling".to_string(), PhaseCallbackFns {
 |-------|------|-------------|
 | `current` | `String` | Current phase label |
 | `previous` | `Option<String>` | Phase before the last transition |
-| `next` | `Option<String>` | Set to request a transition |
-| `time_in_phase` | `f32` | Seconds since entering current phase |
-
-**External transitions:** Set `phase.next = Some("new_phase".to_string())` from outside the phase system to request a transition. The `phase_system` processes this on its next run, which is the next sim tick.
-
-**Example callbacks:**
-
-```rust
-use aberredengine::prelude::*;
-
-fn idle_enter(_entity: Entity, _ctx: &mut GameCtx, _input: &InputState) -> Option<String> {
-    None // stay in idle
-}
-
-fn idle_update(entity: Entity, ctx: &mut GameCtx, input: &InputState, _dt: f32) -> Option<String> {
-    if input.action(InputAction::Action1).just_pressed {
-        // Apply jump velocity
-        if let Ok(mut rb) = ctx.rigid_bodies.get_mut(entity) {
-            rb.velocity.y = -400.0;
-        }
-        return Some("jumping".to_string());
-    }
-    None
-}
-
-fn jumping_enter(_entity: Entity, ctx: &mut GameCtx, _input: &InputState) -> Option<String> {
-    ctx.audio.write(AudioCmd::PlayFx { id: "jump".into() });
-    None
-}
-
-fn jumping_update(entity: Entity, ctx: &mut GameCtx, _input: &InputState, _dt: f32) -> Option<String> {
-    if let Ok(rb) = ctx.rigid_bodies.get(entity)
-        && rb.velocity.y > 0.0
-    {
-        return Some("falling".to_string());
-    }
-    None
-}
-
-fn jumping_exit(_entity: Entity, _ctx: &mut GameCtx) {
-    // cleanup if needed
-}
-
-fn falling_update(entity: Entity, ctx: &mut GameCtx, _input: &InputState, _dt: f32) -> Option<String> {
-    // Transition back to idle when landing (detected by some condition)
-    if let Ok(rb) = ctx.rigid_bodies.get(entity)
-        && rb.velocity.y == 0.0
-    {
-        return Some("idle".to_string());
-    }
-    None
-}
-```
+| `next` | `Option<String>` | Set to request a transition; cleared when applied |
+| `time_in_phase` | `f32` | Seconds since entering the current phase; grows by `dt` every sim tick |
 
 ### 7.3 Collision Rules
 

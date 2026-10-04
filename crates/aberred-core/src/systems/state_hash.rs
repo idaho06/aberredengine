@@ -22,7 +22,7 @@ use crate::components::boxcollider::BoxCollider;
 use crate::components::globaltransform2d::GlobalTransform2D;
 use crate::components::group::Group;
 use crate::components::mapposition::MapPosition;
-use crate::components::phase::{Phase, PhaseCallbackFns};
+use crate::components::phase::Phase;
 use crate::components::position2d::{Position2D, PositionSpace};
 use crate::components::rigidbody::RigidBody;
 use crate::components::rotation::Rotation;
@@ -205,9 +205,11 @@ pub fn hash_world_state(world: &World) -> u64 {
             hash_sorted_set(h, c.flags.iter());
             hash_sorted_map(h, c.strings.iter(), |h, v: &String| h.write_str(v));
         });
-        hash_optional(&mut h, e.get::<Phase<PhaseCallbackFns>>(), |h, c| {
+        hash_optional(&mut h, e.get::<Phase>(), |h, c| {
             h.write_str(&c.current);
             h.write_f32(c.time_in_phase);
+            h.write_bool(c.entered);
+            hash_optional(h, c.next.as_ref(), |h, next| h.write_str(next));
         });
         hash_optional(&mut h, e.get::<Timer>(), |h, c| {
             h.write_f32(c.duration);
@@ -288,9 +290,6 @@ mod tests {
         signals.set_integer("i", 1);
         signals.set_flag("f");
         signals.set_string("n", "a");
-        let mut phases = rustc_hash::FxHashMap::default();
-        phases.insert("idle".to_string(), PhaseCallbackFns::default());
-        phases.insert("run".to_string(), PhaseCallbackFns::default());
         let e = world
             .spawn((
                 MapPosition::new(1.0, 2.0),
@@ -300,7 +299,7 @@ mod tests {
                 Scale::new(1.0, 1.0),
                 BoxCollider::new(8.0, 8.0),
                 signals,
-                Phase::new("idle", phases),
+                Phase::new("idle"),
                 Timer::new(1.0),
                 Ttl::new(5.0),
                 Animation::new("walk"),
@@ -391,12 +390,16 @@ mod tests {
                 w.get_mut::<Signals>(e).unwrap().set_string("n", "b")
             }),
             ("Phase.current", |w, e| {
-                w.get_mut::<Phase<PhaseCallbackFns>>(e).unwrap().current = "run".to_string();
+                w.get_mut::<Phase>(e).unwrap().current = "run".to_string();
             }),
             ("Phase.time_in_phase", |w, e| {
-                w.get_mut::<Phase<PhaseCallbackFns>>(e)
-                    .unwrap()
-                    .time_in_phase = 0.5;
+                w.get_mut::<Phase>(e).unwrap().time_in_phase = 0.5;
+            }),
+            ("Phase.entered", |w, e| {
+                w.get_mut::<Phase>(e).unwrap().begin();
+            }),
+            ("Phase.next", |w, e| {
+                w.get_mut::<Phase>(e).unwrap().next = Some("run".to_string());
             }),
             ("Timer.duration", |w, e| {
                 w.get_mut::<Timer>(e).unwrap().duration = 2.0
