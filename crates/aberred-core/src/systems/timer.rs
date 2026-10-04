@@ -29,18 +29,32 @@ pub fn update_timers(
 ) {
     let fired_at = ticks.this_run();
     for (entity, mut timer) in query.iter_mut() {
-        timer.elapsed += world_time.delta;
-        if timer.elapsed >= timer.duration {
+        if timer.advance(world_time.delta) {
             commands.trigger(TimerFired { entity });
-            match timer.mode {
-                TimerMode::Repeat => timer.reset(),
-                TimerMode::Once => {
-                    commands
-                        .entity(entity)
-                        .queue_silenced(move |entity: EntityWorldMut| {
-                            remove_fired_timer::<Timer>(entity, fired_at)
-                        });
-                }
+            timer.finish_fired::<Timer>(&mut commands, entity, fired_at);
+        }
+    }
+}
+
+impl Timer {
+    /// Applies this fired timer's [`TimerMode`]: reset, or queue the removal of `C`
+    /// (the component holding this timer). Call it right after triggering the fired
+    /// event; `fired_at` is the firing system's `SystemChangeTick::this_run`.
+    #[doc(hidden)]
+    pub fn finish_fired<C: Component>(
+        &mut self,
+        commands: &mut Commands,
+        entity: Entity,
+        fired_at: Tick,
+    ) {
+        match self.mode {
+            TimerMode::Repeat => self.reset(),
+            TimerMode::Once => {
+                commands
+                    .entity(entity)
+                    .queue_silenced(move |entity: EntityWorldMut| {
+                        remove_fired_timer::<C>(entity, fired_at)
+                    });
             }
         }
     }
@@ -48,10 +62,9 @@ pub fn update_timers(
 
 /// Removes the entity's `C` unless it was inserted or changed after `fired_at`.
 ///
-/// Queued by a timer system after it fires a one-shot timer, so it runs after the
-/// fired event's observers: a timer they replaced or modified has a newer change
-/// tick and is kept. `queue_silenced` ignores an entity they despawned.
-pub fn remove_fired_timer<C: Component>(mut entity: EntityWorldMut, fired_at: Tick) {
+/// Runs after the fired event's observers: a timer they replaced or modified has a
+/// newer change tick and is kept. `queue_silenced` ignores an entity they despawned.
+fn remove_fired_timer<C: Component>(mut entity: EntityWorldMut, fired_at: Tick) {
     let now = entity.world().read_change_tick();
     if entity
         .get_change_ticks::<C>()

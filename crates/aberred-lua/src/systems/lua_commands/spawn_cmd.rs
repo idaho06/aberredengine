@@ -9,7 +9,7 @@ use bevy_ecs::prelude::*;
 
 use crate::components::luaphase::{LuaPhase, PhaseCallbacks};
 use crate::components::luasetup::LuaSetup;
-use crate::components::luatimer::{LuaTimer, LuaTimerCallback};
+use crate::components::luatimer::LuaTimer;
 use aberred_core::components::animation::{Animation, AnimationController};
 use aberred_core::components::boxcollider::BoxCollider;
 use aberred_core::components::cameratarget::CameraTarget;
@@ -451,9 +451,7 @@ fn apply_behavior_components(entity_commands: &mut EntityCommands, b: BehaviorCo
     if let Some(timer) = lua_timer {
         entity_commands.insert(LuaTimer::with_mode(
             timer.duration,
-            LuaTimerCallback {
-                name: timer.callback.into(),
-            },
+            timer.callback,
             timer.mode,
         ));
     }
@@ -1247,7 +1245,7 @@ mod tests {
         assert_eq!(phase.phases.len(), 2);
         assert_eq!(phase.phases["idle"].on_enter.as_deref(), Some("idle_in"));
         let timer = world.get::<LuaTimer>(e).unwrap();
-        assert_eq!((timer.duration, &*timer.callback.name), (0.5, "tick"));
+        assert_eq!((timer.timer.duration, &*timer.callback), (0.5, "tick"));
         // Must be queryable as LuaCollisionRule, not the Rust-callback CollisionRule.
         let rule = world
             .query::<&LuaCollisionRule>()

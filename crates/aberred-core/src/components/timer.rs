@@ -60,19 +60,28 @@ pub struct Timer {
 impl Timer {
     /// Create a timer that fires every `duration` seconds.
     pub fn new(duration: f32) -> Self {
-        Timer {
-            duration,
-            elapsed: 0.0,
-            mode: TimerMode::Repeat,
-        }
+        Timer::with_mode(duration, TimerMode::Repeat)
     }
 
     /// Create a timer that fires once after `duration` seconds, then removes itself.
     pub fn once(duration: f32) -> Self {
+        Timer::with_mode(duration, TimerMode::Once)
+    }
+
+    /// Create a timer with the given [`TimerMode`].
+    pub fn with_mode(duration: f32, mode: TimerMode) -> Self {
         Timer {
-            mode: TimerMode::Once,
-            ..Timer::new(duration)
+            duration,
+            elapsed: 0.0,
+            mode,
         }
+    }
+
+    /// Add `delta` to `elapsed`; returns `true` when the timer is due to fire
+    /// (`elapsed >= duration`).
+    pub fn advance(&mut self, delta: f32) -> bool {
+        self.elapsed += delta;
+        self.elapsed >= self.duration
     }
 
     /// Reset the timer by subtracting the duration from elapsed time.
@@ -88,6 +97,19 @@ impl Timer {
 mod tests {
     use super::*;
     use crate::testing::approx_eq;
+
+    #[test]
+    fn advance_accumulates_and_reports_when_due() {
+        let mut timer = Timer::new(1.0);
+        assert!(!timer.advance(0.6));
+        assert!(timer.advance(0.6), "elapsed 1.2 >= duration 1.0");
+        assert!(approx_eq(timer.elapsed, 1.2));
+    }
+
+    #[test]
+    fn zero_duration_timer_is_due_on_its_first_advance() {
+        assert!(Timer::once(0.0).advance(0.0));
+    }
 
     #[test]
     fn test_reset_subtracts_duration() {

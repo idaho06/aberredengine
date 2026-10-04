@@ -24,7 +24,7 @@ use aberred_core::resources::worldtime::WorldTime;
 use aberred_core::systems::collision_detector::collision_detector;
 use aberred_lua::components::luacollision::{LuaCollisionCallback, LuaCollisionRule};
 use aberred_lua::components::luaphase::{LuaPhase, PhaseCallbacks};
-use aberred_lua::components::luatimer::{LuaTimer, LuaTimerCallback};
+use aberred_lua::components::luatimer::LuaTimer;
 use aberred_lua::resources::lua_runtime::LuaRuntime;
 use aberred_lua::systems::lua_collision::lua_collision_observer;
 use aberred_lua::systems::lua_collision_rule_index::rebuild_collision_rule_index;
@@ -223,12 +223,7 @@ fn timer_callback_spawn_then_clone_same_drain() {
             .expect("lua load");
     }
 
-    world.spawn((LuaTimer::new(
-        0.5,
-        LuaTimerCallback {
-            name: "spawn_and_clone_cb".into(),
-        },
-    ),));
+    world.spawn((LuaTimer::new(0.5, "spawn_and_clone_cb"),));
 
     tick_lua_timers_with_observer(&mut world);
 
@@ -261,14 +256,7 @@ fn once_timer_runs_lua_callback_once_and_removes_timer() {
             .exec()
             .expect("lua load");
     }
-    let entity = world
-        .spawn(LuaTimer::once(
-            0.5,
-            LuaTimerCallback {
-                name: "once_cb".into(),
-            },
-        ))
-        .id();
+    let entity = world.spawn(LuaTimer::once(0.5, "once_cb")).id();
     world.add_observer(lua_timer_observer);
     world.flush();
 
@@ -307,22 +295,15 @@ fn once_timer_lua_callback_can_rearm_through_engine_api() {
             .exec()
             .expect("lua load");
     }
-    let entity = world
-        .spawn(LuaTimer::once(
-            0.5,
-            LuaTimerCallback {
-                name: "rearm_cb".into(),
-            },
-        ))
-        .id();
+    let entity = world.spawn(LuaTimer::once(0.5, "rearm_cb")).id();
 
     tick_lua_timers_with_observer(&mut world);
 
     let timer = world
         .get::<LuaTimer>(entity)
         .expect("the re-armed timer must survive the spent timer's removal");
-    assert_eq!(&*timer.callback.name, "again");
-    assert_eq!(timer.duration, 2.0);
+    assert_eq!(&*timer.callback, "again");
+    assert_eq!(timer.timer.duration, 2.0);
 }
 
 /// A zero-duration one-shot re-armed from a Lua callback fires on the next tick.
@@ -346,14 +327,7 @@ fn once_timer_lua_callback_zero_duration_rearm_fires_next_tick() {
             .exec()
             .expect("lua load");
     }
-    let entity = world
-        .spawn(LuaTimer::once(
-            0.5,
-            LuaTimerCallback {
-                name: "zero_cb".into(),
-            },
-        ))
-        .id();
+    let entity = world.spawn(LuaTimer::once(0.5, "zero_cb")).id();
     world.add_observer(lua_timer_observer);
     world.flush();
     let zero_calls = |world: &World| -> i64 {
@@ -383,6 +357,41 @@ fn once_timer_lua_callback_zero_duration_rearm_fires_next_tick() {
         "the zero-duration re-arm fires on the next tick"
     );
     assert!(world.get::<LuaTimer>(entity).is_none());
+}
+
+/// A timer callback's `ctx.timer` reports the firing timer's duration, elapsed
+/// time and callback name.
+#[test]
+fn timer_callback_ctx_timer_reports_the_firing_timer() {
+    let mut world = make_lua_callback_world(1.0);
+    {
+        let rt = world.non_send::<LuaRuntime>();
+        rt.lua()
+            .load(
+                r#"
+                function read_ctx_timer(ctx, input)
+                    seen_duration = ctx.timer.duration
+                    seen_elapsed = ctx.timer.elapsed
+                    seen_callback = ctx.timer.callback
+                end
+            "#,
+            )
+            .exec()
+            .expect("lua load");
+    }
+    // One-shot, so the snapshot shows the un-reset elapsed time (1.0 > 0.5).
+    world.spawn(LuaTimer::once(0.5, "read_ctx_timer"));
+
+    tick_lua_timers_with_observer(&mut world);
+
+    let globals = world.non_send::<LuaRuntime>().lua().globals();
+    let duration: f32 = globals.get("seen_duration").expect("seen_duration");
+    let elapsed: f32 = globals.get("seen_elapsed").expect("seen_elapsed");
+    let callback: String = globals.get("seen_callback").expect("seen_callback");
+    assert_eq!(
+        (duration, elapsed, callback.as_str()),
+        (0.5, 1.0, "read_ctx_timer")
+    );
 }
 
 /// Collision path: spawn before clone (collision callback)

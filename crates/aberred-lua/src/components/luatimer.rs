@@ -1,17 +1,14 @@
 //! Lua-based timer component for delayed callbacks.
 //!
-//! The [`LuaTimer`] component counts elapsed time each sim tick. When the
-//! accumulated time exceeds `duration`, a [`LuaTimerEvent`](crate::events::luatimer::LuaTimerEvent)
-//! is triggered on the entity; the timer then resets by subtracting the duration
-//! (repeating) or removes itself (one-shot).
+//! The [`LuaTimer`] component wraps a core `Timer` (same firing rules and
+//! `TimerMode`) plus the name of a Lua function. When the timer fires, a
+//! [`LuaTimerEvent`](crate::events::luatimer::LuaTimerEvent) is triggered on the entity.
 //!
 //! # How It Works
 //!
 //! 1. Entity is spawned with a `LuaTimer` containing duration and callback name
-//! 2. The `update_lua_timers` system runs each sim tick:
-//!    - Accumulates delta time into `elapsed`
-//!    - When `elapsed >= duration`, emits `LuaTimerEvent`, then resets (repeating)
-//!      or removes the `LuaTimer` (one-shot)
+//! 2. The `update_lua_timers` system advances its `Timer` each sim tick and emits
+//!    `LuaTimerEvent` when it fires (repeating timers reset, one-shots remove the `LuaTimer`)
 //! 3. The `lua_timer_observer` receives the event:
 //!    - Looks up the Lua function by name
 //!    - Calls the function as `(ctx, input)`
@@ -57,59 +54,40 @@
 //! - [`crate::systems::luatimer::lua_timer_observer`] – observer that executes Lua callbacks
 //! - [`crate::events::luatimer::LuaTimerEvent`] – event emitted when timer expires
 
-use aberred_core::components::timer::TimerMode;
+use std::sync::Arc;
+
+use aberred_core::components::timer::{Timer, TimerMode};
 use bevy_ecs::prelude::Component;
 
-/// Lua callback function name for a timer.
-///
-/// Stores the name of the Lua function to call when the timer expires.
-/// Used as the callback payload type in [`LuaTimer`].
-#[derive(Clone, Debug, Default)]
-pub struct LuaTimerCallback {
-    /// Lua function name to invoke when the timer fires.
-    pub name: std::sync::Arc<str>,
-}
-
 /// Countdown timer that calls a Lua function when it expires; ticked by
-/// [`update_lua_timers`](crate::systems::luatimer::update_lua_timers). After firing
-/// it applies its [`TimerMode`], like the core `Timer`.
+/// [`update_lua_timers`](crate::systems::luatimer::update_lua_timers).
+///
+/// Wraps a core [`Timer`], so it follows the same firing rules and [`TimerMode`],
+/// and adds the name of the Lua function to call.
 #[derive(Component, Clone, Debug)]
 pub struct LuaTimer {
-    /// Total duration in seconds before the timer fires.
-    pub duration: f32,
-    /// Elapsed time since last reset.
-    pub elapsed: f32,
+    /// Duration, elapsed time and mode.
+    pub timer: Timer,
     /// Lua function to call when the timer fires.
-    pub callback: LuaTimerCallback,
-    /// Whether the timer repeats or fires once.
-    pub mode: TimerMode,
+    pub callback: Arc<str>,
 }
 
 impl LuaTimer {
     /// Create a timer that fires every `duration` seconds.
-    pub fn new(duration: f32, callback: LuaTimerCallback) -> Self {
+    pub fn new(duration: f32, callback: impl Into<Arc<str>>) -> Self {
         Self::with_mode(duration, callback, TimerMode::Repeat)
     }
 
     /// Create a timer that fires once after `duration` seconds, then removes itself.
-    pub fn once(duration: f32, callback: LuaTimerCallback) -> Self {
+    pub fn once(duration: f32, callback: impl Into<Arc<str>>) -> Self {
         Self::with_mode(duration, callback, TimerMode::Once)
     }
 
     /// Create a timer with the given [`TimerMode`].
-    pub fn with_mode(duration: f32, callback: LuaTimerCallback, mode: TimerMode) -> Self {
+    pub fn with_mode(duration: f32, callback: impl Into<Arc<str>>, mode: TimerMode) -> Self {
         Self {
-            duration,
-            elapsed: 0.0,
-            callback,
-            mode,
+            timer: Timer::with_mode(duration, mode),
+            callback: callback.into(),
         }
-    }
-
-    /// Reset the timer by subtracting the duration from elapsed time.
-    ///
-    /// Keeping the overshoot (rather than zeroing) keeps periodic firing accurate.
-    pub fn reset(&mut self) {
-        self.elapsed -= self.duration;
     }
 }

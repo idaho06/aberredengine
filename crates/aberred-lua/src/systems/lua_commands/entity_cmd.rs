@@ -9,7 +9,7 @@ use aberred_core::math::Vec2;
 use bevy_ecs::hierarchy::ChildOf;
 use bevy_ecs::prelude::*;
 
-use crate::components::luatimer::{LuaTimer, LuaTimerCallback};
+use crate::components::luatimer::LuaTimer;
 use aberred_core::components::cameratarget::CameraTarget;
 use aberred_core::components::entityshader::EntityShader;
 use aberred_core::components::globaltransform2d::GlobalTransform2D;
@@ -841,13 +841,7 @@ fn process_lifecycle_cmd(
             mode,
         } => {
             with_entity_cmd(commands, entity_id, |ec| {
-                ec.try_insert(LuaTimer::with_mode(
-                    duration,
-                    LuaTimerCallback {
-                        name: callback.into(),
-                    },
-                    mode,
-                ));
+                ec.try_insert(LuaTimer::with_mode(duration, callback, mode));
             });
         }
         EntityCmd::RemoveLuaTimer { entity_id } => {
@@ -1167,10 +1161,10 @@ mod tests {
             },
         );
 
-        let timer = world.get::<LuaTimer>(entity).unwrap();
-        assert_eq!(timer.mode, TimerMode::Once);
-        assert_eq!(timer.duration, 1.5);
-        assert_eq!(&*timer.callback.name, "boom");
+        let lua_timer = world.get::<LuaTimer>(entity).unwrap();
+        assert_eq!(lua_timer.timer.mode, TimerMode::Once);
+        assert_eq!(lua_timer.timer.duration, 1.5);
+        assert_eq!(&*lua_timer.callback, "boom");
     }
 
     #[test]
