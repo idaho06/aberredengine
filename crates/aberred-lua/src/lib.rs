@@ -16,9 +16,8 @@
 //! direction confines macro-based codegen to this crate; core, render, and
 //! audio use generic functions instead.
 //!
-//! The facade crate (`aberredengine`) keeps three small Lua-priority "shadow"
-//! systems of its own (`systems::{gui_interactable_click,
-//! collision_rule_index, mapspawn}`) that call into this crate's
+//! The facade crate (`aberredengine`) keeps two small Lua-priority "shadow"
+//! systems of its own (`systems::{collision_rule_index, mapspawn}`) that call into this crate's
 //! `systems::lua_*` modules -- those shadow files never moved here, since
 //! they also need to resolve to a Rust-only variant when the `lua` feature
 //! is off, which this crate (Lua-only by construction) cannot express.

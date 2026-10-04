@@ -1193,7 +1193,6 @@ mod mirror_tests {
                 size: Vec2::new(100.0, 30.0),
                 state: GuiWidgetState::Normal,
                 on_click_callback: None,
-                on_rust_callback: None,
             },
             position: ScreenPosition::new(1.0, 2.0),
             z_index: ZIndex(z_index),

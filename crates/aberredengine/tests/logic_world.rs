@@ -12,15 +12,18 @@ use aberredengine::core::components::boxcollider::BoxCollider;
 use aberredengine::core::components::collision::{BoxSides, CollisionRule};
 use aberredengine::core::components::dynamictext::DynamicText;
 use aberredengine::core::components::group::Group;
+use aberredengine::core::components::guiinteractable::GuiInteractable;
 use aberredengine::core::components::mapposition::MapPosition;
 use aberredengine::core::components::menu::{Menu, MenuAction, MenuActions};
 use aberredengine::core::components::phase::Phase;
 use aberredengine::core::components::scene::SceneName;
+use aberredengine::core::components::screenposition::ScreenPosition;
 use aberredengine::core::components::signals::Signals;
 use aberredengine::core::components::sprite::Sprite;
 use aberredengine::core::components::timer::Timer;
 use aberredengine::core::components::zindex::ZIndex;
 use aberredengine::core::events::asset::{AssetLoadFailed, AssetLoaded};
+use aberredengine::core::events::gui_interactable::GuiClicked;
 use aberredengine::core::events::input::InputAction;
 use aberredengine::core::events::phase::{PhaseEntered, PhaseExited};
 use aberredengine::core::events::scene::{SceneEntered, SceneExited};
@@ -35,9 +38,11 @@ use aberredengine::core::protocol::tick_input::TickInput;
 use aberredengine::core::resources::fontmetrics::{FontMetrics, GlyphMetrics};
 use aberredengine::core::resources::gamestate::{GameState, GameStates, NextGameState};
 use aberredengine::core::resources::input::InputState;
+use aberredengine::core::resources::input_bindings::MouseButton;
 use aberredengine::core::resources::loaded_assets::LoadedAssets;
 use aberredengine::core::resources::pending_assets::PendingAssets;
 use aberredengine::core::resources::scenemanager::SceneManager;
+use aberredengine::core::resources::screensize::ScreenSize;
 use aberredengine::core::resources::signal_intents::SignalIntent;
 use aberredengine::core::resources::signal_keys as sk;
 use aberredengine::core::resources::worldsignals::WorldSignals;
@@ -1210,4 +1215,47 @@ fn menu_set_scene_switches_in_the_confirming_tick_without_lua() {
         tw.world.resource::<SceneManager>().active_scene.as_deref(),
         Some("b")
     );
+}
+
+#[derive(Resource, Default)]
+struct ClickCount(u32);
+
+/// A press then release inside a `GuiInteractable` in a Rust-only game (no
+/// `.with_lua()`, whatever the `lua` feature) triggers `GuiClicked` once on
+/// the widget.
+#[test]
+fn gui_click_observer_fires_once_without_lua() {
+    let mut tw = TestWorld::builder().build().expect("build should succeed");
+    tw.world.init_resource::<ClickCount>();
+    tw.tick_to_play(DT, 8);
+    tw.world
+        .spawn((
+            GuiInteractable::new(40.0, 20.0),
+            ScreenPosition::new(10.0, 10.0),
+            ZIndex(0.0),
+        ))
+        .observe(|_: On<GuiClicked>, mut clicks: ResMut<ClickCount>| clicks.0 += 1);
+    tw.tick(1, DT);
+
+    // A window the size of the game resolution maps cursor coordinates 1:1.
+    let screen = *tw.world.resource::<ScreenSize>();
+    let sample = |down: bool| {
+        let mut raw = RawDeviceSnapshot {
+            window_w: screen.w,
+            window_h: screen.h,
+            mouse_x: 20.0,
+            mouse_y: 15.0,
+            ..Default::default()
+        };
+        if down {
+            raw.set_mouse_button(MouseButton::MOUSE_BUTTON_LEFT.as_u8());
+        }
+        raw
+    };
+    tw.send_input(sample(true));
+    tw.tick(1, DT);
+    tw.send_input(sample(false));
+    tw.tick(1, DT);
+
+    assert_eq!(tw.world.resource::<ClickCount>().0, 1);
 }

@@ -1,19 +1,16 @@
 //! Shared hit-test/click state for clickable GUI widgets.
 //!
 //! [`GuiInteractable`] is the shared hit-test/click runtime state for
-//! clickable GUI widgets, letting `gui_hit_test_system`/the click-dispatch
-//! observer serve any clickable widget (`GuiButton`, `GuiImage`) without
-//! duplicating the winner-resolution algorithm. `GuiButton`/`GuiImage` still
-//! carry their own full spawn-time
-//! data (size, caption/tex_key, callback_name, theme_key); the
+//! clickable GUI widgets, letting `gui_hit_test_system` serve any clickable
+//! widget (`GuiButton`, `GuiImage`) without duplicating the
+//! winner-resolution algorithm. `GuiButton`/`GuiImage` still carry their own
+//! full spawn-time data (size, caption/tex_key, callback_name, theme_key); the
 //! `gui_button_spawn_system`/`gui_image_spawn_system` reactive spawn systems
 //! (`systems/gui_spawn.rs`) react on `Added<GuiButton>`/`Added<GuiImage>` to
 //! insert the co-located `GuiInteractable` one frame later.
 
 use crate::math::Vec2;
-use bevy_ecs::prelude::{Component, Entity};
-
-use crate::systems::GameCtx;
+use bevy_ecs::prelude::Component;
 
 /// Visual/interaction state of a [`GuiInteractable`], resolved each frame by
 /// `gui_hit_test_system` from cursor position + the raw left mouse button.
@@ -28,42 +25,18 @@ pub enum GuiWidgetState {
     Disabled,
 }
 
-/// Type alias for a Rust click callback, widget-agnostic (shared by
-/// `GuiButton` and `GuiImage`).
-///
-/// The click edge itself is the signal, so no raw input access is needed
-/// beyond `GameCtx`'s existing commands/queries/resources.
-pub type GuiRustCallback = for<'w, 's> fn(Entity, &mut GameCtx<'w, 's>);
-
 /// Hit-test/click state shared by every clickable GUI widget (`GuiButton`,
 /// `GuiImage`, and any other widget that carries `GuiInteractable`).
-#[derive(Component, Clone, Debug)]
+///
+/// A click (press then release inside the widget) triggers the
+/// [`GuiClicked`](crate::events::gui_interactable::GuiClicked) event on this
+/// entity; Rust code observes it.
+#[derive(Component, Clone, Debug, PartialEq)]
 pub struct GuiInteractable {
     pub size: Vec2,
     pub state: GuiWidgetState,
-    /// Lua callback name, checked first.
+    /// Lua callback name, called on click when the game runs a Lua script.
     pub on_click_callback: Option<String>,
-    /// Rust fn-pointer callback, checked second. Set once at spawn time and
-    /// never mutated afterward -- excluded from `PartialEq` below (see that
-    /// impl's comment) rather than compared by address, which the compiler
-    /// warns is not a reliable identity check.
-    pub on_rust_callback: Option<GuiRustCallback>,
-}
-
-/// Manual, not derived: comparing `on_rust_callback` by function-pointer
-/// address is unreliable (the compiler may merge identical function bodies,
-/// or addresses may vary across codegen units -- see
-/// `unpredictable_function_pointer_comparisons`), so it's excluded here.
-/// Safe for this struct's one consumer, the mirror reconcile diff-guard
-/// (`src/systems/render/mirror.rs`): `on_rust_callback` is set once at spawn
-/// and never mutated afterward, so treating it as always-equal never masks
-/// a real change on an otherwise-identical, still-live entity.
-impl PartialEq for GuiInteractable {
-    fn eq(&self, other: &Self) -> bool {
-        self.size == other.size
-            && self.state == other.state
-            && self.on_click_callback == other.on_click_callback
-    }
 }
 
 impl GuiInteractable {
@@ -72,21 +45,6 @@ impl GuiInteractable {
             size: Vec2::new(width, height),
             state: GuiWidgetState::Normal,
             on_click_callback: None,
-            on_rust_callback: None,
-        }
-    }
-
-    /// Create an interactable with a Rust function pointer callback.
-    ///
-    /// Prefer this over `::new` + `with_on_rust_callback` for Rust callbacks:
-    /// the typed parameter forces coercion from the function-item type to
-    /// the `fn(...)` pointer type `Query<&GuiInteractable>` expects. Without
-    /// the coercion the query silently matches nothing. Mirrors
-    /// `CollisionRule::rust`.
-    pub fn rust(width: f32, height: f32, callback: GuiRustCallback) -> Self {
-        Self {
-            on_rust_callback: Some(callback),
-            ..Self::new(width, height)
         }
     }
 

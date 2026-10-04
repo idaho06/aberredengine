@@ -53,10 +53,9 @@ impl GuiButton {
         }
     }
 
-    /// Lua-only constructor: sets `callback_name`, dispatched by name through
-    /// the Lua-then-Rust callback chain. Rust callers should use `::new` and
-    /// pair the entity with a pre-spawned `GuiInteractable::rust(...)`
-    /// instead — `callback_name` has no effect once a `GuiInteractable` is
+    /// Lua-only constructor: sets `callback_name`, the Lua function called on
+    /// click. Rust callers use `::new` and observe `GuiClicked` on the entity
+    /// instead. `callback_name` has no effect once a `GuiInteractable` is
     /// already present (`insert_if_new`).
     #[cfg(feature = "lua")]
     pub fn with_lua_callback(

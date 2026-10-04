@@ -4,7 +4,6 @@ use bevy_ecs::prelude::*;
 use super::builder::EngineBuilder;
 use super::logic_thread::LogicInit;
 use super::registrar::ObserverRegistrar;
-use crate::systems::gui_interactable_click::gui_interactable_click_observer;
 use crate::systems::mapspawn::spawn_map_observer;
 use aberred_audio::systems::setup_audio;
 #[cfg(feature = "lua")]
@@ -69,6 +68,8 @@ use aberred_lua::resources::lua_runtime::LuaRuntime;
 use aberred_lua::systems::lua_animation_finished::lua_animation_finished_observer;
 #[cfg(feature = "lua")]
 use aberred_lua::systems::lua_collision::lua_collision_observer;
+#[cfg(feature = "lua")]
+use aberred_lua::systems::lua_gui_interactable_click::lua_gui_interactable_click_observer;
 #[cfg(feature = "lua")]
 use aberred_lua::systems::lua_menu::lua_menu_selection_observer;
 #[cfg(feature = "lua")]
@@ -328,11 +329,14 @@ impl EngineBuilder {
         // world — F10 toggles the window, which only exists there.
         world.spawn((Observer::new(menu_controller_observer), Persistent));
         world.spawn((Observer::new(menu_selection_observer), Persistent));
-        world.spawn((Observer::new(gui_interactable_click_observer), Persistent));
         #[cfg(feature = "lua")]
         if has_lua {
             world.spawn((Observer::new(lua_timer_observer), Persistent));
             world.spawn((Observer::new(lua_menu_selection_observer), Persistent));
+            world.spawn((
+                Observer::new(lua_gui_interactable_click_observer),
+                Persistent,
+            ));
             world.spawn((Observer::new(lua_animation_finished_observer), Persistent));
 
             fn spawn_tween_finished_observer<T: aberred_core::components::tween::TweenValue>(

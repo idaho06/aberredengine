@@ -1,13 +1,13 @@
-//! Unified ECS context passed to all Rust game callbacks.
+//! ECS context passed to Rust collision callbacks.
 //!
 //! [`GameCtx`] is a [`SystemParam`] that bundles every query and resource
-//! a game callback is likely to need. It is the single context type shared by
-//! collision rules, menus, and GUI interactables.
+//! a game callback is likely to need. Collision rules' Rust callbacks receive
+//! it.
 //!
 //! # Usage in callbacks
 //!
 //! ```ignore
-//! fn on_click(entity: Entity, ctx: &mut GameCtx) {
+//! fn on_hit(entity: Entity, ctx: &mut GameCtx) {
 //!     if let Ok(mut rb) = ctx.rigid_bodies.get_mut(entity) {
 //!         rb.velocity = Vec2::ZERO;
 //!     }
@@ -19,7 +19,6 @@
 //! # Related
 //!
 //! - [`crate::components::collision::CollisionCallback`] – fn-pointer type for collision callbacks
-//! - [`crate::components::guiinteractable::GuiRustCallback`] – fn-pointer type for GUI click callbacks
 
 use bevy_ecs::prelude::*;
 use bevy_ecs::system::SystemParam;
@@ -49,20 +48,18 @@ use crate::resources::sim_rng::SimRng;
 use crate::resources::worldsignals::WorldSignals;
 use crate::resources::worldtime::WorldTime;
 
-/// Unified ECS access passed to all Rust game callbacks.
+/// ECS access passed to Rust collision callbacks.
 ///
 /// Provides commands, a complete set of component queries, and the most
-/// commonly needed resources. All Rust callback types —
-/// [`CollisionCallback`](crate::components::collision::CollisionCallback),
-/// and [`GuiRustCallback`](crate::components::guiinteractable::GuiRustCallback)
-/// — receive `&mut GameCtx`.
+/// commonly needed resources. Rust collision callbacks
+/// ([`CollisionCallback`](crate::components::collision::CollisionCallback))
+/// receive `&mut GameCtx`.
 ///
 /// If your system takes `&mut GameCtx` alongside its own component query,
 /// check whether `GameCtx` already covers that component first — borrow it
 /// from `ctx` instead of adding a sibling query parameter. A sibling query
 /// that overlaps one of `GameCtx`'s queries causes a Bevy `B0001`
-/// query-aliasing panic at startup (see `gui_interactable_click_observer`,
-/// which hit this when `gui_interactables` was added here).
+/// query-aliasing panic at startup.
 ///
 /// `GameCtx` holds a `MessageWriter<AudioCmd>`, so a system that takes it
 /// can't also take [`AssetLoader`](crate::systems::asset_loader::AssetLoader),
@@ -85,9 +82,8 @@ pub struct GameCtx<'w, 's> {
     /// Mutable access to camera target markers (priority and zoom).
     pub camera_targets: Query<'w, 's, &'static mut CameraTarget>,
     /// Mutable access to GUI widget hit-test/click state (enable/disable, etc.).
-    /// Present here — not only in the click observer — so that any Rust
-    /// callback (`GuiRustCallback`, menu, collision rule) can disable
-    /// or re-enable a widget directly via `ctx.gui_interactables.get_mut(id)`.
+    /// A Rust callback can disable or re-enable a widget directly via
+    /// `ctx.gui_interactables.get_mut(id)`.
     pub gui_interactables: Query<'w, 's, &'static mut GuiInteractable>,
     // Read-only queries
     /// Read-only access to entity groups.

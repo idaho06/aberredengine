@@ -1,106 +1,71 @@
-//! Lua-priority GUI interactable click dispatch.
+//! Lua GUI interactable click dispatch.
 //!
-//! Shadows [`aberred_core::systems::gui_interactable_click::gui_interactable_click_observer`]
-//! with a variant that checks the entity's named Lua callback first, falling
-//! back to its Rust fn-pointer callback. Re-exported by
-//! the facade's `systems::gui_interactable_click` under `#[cfg(feature = "lua")]`.
+//! [`lua_gui_interactable_click_observer`] is spawned only in games that run
+//! a Lua script. It calls the clicked widget's named Lua callback; Rust code
+//! observes the same `GuiClicked` event directly.
 
+use crate::resources::lua_runtime::LuaRuntime;
+use aberred_core::components::guiinteractable::GuiInteractable;
 use aberred_core::events::gui_interactable::GuiClicked;
-use aberred_core::systems::GameCtx;
 use bevy_ecs::prelude::*;
 use log::warn;
 
-/// Reacts to `GuiClicked`; dispatches to the entity's named
-/// Lua callback first, falling back to its Rust fn-pointer callback.
-pub fn gui_interactable_click_observer(
+/// Reacts to `GuiClicked` by calling the widget's Lua callback
+/// (`GuiInteractable::on_click_callback`) with a `{ entity_id }` table.
+pub fn lua_gui_interactable_click_observer(
     trigger: On<GuiClicked>,
-    mut ctx: GameCtx,
-    lua_runtime: bevy_ecs::system::NonSend<crate::resources::lua_runtime::LuaRuntime>,
+    interactables: Query<&GuiInteractable>,
+    lua_runtime: NonSend<LuaRuntime>,
 ) {
-    let event = trigger.event();
-    let Ok(interactable) = ctx.gui_interactables.get(event.entity) else {
-        warn!(
-            "gui_interactable_click_observer: entity {:?} not found",
-            event.entity
-        );
+    let entity = trigger.event().entity;
+    let Ok(interactable) = interactables.get(entity) else {
+        warn!("lua_gui_interactable_click_observer: entity {entity:?} not found");
         return;
     };
-    let on_click_callback = interactable.on_click_callback.clone();
-    let on_rust_callback = interactable.on_rust_callback;
-
-    // Priority 1: Lua callback
-    if let Some(callback_name) = on_click_callback {
-        if lua_runtime.has_function(&callback_name) {
-            let lua_ctx = lua_runtime.lua().create_table().unwrap();
-            lua_ctx.set("entity_id", event.entity.to_bits()).unwrap();
-            if let Err(e) = lua_runtime.call_function::<_, ()>(&callback_name, lua_ctx) {
-                log::error!(target: "lua", "Error in gui interactable callback '{}': {}", callback_name, e);
-            }
-        } else {
-            warn!(target: "lua", "gui interactable callback '{}' not found", callback_name);
-        }
+    let Some(callback_name) = &interactable.on_click_callback else {
         return;
-    }
-
-    // Priority 2: Rust callback
-    if let Some(cb) = on_rust_callback {
-        cb(event.entity, &mut ctx);
-    }
+    };
+    lua_runtime.call_named(callback_name, "GUI interactable", |f| {
+        let lua_ctx = lua_runtime.lua().create_table()?;
+        lua_ctx.set("entity_id", entity.to_bits())?;
+        f.call::<()>(lua_ctx)
+    });
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::resources::lua_runtime::LuaRuntime;
-    use aberred_core::components::guiinteractable::GuiInteractable;
-    use aberred_core::resources::worldsignals::WorldSignals;
-    use aberred_core::testing::insert_game_ctx_resources;
 
     fn setup_world() -> World {
         let mut world = World::new();
-        insert_game_ctx_resources(&mut world);
         world.insert_non_send(LuaRuntime::new().expect("LuaRuntime::new"));
+        world.spawn(Observer::new(lua_gui_interactable_click_observer));
+        world.flush();
         world
     }
 
-    fn tick(world: &mut World) {
-        world.spawn(Observer::new(gui_interactable_click_observer));
-        world.flush();
-    }
-
-    fn dummy_callback(entity: Entity, ctx: &mut GameCtx) {
-        ctx.world_signals.set_flag("rust_callback_fired");
-        let _ = entity;
-    }
-
     #[test]
-    fn lua_callback_takes_priority_over_rust_callback() {
+    fn click_calls_the_lua_callback_with_the_entity_id() {
         let mut world = setup_world();
-        {
-            let lua_rt = world.non_send::<LuaRuntime>();
-            lua_rt
-                .lua()
-                .load("function on_gui_button_clicked() end")
-                .exec()
-                .expect("failed to load Lua function");
-        }
+        world
+            .non_send::<LuaRuntime>()
+            .lua()
+            .load("function on_gui_button_clicked(ctx) clicked_entity = ctx.entity_id end")
+            .exec()
+            .expect("failed to load Lua function");
 
         let button = world
-            .spawn(
-                GuiInteractable::rust(80.0, 24.0, dummy_callback)
-                    .with_on_click_callback("on_gui_button_clicked"),
-            )
+            .spawn(GuiInteractable::new(80.0, 24.0).with_on_click_callback("on_gui_button_clicked"))
             .id();
-
-        tick(&mut world);
         world.trigger(GuiClicked { entity: button });
         world.flush();
 
-        assert!(
-            !world
-                .resource::<WorldSignals>()
-                .has_flag("rust_callback_fired"),
-            "Rust callback should be skipped when a Lua callback is set"
-        );
+        let clicked: Option<u64> = world
+            .non_send::<LuaRuntime>()
+            .lua()
+            .globals()
+            .get("clicked_entity")
+            .unwrap();
+        assert_eq!(clicked, Some(button.to_bits()));
     }
 }

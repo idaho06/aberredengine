@@ -1310,7 +1310,7 @@ When `WorldSignals` has a value for key `"score"`, the text automatically update
 | `GuiImage` | `GuiImage::new(width, height, "tex_key", offset_x, offset_y)` — add `.with_offset_hover(x, y)` / `.with_offset_pressed(x, y)` / `.with_offset_disabled(x, y)` for per-state atlas offsets |
 | `GuiProgressBar` | `GuiProgressBar::new(w, h, value, max)` — add `.with_direction(ProgressBarDirection)`, `.with_signal_binding(key)`, `.with_theme_key(key)`; requires `ScreenPosition` + `ZIndex` |
 | `Shadow` | `Shadow::new(dx, dy, r, g, b, a)` or `Shadow::default_color(dx, dy)` — pre-pass shadow for `Sprite` and `DynamicText` entities; see §7.7 |
-| `GuiInteractable` | `GuiInteractable::rust(width, height, callback)` — use `::rust()` for Rust callbacks; see §7.7 |
+| `GuiInteractable` | `GuiInteractable::new(width, height)` — hit-test/click state; observe `GuiClicked` for clicks; see §7.7 |
 | `GuiOffset` | `GuiOffset(Vec2::new(x, y))` — position relative to a `ChildOf` parent |
 
 **Animation controller rules.** `with_rule` takes a `Condition` (`aberredengine::core::components::animation::{Condition, CmpOp}`) evaluated against the entity's **own** `Signals` component, not `WorldSignals`. An entity without `Signals` is skipped. Rules run in order every sim tick and the first match sets the animation; when none matches, the fallback key plays. `Condition` variants: `ScalarCmp`, `ScalarRange`, `IntegerCmp`, `IntegerRange`, `HasFlag`, `LacksFlag`, and the combinators `All`, `Any`, `Not`.
@@ -1960,12 +1960,12 @@ callback signature is `fn(ctx, input)` — the same as the animation-finished an
 
 ### 7.7 GUI Widgets
 
-**Source:** `aberred-core/src/components/{guiwindow,guibutton,guilabel,guiimage,guiinteractable,guioffset}.rs`, `aberred-core/src/resources/guitheme.rs`, `aberred-core/src/systems/{gui_spawn,gui_layout,gui_hit_test,gui_interactable_click}.rs`, `aberred-core/src/events/gui_interactable.rs`
+**Source:** `aberred-core/src/components/{guiwindow,guibutton,guilabel,guiimage,guiinteractable,guioffset}.rs`, `aberred-core/src/resources/guitheme.rs`, `aberred-core/src/systems/{gui_spawn,gui_layout,gui_hit_test}.rs`, `aberred-core/src/events/gui_interactable.rs`
 
 The engine provides a themed, nine-patch-skinned in-game GUI widget system — panels, buttons, labels, and
 clickable images. It is plain ECS components and systems, fully usable from pure Rust; all of its systems
 (`gui_button_spawn_system`, `gui_label_spawn_system`, `gui_image_spawn_system`, `gui_layout_system`,
-`gui_hit_test_system`, `gui_interactable_click_observer`) are registered automatically by `EngineBuilder`
+`gui_hit_test_system`) are registered automatically by `EngineBuilder`
 regardless of the `lua` feature — there's nothing extra to wire up.
 
 This is distinct from the ImGui GUI callback covered in Section 3 — ImGui is for editor/debug
@@ -1983,15 +1983,13 @@ parented with `ChildOf`, hidden by removing `ScreenPosition`, etc.).
 | `GuiImage` | `GuiImage::new(w, h, "tex_key", offset_x, offset_y)` — add `.with_offset_hover(x, y)` / `.with_offset_pressed(x, y)` / `.with_offset_disabled(x, y)` for per-state atlas offsets | `gui_image_spawn_system` inserts a co-located `GuiInteractable` + `Sprite` (same entity, no child). `gui_image_state_sync_system` re-resolves `Sprite.offset` from `GuiInteractable.state` every sim tick automatically — no game code needed. |
 | `GuiProgressBar` | `GuiProgressBar::new(w, h, value, max)` — `theme_key: Arc<str>` defaults to `"default"`, override with `.with_theme_key(key)`; `.with_direction(ProgressBarDirection)`, `.with_signal_binding(key)` for `WorldSignals` auto-update | No spawn system — rendered directly. Requires `ScreenPosition` + `ZIndex`. `value` clamped to `[0, max]`. `direction` variants: `Horizontal` (default, left→right), `HorizontalReversed`, `Vertical` (bottom→top), `VerticalReversed`. |
 | `Shadow` | `Shadow::new(dx, dy, r, g, b, a)` or `Shadow::default_color(dx, dy)` (50% transparent black) | Pre-pass shadow drawn at entity position + offset before the main sprite/text draw. Bypasses entity shaders. Works for both world-space and screen-space entities (`Sprite` and `DynamicText`). |
-| `GuiInteractable` | `GuiInteractable::rust(w, h, callback)` | Shared hit-test/click runtime state (`Normal`/`Hovered`/`Pressed`/`Disabled`). Use the `::rust()` coercion constructor — mirrors `CollisionRule::rust` — for a Rust fn-pointer callback: `GuiRustCallback = fn(Entity, &mut GameCtx)`. |
+| `GuiInteractable` | `GuiInteractable::new(w, h)` | Shared hit-test/click runtime state (`Normal`/`Hovered`/`Pressed`/`Disabled`). A click on it triggers `GuiClicked` on the entity. |
 | `GuiOffset` | `GuiOffset(Vec2::new(x, y))` | A child widget's position relative to its `ChildOf` parent. `gui_layout_system` resolves it into the child's `ScreenPosition` every sim tick; `ChildOf` is used for lifecycle (cascade despawn) only, not positioning. |
 
-> **Important:** `GuiButton`/`GuiImage`'s spawn systems use `insert_if_new` for the `GuiInteractable` they
-> add — they will not overwrite one you pre-spawned. **To get a Rust callback, you must spawn
-> `GuiInteractable::rust(...)` yourself in the same bundle as `GuiButton`/`GuiImage`.** If you only spawn
-> `GuiButton`/`GuiImage` alone, the inserted default `GuiInteractable` has no Rust callback wired. It only
-> carries the Lua dispatch name: the spawn system copies the widget's `callback_name` (if non-empty) into
-> `GuiInteractable.on_click_callback`, which no-ops with no matching Lua function present.
+> **Note:** `GuiButton`/`GuiImage`'s spawn systems use `insert_if_new` for the `GuiInteractable` they
+> add, so they never overwrite one you pre-spawned in the same bundle (for example, to give the widget a
+> different hit area). The spawn system copies the widget's `callback_name` (if non-empty) into
+> `GuiInteractable.on_click_callback`, the Lua function a Lua game calls on click.
 
 **Theming:** Themes are stored in `GuiThemeStore` — a `FxHashMap<Arc<str>, GuiTheme>` pre-inserted by the engine. Each widget carries a `theme_key: Arc<str>` (default `"default"`) that is resolved against `GuiThemeStore` at render time. Set up themes in your setup system before spawning any widgets:
 
@@ -2054,13 +2052,12 @@ A missing/unregistered `theme_key` skips the themed background (caption/sprite s
 ```rust
 use aberredengine::prelude::*;
 
-fn on_start_clicked(_entity: Entity, ctx: &mut GameCtx) {
-    ctx.world_signals.set_flag("start_pressed");
+fn on_start_clicked(_ev: On<GuiClicked>, mut signals: ResMut<WorldSignals>) {
+    signals.set_flag("start_pressed");
 }
 
-fn spawn_menu_panel(ctx: &mut GameCtx) {
-    let panel = ctx
-        .commands
+fn spawn_menu_panel(mut commands: Commands) {
+    let panel = commands
         .spawn((
             GuiWindow::new(200.0, 100.0),
             ScreenPosition::new(50.0, 50.0),
@@ -2068,25 +2065,24 @@ fn spawn_menu_panel(ctx: &mut GameCtx) {
         ))
         .id();
 
-    ctx.commands.spawn((
-        GuiButton::new(120.0, 32.0, "Start"),
-        GuiInteractable::rust(120.0, 32.0, on_start_clicked),
-        ChildOf(panel),
-        GuiOffset(Vec2::new(40.0, 34.0)),
-        ZIndex(10.0),
-    ));
+    commands
+        .spawn((
+            GuiButton::new(120.0, 32.0, "Start"),
+            ChildOf(panel),
+            GuiOffset(Vec2::new(40.0, 34.0)),
+            ZIndex(10.0),
+        ))
+        .observe(on_start_clicked);
 }
 ```
 
 The button entity needs no `ScreenPosition` set directly — `gui_layout_system` supplies it each sim tick from
 the parent's `ScreenPosition` plus `GuiOffset`.
 
-**Click events:** clicks dispatch primarily through the per-widget `GuiInteractable.on_rust_callback` /
-`on_click_callback` (Lua name) shown above. For cross-cutting logic that doesn't belong to one specific
-widget (analytics, a UI click sound), you can additionally observe `GuiClicked { entity }`
-(`aberred-core/src/events/gui_interactable.rs`), either per widget (`.observe(handler)` on the widget entity) or
-once with `EngineBuilder::add_observer`; it fires for any `GuiInteractable`-carrying widget
-(`GuiButton` or `GuiImage`) on a press-then-release-inside.
+**Click events:** a press then release inside any `GuiInteractable`-carrying widget (`GuiButton` or
+`GuiImage`) triggers `GuiClicked { entity }` (`aberred-core/src/events/gui_interactable.rs`) on that widget.
+Observe it per widget with `.observe(handler)`, as above, or once with `EngineBuilder::add_observer` for
+cross-cutting logic such as a UI click sound. A disabled widget never triggers it.
 
 ### 7.8 Particle Emitters
 

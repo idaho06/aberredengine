@@ -830,7 +830,6 @@ mod tests {
                 size: Vec2::new(100.0, 30.0),
                 state: GuiWidgetState::Hovered,
                 on_click_callback: Some("on_play".to_string()),
-                on_rust_callback: None,
             },
             ScreenPosition::new(10.0, 20.0),
             ZIndex(5.0),

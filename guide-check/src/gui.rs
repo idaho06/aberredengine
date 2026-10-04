@@ -37,13 +37,12 @@ mod gui_widgets {
 
     use aberredengine::prelude::*;
 
-    fn on_start_clicked(_entity: Entity, ctx: &mut GameCtx) {
-        ctx.world_signals.set_flag("start_pressed");
+    fn on_start_clicked(_ev: On<GuiClicked>, mut signals: ResMut<WorldSignals>) {
+        signals.set_flag("start_pressed");
     }
 
-    fn spawn_menu_panel(ctx: &mut GameCtx) {
-        let panel = ctx
-            .commands
+    fn spawn_menu_panel(mut commands: Commands) {
+        let panel = commands
             .spawn((
                 GuiWindow::new(200.0, 100.0),
                 ScreenPosition::new(50.0, 50.0),
@@ -51,13 +50,14 @@ mod gui_widgets {
             ))
             .id();
 
-        ctx.commands.spawn((
-            GuiButton::new(120.0, 32.0, "Start"),
-            GuiInteractable::rust(120.0, 32.0, on_start_clicked),
-            ChildOf(panel),
-            GuiOffset(Vec2::new(40.0, 34.0)),
-            ZIndex(10.0),
-        ));
+        commands
+            .spawn((
+                GuiButton::new(120.0, 32.0, "Start"),
+                ChildOf(panel),
+                GuiOffset(Vec2::new(40.0, 34.0)),
+                ZIndex(10.0),
+            ))
+            .observe(on_start_clicked);
     }
 }
 

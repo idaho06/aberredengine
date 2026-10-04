@@ -14,8 +14,7 @@
 //! uses for `Menu`'s items. Using `insert_if_new` (not `insert`) for the
 //! inserted `GuiInteractable`/`Sprite` means a Rust caller that pre-spawned
 //! either component in the same bundle as `GuiButton`/`GuiImage` (e.g. to
-//! get a Rust fn-pointer click callback via `GuiInteractable::rust(...)`)
-//! keeps it — these systems only fill in what's missing.
+//! give the widget a different hit area) keeps it — these systems only fill in what's missing.
 
 use std::sync::Arc;
 
@@ -314,15 +313,13 @@ mod tests {
     }
 
     #[test]
-    fn gui_button_spawn_preserves_preexisting_rust_callback_interactable() {
-        fn dummy_callback(_entity: Entity, _ctx: &mut crate::systems::GameCtx) {}
-
+    fn gui_button_spawn_preserves_preexisting_interactable() {
         let mut world = World::new();
         insert_empty_theme_store(&mut world);
         let button_entity = world
             .spawn((
                 GuiButton::new(80.0, 24.0, "").with_disabled(),
-                GuiInteractable::rust(80.0, 24.0, dummy_callback),
+                GuiInteractable::new(100.0, 40.0),
                 ScreenPosition::new(10.0, 20.0),
                 ZIndex(5.0),
             ))
@@ -333,8 +330,9 @@ mod tests {
         let interactable = world
             .get::<GuiInteractable>(button_entity)
             .expect("GuiInteractable should be present");
-        assert!(
-            interactable.on_rust_callback.is_some(),
+        assert_eq!(
+            interactable.size,
+            Vec2::new(100.0, 40.0),
             "insert_if_new must not overwrite a pre-spawned GuiInteractable"
         );
         assert_eq!(
@@ -698,12 +696,10 @@ mod tests {
 
     #[test]
     fn gui_image_spawn_preserves_preexisting_sprite_and_interactable() {
-        fn dummy_callback(_entity: Entity, _ctx: &mut crate::systems::GameCtx) {}
-
         let mut world = World::new();
         world.spawn((
             GuiImage::new(32.0, 32.0, "item_sword", 0.0, 0.0),
-            GuiInteractable::rust(32.0, 32.0, dummy_callback),
+            GuiInteractable::new(48.0, 16.0),
             Sprite {
                 tex_key: Arc::from("custom_override"),
                 width: 32.0,
@@ -722,8 +718,9 @@ mod tests {
             .iter(&world)
             .next()
             .expect("entity should be spawned");
-        assert!(
-            interactable.on_rust_callback.is_some(),
+        assert_eq!(
+            interactable.size,
+            Vec2::new(48.0, 16.0),
             "insert_if_new must not overwrite a pre-spawned GuiInteractable"
         );
         assert_eq!(&*sprite.tex_key, "custom_override");

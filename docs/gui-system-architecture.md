@@ -261,23 +261,22 @@ ctx.commands.spawn((
 ));
 ```
 
-**Rust (with Rust fn-pointer callback):**
+**Rust (observing the click):**
 
-Pre-spawn `GuiInteractable::rust(...)` alongside `GuiButton::new(...)`. The spawn system uses
-`insert_if_new`, so the pre-existing interactable is kept and the button's `callback_name` is
-ignored. The coercion constructor is required — see [Interaction Model](#interaction-model).
+Observe `GuiClicked` on the button entity — see [Click events](#click-events).
 
 ```rust
-fn on_start_clicked(entity: Entity, ctx: &mut GameCtx) {
-    ctx.signals.set_flag("start_game");
+fn on_start_clicked(_ev: On<GuiClicked>, mut signals: ResMut<WorldSignals>) {
+    signals.set_flag("start_game");
 }
 
-ctx.commands.spawn((
-    GuiButton::new(100.0, 24.0, "Start Game"),
-    GuiInteractable::rust(100.0, 24.0, on_start_clicked),
-    ScreenPosition { pos: Vec2::new(16.0, 50.0) },
-    ZIndex(2.0),
-));
+commands
+    .spawn((
+        GuiButton::new(100.0, 24.0, "Start Game"),
+        ScreenPosition { pos: Vec2::new(16.0, 50.0) },
+        ZIndex(2.0),
+    ))
+    .observe(on_start_clicked);
 ```
 
 ---
@@ -377,10 +376,9 @@ ctx.commands.spawn((
         .with_offset_hover(32.0, 0.0)
         .with_offset_pressed(0.0, 32.0)
         .with_offset_disabled(32.0, 32.0),
-    GuiInteractable::rust(32.0, 32.0, on_sword_clicked),
     ScreenPosition { pos: Vec2::new(8.0, 36.0) },
     ZIndex(2.0),
-));
+)).observe(on_sword_clicked);
 ```
 
 ---
@@ -614,15 +612,14 @@ colors. Removing `ScreenPosition` is separate from and not implied by `Tint`.
 
 ```
 GuiInteractable { size: Vec2, state: GuiWidgetState,
-                  on_click_callback: Option<String>,
-                  on_rust_callback:  Option<GuiRustCallback> }
+                  on_click_callback: Option<String> }
 
 GuiWidgetState: Normal | Hovered | Pressed | Disabled
 ```
 
 `gui_button_spawn_system` and `gui_image_spawn_system` insert `GuiInteractable` automatically (via
-`insert_if_new`). For Rust fn-pointer callbacks, pre-spawn your own `GuiInteractable::rust(...)`
-alongside the widget component — the spawn system will leave it intact. `.with_on_click_callback(name)`
+`insert_if_new`), so one you pre-spawn alongside the widget component (for example, with a different
+hit area) is left intact. `.with_on_click_callback(name)`
 sets a Lua function name from Rust-only code (the Rust equivalent of `GuiButton`/`GuiImage`'s
 `callback_name` constructor argument, for a hand-built `GuiInteractable`), and `.with_disabled()`
 starts the widget in `Disabled` state at spawn time — the same role as `GuiButton::with_disabled()`
@@ -648,19 +645,15 @@ neither promote past `Disabled` nor ever cause `GuiClicked` to fire — the "dis
 buttons don't click" behavior is enforced here, in the hit-test step, not in the click observer
 described below.
 
-### Click callbacks
+### Click events
 
-`gui_interactable_click_observer` reacts to `GuiClicked` (which, per above, never
-fires for a `Disabled` widget) and resolves a callback chain on the clicked entity's
-`GuiInteractable`. There are **two implementations**, selected by the facade's feature-gated
-shadow module (`crates/aberredengine/src/systems/gui_interactable_click.rs`):
+`GuiClicked { entity }` (which, per above, never fires for a `Disabled` widget) is an
+`EntityEvent` targeted at the clicked widget. Rust code observes it, either per widget with
+`.observe(handler)` on the widget entity or globally with `EngineBuilder::add_observer`.
 
-- Under `feature = "lua"` (the default), the Lua-priority variant (`aberred-lua`) checks
-  `on_click_callback` (a Lua function name) first, falling back to `on_rust_callback` (fn-pointer)
-  if unset or unresolvable.
-- Under `--no-default-features` (no Lua), the Rust-only variant (`aberred-core`) checks only
-  `on_rust_callback` — `aberred-core` cannot name `LuaRuntime` at all, so there is no Lua branch
-  to fall through.
+In a game that runs a Lua script, `lua_gui_interactable_click_observer` (`aberred-lua`) also
+reacts to it and calls the widget's `on_click_callback` (a Lua function name), if set. A missing
+Lua function only warns. Rust observers run either way.
 
 **Lua click callback:** receives a table with `evt.entity_id` (u64 entity ID).
 
@@ -671,22 +664,15 @@ local function on_button_clicked(evt)
 end
 ```
 
-**Rust fn-pointer callback:** use `GuiInteractable::rust(...)` — the typed parameter forces
-coercion from function-item to `fn(...)` pointer, which `Query<&GuiInteractable>` requires.
-Without the coercion the query silently matches nothing (same gotcha as `CollisionRule::rust`).
+**Rust observer:**
 
 ```rust
-pub type GuiRustCallback = for<'w, 's> fn(Entity, &mut GameCtx<'w, 's>);
-
-fn on_my_button_clicked(entity: Entity, ctx: &mut GameCtx) {
-    ctx.signals.set_flag("action_triggered");
+fn on_my_button_clicked(_ev: On<GuiClicked>, mut signals: ResMut<WorldSignals>) {
+    signals.set_flag("action_triggered");
 }
 
-// Correct:
-GuiInteractable::rust(100.0, 24.0, on_my_button_clicked)
-
-// Wrong — query won't match:
-GuiInteractable { on_rust_callback: Some(on_my_button_clicked), .. }
+commands.spawn((GuiButton::new(100.0, 24.0, "Go"), ScreenPosition::new(16.0, 50.0), ZIndex(2.0)))
+    .observe(on_my_button_clicked);
 ```
 
 ### Runtime enable/disable
@@ -958,18 +944,17 @@ fn scene_enter(ctx: &mut GameCtx) {
         ZIndex(2.0),
     ));
 
-    // Retreat button with Rust fn-pointer callback
+    // Retreat button, observed for clicks
     ctx.commands.spawn((
         GuiButton::new(100.0, 24.0, "Retreat"),
-        GuiInteractable::rust(100.0, 24.0, on_retreat_clicked),
         ChildOf(window),
         GuiOffset(Vec2::new(16.0, 50.0)),
         ZIndex(2.0),
-    ));
+    )).observe(on_retreat_clicked);
 }
 
-fn on_retreat_clicked(_entity: Entity, ctx: &mut GameCtx) {
-    ctx.signals.set_string("switch_scene", "menu");
+fn on_retreat_clicked(_ev: On<GuiClicked>, mut signals: ResMut<WorldSignals>) {
+    signals.request_scene("menu");
 }
 
 // ── Engine setup ─────────────────────────────────────────────────────────────
@@ -1016,9 +1001,7 @@ The GUI systems and components are **always compiled** regardless of the `lua` f
 - `gui_button_spawn_system`, `gui_label_spawn_system`, `gui_image_spawn_system`
 - `gui_layout_system`, `gui_hit_test_system`, `gui_image_state_sync_system`,
   `gui_progressbar_signal_update_system`
-- `gui_interactable_click_observer` — always compiled, but as **two separate implementations**
-  (see [Click callbacks](#click-callbacks)): the facade picks the Rust-only `aberred-core` variant
-  under `--no-default-features`, or the Lua-priority `aberred-lua` variant otherwise.
+- the `GuiClicked` event (see [Click events](#click-events))
 - All component types (`GuiWindow`, `GuiButton`, `GuiLabel`, `GuiImage`, `GuiInteractable`,
   `GuiOffset`, `GuiWidgetState`)
 - `GuiThemeStore`, `GuiTheme`, `GuiInputState`
@@ -1028,7 +1011,7 @@ The following are gated on `feature = "lua"`:
 - `engine.set_gui_theme_*` / `engine.entity_set_gui_disabled` Lua API calls
 - The `gui_theme_commands` queue in `LuaAppData`
 - `GuiButton::with_lua_callback`, `GuiImage::with_lua_callback` constructors
-- The Lua-priority half of `gui_interactable_click_observer` itself (`aberred-lua`)
+- `lua_gui_interactable_click_observer` (`aberred-lua`), spawned only in games that run a Lua script
 
 Rust-only games (built with `default-features = false`) get the full component and system stack
 and configure everything via `ResMut<GuiThemeStore>` and direct component spawning.

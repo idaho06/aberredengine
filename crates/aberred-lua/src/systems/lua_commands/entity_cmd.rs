@@ -298,7 +298,7 @@ fn process_physics_cmd(cmd: EntityCmd, queries: &mut EntityCmdQueries) {
 
 /// Query-mutation handler for GUI widget enable/disable. Mutates
 /// `GuiInteractable.state` only — never `try_insert`s a fresh component,
-/// since that would wipe `on_click_callback`/`on_rust_callback`/`size`.
+/// since that would wipe `on_click_callback`/`size`.
 fn process_gui_interactable_cmd(entity_id: u64, disabled: bool, queries: &mut EntityCmdQueries) {
     let Some(entity) = resolve_entity(entity_id) else {
         return;
