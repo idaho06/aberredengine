@@ -37,8 +37,9 @@ pub enum TimerMode {
     #[default]
     Repeat,
     /// Fire once, then remove the `Timer` component (the entity is kept).
-    /// `TimerFired` observers still see the `Timer`, and a new `Timer` an
-    /// observer inserts is kept.
+    /// `TimerFired` observers still see the `Timer`. A `Timer` inserted or
+    /// changed after it fires (by an observer, or by a later system before the
+    /// commands apply) is kept. A zero-duration timer fires on the next tick.
     Once,
 }
 

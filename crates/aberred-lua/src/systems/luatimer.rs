@@ -31,12 +31,14 @@
 //! See `EntityCtxTables` in runtime.rs.
 
 use bevy_ecs::prelude::*;
+use bevy_ecs::system::SystemChangeTick;
 
 use crate::components::luatimer::LuaTimer;
 use crate::events::luatimer::LuaTimerEvent;
 use crate::systems::lua_commands::{LuaDispatch, dispatch_and_drain};
 use aberred_core::components::timer::TimerMode;
 use aberred_core::resources::worldtime::WorldTime;
+use aberred_core::systems::timer::remove_fired_timer;
 
 /// Update all Lua timer components and emit events when they expire.
 ///
@@ -48,7 +50,9 @@ pub fn update_lua_timers(
     world_time: Res<WorldTime>,
     mut query: Query<(Entity, &mut LuaTimer)>,
     mut commands: Commands,
+    ticks: SystemChangeTick,
 ) {
+    let fired_at = ticks.this_run();
     for (entity, mut timer) in query.iter_mut() {
         timer.elapsed += world_time.delta;
         if timer.elapsed >= timer.duration {
@@ -61,24 +65,12 @@ pub fn update_lua_timers(
                 TimerMode::Once => {
                     commands
                         .entity(entity)
-                        .queue_silenced(remove_spent_once_timer);
+                        .queue_silenced(move |entity: EntityWorldMut| {
+                            remove_fired_timer::<LuaTimer>(entity, fired_at)
+                        });
                 }
             }
         }
-    }
-}
-
-/// Removes the entity's [`LuaTimer`] if it is still the spent one-shot timer.
-///
-/// Runs after the Lua callback, so the callback's ctx still has its timer. The
-/// guard keeps a fresh `LuaTimer` the callback inserted in its place, and
-/// `queue_silenced` ignores an entity the callback despawned.
-fn remove_spent_once_timer(mut entity: EntityWorldMut) {
-    if entity
-        .get::<LuaTimer>()
-        .is_some_and(|t| t.mode == TimerMode::Once && t.elapsed >= t.duration)
-    {
-        entity.remove::<LuaTimer>();
     }
 }
 

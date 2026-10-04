@@ -325,6 +325,66 @@ fn once_timer_lua_callback_can_rearm_through_engine_api() {
     assert_eq!(timer.duration, 2.0);
 }
 
+/// A zero-duration one-shot re-armed from a Lua callback fires on the next tick.
+#[test]
+fn once_timer_lua_callback_zero_duration_rearm_fires_next_tick() {
+    let mut world = make_lua_callback_world(1.0);
+    {
+        let rt = world.non_send::<LuaRuntime>();
+        rt.lua()
+            .load(
+                r#"
+                zero_calls = 0
+                function zero_cb(ctx, input)
+                    zero_calls = zero_calls + 1
+                    if zero_calls == 1 then
+                        engine.entity_insert_lua_timer_once(ctx.id, 0, "zero_cb")
+                    end
+                end
+            "#,
+            )
+            .exec()
+            .expect("lua load");
+    }
+    let entity = world
+        .spawn(LuaTimer::once(
+            0.5,
+            LuaTimerCallback {
+                name: "zero_cb".into(),
+            },
+        ))
+        .id();
+    world.add_observer(lua_timer_observer);
+    world.flush();
+    let zero_calls = |world: &World| -> i64 {
+        world
+            .non_send::<LuaRuntime>()
+            .lua()
+            .globals()
+            .get("zero_calls")
+            .expect("zero_calls")
+    };
+
+    world
+        .run_system_once(update_lua_timers)
+        .expect("update_lua_timers should run");
+    assert_eq!(zero_calls(&world), 1);
+    assert!(
+        world.get::<LuaTimer>(entity).is_some(),
+        "re-armed timer kept"
+    );
+
+    world
+        .run_system_once(update_lua_timers)
+        .expect("update_lua_timers should run");
+    assert_eq!(
+        zero_calls(&world),
+        2,
+        "the zero-duration re-arm fires on the next tick"
+    );
+    assert!(world.get::<LuaTimer>(entity).is_none());
+}
+
 /// Collision path: spawn before clone (collision callback)
 ///
 /// A collision callback registers a freshly spawned entity then clones it.

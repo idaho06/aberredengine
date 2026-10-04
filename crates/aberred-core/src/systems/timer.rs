@@ -9,7 +9,9 @@
 //! - [`crate::events::timer::TimerFired`] – event triggered on expiration
 //! - `aberred_lua::systems::luatimer` – Lua equivalent
 
+use bevy_ecs::change_detection::Tick;
 use bevy_ecs::prelude::*;
+use bevy_ecs::system::SystemChangeTick;
 
 use crate::components::timer::{Timer, TimerMode};
 use crate::events::timer::TimerFired;
@@ -23,7 +25,9 @@ pub fn update_timers(
     world_time: Res<WorldTime>,
     mut query: Query<(Entity, &mut Timer)>,
     mut commands: Commands,
+    ticks: SystemChangeTick,
 ) {
+    let fired_at = ticks.this_run();
     for (entity, mut timer) in query.iter_mut() {
         timer.elapsed += world_time.delta;
         if timer.elapsed >= timer.duration {
@@ -33,24 +37,27 @@ pub fn update_timers(
                 TimerMode::Once => {
                     commands
                         .entity(entity)
-                        .queue_silenced(remove_spent_once_timer);
+                        .queue_silenced(move |entity: EntityWorldMut| {
+                            remove_fired_timer::<Timer>(entity, fired_at)
+                        });
                 }
             }
         }
     }
 }
 
-/// Removes the entity's `Timer` if it is still the spent one-shot timer.
+/// Removes the entity's `C` unless it was inserted or changed after `fired_at`.
 ///
-/// Runs after the [`TimerFired`] observers, so they see the `Timer`. The guard keeps
-/// a fresh `Timer` an observer inserted in its place, and `queue_silenced` ignores
-/// an entity an observer despawned.
-fn remove_spent_once_timer(mut entity: EntityWorldMut) {
+/// Queued by a timer system after it fires a one-shot timer, so it runs after the
+/// fired event's observers: a timer they replaced or modified has a newer change
+/// tick and is kept. `queue_silenced` ignores an entity they despawned.
+pub fn remove_fired_timer<C: Component>(mut entity: EntityWorldMut, fired_at: Tick) {
+    let now = entity.world().read_change_tick();
     if entity
-        .get::<Timer>()
-        .is_some_and(|t| t.mode == TimerMode::Once && t.elapsed >= t.duration)
+        .get_change_ticks::<C>()
+        .is_some_and(|ticks| !ticks.is_changed(fired_at, now))
     {
-        entity.remove::<Timer>();
+        entity.remove::<C>();
     }
 }
 
@@ -213,6 +220,32 @@ mod tests {
             .get::<Timer>(entity)
             .expect("the re-armed timer must survive the spent timer's removal");
         assert_eq!(timer.duration, 2.0);
+    }
+
+    #[test]
+    fn once_timer_rearmed_with_zero_duration_fires_next_tick() {
+        let mut world = observed_world(1.0);
+        world.add_observer(
+            |ev: On<TimerFired>, mut rearmed: Local<bool>, mut commands: Commands| {
+                if !*rearmed {
+                    *rearmed = true;
+                    commands.entity(ev.entity).insert(Timer::once(0.0));
+                }
+            },
+        );
+        world.flush();
+        let entity = world.spawn(Timer::once(0.5)).id();
+
+        tick_timers(&mut world);
+        assert_eq!(fired(&world), [entity]);
+        assert!(
+            world.get::<Timer>(entity).is_some(),
+            "the zero-duration re-arm must survive the spent timer's removal"
+        );
+
+        tick_timers(&mut world);
+        assert_eq!(fired(&world), [entity, entity], "fires on the next tick");
+        assert!(world.get::<Timer>(entity).is_none());
     }
 
     #[test]
