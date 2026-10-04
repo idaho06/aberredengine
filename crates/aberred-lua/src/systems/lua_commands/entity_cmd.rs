@@ -838,13 +838,15 @@ fn process_lifecycle_cmd(
             entity_id,
             duration,
             callback,
+            mode,
         } => {
             with_entity_cmd(commands, entity_id, |ec| {
-                ec.try_insert(LuaTimer::new(
+                ec.try_insert(LuaTimer::with_mode(
                     duration,
                     LuaTimerCallback {
                         name: callback.into(),
                     },
+                    mode,
                 ));
             });
         }
@@ -888,6 +890,7 @@ mod tests {
     use aberred_core::components::animation::Animation;
     use aberred_core::components::guiinteractable::GuiInteractable;
     use aberred_core::components::sprite::Sprite;
+    use aberred_core::components::timer::TimerMode;
     use aberred_core::testing::approx_eq;
 
     #[test]
@@ -1114,6 +1117,7 @@ mod tests {
                 entity_id: id,
                 duration: 1.0,
                 callback: "cb".into(),
+                mode: TimerMode::Repeat,
             },
             EntityCmd::RemoveLuaTimer { entity_id: id },
             EntityCmd::InsertTtl {
@@ -1144,6 +1148,29 @@ mod tests {
             world.get::<Children>(parent).is_none(),
             "no ChildOf may point at the parent from the despawned entity"
         );
+    }
+
+    #[test]
+    fn insert_lua_timer_cmd_carries_its_mode() {
+        let mut world = World::new();
+        let mut signals = WorldSignals::default();
+        let entity = world.spawn_empty().id();
+
+        run_entity_cmd(
+            &mut world,
+            &mut signals,
+            EntityCmd::InsertLuaTimer {
+                entity_id: entity.to_bits(),
+                duration: 1.5,
+                callback: "boom".into(),
+                mode: TimerMode::Once,
+            },
+        );
+
+        let timer = world.get::<LuaTimer>(entity).unwrap();
+        assert_eq!(timer.mode, TimerMode::Once);
+        assert_eq!(timer.duration, 1.5);
+        assert_eq!(&*timer.callback.name, "boom");
     }
 
     #[test]

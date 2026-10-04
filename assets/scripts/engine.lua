@@ -529,11 +529,17 @@ function engine.collision_entity_despawn(entity_id) end
 ---@param entity_id integer
 function engine.collision_entity_freeze(entity_id) end
 
----Insert a Lua timer on an entity
+---Insert a repeating Lua timer on an entity
 ---@param entity_id integer
 ---@param duration number
 ---@param callback string
 function engine.collision_entity_insert_lua_timer(entity_id, duration, callback) end
+
+---Insert a one-shot Lua timer on an entity; it removes itself after firing
+---@param entity_id integer
+---@param duration number
+---@param callback string
+function engine.collision_entity_insert_lua_timer_once(entity_id, duration, callback) end
 
 ---Attach entity to a target entity
 ---@param entity_id integer
@@ -880,11 +886,17 @@ function engine.entity_despawn(entity_id) end
 ---@param entity_id integer
 function engine.entity_freeze(entity_id) end
 
----Insert a Lua timer on an entity
+---Insert a repeating Lua timer on an entity
 ---@param entity_id integer
 ---@param duration number
 ---@param callback string
 function engine.entity_insert_lua_timer(entity_id, duration, callback) end
+
+---Insert a one-shot Lua timer on an entity; it removes itself after firing
+---@param entity_id integer
+---@param duration number
+---@param callback string
+function engine.entity_insert_lua_timer_once(entity_id, duration, callback) end
 
 ---Attach entity to a target entity
 ---@param entity_id integer
@@ -1784,11 +1796,17 @@ function EntityBuilder:with_lua_collision_rule(group_a, group_b, callback) end
 ---@return EntityBuilder
 function EntityBuilder:with_lua_setup(callback) end
 
----Add a Lua timer callback
+---Add a repeating Lua timer callback
 ---@param duration number
 ---@param callback string
 ---@return EntityBuilder
 function EntityBuilder:with_lua_timer(duration, callback) end
+
+---Add a one-shot Lua timer callback; the timer removes itself after firing
+---@param duration number
+---@param callback string
+---@return EntityBuilder
+function EntityBuilder:with_lua_timer_once(duration, callback) end
 
 ---Set max speed clamp (creates RigidBody if needed)
 ---@param speed number
@@ -2353,11 +2371,17 @@ function CollisionEntityBuilder:with_lua_collision_rule(group_a, group_b, callba
 ---@return CollisionEntityBuilder
 function CollisionEntityBuilder:with_lua_setup(callback) end
 
----Add a Lua timer callback
+---Add a repeating Lua timer callback
 ---@param duration number
 ---@param callback string
 ---@return CollisionEntityBuilder
 function CollisionEntityBuilder:with_lua_timer(duration, callback) end
+
+---Add a one-shot Lua timer callback; the timer removes itself after firing
+---@param duration number
+---@param callback string
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_lua_timer_once(duration, callback) end
 
 ---Set max speed clamp (creates RigidBody if needed)
 ---@param speed number

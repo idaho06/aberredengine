@@ -36,9 +36,9 @@ use aberred_core::math::Color;
 
 use crate::resources::lua_runtime::{
     AnimationControllerData, AnimationData, CloneCmd, ColliderData, EntityShaderData,
-    LuaCollisionRuleData, MenuActionData, MenuData, ParticleEmitterData, PhaseData, RigidBodyData,
-    SpawnCmd, SpriteData, StuckToData, TextData, TweenPositionData, TweenRotationData,
-    TweenScaleData, TweenScreenPositionData,
+    LuaCollisionRuleData, LuaTimerSpawn, MenuActionData, MenuData, ParticleEmitterData, PhaseData,
+    RigidBodyData, SpawnCmd, SpriteData, StuckToData, TextData, TweenPositionData,
+    TweenRotationData, TweenScaleData, TweenScreenPositionData,
 };
 use aberred_core::resources::worldsignals::WorldSignals;
 use aberred_core::systems::propagate_transforms::ComputeInitialGlobalTransform;
@@ -417,7 +417,7 @@ fn apply_signal_components(
 
 struct BehaviorComponents {
     phase_data: Option<PhaseData>,
-    lua_timer: Option<(f32, String)>,
+    lua_timer: Option<LuaTimerSpawn>,
     lua_collision_rule: Option<LuaCollisionRuleData>,
     lua_setup: Option<String>,
     lua_on_animation_end: Option<String>,
@@ -448,12 +448,13 @@ fn apply_behavior_components(entity_commands: &mut EntityCommands, b: BehaviorCo
             .collect();
         entity_commands.insert(LuaPhase::new(phase_data.initial, phases));
     }
-    if let Some((duration, callback)) = lua_timer {
-        entity_commands.insert(LuaTimer::new(
-            duration,
+    if let Some(timer) = lua_timer {
+        entity_commands.insert(LuaTimer::with_mode(
+            timer.duration,
             LuaTimerCallback {
-                name: callback.into(),
+                name: timer.callback.into(),
             },
+            timer.mode,
         ));
     }
     if let Some(rule_data) = lua_collision_rule {

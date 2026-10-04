@@ -5,6 +5,7 @@
 
 // Re-export UniformValue from its canonical location for internal convenience.
 pub use super::spawn_data::TweenConfig;
+use aberred_core::components::timer::TimerMode;
 pub use aberred_core::resources::uniformvalue::UniformValue;
 
 /// Commands that Lua can queue for asset loading.
@@ -248,6 +249,7 @@ pub enum EntityCmd {
         entity_id: u64,
         duration: f32,
         callback: String,
+        mode: TimerMode,
     },
     /// Remove a LuaTimer component
     RemoveLuaTimer { entity_id: u64 },

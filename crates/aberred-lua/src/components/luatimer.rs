@@ -9,7 +9,8 @@
 //! 1. Entity is spawned with a `LuaTimer` containing duration and callback name
 //! 2. The `update_lua_timers` system runs each sim tick:
 //!    - Accumulates delta time into `elapsed`
-//!    - When `elapsed >= duration`, emits `LuaTimerEvent` and resets
+//!    - When `elapsed >= duration`, emits `LuaTimerEvent`, then resets (repeating)
+//!      or removes the `LuaTimer` (one-shot)
 //! 3. The `lua_timer_observer` receives the event:
 //!    - Looks up the Lua function by name
 //!    - Calls the function as `(ctx, input)`
@@ -39,6 +40,9 @@
 //!     :with_lua_timer(3.0, "auto_despawn")
 //!     :build()
 //!
+//! -- One-shot timer: fires once, then removes itself (the entity stays)
+//! engine.entity_insert_lua_timer_once(entity_id, 1.5, "end_invulnerability")
+//!
 //! -- Timer callback
 //! function delayed_explosion(ctx, input)
 //!     engine.play_sound("boom")
@@ -52,6 +56,7 @@
 //! - [`crate::systems::luatimer::lua_timer_observer`] – observer that executes Lua callbacks
 //! - [`crate::events::luatimer::LuaTimerEvent`] – event emitted when timer expires
 
+use aberred_core::components::timer::TimerMode;
 use bevy_ecs::prelude::Component;
 
 /// Lua callback function name for a timer.
@@ -64,8 +69,9 @@ pub struct LuaTimerCallback {
     pub name: std::sync::Arc<str>,
 }
 
-/// Repeating countdown timer that calls a Lua function each time it expires;
-/// ticked by [`update_lua_timers`](crate::systems::luatimer::update_lua_timers).
+/// Countdown timer that calls a Lua function when it expires; ticked by
+/// [`update_lua_timers`](crate::systems::luatimer::update_lua_timers). After firing
+/// it applies its [`TimerMode`], like the core `Timer`.
 #[derive(Component, Clone, Debug)]
 pub struct LuaTimer {
     /// Total duration in seconds before the timer fires.
@@ -74,15 +80,28 @@ pub struct LuaTimer {
     pub elapsed: f32,
     /// Lua function to call when the timer fires.
     pub callback: LuaTimerCallback,
+    /// Whether the timer repeats or fires once.
+    pub mode: TimerMode,
 }
 
 impl LuaTimer {
     /// Create a timer that fires every `duration` seconds.
     pub fn new(duration: f32, callback: LuaTimerCallback) -> Self {
+        Self::with_mode(duration, callback, TimerMode::Repeat)
+    }
+
+    /// Create a timer that fires once after `duration` seconds, then removes itself.
+    pub fn once(duration: f32, callback: LuaTimerCallback) -> Self {
+        Self::with_mode(duration, callback, TimerMode::Once)
+    }
+
+    /// Create a timer with the given [`TimerMode`].
+    pub fn with_mode(duration: f32, callback: LuaTimerCallback, mode: TimerMode) -> Self {
         Self {
             duration,
             elapsed: 0.0,
             callback,
+            mode,
         }
     }
 

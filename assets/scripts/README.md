@@ -218,7 +218,7 @@ return M
    - Scene update (`on_update_<scene_name>`)
    - Collision callbacks (names in `:with_lua_collision_rule()`)
    - Phase callbacks (names in `:with_phase()` — `on_enter`, `on_update`, `on_exit`)
-   - Timer callbacks (names in `:with_lua_timer()`)
+   - Timer callbacks (names in `:with_lua_timer()` / `:with_lua_timer_once()`)
    - Menu callbacks (names in `:with_menu_callback()`)
    - LuaSetup callbacks (names in `:with_lua_setup()` or map file `"lua_setup"` field)
    - OnAnimationEnd callbacks (names in `:with_on_animation_end()` or map file `"on_animation_end"` field)
@@ -327,6 +327,7 @@ Collision callbacks process commands from their own dedicated queues, which are 
 - `engine.collision_entity_signal_set_scalar()` instead of `engine.entity_signal_set_scalar()`
 - `engine.collision_entity_signal_set_string()` instead of `engine.entity_signal_set_string()`
 - `engine.collision_entity_insert_lua_timer()` instead of `engine.entity_insert_lua_timer()`
+- `engine.collision_entity_insert_lua_timer_once()` instead of `engine.entity_insert_lua_timer_once()`
 - `engine.collision_entity_remove_lua_timer()` instead of `engine.entity_remove_lua_timer()`
 - `engine.collision_entity_insert_ttl()` instead of `engine.entity_insert_ttl()`
 - `engine.collision_entity_insert_stuckto()` instead of `engine.entity_insert_stuckto()`

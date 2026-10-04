@@ -1,5 +1,6 @@
 use super::super::entity_builder::LuaEntityBuilder;
 use super::*;
+use aberred_core::components::timer::TimerMode;
 
 impl LuaRuntime {
     pub(in crate::resources::lua_runtime) fn register_entity_api(&self) -> LuaResult<()> {

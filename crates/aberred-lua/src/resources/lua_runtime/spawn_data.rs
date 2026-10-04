@@ -8,6 +8,7 @@ use aberred_core::components::guiimage::GuiImage;
 use aberred_core::components::guilabel::GuiLabel;
 use aberred_core::components::guiprogressbar::GuiProgressBar;
 use aberred_core::components::guiwindow::GuiWindow;
+use aberred_core::components::timer::TimerMode;
 use aberred_core::resources::uniformvalue::UniformValue;
 
 /// Sprite component data for spawning.
@@ -57,6 +58,17 @@ pub struct RigidBodyData {
     pub frozen: bool,
     /// Named acceleration forces to add at spawn time.
     pub forces: Vec<ForceData>,
+}
+
+/// LuaTimer component data for spawning.
+#[derive(Debug, Clone, PartialEq)]
+pub struct LuaTimerSpawn {
+    /// Seconds before the timer fires
+    pub duration: f32,
+    /// Lua function to call when the timer fires
+    pub callback: String,
+    /// Whether the timer repeats or fires once
+    pub mode: TimerMode,
 }
 
 /// StuckTo component data for spawning.
@@ -412,8 +424,8 @@ pub struct SpawnCmd {
     pub has_signals: bool,
     /// StuckTo component data
     pub stuckto: Option<StuckToData>,
-    /// LuaTimer component data (duration, callback)
-    pub lua_timer: Option<(f32, String)>,
+    /// LuaTimer component data
+    pub lua_timer: Option<LuaTimerSpawn>,
     /// SignalBinding component data (key, optional format)
     pub signal_binding: Option<(String, Option<String>)>,
     /// GridLayout component data (path, group, zindex)

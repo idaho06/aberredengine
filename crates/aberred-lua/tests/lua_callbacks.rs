@@ -243,6 +243,88 @@ fn timer_callback_spawn_then_clone_same_drain() {
     );
 }
 
+/// A one-shot Lua timer runs its callback once, then loses its `LuaTimer`.
+#[test]
+fn once_timer_runs_lua_callback_once_and_removes_timer() {
+    let mut world = make_lua_callback_world(1.0);
+    {
+        let rt = world.non_send::<LuaRuntime>();
+        rt.lua()
+            .load(
+                r#"
+                once_calls = 0
+                function once_cb(ctx, input)
+                    once_calls = once_calls + 1
+                end
+            "#,
+            )
+            .exec()
+            .expect("lua load");
+    }
+    let entity = world
+        .spawn(LuaTimer::once(
+            0.5,
+            LuaTimerCallback {
+                name: "once_cb".into(),
+            },
+        ))
+        .id();
+    world.add_observer(lua_timer_observer);
+    world.flush();
+
+    for _ in 0..2 {
+        world
+            .run_system_once(update_lua_timers)
+            .expect("update_lua_timers should run");
+    }
+
+    let calls: i64 = world
+        .non_send::<LuaRuntime>()
+        .lua()
+        .globals()
+        .get("once_calls")
+        .expect("once_calls");
+    assert_eq!(calls, 1);
+    assert!(world.get::<LuaTimer>(entity).is_none());
+    assert!(world.get_entity(entity).is_ok(), "the entity survives");
+}
+
+/// A one-shot callback that re-arms its own entity through the engine API keeps
+/// the new timer: its queued command lands before the spent timer is removed.
+#[test]
+fn once_timer_lua_callback_can_rearm_through_engine_api() {
+    let mut world = make_lua_callback_world(1.0);
+    {
+        let rt = world.non_send::<LuaRuntime>();
+        rt.lua()
+            .load(
+                r#"
+                function rearm_cb(ctx, input)
+                    engine.entity_insert_lua_timer_once(ctx.id, 2.0, "again")
+                end
+            "#,
+            )
+            .exec()
+            .expect("lua load");
+    }
+    let entity = world
+        .spawn(LuaTimer::once(
+            0.5,
+            LuaTimerCallback {
+                name: "rearm_cb".into(),
+            },
+        ))
+        .id();
+
+    tick_lua_timers_with_observer(&mut world);
+
+    let timer = world
+        .get::<LuaTimer>(entity)
+        .expect("the re-armed timer must survive the spent timer's removal");
+    assert_eq!(&*timer.callback.name, "again");
+    assert_eq!(timer.duration, 2.0);
+}
+
 /// Collision path: spawn before clone (collision callback)
 ///
 /// A collision callback registers a freshly spawned entity then clones it.

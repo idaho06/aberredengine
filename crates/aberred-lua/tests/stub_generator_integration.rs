@@ -510,7 +510,7 @@ fn meta_functions_complete() {
             "entity_despawn", "entity_menu_despawn", "entity_set_velocity",
             "entity_set_position", "entity_freeze", "entity_unfreeze",
             "entity_signal_set_flag", "entity_signal_clear_flag", "entity_signal_toggle_flag",
-            "entity_insert_lua_timer", "entity_remove_lua_timer",
+            "entity_insert_lua_timer", "entity_insert_lua_timer_once", "entity_remove_lua_timer",
             "entity_insert_ttl", "entity_set_rotation", "entity_set_scale",
             "entity_set_speed", "entity_set_friction", "entity_set_max_speed",
             "entity_insert_tween_position", "entity_insert_tween_rotation",

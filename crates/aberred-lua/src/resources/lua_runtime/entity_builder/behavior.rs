@@ -1,4 +1,5 @@
 use super::*;
+use aberred_core::components::timer::TimerMode;
 
 pub(super) fn register<M: LuaUserDataMethods<LuaEntityBuilder>>(
     methods: &mut M,
@@ -122,10 +123,22 @@ pub(super) fn register<M: LuaUserDataMethods<LuaEntityBuilder>>(
         methods,
         meta,
         "with_lua_timer",
-        "Add a Lua timer callback",
+        "Add a repeating Lua timer callback",
         [("duration", "number"), ("callback", "string")],
         |_, this: &mut LuaEntityBuilder, (duration, callback): (f32, String)| {
-            this.cmd.lua_timer = Some((duration, callback));
+            set_lua_timer(this, duration, callback, TimerMode::Repeat);
+            Ok(())
+        }
+    );
+
+    builder_method!(
+        methods,
+        meta,
+        "with_lua_timer_once",
+        "Add a one-shot Lua timer callback; the timer removes itself after firing",
+        [("duration", "number"), ("callback", "string")],
+        |_, this: &mut LuaEntityBuilder, (duration, callback): (f32, String)| {
+            set_lua_timer(this, duration, callback, TimerMode::Once);
             Ok(())
         }
     );
@@ -357,12 +370,21 @@ pub(super) fn register<M: LuaUserDataMethods<LuaEntityBuilder>>(
     );
 }
 
+fn set_lua_timer(this: &mut LuaEntityBuilder, duration: f32, callback: String, mode: TimerMode) {
+    this.cmd.lua_timer = Some(LuaTimerSpawn {
+        duration,
+        callback,
+        mode,
+    });
+}
+
 #[cfg(test)]
 mod tests {
     use super::super::super::spawn_data::{
-        ParticleEmitterData, ParticleEmitterShapeData, ParticleTtlData,
+        LuaTimerSpawn, ParticleEmitterData, ParticleEmitterShapeData, ParticleTtlData,
     };
     use super::super::test_helpers::{assert_runtime_error, built_spawn_cmd};
+    use aberred_core::components::timer::TimerMode;
 
     fn built(chain: &str) -> super::super::SpawnCmd {
         built_spawn_cmd(&format!("engine.spawn(){chain}:build()"))
@@ -454,7 +476,14 @@ mod tests {
              :with_tilemap('maps/overworld')\
              :with_lua_setup('setup_player')",
         );
-        assert_eq!(cmd.lua_timer, Some((0.5, "on_tick".to_string())));
+        assert_eq!(
+            cmd.lua_timer,
+            Some(LuaTimerSpawn {
+                duration: 0.5,
+                callback: "on_tick".to_string(),
+                mode: TimerMode::Repeat,
+            })
+        );
         assert_eq!(cmd.ttl, Some(2.0));
         assert_eq!(
             cmd.grid_layout,
@@ -471,6 +500,19 @@ mod tests {
         );
         assert_eq!(cmd.tilemap_path.as_deref(), Some("maps/overworld"));
         assert_eq!(cmd.lua_setup.as_deref(), Some("setup_player"));
+    }
+
+    #[test]
+    fn with_lua_timer_once_stores_a_once_timer() {
+        let cmd = built(":with_lua_timer_once(1.5, 'boom')");
+        assert_eq!(
+            cmd.lua_timer,
+            Some(LuaTimerSpawn {
+                duration: 1.5,
+                callback: "boom".to_string(),
+                mode: TimerMode::Once,
+            })
+        );
     }
 
     #[test]

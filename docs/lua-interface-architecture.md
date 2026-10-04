@@ -77,7 +77,7 @@ crates/aberred-lua/src/resources/lua_runtime/
 │   ├── gui.rs            # with_gui_window/button/label/image/progress_bar/offset/theme_key and their per-state offset variants
 │   ├── menu.rs           # with_menu and its with_menu_* configuration methods
 │   ├── tween.rs          # with_tween_position/rotation/scale/screen_position and their *_easing/*_loop/*_backwards/*_on_finished variants
-│   └── behavior.rs       # with_phase, with_lua_timer, with_lua_collision_rule, with_lua_setup, with_on_animation_end, with_signal*, with_group, with_persistent, with_grid_layout, with_tilemap, with_particle_emitter, with_mouse_controlled, with_text
+│   └── behavior.rs       # with_phase, with_lua_timer, with_lua_timer_once, with_lua_collision_rule, with_lua_setup, with_on_animation_end, with_signal*, with_group, with_persistent, with_grid_layout, with_tilemap, with_particle_emitter, with_mouse_controlled, with_text
 ├── engine_api/          # engine.* API registration, split by category
 │   ├── mod.rs          # Re-exports, module declarations
 │   ├── macros.rs       # register_cmd!, register_getter!, define_cmd_twins! (+ its define_*_cmd_twins!/define_entity_cmds! specializations), push_fn_meta()
@@ -313,7 +313,7 @@ This system deliberately does not go through the shared `LuaDispatch`/`dispatch_
 
 ### Timer System
 
-`update_lua_timers` accumulates `dt` on every `LuaTimer` component (a Lua-owned component holding a `LuaTimerCallback` name). When `elapsed >= duration`, it fires a `LuaTimerEvent` and resets by subtracting `duration` (not zeroing) — the timer never self-removes, so a "fire once" callback must call `engine.entity_remove_lua_timer()` on itself. `lua_timer_observer` reacts to `LuaTimerEvent` via `LuaDispatch::dispatch_and_drain`, calling the named function as `(ctx, input)`.
+`update_lua_timers` accumulates `dt` on every `LuaTimer` component (a Lua-owned component holding a `LuaTimerCallback` name). When `elapsed >= duration`, it fires a `LuaTimerEvent`, then applies the timer's core `TimerMode`: a repeating timer (`:with_lua_timer` / `engine.entity_insert_lua_timer`) resets by subtracting `duration` (not zeroing); a one-shot timer (`:with_lua_timer_once` / `engine.entity_insert_lua_timer_once`) removes its `LuaTimer` after the callback, keeping any new timer the callback inserted. `lua_timer_observer` reacts to `LuaTimerEvent` via `LuaDispatch::dispatch_and_drain`, calling the named function as `(ctx, input)`.
 
 ### Collision System
 
@@ -489,7 +489,7 @@ All are registered in `engine_api/render.rs` and queue into `gui_theme_commands`
 - `entity_set_friction`, `entity_set_max_speed`
 - `entity_freeze`, `entity_unfreeze`
 - `entity_set_animation`, `entity_restart_animation`, `entity_set_sprite_flip`
-- `entity_insert_lua_timer`, `entity_remove_lua_timer`
+- `entity_insert_lua_timer`, `entity_insert_lua_timer_once`, `entity_remove_lua_timer`
 - `entity_insert_ttl`
 - `entity_insert_tween_position`, `entity_remove_tween_position`
 - `entity_insert_tween_rotation`, `entity_remove_tween_rotation`

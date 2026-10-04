@@ -35,14 +35,15 @@ use bevy_ecs::prelude::*;
 use crate::components::luatimer::LuaTimer;
 use crate::events::luatimer::LuaTimerEvent;
 use crate::systems::lua_commands::{LuaDispatch, dispatch_and_drain};
+use aberred_core::components::timer::TimerMode;
 use aberred_core::resources::worldtime::WorldTime;
 
 /// Update all Lua timer components and emit events when they expire.
 ///
 /// Accumulates delta time on each [`LuaTimer`]
 /// and triggers a [`LuaTimerEvent`] when
-/// `elapsed >= duration`, at most once per tick. The timer resets by subtracting
-/// duration, keeping the overshoot for consistent periodic timing.
+/// `elapsed >= duration`, at most once per tick, then applies the timer's
+/// [`TimerMode`].
 pub fn update_lua_timers(
     world_time: Res<WorldTime>,
     mut query: Query<(Entity, &mut LuaTimer)>,
@@ -55,8 +56,29 @@ pub fn update_lua_timers(
                 entity,
                 callback: timer.callback.name.clone(),
             });
-            timer.reset();
+            match timer.mode {
+                TimerMode::Repeat => timer.reset(),
+                TimerMode::Once => {
+                    commands
+                        .entity(entity)
+                        .queue_silenced(remove_spent_once_timer);
+                }
+            }
         }
+    }
+}
+
+/// Removes the entity's [`LuaTimer`] if it is still the spent one-shot timer.
+///
+/// Runs after the Lua callback, so the callback's ctx still has its timer. The
+/// guard keeps a fresh `LuaTimer` the callback inserted in its place, and
+/// `queue_silenced` ignores an entity the callback despawned.
+fn remove_spent_once_timer(mut entity: EntityWorldMut) {
+    if entity
+        .get::<LuaTimer>()
+        .is_some_and(|t| t.mode == TimerMode::Once && t.elapsed >= t.duration)
+    {
+        entity.remove::<LuaTimer>();
     }
 }
 
@@ -325,5 +347,61 @@ mod tests {
         assert_eq!(*fired_count.lock().unwrap(), 1);
         let timer = world.get::<LuaTimer>(entity).unwrap();
         assert!(approx_eq(timer.elapsed, 1.5));
+    }
+
+    fn cb(name: &str) -> LuaTimerCallback {
+        LuaTimerCallback { name: name.into() }
+    }
+
+    #[test]
+    fn lua_once_timer_fires_once_then_loses_its_timer() {
+        let fired_count = std::sync::Arc::new(std::sync::Mutex::new(0u32));
+        let fired_clone = fired_count.clone();
+        let mut world = world_with_delta(1.0);
+        let entity = world.spawn(LuaTimer::once(0.5, cb("boom"))).id();
+        world.add_observer(move |_trigger: On<LuaTimerEvent>| {
+            *fired_clone.lock().unwrap() += 1;
+        });
+        world.flush();
+
+        tick_lua_timers(&mut world);
+        tick_lua_timers(&mut world);
+
+        assert_eq!(*fired_count.lock().unwrap(), 1);
+        assert!(world.get::<LuaTimer>(entity).is_none());
+        assert!(world.get_entity(entity).is_ok(), "the entity survives");
+    }
+
+    #[test]
+    fn lua_once_timer_callback_may_despawn_its_entity() {
+        let mut world = world_with_delta(1.0);
+        world.add_observer(|trigger: On<LuaTimerEvent>, mut commands: Commands| {
+            commands.entity(trigger.event().entity).despawn();
+        });
+        world.flush();
+        let entity = world.spawn(LuaTimer::once(0.5, cb("boom"))).id();
+
+        tick_lua_timers(&mut world); // the removal after a despawn must not panic
+
+        assert!(world.get_entity(entity).is_err());
+    }
+
+    #[test]
+    fn lua_once_timer_callback_can_rearm_a_new_timer() {
+        let mut world = world_with_delta(1.0);
+        world.add_observer(|trigger: On<LuaTimerEvent>, mut commands: Commands| {
+            commands
+                .entity(trigger.event().entity)
+                .insert(LuaTimer::once(2.0, cb("again")));
+        });
+        world.flush();
+        let entity = world.spawn(LuaTimer::once(0.5, cb("boom"))).id();
+
+        tick_lua_timers(&mut world);
+
+        let timer = world
+            .get::<LuaTimer>(entity)
+            .expect("the re-armed timer must survive the spent timer's removal");
+        assert_eq!(&*timer.callback.name, "again");
     }
 }
