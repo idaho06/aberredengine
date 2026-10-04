@@ -187,16 +187,15 @@ end
 --- @param ctx EntityContext
 local function on_char_enemy_timer_setup(ctx)
     engine.set_entity("char_enemy_timer", ctx.id)
-    engine.entity_insert_lua_timer(ctx.id, math.random(5, 10), "on_enemy_attack")
+    engine.entity_insert_lua_timer_once(ctx.id, math.random(5, 10), "on_enemy_attack")
 end
 
 -- ─── Character window: action callbacks ──────────────────────────────────────
 
---- Fires when the enemy attack timer ticks. Removes itself, deals damage,
--- then reschedules with a new random delay (variable interval).
+--- Fires when the one-shot enemy attack timer expires. Deals damage, then
+-- reschedules with a new random delay (variable interval).
 --- @param ctx EntityContext
 local function on_enemy_attack(ctx)
-    engine.entity_remove_lua_timer(ctx.id)
     if not char_game_active() then return end
 
     local dmg = math.random(1, 10)
@@ -208,7 +207,7 @@ local function on_enemy_attack(ctx)
         end_game("Defeated!\nEnemy wins.")
     else
         engine.set_integer("char_hp", hp)
-        engine.entity_insert_lua_timer(ctx.id, math.random(5, 10), "on_enemy_attack")
+        engine.entity_insert_lua_timer_once(ctx.id, math.random(5, 10), "on_enemy_attack")
     end
 end
 
@@ -234,7 +233,7 @@ local function on_sword_clicked(evt)
     local cooldown = math.random(5, 8)
     sword_cooldown_secs = cooldown
     engine.entity_set_gui_disabled(sword_id, true)
-    engine.entity_insert_lua_timer(sword_id, cooldown, "on_sword_cooldown_done")
+    engine.entity_insert_lua_timer_once(sword_id, cooldown, "on_sword_cooldown_done")
 
     local dmg      = math.random(1, 10)
     local enemy_hp = engine.get_integer("char_enemy_hp") - dmg
@@ -251,7 +250,6 @@ end
 --- Re-enables the sword after its cooldown expires.
 --- @param ctx EntityContext
 local function on_sword_cooldown_done(ctx)
-    engine.entity_remove_lua_timer(ctx.id)
     sword_cooldown_secs = 0.0
     sword_cooldown_last_display = ""
     engine.set_string("char_sword_cooldown", "")
