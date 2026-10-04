@@ -79,7 +79,8 @@ pub fn rust_collision_observer(
         return;
     };
 
-    let Some((rule, ent_a, ent_b)) = find_matching_rule(bucket, &rules, a, b, ga, gb) else {
+    let lookup = |e| rules.get(e).ok().map(|r| (&*r.group_a, &*r.group_b, r));
+    let Some((rule, ent_a, ent_b)) = find_matching_rule(bucket, lookup, a, b, ga, gb) else {
         return;
     };
 

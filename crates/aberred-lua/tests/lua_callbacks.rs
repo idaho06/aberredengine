@@ -8,7 +8,6 @@ use bevy_ecs::prelude::*;
 use bevy_ecs::system::RunSystemOnce;
 
 use aberred_core::components::boxcollider::BoxCollider;
-use aberred_core::components::collision::CollisionRule;
 use aberred_core::components::group::Group;
 use aberred_core::components::mapposition::MapPosition;
 use aberred_core::components::signals::Signals;
@@ -22,7 +21,7 @@ use aberred_core::resources::systemsstore::SystemsStore;
 use aberred_core::resources::worldsignals::WorldSignals;
 use aberred_core::resources::worldtime::WorldTime;
 use aberred_core::systems::collision_detector::collision_detector;
-use aberred_lua::components::luacollision::{LuaCollisionCallback, LuaCollisionRule};
+use aberred_lua::components::luacollision::LuaCollisionRule;
 use aberred_lua::components::luaphase::{LuaPhase, PhaseCallbacks};
 use aberred_lua::components::luatimer::LuaTimer;
 use aberred_lua::resources::lua_runtime::LuaRuntime;
@@ -92,13 +91,7 @@ fn collision_pipeline_triggers_lua_side_effects() {
             BoxCollider::new(10.0, 10.0),
         ))
         .id();
-    world.spawn((CollisionRule::new(
-        "player",
-        "enemy",
-        LuaCollisionCallback {
-            name: "on_player_enemy".into(),
-        },
-    ),));
+    world.spawn((LuaCollisionRule::new("player", "enemy", "on_player_enemy"),));
 
     // Track if collision event was triggered
     let saw_collision = std::sync::Arc::new(std::sync::Mutex::new(false));
@@ -159,12 +152,10 @@ fn collision_callback_error_still_drains_queued_commands() {
         MapPosition::new(5.0, 0.0),
         BoxCollider::new(10.0, 10.0),
     ));
-    world.spawn((CollisionRule::new(
+    world.spawn((LuaCollisionRule::new(
         "player",
         "enemy",
-        LuaCollisionCallback {
-            name: "on_player_enemy_err".into(),
-        },
+        "on_player_enemy_err",
     ),));
 
     world.add_observer(lua_collision_observer);
@@ -436,9 +427,7 @@ fn collision_callback_spawn_then_clone_same_drain() {
     world.spawn(LuaCollisionRule::new(
         "shooter",
         "target",
-        LuaCollisionCallback {
-            name: "on_coll_spawn_clone".into(),
-        },
+        "on_coll_spawn_clone",
     ));
 
     world.add_observer(lua_collision_observer);
@@ -556,13 +545,7 @@ fn collision_callback_phase_plus_signal_all_processed() {
         MapPosition::new(5.0, 0.0),
         BoxCollider::new(10.0, 10.0),
     ));
-    world.spawn(LuaCollisionRule::new(
-        "hero",
-        "hazard",
-        LuaCollisionCallback {
-            name: "on_multi_effect".into(),
-        },
-    ));
+    world.spawn(LuaCollisionRule::new("hero", "hazard", "on_multi_effect"));
 
     world.add_observer(lua_collision_observer);
     world.flush();

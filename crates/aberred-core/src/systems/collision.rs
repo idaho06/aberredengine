@@ -17,7 +17,7 @@
 use bevy_ecs::prelude::*;
 
 use crate::components::boxcollider::BoxCollider;
-use crate::components::collision::{BoxSides, CollisionRule, get_colliding_sides};
+use crate::components::collision::{BoxSides, get_colliding_sides, match_groups};
 use crate::components::globaltransform2d::GlobalTransform2D;
 use crate::components::group::Group;
 use crate::components::mapposition::MapPosition;
@@ -82,31 +82,27 @@ pub fn resolve_groups<'q>(
 /// bucket for the first rule whose groups still match `(ga, gb)`, skipping
 /// any entity that despawned between this tick's index rebuild and now.
 ///
+/// `lookup` returns a rule entity's `(group_a, group_b, rule)`, or `None` if
+/// it no longer is a rule; `rule` is whatever the caller needs back. Returns
+/// `(rule, ent_a, ent_b)`, with `ent_a`/`ent_b` ordered to match the rule's
+/// `group_a`/`group_b`.
+///
 /// Shared by [`rust_collision_observer`](crate::systems::rust_collision::rust_collision_observer)
-/// and `lua_collision_observer` (`aberred-lua`),
-/// which otherwise duplicated this loop identically (generic over the rule's
-/// callback payload `C`, since the two observers query `CollisionRule` and
-/// `LuaCollisionRule = CollisionRule<LuaCollisionCallback>` respectively).
-pub fn find_matching_rule<'q, C>(
+/// and `lua_collision_observer` (`aberred-lua`), which query different rule
+/// components.
+pub fn find_matching_rule<'q, R>(
     bucket: &SmallVec<[Entity; 2]>,
-    rules: &'q Query<&CollisionRule<C>>,
+    lookup: impl Fn(Entity) -> Option<(&'q str, &'q str, R)>,
     a: Entity,
     b: Entity,
     ga: &str,
     gb: &str,
-) -> Option<(&'q CollisionRule<C>, Entity, Entity)>
-where
-    C: Send + Sync + 'static,
-{
-    for &rule_entity in bucket {
-        let Ok(rule) = rules.get(rule_entity) else {
-            continue;
-        };
-        if let Some((ent_a, ent_b)) = rule.match_and_order(a, b, ga, gb) {
-            return Some((rule, ent_a, ent_b));
-        }
-    }
-    None
+) -> Option<(R, Entity, Entity)> {
+    bucket.iter().find_map(|&rule_entity| {
+        let (rule_a, rule_b, rule) = lookup(rule_entity)?;
+        let (ent_a, ent_b) = match_groups(rule_a, rule_b, a, b, ga, gb)?;
+        Some((rule, ent_a, ent_b))
+    })
 }
 
 #[cfg(test)]

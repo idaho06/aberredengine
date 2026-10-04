@@ -66,9 +66,6 @@ pub type CollisionCallback =
 /// The default `CollisionRule` stores a Rust function pointer via
 /// [`CollisionCallback`] and is processed by
 /// [`rust_collision_observer`](crate::systems::rust_collision::rust_collision_observer).
-/// The Lua-facing `LuaCollisionRule` (`aberred_lua::components::luacollision`)
-/// alias reuses this same storage with a `LuaCollisionCallback`
-/// payload.
 ///
 /// When a collision is detected between entities with groups matching
 /// `group_a` and `group_b`, the `callback` is invoked with the entities and
@@ -79,9 +76,7 @@ pub struct CollisionRule<C = CollisionCallback> {
     pub group_a: String,
     /// Second group name to match.
     pub group_b: String,
-    /// Callback payload — a Rust fn pointer for `CollisionRule`, or a
-    /// `LuaCollisionCallback`
-    /// for `LuaCollisionRule`.
+    /// Callback payload — a Rust fn pointer for `CollisionRule`.
     pub callback: C,
 }
 

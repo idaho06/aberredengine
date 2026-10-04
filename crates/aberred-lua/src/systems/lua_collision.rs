@@ -104,13 +104,12 @@ pub fn lua_collision_observer(
         return;
     };
 
-    let Some((lua_rule, ent_a, ent_b)) =
-        find_matching_rule(bucket, &params.lua_rules, a, b, ga, gb)
-    else {
+    let lookup = |e| (params.lua_rules.get(e).ok()).map(|r| (&*r.group_a, &*r.group_b, r));
+    let Some((lua_rule, ent_a, ent_b)) = find_matching_rule(bucket, lookup, a, b, ga, gb) else {
         return;
     };
 
-    let callback_name: &str = &lua_rule.callback.name;
+    let callback_name: &str = &lua_rule.callback;
     let pos_a = resolve_world_pos(
         &params.entity_cmds.positions.as_readonly(),
         &params.entity_cmds.global_transforms,

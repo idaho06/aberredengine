@@ -456,14 +456,11 @@ fn apply_behavior_components(entity_commands: &mut EntityCommands, b: BehaviorCo
         ));
     }
     if let Some(rule_data) = lua_collision_rule {
-        use crate::components::luacollision::LuaCollisionCallback;
-        use aberred_core::components::collision::CollisionRule;
-        entity_commands.insert(CollisionRule::new(
+        use crate::components::luacollision::LuaCollisionRule;
+        entity_commands.insert(LuaCollisionRule::new(
             rule_data.group_a,
             rule_data.group_b,
-            LuaCollisionCallback {
-                name: rule_data.callback.into(),
-            },
+            rule_data.callback,
         ));
     }
     if let Some(callback) = lua_setup {
@@ -1246,7 +1243,7 @@ mod tests {
         assert_eq!(phase.phases["idle"].on_enter.as_deref(), Some("idle_in"));
         let timer = world.get::<LuaTimer>(e).unwrap();
         assert_eq!((timer.timer.duration, &*timer.callback), (0.5, "tick"));
-        // Must be queryable as LuaCollisionRule, not the Rust-callback CollisionRule.
+        // Must be queryable as LuaCollisionRule, not core's CollisionRule.
         let rule = world
             .query::<&LuaCollisionRule>()
             .get(&world, e)
@@ -1255,7 +1252,7 @@ mod tests {
             (
                 rule.group_a.as_str(),
                 rule.group_b.as_str(),
-                &*rule.callback.name
+                &*rule.callback
             ),
             ("player", "enemy", "on_hit")
         );
