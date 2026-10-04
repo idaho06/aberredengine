@@ -1241,7 +1241,7 @@ mod tests {
         );
 
         let phase = world.get::<LuaPhase>(e).unwrap();
-        assert_eq!(phase.current, "idle");
+        assert_eq!(phase.phase.current, "idle");
         assert_eq!(phase.phases.len(), 2);
         assert_eq!(phase.phases["idle"].on_enter.as_deref(), Some("idle_in"));
         let timer = world.get::<LuaTimer>(e).unwrap();

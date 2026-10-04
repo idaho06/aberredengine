@@ -41,6 +41,7 @@
 //! end
 //! ```
 
+use aberred_core::components::phase::Phase;
 use bevy_ecs::prelude::Component;
 use rustc_hash::FxHashMap;
 
@@ -57,18 +58,13 @@ pub struct PhaseCallbacks {
 
 /// Lua-based phase state machine component, processed by
 /// [`lua_phase_system`](crate::systems::luaphase::lua_phase_system).
+///
+/// Wraps a core [`Phase`], so it follows the same transition rules, and adds the
+/// names of the Lua callbacks for each phase.
 #[derive(Clone, Debug, Component)]
 pub struct LuaPhase {
-    /// The current phase label (e.g., "idle", "playing").
-    pub current: String,
-    /// The phase before the last transition, if any.
-    pub previous: Option<String>,
-    /// Set to request a transition to a new phase. Cleared after processing.
-    pub next: Option<String>,
-    /// Seconds elapsed since entering the current phase.
-    pub time_in_phase: f32,
-    /// Whether to call on_enter on the first frame.
-    pub needs_enter_callback: bool,
+    /// Current/previous/next phase and time in phase.
+    pub phase: Phase,
     /// Map of phase name → callback function names.
     pub phases: FxHashMap<String, PhaseCallbacks>,
 }
@@ -80,22 +76,18 @@ impl LuaPhase {
         phases: FxHashMap<String, PhaseCallbacks>,
     ) -> Self {
         Self {
-            current: initial_phase.into(),
-            previous: None,
-            next: None,
-            time_in_phase: 0.0,
-            needs_enter_callback: true,
+            phase: Phase::new(initial_phase),
             phases,
         }
     }
 
     /// Get the callbacks for the current phase.
-    pub fn current_callbacks(&self) -> Option<&PhaseCallbacks> {
-        self.phases.get(&self.current)
+    pub(crate) fn current_callbacks(&self) -> Option<&PhaseCallbacks> {
+        self.phases.get(&self.phase.current)
     }
 
     /// Get the callbacks for a specific phase.
-    pub fn get_callbacks(&self, phase: &str) -> Option<&PhaseCallbacks> {
+    pub(crate) fn get_callbacks(&self, phase: &str) -> Option<&PhaseCallbacks> {
         self.phases.get(phase)
     }
 }

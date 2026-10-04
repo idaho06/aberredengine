@@ -108,8 +108,8 @@ pub struct LuaPhaseSnapshot<'a> {
 impl<'a> From<&'a crate::components::luaphase::LuaPhase> for LuaPhaseSnapshot<'a> {
     fn from(phase: &'a crate::components::luaphase::LuaPhase) -> Self {
         Self {
-            current: phase.current.as_str(),
-            time_in_phase: phase.time_in_phase,
+            current: phase.phase.current.as_str(),
+            time_in_phase: phase.phase.time_in_phase,
         }
     }
 }

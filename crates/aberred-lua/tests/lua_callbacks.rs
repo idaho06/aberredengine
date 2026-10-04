@@ -502,7 +502,7 @@ fn lua_phase_return_value_beats_phase_transition_cmd() {
     // The winning transition is stored in `next` after the first tick.
     let phase = world.get::<LuaPhase>(entity).unwrap();
     assert_eq!(
-        phase.next.as_deref(),
+        phase.phase.next.as_deref(),
         Some("return_winner"),
         "return value should override the phase_transition() cmd"
     );
@@ -511,7 +511,7 @@ fn lua_phase_return_value_beats_phase_transition_cmd() {
     tick_lua_phases(&mut world);
 
     let phase = world.get::<LuaPhase>(entity).unwrap();
-    assert_eq!(phase.current, "return_winner");
+    assert_eq!(phase.phase.current, "return_winner");
 }
 
 /// Collision path: the phase drain does not suppress other queues.
@@ -572,7 +572,7 @@ fn collision_callback_phase_plus_signal_all_processed() {
     // Phase transition queued
     let phase = world.get::<LuaPhase>(a).unwrap();
     assert_eq!(
-        phase.next.as_deref(),
+        phase.phase.next.as_deref(),
         Some("hit"),
         "phase transition should be queued"
     );
