@@ -24,9 +24,10 @@
 //!   `AudioMessage` replies injected.
 //! - `sent_to_render`: a plain `RenderMsg` channel the harness owns instead
 //!   of a real render thread.
-//! - `send_input`/[`resolve_input_backlog`](aberred_core::systems::input::resolve_input_backlog):
-//!   the harness calls this function DIRECTLY rather than routing a sample
-//!   through the real bounded `InputSample` channel -- that channel only
+//! - `send_input`: the harness applies a sample DIRECTLY, through the same
+//!   `apply_tick_input` the logic thread runs (so `WindowSize` and the input
+//!   backlog resolve as in production), rather than routing it through the
+//!   real bounded `InputSample` channel -- that channel only
 //!   exists because [`LogicInit`] requires an `rx_input` field, and is never
 //!   driven by the harness. Don't mistake `send_input` for a real
 //!   cross-thread round trip.
@@ -57,7 +58,6 @@ use aberred_core::resources::fontmetrics::FontMetrics;
 use aberred_core::resources::gameconfig::GameConfig;
 use aberred_core::resources::gamestate::{GameState, GameStates};
 use aberred_core::resources::systemsstore as hook_keys;
-use aberred_core::systems::input::resolve_input_backlog;
 use aberred_core::systems::time::update_world_time;
 
 /// A headless logic-thread `World` plus its `sim`/`present` schedules.
@@ -362,11 +362,16 @@ impl TestWorld {
         );
     }
 
-    /// Feed one raw device sample straight into
-    /// [`resolve_input_backlog`] -- see the module doc for why this bypasses
-    /// the real `InputSample` channel.
+    /// Apply one raw device sample the way the logic thread applies a tick's
+    /// input (`WindowSize` from the sample, then the input backlog), without
+    /// advancing a tick -- see the module doc for why this bypasses the real
+    /// `InputSample` channel.
     pub fn send_input(&mut self, sample: RawDeviceSnapshot) {
-        resolve_input_backlog(&mut self.world, std::slice::from_ref(&sample));
+        let tick_input = TickInput {
+            samples: vec![sample],
+            ..Default::default()
+        };
+        apply_tick_input(&mut self.world, &tick_input);
     }
 
     /// Apply one [`TickInput`], then advance one tick via [`Self::tick`] --
