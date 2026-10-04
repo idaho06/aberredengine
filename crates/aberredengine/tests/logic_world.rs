@@ -9,7 +9,7 @@
 
 use aberredengine::bevy_ecs::prelude::*;
 use aberredengine::core::components::boxcollider::BoxCollider;
-use aberredengine::core::components::collision::{BoxSides, CollisionRule};
+use aberredengine::core::components::collision::CollisionRule;
 use aberredengine::core::components::dynamictext::DynamicText;
 use aberredengine::core::components::group::Group;
 use aberredengine::core::components::guiinteractable::GuiInteractable;
@@ -23,6 +23,7 @@ use aberredengine::core::components::sprite::Sprite;
 use aberredengine::core::components::timer::Timer;
 use aberredengine::core::components::zindex::ZIndex;
 use aberredengine::core::events::asset::{AssetLoadFailed, AssetLoaded};
+use aberredengine::core::events::collision::Collided;
 use aberredengine::core::events::gui_interactable::GuiClicked;
 use aberredengine::core::events::input::InputAction;
 use aberredengine::core::events::phase::{PhaseEntered, PhaseExited};
@@ -46,7 +47,6 @@ use aberredengine::core::resources::screensize::ScreenSize;
 use aberredengine::core::resources::signal_intents::SignalIntent;
 use aberredengine::core::resources::signal_keys as sk;
 use aberredengine::core::resources::worldsignals::WorldSignals;
-use aberredengine::core::systems::GameCtx;
 use aberredengine::core::systems::asset_loader::AssetLoader;
 use aberredengine::core::systems::scene_dispatch::in_scene;
 use aberredengine::engine_app::SimSet;
@@ -99,20 +99,21 @@ fn input_edge_fires_exactly_once_and_clears() {
     assert!(input.action(InputAction::Action1).active, "still held");
 }
 
-fn collision_bump_flag(_a: Entity, _b: Entity, _sa: &BoxSides, _sb: &BoxSides, ctx: &mut GameCtx) {
-    ctx.world_signals.set_flag("collided");
+fn collision_bump_flag(_: On<Collided>, mut signals: ResMut<WorldSignals>) {
+    signals.set_flag("collided");
 }
 
-/// (b) Spawn two overlapping entities in matching groups with a Rust
-/// collision rule; tick until overlap is detected and the rule's callback's
-/// `WorldSignals` side-effect lands.
+/// (b) Spawn two overlapping entities in matching groups with a
+/// `CollisionRule`; tick until overlap is detected and the rule's `Collided`
+/// observer's `WorldSignals` side-effect lands.
 #[test]
-fn spawn_and_collide_fires_rust_collision_rule() {
+fn spawn_and_collide_triggers_collided_on_the_rule() {
     let mut tw = TestWorld::new();
     tw.tick_to_play(DT, 8);
 
     tw.world
-        .spawn(CollisionRule::rust("a", "b", collision_bump_flag));
+        .spawn(CollisionRule::new("a", "b"))
+        .observe(collision_bump_flag);
     tw.world.spawn((
         Group::new("a"),
         MapPosition::new(0.0, 0.0),

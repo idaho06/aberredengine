@@ -108,41 +108,34 @@ mod phase_state_machines {
 
 // 7.3 Collision Rules
 mod collision_rules {
+    use aberredengine::prelude::*; // GLUE
 
+    fn spawn_rule(mut commands: Commands) { // GLUE
     use aberredengine::prelude::*;
 
-    type CollisionCallback = fn(Entity, Entity, &BoxSides, &BoxSides, &mut GameCtx);
-
-    fn same_as_engine(f: CollisionCallback) -> aberredengine::core::components::collision::CollisionCallback { f } // GLUE
-
-    mod usage { // GLUE
-    use super::*; // GLUE
-
-    fn spawn_rule(ctx: &mut GameCtx) { // GLUE
-    use aberredengine::prelude::*;
-
-    ctx.commands.spawn((
-        CollisionRule::rust("ball", "brick", ball_brick_collision),
-        Persistent, // survive scene switches
-    ));
+    commands
+        .spawn((
+            CollisionRule::new("ball", "brick"),
+            Persistent, // survive scene switches
+        ))
+        .observe(ball_brick_collision);
     } // GLUE
 
     use aberredengine::prelude::*;
 
     fn ball_brick_collision(
-        ball: Entity,
-        brick: Entity,
-        ball_sides: &BoxSides,
-        _brick_sides: &BoxSides,
-        ctx: &mut GameCtx,
+        hit: On<Collided>,
+        mut commands: Commands,
+        mut rigid_bodies: Query<&mut RigidBody>,
+        mut audio: MessageWriter<AudioCmd>,
     ) {
         // Despawn the brick
-        ctx.commands.entity(brick).despawn();
-        ctx.audio.write(AudioCmd::PlayFx { id: "break".into() });
+        commands.entity(hit.b).despawn();
+        audio.write(AudioCmd::PlayFx { id: "break".into() });
 
         // Reflect ball velocity based on collision side
-        if let Ok(mut rb) = ctx.rigid_bodies.get_mut(ball) {
-            for side in ball_sides.iter() {
+        if let Ok(mut rb) = rigid_bodies.get_mut(hit.a) {
+            for side in hit.sides_a.iter() {
                 match side {
                     BoxSide::Top | BoxSide::Bottom => rb.velocity.y = -rb.velocity.y,
                     BoxSide::Left | BoxSide::Right => rb.velocity.x = -rb.velocity.x,
@@ -150,7 +143,6 @@ mod collision_rules {
             }
         }
     }
-    } // GLUE
 }
 
 // 7.4 Menus

@@ -1,50 +1,38 @@
-//! Collision rule component and callback type.
+//! Collision rule component and contact sides.
 //!
-//! This module provides the [`CollisionRule`] component which defines how
-//! collisions between entity groups should be handled, and the
-//! [`CollisionCallback`] type alias for the Rust callback signature.
+//! [`CollisionRule`] names two entity groups. When an entity of one group
+//! overlaps an entity of the other, the engine triggers
+//! [`Collided`](crate::events::collision::Collided) on the rule entity, so
+//! gameplay reacts with an observer on that rule (or a global observer).
 //!
 //! # Group-Based Collision
 //!
 //! Collision rules match entities by their [`Group`](super::group::Group)
-//! component. When two entities collide, the observer looks up rules that match
-//! both groups and invokes the corresponding callback.
+//! component, in either order. When several rules cover the same pair, the
+//! rule with the lowest `Entity` wins.
 //!
 //! # Example
 //!
 //! ```
 //! # use bevy_ecs::prelude::*;
-//! use aberred_core::components::collision::{BoxSides, CollisionRule};
-//! use aberred_core::components::group::Group;
-//! use aberred_core::systems::GameCtx;
+//! use aberred_core::components::collision::CollisionRule;
+//! use aberred_core::events::collision::Collided;
 //!
-//! fn ball_brick_callback(
-//!     ball: Entity,
-//!     brick: Entity,
-//!     sides_a: &BoxSides,
-//!     sides_b: &BoxSides,
-//!     ctx: &mut GameCtx,
-//! ) {
-//!     // Reflect ball, damage brick, play sound, etc.
+//! fn ball_brick(hit: On<Collided>, mut commands: Commands) {
+//!     // `hit.a` is the ball, `hit.b` the brick (rule order).
+//!     commands.entity(hit.b).despawn();
 //! }
 //!
-//! // `::rust` coerces the fn item to the fn-pointer type the collision
-//! // observer queries for; `CollisionRule::new` with a fn item would
-//! // silently never match.
-//! let bundle = (
-//!     CollisionRule::rust("ball", "brick", ball_brick_callback),
-//!     Group::new("collision_rules"),
-//! );
 //! # let mut world = World::new();
-//! # world.spawn(bundle);
+//! world.spawn(CollisionRule::new("ball", "brick")).observe(ball_brick);
 //! ```
 //!
 //! # Related
 //!
 //! - [`crate::systems::collision_detector`] – collision detection system
-//! - [`crate::systems::rust_collision`] – Rust collision observer
+//! - [`crate::systems::collision_rule`] – triggers `Collided` for matched rules
 //! - `aberred_lua::systems::lua_collision` – Lua collision observer
-//! - [`crate::events::collision::CollisionEvent`] – event emitted on collisions
+//! - [`crate::events::collision::CollisionEvent`] – raw overlap event
 //! - [`super::group::Group`] – group tag used for rule matching
 
 use bevy_ecs::prelude::*;
@@ -52,77 +40,32 @@ use smallvec::SmallVec;
 
 use crate::math::Rect;
 use crate::resources::collision_rule_index::RuleGroups;
-use crate::systems::GameCtx;
 
-/// Callback type for Rust collision rules.
+/// Matches collisions between two entity groups.
 ///
-/// Receives the two matched entities (ordered to match `group_a` and `group_b`),
-/// the colliding sides for each entity, and a mutable reference to
-/// [`GameCtx`] providing full ECS query/resource access.
-pub type CollisionCallback =
-    for<'w, 's> fn(Entity, Entity, &BoxSides, &BoxSides, &mut GameCtx<'w, 's>);
-
-/// Defines how collisions between two entity groups should be handled.
-///
-/// The default `CollisionRule` stores a Rust function pointer via
-/// [`CollisionCallback`] and is processed by
-/// [`rust_collision_observer`](crate::systems::rust_collision::rust_collision_observer).
-///
-/// When a collision is detected between entities with groups matching
-/// `group_a` and `group_b`, the `callback` is invoked with the entities and
-/// collision context.
+/// When entities with groups matching `group_a` and `group_b` overlap,
+/// [`collision_rule_observer`](crate::systems::collision_rule::collision_rule_observer)
+/// triggers [`Collided`](crate::events::collision::Collided) on this rule's
+/// entity, every tick while they overlap.
 #[derive(Component, Clone, Debug)]
-pub struct CollisionRule<C = CollisionCallback> {
+pub struct CollisionRule {
     /// First group name to match.
     pub group_a: String,
     /// Second group name to match.
     pub group_b: String,
-    /// Callback payload — a Rust fn pointer for `CollisionRule`.
-    pub callback: C,
 }
 
-impl<C> CollisionRule<C> {
-    /// Create a new collision rule for two groups with a callback payload.
-    pub fn new(group_a: impl Into<String>, group_b: impl Into<String>, callback: C) -> Self {
+impl CollisionRule {
+    /// Create a rule matching collisions between `group_a` and `group_b`.
+    pub fn new(group_a: impl Into<String>, group_b: impl Into<String>) -> Self {
         Self {
             group_a: group_a.into(),
             group_b: group_b.into(),
-            callback,
         }
     }
-
-    /// Check if this rule matches the given groups and return entities in order.
-    ///
-    /// Returns `Some((entity_a, entity_b))` if the rule matches, with entities
-    /// ordered to match `group_a` and `group_b` respectively.
-    pub fn match_and_order(
-        &self,
-        ent_a: Entity,
-        ent_b: Entity,
-        group_a: &str,
-        group_b: &str,
-    ) -> Option<(Entity, Entity)> {
-        match_groups(&self.group_a, &self.group_b, ent_a, ent_b, group_a, group_b)
-    }
 }
 
-impl CollisionRule<CollisionCallback> {
-    /// Create a collision rule with a Rust function pointer callback.
-    ///
-    /// Prefer this over `::new` for Rust callbacks: the typed parameter forces
-    /// coercion from the function-item type to the `fn(...)` pointer type that
-    /// `Query<&CollisionRule>` expects. Without the coercion the query silently
-    /// matches nothing.
-    pub fn rust(
-        group_a: impl Into<String>,
-        group_b: impl Into<String>,
-        callback: CollisionCallback,
-    ) -> Self {
-        Self::new(group_a, group_b, callback)
-    }
-}
-
-impl<C: Send + Sync + 'static> RuleGroups for CollisionRule<C> {
+impl RuleGroups for CollisionRule {
     fn groups(&self) -> (&str, &str) {
         (&self.group_a, &self.group_b)
     }
@@ -131,7 +74,8 @@ impl<C: Send + Sync + 'static> RuleGroups for CollisionRule<C> {
 /// Check if a collision rule's groups match the given group names and return
 /// entities ordered to match `rule_a` and `rule_b`.
 ///
-/// This is the core matching logic used by [`CollisionRule::match_and_order`].
+/// This is the core matching logic used by
+/// [`find_matching_rule`](crate::systems::collision::find_matching_rule).
 pub fn match_groups(
     rule_a: &str,
     rule_b: &str,
@@ -149,6 +93,8 @@ pub fn match_groups(
     }
 }
 
+/// One side of an axis-aligned box.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum BoxSide {
     Left,
     Right,
@@ -441,28 +387,6 @@ mod tests {
         }
     }
 
-    // CollisionRule::match_and_order tests
-
-    fn dummy_collision_callback(
-        _a: Entity,
-        _b: Entity,
-        _sides_a: &BoxSides,
-        _sides_b: &BoxSides,
-        _ctx: &mut GameCtx,
-    ) {
-    }
-
-    #[test]
-    fn test_match_and_order_reversed() {
-        let rule = CollisionRule::rust("ball", "brick", dummy_collision_callback);
-        let ent_a = Entity::from_bits(1);
-        let ent_b = Entity::from_bits(2);
-        // Groups come in swapped relative to the rule
-        let result = rule.match_and_order(ent_a, ent_b, "brick", "ball");
-        // Entities should be reordered so ball maps to group_a
-        assert_eq!(result, Some((ent_b, ent_a)));
-    }
-
     #[test]
     fn test_match_groups_direct() {
         let ent_a = Entity::from_bits(1);
@@ -513,13 +437,5 @@ mod tests {
             match_groups("ball", "ball", ent_a, ent_b, "ball", "ball"),
             Some((ent_a, ent_b))
         );
-    }
-
-    #[test]
-    fn collision_rule_rust_ctor_accepts_fn_without_cast() {
-        fn cb(_: Entity, _: Entity, _: &BoxSides, _: &BoxSides, _: &mut GameCtx) {}
-        let rule = CollisionRule::rust("a", "b", cb);
-        assert_eq!(rule.group_a, "a");
-        assert_eq!(rule.group_b, "b");
     }
 }

@@ -21,9 +21,10 @@
 
 use aberredengine::bevy_ecs::prelude::*;
 use aberredengine::core::components::boxcollider::BoxCollider;
-use aberredengine::core::components::collision::{BoxSides, CollisionRule};
+use aberredengine::core::components::collision::CollisionRule;
 use aberredengine::core::components::group::Group;
 use aberredengine::core::components::mapposition::MapPosition;
+use aberredengine::core::events::collision::Collided;
 use aberredengine::core::events::input::InputAction;
 use aberredengine::core::events::scene::SceneEntered;
 use aberredengine::core::protocol::raw_input::RawDeviceSnapshot;
@@ -33,15 +34,14 @@ use aberredengine::core::resources::screensize::ScreenSize;
 use aberredengine::core::resources::signal_intents::SignalIntent;
 use aberredengine::core::resources::signal_keys as sk;
 use aberredengine::core::resources::worldsignals::WorldSignals;
-use aberredengine::core::systems::GameCtx;
 use aberredengine::raylib::ffi::KeyboardKey;
 use aberredengine::test_support::{TestWorld, TestWorldBuilder};
 
 mod common;
 use common::DT;
 
-fn collision_bump_flag(_a: Entity, _b: Entity, _sa: &BoxSides, _sb: &BoxSides, ctx: &mut GameCtx) {
-    ctx.world_signals.set_flag("determinism_test_collided");
+fn collision_bump_flag(_: On<Collided>, mut signals: ResMut<WorldSignals>) {
+    signals.set_flag("determinism_test_collided");
 }
 
 /// Records every entity id this scenario allocates/frees, in the exact
@@ -89,7 +89,8 @@ fn scenario_driver(
             log.spawned.push(b);
 
             let rule = commands
-                .spawn(CollisionRule::rust("a", "b", collision_bump_flag))
+                .spawn(CollisionRule::new("a", "b"))
+                .observe(collision_bump_flag)
                 .id();
             log.spawned.push(rule);
         }

@@ -11,6 +11,7 @@
 //! - [`asset_tracking`] – settle `PendingAssets` on load replies and trigger `AssetLoaded`/`AssetLoadFailed`
 //! - [`audio_bridge`] – logic-thread systems that shuttle `AudioCmd`/`AudioMessage` with the audio thread
 //! - [`collision_detector`] – broad/simple overlap checks and event emission
+//! - [`collision_rule`] – matches overlaps against `CollisionRule`s and triggers `Collided`
 //! - [`collision_rule_index`] – rebuilds `CollisionRuleIndex` from rule entities on change
 //! - [`gamestate`] – check for pending state transitions and trigger events
 //! - [`gridlayout`] – spawn entities from JSON-defined grid layouts
@@ -26,7 +27,6 @@
 //! - [`mousecontroller`] – update entity positions based on mouse position
 //! - [`movement`] – integrate positions from rigid body velocities and time
 //! - [`phase`] – apply phase state machine transitions and trigger phase events
-//! - [`rust_collision`] – Rust-native collision observer and callback dispatch
 //! - [`scene_dispatch`] – scene switch and update systems for `SceneManager`-based games
 //! - [`signal_intents`] – apply buffered `SignalIntent`s queued by render-side scene callbacks
 //! - [`signalbinding`] – update DynamicText components based on signal values
@@ -48,6 +48,7 @@ pub mod audio_bridge;
 pub mod camera_follow;
 pub mod collision;
 pub mod collision_detector;
+pub mod collision_rule;
 pub mod collision_rule_index;
 pub mod dynamictext_size;
 pub mod entity_registrations;
@@ -72,7 +73,6 @@ pub mod particleemitter;
 pub mod phase;
 pub mod propagate_transforms;
 pub mod render_assets;
-pub mod rust_collision;
 pub mod scene_dispatch;
 pub mod signal_intents;
 pub mod signalbinding;

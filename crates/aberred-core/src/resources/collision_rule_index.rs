@@ -47,7 +47,7 @@ pub struct RuleIndex<T: RuleGroups> {
 }
 
 /// Index of [`CollisionRule`] entities, read by
-/// [`rust_collision_observer`](crate::systems::rust_collision::rust_collision_observer).
+/// [`collision_rule_observer`](crate::systems::collision_rule::collision_rule_observer).
 pub type CollisionRuleIndex = RuleIndex<CollisionRule>;
 
 impl<T: RuleGroups> Default for RuleIndex<T> {
@@ -124,15 +124,7 @@ mod tests {
     fn bucket_found_regardless_of_query_order() {
         let mut index = CollisionRuleIndex::default();
         let e = Entity::from_bits(1);
-        fn noop(
-            _: Entity,
-            _: Entity,
-            _: &crate::components::collision::BoxSides,
-            _: &crate::components::collision::BoxSides,
-            _: &mut crate::systems::GameCtx,
-        ) {
-        }
-        let rule = CollisionRule::rust("a", "b", noop);
+        let rule = CollisionRule::new("a", "b");
         index.rebuild(std::iter::once((e, &rule)));
         assert!(!index.is_empty());
         assert_eq!(index.bucket("a", "b").unwrap(), &[e]);

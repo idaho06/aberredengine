@@ -1,8 +1,8 @@
-//! Shared collision helpers used by both the Lua and Rust collision observers.
+//! Shared collision helpers used by both the core and Lua collision rule observers.
 //!
 //! This module contains system-level utility functions that de-duplicate logic
 //! common to `lua_collision` (`aberred-lua`) and
-//! [`rust_collision`](crate::systems::rust_collision).
+//! [`collision_rule`](crate::systems::collision_rule).
 //!
 //! All functions are pure Rust with no Lua dependency and are always compiled
 //! regardless of the `lua` feature flag.
@@ -10,11 +10,12 @@
 //! # Related
 //!
 //! - [`crate::systems::collision_detector`] – AABB detection system
-//! - [`crate::systems::rust_collision`] – Rust collision observer
+//! - [`crate::systems::collision_rule`] – triggers `Collided` for matched rules
 //! - `aberred_lua::systems::lua_collision` – Lua collision observer
 //! - [`crate::components::collision`] – collision types and side detection
 
 use bevy_ecs::prelude::*;
+use bevy_ecs::system::SystemParam;
 
 use crate::components::boxcollider::BoxCollider;
 use crate::components::collision::{BoxSides, get_colliding_sides, match_groups};
@@ -53,6 +54,27 @@ pub fn resolve_collider_rect(
     box_colliders.get(entity).ok().map(|c| c.as_rectangle(pos))
 }
 
+/// The queries [`resolve_collider_rect`] reads, bundled for observers.
+#[derive(SystemParam)]
+pub struct ColliderRects<'w, 's> {
+    positions: Query<'w, 's, &'static MapPosition>,
+    global_transforms: Query<'w, 's, &'static GlobalTransform2D>,
+    box_colliders: Query<'w, 's, &'static BoxCollider>,
+}
+
+impl ColliderRects<'_, '_> {
+    /// `entity`'s world-space collider rectangle, if it has a position and a
+    /// collider.
+    pub fn rect(&self, entity: Entity) -> Option<Rect> {
+        resolve_collider_rect(
+            &self.positions,
+            &self.global_transforms,
+            &self.box_colliders,
+            entity,
+        )
+    }
+}
+
 /// Compute colliding sides for two optional rectangles.
 ///
 /// Returns `(BoxSides, BoxSides)` — both empty if either rectangle is `None`
@@ -86,7 +108,7 @@ pub fn resolve_groups<'q>(
 /// `(rule, ent_a, ent_b)`, with `ent_a`/`ent_b` ordered to match the rule's
 /// `group_a`/`group_b`.
 ///
-/// Shared by [`rust_collision_observer`](crate::systems::rust_collision::rust_collision_observer)
+/// Shared by [`collision_rule_observer`](crate::systems::collision_rule::collision_rule_observer)
 /// and `lua_collision_observer` (`aberred-lua`), which query different rule
 /// components.
 pub fn find_matching_rule<'q, R>(

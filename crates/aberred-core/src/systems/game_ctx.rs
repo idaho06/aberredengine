@@ -1,24 +1,19 @@
-//! ECS context passed to Rust collision callbacks.
+//! Bundled ECS access for gameplay systems.
 //!
 //! [`GameCtx`] is a [`SystemParam`] that bundles every query and resource
-//! a game callback is likely to need. Collision rules' Rust callbacks receive
-//! it.
+//! a gameplay system is likely to need.
 //!
-//! # Usage in callbacks
+//! # Usage
 //!
 //! ```ignore
-//! fn on_hit(entity: Entity, ctx: &mut GameCtx) {
-//!     if let Ok(mut rb) = ctx.rigid_bodies.get_mut(entity) {
+//! fn on_hit(hit: On<Collided>, mut ctx: GameCtx) {
+//!     if let Ok(mut rb) = ctx.rigid_bodies.get_mut(hit.a) {
 //!         rb.velocity = Vec2::ZERO;
 //!     }
 //!     ctx.audio.write(AudioCmd::PlayFx { id: "beep".into() });
 //!     ctx.world_signals.set_flag("clicked");
 //! }
 //! ```
-//!
-//! # Related
-//!
-//! - [`crate::components::collision::CollisionCallback`] – fn-pointer type for collision callbacks
 
 use bevy_ecs::prelude::*;
 use bevy_ecs::system::SystemParam;
@@ -48,12 +43,10 @@ use crate::resources::sim_rng::SimRng;
 use crate::resources::worldsignals::WorldSignals;
 use crate::resources::worldtime::WorldTime;
 
-/// ECS access passed to Rust collision callbacks.
+/// Bundled ECS access for gameplay systems.
 ///
 /// Provides commands, a complete set of component queries, and the most
-/// commonly needed resources. Rust collision callbacks
-/// ([`CollisionCallback`](crate::components::collision::CollisionCallback))
-/// receive `&mut GameCtx`.
+/// commonly needed resources.
 ///
 /// If your system takes `&mut GameCtx` alongside its own component query,
 /// check whether `GameCtx` already covers that component first — borrow it
@@ -82,7 +75,7 @@ pub struct GameCtx<'w, 's> {
     /// Mutable access to camera target markers (priority and zoom).
     pub camera_targets: Query<'w, 's, &'static mut CameraTarget>,
     /// Mutable access to GUI widget hit-test/click state (enable/disable, etc.).
-    /// A Rust callback can disable or re-enable a widget directly via
+    /// A system can disable or re-enable a widget directly via
     /// `ctx.gui_interactables.get_mut(id)`.
     pub gui_interactables: Query<'w, 's, &'static mut GuiInteractable>,
     // Read-only queries

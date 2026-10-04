@@ -8,7 +8,7 @@
 //! - [`animation`] – playback state and a rule-based controller for sprite animations
 //! - [`boxcollider`] – axis-aligned rectangular collider for collision detection
 //! - [`cameratarget`] – marks an entity as a candidate for camera following
-//! - [`collision`] – collision callback rules and context for collision observers
+//! - [`collision`] – group-pair collision rules and contact sides
 //! - [`dynamictext`] – text component for rendering variable strings
 //! - [`emittedparticle`] – marker for entities spawned by a particle emitter
 //! - [`entityshader`] – per-entity shader for custom rendering effects

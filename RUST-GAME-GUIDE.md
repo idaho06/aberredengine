@@ -140,7 +140,7 @@ The engine owns the main loop. You configure it through `EngineBuilder` and supp
 
 The engine runs **three separate ECS worlds on three threads**: render (the main thread — owns the raylib window and GPU resources), logic/sim (a spawned thread — this is where **all your game code runs**), and audio (a spawned thread, talked to via message queues you already use for sound/music). Understanding this is required to use the rest of this guide correctly.
 
-- **Every hook and callback you write — `on_setup`, scene observers and systems (`.on_scene_enter()`/`.on_scene_exit()`/`.add_scene_system()`), systems added via `.add_system()`/`.configure_schedule()`, `CollisionRule` callbacks, and observers (`.add_observer()`, `.observe()`, e.g. on `TimerFired`) — runs on the LOGIC thread**, once per **sim tick**. Sim ticks happen at a configurable rate (`[simulation] hz` in `config.ini`, default 240) **decoupled from your render frame rate** — a sim tick is not the same thing as a rendered frame. `dt` is always the fixed constant `1.0 / hz` (scaled by `WorldTime.time_scale`), never a measured wall-clock value — a render stall does not spike `dt` or replay missed ticks, it simply dilates game time until the stall clears, and sim ticks keep running throughout.
+- **Every hook and callback you write — `on_setup`, scene observers and systems (`.on_scene_enter()`/`.on_scene_exit()`/`.add_scene_system()`), systems added via `.add_system()`/`.configure_schedule()`, and observers (`.add_observer()`, `.observe()`, e.g. on `TimerFired` or `Collided`) — runs on the LOGIC thread**, once per **sim tick**. Sim ticks happen at a configurable rate (`[simulation] hz` in `config.ini`, default 240) **decoupled from your render frame rate** — a sim tick is not the same thing as a rendered frame. `dt` is always the fixed constant `1.0 / hz` (scaled by `WorldTime.time_scale`), never a measured wall-clock value — a render stall does not spike `dt` or replay missed ticks, it simply dilates game time until the stall clears, and sim ticks keep running throughout.
 - **Scene GUI and world-draw callbacks (`.add_scene_gui()`/`.add_scene_world_draw()`) are the one exception** — they run on the RENDER thread, inside the render pass itself. This is why they take a context struct (`GuiCtx`/`WorldDrawCtx`) of read-only snapshots instead of live, mutable `WorldSignals` — see below.
 - **A direct consequence**: logic-thread code (everything in the first bullet) can **never** take `RaylibAccess`, `NonSend<FontStore>`, `NonSend<ShaderStore>`, or `Res<TextureStore>` as a system parameter — those resources only exist in the render world. A logic-side system that requests one panics the first time it runs: Bevy checks a system's resources when the system runs, not when the schedule is built. There is no escape hatch to register a custom system on the render thread. This is why asset loading (Section 4) goes through a message queue instead of calling `rl.load_texture(...)` directly inside `setup()`.
 
@@ -1299,7 +1299,7 @@ When `WorldSignals` has a value for key `"score"`, the text automatically update
 | `MouseControlled` | `MouseControlled { follow_x: true, follow_y: true }` |
 | `Timer` | `Timer::new(duration_secs)` (repeating) or `Timer::once(duration_secs)` — triggers `TimerFired` on its entity; see §7.1 |
 | `Phase` | `Phase::new("initial_phase")` — set `next` to transition; triggers `PhaseEntered`/`PhaseExited`; see §7.2 |
-| `CollisionRule` | `CollisionRule::rust("group_a", "group_b", callback)` — use `::rust()` for Rust callbacks; see §7.3 |
+| `CollisionRule` | `CollisionRule::new("group_a", "group_b")` — observe `Collided` on it; see §7.3 |
 | `Tween<MapPosition>` | `Tween::position(from: Vec2, to: Vec2, duration)` |
 | `Tween<Rotation>` | `Tween::rotation(from_degrees, to_degrees, duration)` |
 | `Tween<Scale>` | `Tween::scale(from: Vec2, to: Vec2, duration)` |
@@ -1567,9 +1567,9 @@ fn update(time: Res<WorldTime>, input: Res<InputState>) {
 
 ## 7. Gameplay Systems
 
-The engine provides several gameplay systems: **timers**, **phase state machines**, **collision rules**, **menus**, animation/tween-finished events, and GUI widgets. Timers and phases are data-only **components** that trigger **events**, which you handle with ordinary observers and systems. Collision rules and menus follow a callback pattern: a **component** attached to an entity, a **callback type** (Rust function pointer), and a **context SystemParam** providing full ECS access.
+The engine provides several gameplay systems: **timers**, **phase state machines**, **collision rules**, **menus**, animation/tween-finished events, and GUI widgets. Timers, phases, collision rules and menus are data **components** that trigger **events**, which you handle with ordinary observers and systems.
 
-The callback types — collisions and menus — receive `&mut GameCtx` (`aberred-core/src/systems/game_ctx.rs`), which provides commands, mutable/write queries, read-only queries, and key resources including `world_signals`, `app_state`, `audio`, `world_time`, `config`, `post_process`, `camera_follow`, `input_bindings`, and `sim_rng` (the RNG deterministic-mode games must draw from for anything that needs to reproduce — see [Determinism and replay](#determinism-and-replay)). `GameCtx` runs on the logic thread and has **no direct texture access** — if a callback needs texture data, load it via `RenderAssetCmd` and read back dimensions from `TextureDimsStore` (see [Section 4](#4-loading-assets)). Callbacks have full ECS access otherwise.
+`GameCtx` (`aberred-core/src/systems/game_ctx.rs`) is an optional `SystemParam` that bundles what gameplay code commonly needs: commands, mutable/write queries, read-only queries, and key resources including `world_signals`, `app_state`, `audio`, `world_time`, `config`, `post_process`, `camera_follow`, `input_bindings`, and `sim_rng` (the RNG deterministic-mode games must draw from for anything that needs to reproduce — see [Determinism and replay](#determinism-and-replay)). `GameCtx` runs on the logic thread and has **no direct texture access** — if a system needs texture data, load it via `RenderAssetCmd` and read back dimensions from `TextureDimsStore` (see [Section 4](#4-loading-assets)).
 
 ### 7.1 Timers
 
@@ -1709,35 +1709,30 @@ As with timers (§7.1), observe one entity with `.observe(handler)` or many with
 
 ### 7.3 Collision Rules
 
-**Source:** `aberred-core/src/components/collision.rs`, `aberred-core/src/systems/rust_collision.rs`, `aberred-core/src/systems/collision_detector.rs`
+**Source:** `aberred-core/src/components/collision.rs`, `aberred-core/src/systems/collision_rule.rs`, `aberred-core/src/systems/collision_detector.rs`
 
-`CollisionRule` defines how collisions between two entity groups are handled. Rules are spawned as their own entities.
+`CollisionRule` names two entity groups. Rules are spawned as their own entities. When an entity of one group overlaps an entity of the other, the engine triggers a `Collided` event on the rule entity. React with an observer on the rule (`.observe(handler)`), or with a global observer (`.add_observer(handler)`) that sees every rule's collisions.
 
-**Callback signature:**
+**The event:** `Collided { rule, a, b, sides_a, sides_b }`
 
-```rust
-use aberredengine::prelude::*;
-
-type CollisionCallback = fn(Entity, Entity, &BoxSides, &BoxSides, &mut GameCtx);
-```
-
-- `Entity, Entity` — the two colliding entities, ordered to match `group_a` and `group_b`
-- `BoxSides = SmallVec<[BoxSide; 4]>` — which sides are colliding for each entity
+- `rule` — the matched rule entity (the event target)
+- `a`, `b` — the two colliding entities, ordered to match `group_a` and `group_b`
+- `sides_a`, `sides_b` — `BoxSides = SmallVec<[BoxSide; 4]>`, which sides of each collider touch the other
 - `BoxSide` variants: `Left`, `Right`, `Top`, `Bottom`
 
 **Detection pipeline:**
 
 1. `collision_detector` system iterates all entity pairs with `MapPosition` + `BoxCollider`
 2. Uses AABB overlap via `BoxCollider::as_rectangle()` + `Rect::overlaps()`
-3. On overlap, triggers a `CollisionEvent`
-4. `rust_collision_observer` receives the event, looks up `Group` names, finds a matching `CollisionRule`, computes collision sides, and calls the callback
+3. On overlap, triggers a `CollisionEvent { a, b }` (observe it directly for "any overlap" logic)
+4. `collision_rule_observer` receives the event, looks up `Group` names, finds a matching `CollisionRule`, computes collision sides, and triggers `Collided` on the rule entity
 
-**Bidirectional matching:** A rule for `("ball", "brick")` matches regardless of which entity is `ball` vs `brick`. The observer reorders entities so the first argument always corresponds to `group_a` and the second to `group_b`.
+**Bidirectional matching:** A rule for `("ball", "brick")` matches regardless of which entity is `ball` vs `brick`. `Collided.a` is always the `group_a` entity and `Collided.b` the `group_b` entity.
 
 **Timing and cost:**
 
-- The callback runs **every sim tick** while the two boxes overlap (240 times a second at the default `[simulation] hz`). There are no enter/exit events. To react once, remember the pair yourself (a flag, a `Signals` entry, or despawning one side, as the example below does).
-- Only **one rule** runs per overlapping pair. If several rules cover the same two groups, the one on the lowest `Entity` wins and the others never fire for that pair.
+- `Collided` fires **every sim tick** while the two boxes overlap (240 times a second at the default `[simulation] hz`). There are no enter/exit events. To react once, remember the pair yourself (a flag, a `Signals` entry, or despawning one side, as the example below does).
+- Only **one rule** fires per overlapping pair. If several rules cover the same two groups, the one on the lowest `Entity` wins and the others never fire for that pair.
 - `collision_detector` tests **every pair** of entities with `MapPosition` + `BoxCollider` (O(n²)), whether or not any rule names their groups. Keep the number of colliders small; give a `BoxCollider` only to entities that need one.
 
 **Creating a collision rule:**
@@ -1745,35 +1740,34 @@ type CollisionCallback = fn(Entity, Entity, &BoxSides, &BoxSides, &mut GameCtx);
 ```rust
 use aberredengine::prelude::*;
 
-ctx.commands.spawn((
-    CollisionRule::rust("ball", "brick", ball_brick_collision),
-    Persistent, // survive scene switches
-));
+commands
+    .spawn((
+        CollisionRule::new("ball", "brick"),
+        Persistent, // survive scene switches
+    ))
+    .observe(ball_brick_collision);
 ```
 
-> **Note:** Use `CollisionRule::rust(group_a, group_b, callback)` for Rust callbacks. `CollisionRule<C>` is generic — `CollisionRule::rust()` forces the parameter to the concrete `CollisionCallback` fn-pointer type that `Query<&CollisionRule>` expects. If you use the generic `CollisionRule::new()` with a plain function reference, Rust infers a unique function-item type that the query can never match, and the callback silently never fires.
+> **Note:** `CollisionRule` entities are regular entities — they get despawned on scene switch unless marked `Persistent`. An observer added with `.observe()` lives on its own entity and is despawned with the rule.
 
-> **Note:** `CollisionRule` entities are regular entities — they get despawned on scene switch unless marked `Persistent`.
-
-**Example callback — ball/brick collision with side-based reflection:**
+**Example observer — ball/brick collision with side-based reflection:**
 
 ```rust
 use aberredengine::prelude::*;
 
 fn ball_brick_collision(
-    ball: Entity,
-    brick: Entity,
-    ball_sides: &BoxSides,
-    _brick_sides: &BoxSides,
-    ctx: &mut GameCtx,
+    hit: On<Collided>,
+    mut commands: Commands,
+    mut rigid_bodies: Query<&mut RigidBody>,
+    mut audio: MessageWriter<AudioCmd>,
 ) {
     // Despawn the brick
-    ctx.commands.entity(brick).despawn();
-    ctx.audio.write(AudioCmd::PlayFx { id: "break".into() });
+    commands.entity(hit.b).despawn();
+    audio.write(AudioCmd::PlayFx { id: "break".into() });
 
     // Reflect ball velocity based on collision side
-    if let Ok(mut rb) = ctx.rigid_bodies.get_mut(ball) {
-        for side in ball_sides.iter() {
+    if let Ok(mut rb) = rigid_bodies.get_mut(hit.a) {
+        for side in hit.sides_a.iter() {
             match side {
                 BoxSide::Top | BoxSide::Bottom => rb.velocity.y = -rb.velocity.y,
                 BoxSide::Left | BoxSide::Right => rb.velocity.x = -rb.velocity.x,

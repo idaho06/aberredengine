@@ -41,18 +41,8 @@ pub fn rebuild_rule_index<T: RuleGroups>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::components::collision::CollisionCallback;
     use crate::components::collision::CollisionRule;
     use crate::resources::collision_rule_index::CollisionRuleIndex;
-
-    fn dummy_callback(
-        _a: Entity,
-        _b: Entity,
-        _sa: &crate::components::collision::BoxSides,
-        _sb: &crate::components::collision::BoxSides,
-        _ctx: &mut crate::systems::GameCtx,
-    ) {
-    }
 
     fn build_world_with_rules() -> World {
         let mut world = World::new();
@@ -69,13 +59,7 @@ mod tests {
     #[test]
     fn rebuild_populates_bucket_for_matching_pair_both_orders() {
         let mut world = build_world_with_rules();
-        let e = world
-            .spawn(CollisionRule::rust(
-                "ball",
-                "brick",
-                dummy_callback as CollisionCallback,
-            ))
-            .id();
+        let e = world.spawn(CollisionRule::new("ball", "brick")).id();
         world.flush();
         run_rebuild(&mut world);
 
@@ -87,13 +71,7 @@ mod tests {
     #[test]
     fn rebuild_after_removal_empties_bucket() {
         let mut world = build_world_with_rules();
-        let e = world
-            .spawn(CollisionRule::rust(
-                "ball",
-                "brick",
-                dummy_callback as CollisionCallback,
-            ))
-            .id();
+        let e = world.spawn(CollisionRule::new("ball", "brick")).id();
         world.flush();
         run_rebuild(&mut world);
         assert!(
@@ -118,20 +96,8 @@ mod tests {
     fn rebuild_sorts_bucket_by_entity() {
         let mut world = build_world_with_rules();
         // Spawn in descending id order so an unsorted bucket would fail.
-        let e2 = world
-            .spawn(CollisionRule::rust(
-                "a",
-                "b",
-                dummy_callback as CollisionCallback,
-            ))
-            .id();
-        let e1 = world
-            .spawn(CollisionRule::rust(
-                "a",
-                "b",
-                dummy_callback as CollisionCallback,
-            ))
-            .id();
+        let e2 = world.spawn(CollisionRule::new("a", "b")).id();
+        let e1 = world.spawn(CollisionRule::new("a", "b")).id();
         world.flush();
         run_rebuild(&mut world);
 

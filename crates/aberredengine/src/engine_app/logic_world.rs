@@ -53,11 +53,11 @@ use aberred_core::resources::thread_stats::{AudioStats, SimStats};
 use aberred_core::resources::windowsize::WindowSize;
 use aberred_core::resources::worldsignals::WorldSignals;
 use aberred_core::resources::worldtime::WorldTime;
+use aberred_core::systems::collision_rule::collision_rule_observer;
 use aberred_core::systems::gamestate::{clean_all_entities, quit_game};
 use aberred_core::systems::menu::{
     menu_controller_observer, menu_despawn, menu_selection_observer,
 };
-use aberred_core::systems::rust_collision::rust_collision_observer;
 use aberred_core::systems::scene_dispatch::{
     insert_scene_manager, scene_enter_loading, scene_enter_play, scene_switch_system,
 };
@@ -326,7 +326,7 @@ impl EngineBuilder {
         if has_lua {
             world.spawn((Observer::new(lua_collision_observer), Persistent));
         }
-        world.spawn((Observer::new(rust_collision_observer), Persistent));
+        world.spawn((Observer::new(collision_rule_observer), Persistent));
         world.spawn((Observer::new(switch_debug_observer), Persistent));
         // switch_fullscreen_observer is NOT here: it lives in the RENDER
         // world — F10 toggles the window, which only exists there.
