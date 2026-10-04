@@ -1287,3 +1287,34 @@ fn lua_game_indexes_lua_collision_rules() {
     let index = tw.world.resource::<LuaCollisionRuleIndex>();
     assert_eq!(index.bucket("brick", "ball"), Some(&[rule][..]));
 }
+
+/// A map entity's `lua_setup` names a Lua function, so a Rust-only game (no
+/// `.with_lua()`, whatever the `lua` feature) spawns it without `LuaSetup`.
+#[cfg(feature = "lua")]
+#[test]
+fn rust_only_game_spawns_map_entities_without_lua_components() {
+    use aberredengine::core::events::spawnmap::SpawnMapRequested;
+    use aberredengine::core::resources::mapdata::{EntityDef, MapData};
+    use aberredengine::lua::components::luasetup::LuaSetup;
+
+    let mut tw = TestWorld::new();
+    tw.tick_to_play(DT, 8);
+    tw.world.trigger(SpawnMapRequested {
+        map: MapData {
+            entities: vec![EntityDef {
+                registered_as: Some("thing".into()),
+                lua_setup: Some("setup_fn".into()),
+                ..Default::default()
+            }],
+            ..Default::default()
+        },
+    });
+    tw.world.flush();
+
+    let thing = tw
+        .world
+        .resource::<WorldSignals>()
+        .get_entity("thing")
+        .unwrap();
+    assert!(tw.world.get::<LuaSetup>(thing).is_none());
+}

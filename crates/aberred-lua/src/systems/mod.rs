@@ -1,10 +1,9 @@
 //! Lua-callback systems, observers, and command dispatch.
 //!
 //! See the crate root doc comment for the sim/logic-world boundary this
-//! crate sits at. `lua_mapspawn` is the Lua-priority body the facade's
-//! `mapspawn` shadow module re-exports under `#[cfg(feature = "lua")]`.
-//! When the game runs a Lua script, `lua_menu`'s observer runs alongside
-//! core's `menu_selection_observer`.
+//! crate sits at. When the game runs a Lua script, `lua_mapspawn`'s observer
+//! runs after core's `spawn_map_observer`, and `lua_menu`'s observer runs
+//! alongside core's `menu_selection_observer`.
 //! `lua_gui_interactable_click`'s observer calls a clicked widget's Lua
 //! callback.
 

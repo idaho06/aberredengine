@@ -1,65 +1,38 @@
 //! Lua-only map-spawning glue.
 //!
-//! [`aberred_core::systems::mapspawn::spawn_map`] cannot attach
-//! `LuaSetup`/`LuaOnAnimationEnd` itself -- those component types are
-//! Lua-only and `aberred-core` cannot name them. This module's
-//! `spawn_map_observer` wraps core's `spawn_map`, zipping its returned
-//! entities against `MapData::entities` to attach them. Re-exported by
-//! the facade's `systems::mapspawn` under `#[cfg(feature = "lua")]`.
-//! `process_lua_map_commands` -- draining `engine.load_map()` queue entries
-//! into `SpawnMapRequested` triggers -- lives here entirely, since it needs
-//! `LuaRuntime`.
+//! [`lua_map_spawned_observer`] attaches `LuaSetup`/`LuaOnAnimationEnd` to
+//! the entities core's `spawn_map` spawned, from each entity
+//! definition's `lua_setup`/`on_animation_end`. It is registered only when the
+//! game runs a Lua script. `process_lua_map_commands` drains
+//! `engine.load_map()` queue entries into `SpawnMapRequested` triggers.
 
 use crate::components::lua_on_animation_end::LuaOnAnimationEnd;
 use crate::components::luasetup::LuaSetup;
 use crate::resources::lua_runtime::{LuaRuntime, MapLuaCmd};
-use aberred_core::events::spawnmap::SpawnMapRequested;
-use aberred_core::protocol::render_assets::RenderAssetCmd;
-use aberred_core::resources::animationstore::AnimationStore;
+use aberred_core::events::spawnmap::{MapSpawned, SpawnMapRequested};
 use aberred_core::resources::mapdata::load_map;
-use aberred_core::resources::worldsignals::WorldSignals;
-use aberred_core::systems::mapspawn::spawn_map;
 use bevy_ecs::prelude::*;
 
-/// Bevy observer registered by the engine. Fires on `SpawnMapRequested` and
-/// delegates to core's `spawn_map`, then attaches the Lua-only per-entity
-/// components core couldn't.
-#[allow(clippy::too_many_arguments)]
-pub fn spawn_map_observer(
-    trigger: On<SpawnMapRequested>,
-    mut commands: Commands,
-    mut animation_store: ResMut<AnimationStore>,
-    mut world_signals: ResMut<WorldSignals>,
-    mut render_asset_cmd_writer: MessageWriter<RenderAssetCmd>,
-) {
-    let mut render_asset_cmds = Vec::new();
-    let map = &trigger.event().map;
-    let entities = spawn_map(
-        &mut commands,
-        &mut animation_store,
-        map,
-        &mut world_signals,
-        &mut render_asset_cmds,
-    );
-    for (entity, def) in entities.iter().zip(map.entities.iter()) {
-        let mut ec = commands.entity(*entity);
-        if let Some(ref callback) = def.lua_setup {
+/// Attaches the Lua callback components named by each spawned map entity's
+/// definition.
+pub fn lua_map_spawned_observer(trigger: On<MapSpawned>, mut commands: Commands) {
+    let MapSpawned { map, spawned } = trigger.event();
+    for (&entity, def) in spawned.iter().zip(&map.entities) {
+        let mut ec = commands.entity(entity);
+        if let Some(callback) = &def.lua_setup {
             ec.insert(LuaSetup::new(callback.as_str()));
         }
-        if let Some(ref callback) = def.on_animation_end {
+        if let Some(callback) = &def.on_animation_end {
             ec.insert(LuaOnAnimationEnd::new(callback.as_str()));
         }
-    }
-    for cmd in render_asset_cmds {
-        render_asset_cmd_writer.write(cmd);
     }
 }
 
 /// Drains `engine.load_map()` commands queued by Lua and fires
-/// `SpawnMapRequested` for each, letting `spawn_map_observer` handle the
-/// Raylib-dependent asset loading and entity spawning.
+/// `SpawnMapRequested` for each, letting core's `spawn_map_observer` queue the
+/// asset loads and spawn the entities.
 ///
-/// Registered by the facade's `EngineBuilder::with_lua`. Runs on the
+/// Registered only when the game runs a Lua script. Runs on the
 /// sim schedule's `SimSet::Bookkeeping`, so a map load queued from
 /// `on_update_<scene>`/phase/timer/collision callbacks is picked up the same
 /// tick it's queued.
@@ -76,5 +49,49 @@ pub fn process_lua_map_commands(
                 Err(e) => log::error!("engine.load_map: failed to read '{path}': {e}"),
             },
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use aberred_core::resources::mapdata::{EntityDef, MapData};
+
+    #[test]
+    fn map_spawned_attaches_lua_components_by_entity_def() {
+        let mut world = World::new();
+        world.add_observer(lua_map_spawned_observer);
+        let with_callbacks = world.spawn_empty().id();
+        let plain = world.spawn_empty().id();
+
+        world.trigger(MapSpawned {
+            map: MapData {
+                entities: vec![
+                    EntityDef {
+                        lua_setup: Some("setup_fn".into()),
+                        on_animation_end: Some("anim_done".into()),
+                        ..Default::default()
+                    },
+                    EntityDef::default(),
+                ],
+                ..Default::default()
+            },
+            spawned: vec![with_callbacks, plain],
+        });
+        world.flush();
+
+        assert_eq!(
+            &*world.get::<LuaSetup>(with_callbacks).unwrap().callback,
+            "setup_fn"
+        );
+        assert_eq!(
+            &*world
+                .get::<LuaOnAnimationEnd>(with_callbacks)
+                .unwrap()
+                .callback,
+            "anim_done"
+        );
+        assert!(world.get::<LuaSetup>(plain).is_none());
+        assert!(world.get::<LuaOnAnimationEnd>(plain).is_none());
     }
 }

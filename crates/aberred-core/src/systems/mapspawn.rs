@@ -26,7 +26,7 @@ use crate::components::sprite::Sprite;
 use crate::components::tilemap::TileMap;
 use crate::components::tint::Tint;
 use crate::components::zindex::ZIndex;
-use crate::events::spawnmap::SpawnMapRequested;
+use crate::events::spawnmap::{MapSpawned, SpawnMapRequested};
 use crate::math::Color;
 use crate::protocol::render_assets::RenderAssetCmd;
 use crate::resources::animationstore::{AnimationResource, AnimationStore};
@@ -36,8 +36,9 @@ use crate::resources::mapdata::{
 use crate::resources::texturefilter::TextureFilter;
 use crate::resources::worldsignals::WorldSignals;
 
-/// Load all assets referenced by `map` into the engine stores, then spawn
-/// entities. Called by [`spawn_map_observer`]; can also be called directly.
+/// Load all assets referenced by `map` into the engine stores, spawn its
+/// entities, then trigger [`MapSpawned`] with them. Called by
+/// [`spawn_map_observer`]; can also be called directly.
 ///
 /// GL asset loads are not performed here — instead the
 /// texture/font entries are translated into [`RenderAssetCmd`]s appended to
@@ -46,14 +47,12 @@ use crate::resources::worldsignals::WorldSignals;
 /// `spawn_map` callable from contexts with no live GL access (e.g. tests).
 ///
 /// Returns exactly one entity per `map.entities` entry, in the same order
-/// (never skipped, never reordered) -- callers zip the result 1:1 against
-/// `map.entities` by index (e.g. the facade's `spawn_map_observer`, which
-/// attaches the Lua-gated `LuaSetup`/`LuaOnAnimationEnd` components
-/// `aberred-core` cannot name). Any future change that makes this function
-/// skip a malformed `EntityDef` instead of always spawning one entity for it
-/// would silently break that zip -- see this file's own
-/// `spawn_map_queues_render_asset_cmds_and_spawns_entities` test, which
-/// asserts the length invariant directly.
+/// (never skipped, never reordered), and `MapSpawned::spawned` carries the
+/// same list: observers zip it 1:1 against `map.entities` by index (e.g.
+/// `aberred-lua`'s, which attaches `LuaSetup`/`LuaOnAnimationEnd`). Skipping
+/// a malformed `EntityDef` instead of spawning one entity for it would break
+/// that zip; `spawn_map_queues_render_asset_cmds_and_spawns_entities` asserts
+/// the length invariant.
 #[allow(clippy::too_many_arguments)]
 pub fn spawn_map(
     commands: &mut Commands,
@@ -120,7 +119,12 @@ pub fn spawn_map(
         }
     }
 
-    spawned.into_iter().map(|(entity, _)| entity).collect()
+    let spawned: Vec<Entity> = spawned.into_iter().map(|(entity, _)| entity).collect();
+    commands.trigger(MapSpawned {
+        map: map.clone(),
+        spawned: spawned.clone(),
+    });
+    spawned
 }
 
 fn spawn_entity(commands: &mut Commands, def: &EntityDef) -> Entity {
@@ -208,11 +212,8 @@ fn spawn_entity(commands: &mut Commands, def: &EntityDef) -> Entity {
     if let Some([r, g, b, a]) = def.tint {
         ec.insert(Tint::new(r, g, b, a));
     }
-    // `def.lua_setup`/`def.on_animation_end` are handled by the facade's own
-    // `spawn_map_observer` (under `#[cfg(feature = "lua")]`), which zips
-    // `spawn_map`'s returned entities against `map.entities` to attach
-    // `LuaSetup`/`LuaOnAnimationEnd` -- `aberred-core` cannot name those
-    // Lua-only component types.
+    // `def.lua_setup`/`def.on_animation_end` name Lua functions: in a Lua
+    // game, `aberred-lua`'s `MapSpawned` observer attaches them.
     if let Some(ref key) = def.animation_key {
         ec.insert(Animation {
             animation_key: key.clone(),
@@ -291,8 +292,8 @@ fn insert_particle_emitter(
 }
 
 /// Bevy observer registered by the engine. Fires on
-/// [`SpawnMapRequested`] and delegates to [`spawn_map`].
-#[allow(clippy::too_many_arguments)]
+/// [`SpawnMapRequested`], delegates to [`spawn_map`] (which triggers
+/// [`MapSpawned`]) and forwards its render asset commands.
 pub fn spawn_map_observer(
     trigger: On<SpawnMapRequested>,
     mut commands: Commands,
@@ -301,7 +302,7 @@ pub fn spawn_map_observer(
     mut render_asset_cmd_writer: MessageWriter<RenderAssetCmd>,
 ) {
     let mut render_asset_cmds = Vec::new();
-    let _entities = spawn_map(
+    spawn_map(
         &mut commands,
         &mut animation_store,
         &trigger.event().map,
@@ -641,15 +642,21 @@ mod tests {
         ));
     }
 
+    /// A world with `spawn_map_observer` and the resources it reads.
+    fn observer_world() -> World {
+        let mut world = World::new();
+        world.init_resource::<AnimationStore>();
+        world.init_resource::<WorldSignals>();
+        world.init_resource::<bevy_ecs::message::Messages<RenderAssetCmd>>();
+        world.add_observer(spawn_map_observer);
+        world
+    }
+
     #[test]
     fn spawn_map_observer_spawns_and_forwards_render_asset_cmds() {
         use crate::resources::mapdata::TextureEntry;
         use bevy_ecs::message::Messages;
-        let mut world = World::new();
-        world.init_resource::<AnimationStore>();
-        world.init_resource::<WorldSignals>();
-        world.init_resource::<Messages<RenderAssetCmd>>();
-        world.add_observer(spawn_map_observer);
+        let mut world = observer_world();
 
         world.trigger(SpawnMapRequested {
             map: MapData {
@@ -684,5 +691,37 @@ mod tests {
             world.get::<MapPosition>(thing).unwrap().pos,
             Vec2::new(4.0, 5.0)
         );
+    }
+
+    #[derive(Resource, Default)]
+    struct Spawned(Vec<Entity>);
+
+    #[test]
+    fn spawn_map_observer_triggers_map_spawned_with_entities_in_map_order() {
+        let mut world = observer_world();
+        world.init_resource::<Spawned>();
+        world.add_observer(|ev: On<MapSpawned>, mut spawned: ResMut<Spawned>| {
+            assert_eq!(ev.map.entities.len(), ev.spawned.len());
+            spawned.0.extend(&ev.spawned);
+        });
+
+        let def = |key: &str| EntityDef {
+            registered_as: Some(key.into()),
+            ..Default::default()
+        };
+        world.trigger(SpawnMapRequested {
+            map: MapData {
+                entities: vec![def("first"), def("second")],
+                ..Default::default()
+            },
+        });
+        world.flush();
+
+        let signals = world.resource::<WorldSignals>();
+        let expected = [
+            signals.get_entity("first").unwrap(),
+            signals.get_entity("second").unwrap(),
+        ];
+        assert_eq!(world.resource::<Spawned>().0, expected);
     }
 }

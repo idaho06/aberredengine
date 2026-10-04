@@ -16,11 +16,8 @@
 //! direction confines macro-based codegen to this crate; core, render, and
 //! audio use generic functions instead.
 //!
-//! The facade crate (`aberredengine`) keeps one small Lua-priority "shadow"
-//! module of its own (`systems::mapspawn`) that calls into this crate's
-//! `systems::lua_mapspawn` -- that file never moved here, since it also
-//! needs to resolve to a Rust-only variant when the `lua` feature is off,
-//! which this crate (Lua-only by construction) cannot express.
+//! Every Lua system and observer here runs on top of core's, never instead
+//! of it: the facade registers them only when the game runs a Lua script.
 
 pub mod components;
 pub mod events;

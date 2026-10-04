@@ -5,7 +5,8 @@
 //! asset stores and spawn all entities defined in the map.
 //!
 //! The built-in [`crate::systems::mapspawn::spawn_map_observer`] handles this
-//! event automatically — no manual registration needed for standard usage.
+//! event automatically; no manual registration is needed. Once the map's
+//! entities are spawned, the engine triggers [`MapSpawned`] with them.
 //!
 //! # Example
 //!
@@ -19,7 +20,7 @@
 //! # }
 //! ```
 
-use bevy_ecs::prelude::Event;
+use bevy_ecs::prelude::{Entity, Event};
 
 use crate::resources::mapdata::MapData;
 
@@ -28,4 +29,17 @@ use crate::resources::mapdata::MapData;
 #[derive(Event)]
 pub struct SpawnMapRequested {
     pub map: MapData,
+}
+
+/// Triggered by [`spawn_map`](crate::systems::mapspawn::spawn_map) after it
+/// spawns a map's entities (including for every [`SpawnMapRequested`]).
+///
+/// `spawned[i]` is the entity spawned for `map.entities[i]`, so an observer
+/// can attach components from each entity definition.
+#[derive(Event, Clone, Debug)]
+pub struct MapSpawned {
+    /// The spawned map.
+    pub map: MapData,
+    /// One entity per `map.entities` entry, in the same order.
+    pub spawned: Vec<Entity>,
 }

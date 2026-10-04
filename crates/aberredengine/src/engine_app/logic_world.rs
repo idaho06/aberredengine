@@ -4,7 +4,6 @@ use bevy_ecs::prelude::*;
 use super::builder::EngineBuilder;
 use super::logic_thread::LogicInit;
 use super::registrar::ObserverRegistrar;
-use crate::systems::mapspawn::spawn_map_observer;
 use aberred_audio::systems::setup_audio;
 #[cfg(feature = "lua")]
 use aberred_core::components::mapposition::MapPosition;
@@ -55,6 +54,7 @@ use aberred_core::resources::worldsignals::WorldSignals;
 use aberred_core::resources::worldtime::WorldTime;
 use aberred_core::systems::collision_rule::collision_rule_observer;
 use aberred_core::systems::gamestate::{clean_all_entities, quit_game};
+use aberred_core::systems::mapspawn::spawn_map_observer;
 use aberred_core::systems::menu::{
     menu_controller_observer, menu_despawn, menu_selection_observer,
 };
@@ -72,6 +72,8 @@ use aberred_lua::systems::lua_animation_finished::lua_animation_finished_observe
 use aberred_lua::systems::lua_collision::lua_collision_observer;
 #[cfg(feature = "lua")]
 use aberred_lua::systems::lua_gui_interactable_click::lua_gui_interactable_click_observer;
+#[cfg(feature = "lua")]
+use aberred_lua::systems::lua_mapspawn::lua_map_spawned_observer;
 #[cfg(feature = "lua")]
 use aberred_lua::systems::lua_menu::lua_menu_selection_observer;
 #[cfg(feature = "lua")]
@@ -341,6 +343,7 @@ impl EngineBuilder {
                 Persistent,
             ));
             world.spawn((Observer::new(lua_animation_finished_observer), Persistent));
+            world.spawn((Observer::new(lua_map_spawned_observer), Persistent));
 
             fn spawn_tween_finished_observer<T: aberred_core::components::tween::TweenValue>(
                 world: &mut World,
