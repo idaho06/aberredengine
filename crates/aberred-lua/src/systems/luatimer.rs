@@ -10,7 +10,8 @@
 //! Each sim tick:
 //!
 //! 1. `update_lua_timers` accumulates delta time on all LuaTimer components
-//! 2. When `elapsed >= duration`, emits `LuaTimerEvent` and resets timer
+//! 2. When `elapsed >= duration`, emits `LuaTimerEvent`, then resets the timer
+//!    (repeating) or removes it (one-shot)
 //! 3. `lua_timer_observer` receives events and calls the named Lua function
 //! 4. Lua callback executes with full engine API access
 //! 5. Commands queued by Lua are processed (spawns, audio, signals, entity ops)

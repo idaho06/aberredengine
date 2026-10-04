@@ -2,7 +2,8 @@
 //!
 //! The [`LuaTimer`] component counts elapsed time each sim tick. When the
 //! accumulated time exceeds `duration`, a [`LuaTimerEvent`](crate::events::luatimer::LuaTimerEvent)
-//! is triggered on the entity, and the timer resets by subtracting the duration.
+//! is triggered on the entity; the timer then resets by subtracting the duration
+//! (repeating) or removes itself (one-shot).
 //!
 //! # How It Works
 //!

@@ -2476,12 +2476,26 @@ end
 
 **Features:**
 
-- Timer automatically repeats every `duration` seconds
+- Timer automatically repeats every `duration` seconds (use `:with_lua_timer_once()` to fire once)
 - Timer reset subtracts the duration instead of zeroing elapsed time, which preserves cadence if a frame runs long
 - Timer callbacks receive `ctx` and `input`, and can queue phase, audio, signal, spawn, clone, entity, and camera commands
 - Can be added at spawn-time with `:with_lua_timer()` or at runtime with `engine.entity_insert_lua_timer()`
 
 **See also:** `engine.entity_insert_lua_timer()` in the [Entity Commands](#entity-commands) section.
+
+#### `:with_lua_timer_once(duration, callback)`
+
+Add a one-shot LuaTimer: it calls the Lua function once after `duration` seconds, then removes itself. The entity stays. Same parameters and callback signature as `:with_lua_timer()`.
+
+```lua
+engine.spawn()
+    :with_position(100, 100)
+    :with_sprite("bomb", 16, 16, 8, 8)
+    :with_lua_timer_once(3.0, "bomb_explode")
+    :build()
+```
+
+A callback that inserts a new timer on its own entity keeps it, so one-shots can chain. A zero-duration one-shot fires on the next tick.
 
 #### `:with_ttl(seconds)`
 
@@ -3105,14 +3119,29 @@ Insert LuaTimer component on entity at runtime.
 **Example:**
 
 ```lua
+-- In a phase callback (regular context): shoot every 2 seconds
+function turret_active_enter(ctx, input)
+    engine.entity_insert_lua_timer(ctx.id, 2.0, "turret_shoot")
+end
+```
+
+**Note:** The timer repeats every `duration` seconds until the component is removed or the entity is despawned. For a timer that fires once, use `engine.entity_insert_lua_timer_once()`.
+
+### `engine.entity_insert_lua_timer_once(entity_id, duration, callback)`
+
+Insert a one-shot LuaTimer: it fires once after `duration` seconds, then removes itself (the entity stays). Same parameters as `engine.entity_insert_lua_timer()`.
+
+**Example:**
+
+```lua
 -- In a phase callback (regular context)
 function player_hit_enter(ctx, input)
     -- Give player 10 seconds of invulnerability
     engine.entity_signal_set_flag(ctx.id, "invulnerable")
-    engine.entity_insert_lua_timer(ctx.id, 10.0, "remove_invulnerability")
+    engine.entity_insert_lua_timer_once(ctx.id, 10.0, "remove_invulnerability")
 end
 
--- Timer callback
+-- Timer callback: runs once
 function remove_invulnerability(ctx, input)
     engine.entity_signal_clear_flag(ctx.id, "invulnerable")
     engine.play_sound("powerup_end")
@@ -3120,7 +3149,7 @@ function remove_invulnerability(ctx, input)
 end
 ```
 
-**Note:** The timer automatically repeats every `duration` seconds until the component is removed or the entity is despawned.
+A callback that inserts a new timer on its own entity keeps it, so one-shots can chain. A zero-duration one-shot fires on the next tick.
 
 ### `engine.entity_remove_lua_timer(entity_id)`
 
@@ -3133,12 +3162,8 @@ Remove LuaTimer component from an entity to stop the timer.
 **Example:**
 
 ```lua
--- One-shot timer that removes itself after firing
-function on_timer_title_test(ctx, input)
-    engine.log_info("Timer fired once!")
-    engine.play_sound("beep")
-
-    -- Remove timer so it doesn't repeat
+-- Stop a repeating timer when the turret is disabled
+function turret_disabled_enter(ctx, input)
     engine.entity_remove_lua_timer(ctx.id)
 end
 ```
@@ -3563,13 +3588,12 @@ function player_jump(player_id)
     engine.entity_set_force_enabled(player_id, "jump", true)
 
     -- Schedule re-enabling gravity after 0.1 seconds
-    engine.entity_insert_lua_timer(player_id, 0.1, "restore_gravity")
+    engine.entity_insert_lua_timer_once(player_id, 0.1, "restore_gravity")
 end
 
 function restore_gravity(ctx, input)
     engine.entity_set_force_enabled(ctx.id, "gravity", true)
     engine.entity_set_force_enabled(ctx.id, "jump", false)
-    engine.entity_remove_lua_timer(ctx.id)
 end
 
 function player_move(player_id, direction)
@@ -3836,7 +3860,7 @@ function on_ball_brick(ctx)
         :with_sprite("particle", 8, 8, 4, 4)
         :with_group("particles")
         :with_velocity(0, -50)
-        :with_lua_timer(0.5, "despawn_particle")
+        :with_lua_timer_once(0.5, "despawn_particle")
         :build()
 
     engine.collision_entity_despawn(ctx.b.id)
@@ -3845,7 +3869,6 @@ end
 function despawn_particle(ctx, input)
     -- Timer callbacks receive (ctx, input) - use ctx.id for the entity
     engine.entity_despawn(ctx.id)
-    engine.entity_remove_lua_timer(ctx.id)
 end
 ```
 
@@ -4247,10 +4270,14 @@ Insert a LuaTimer component on an entity during collision handling.
 function on_player_powerup(ctx)
     local player_id = ctx.a.id
     engine.collision_entity_signal_set_flag(player_id, "powered_up")
-    engine.collision_entity_insert_lua_timer(player_id, 10.0, "remove_powerup")
+    engine.collision_entity_insert_lua_timer_once(player_id, 10.0, "remove_powerup")
     engine.collision_entity_despawn(ctx.b.id)
 end
 ```
+
+#### `engine.collision_entity_insert_lua_timer_once(entity_id, duration, callback)`
+
+Insert a one-shot LuaTimer during collision handling; it fires once, then removes itself. Same parameters as `engine.collision_entity_insert_lua_timer()`.
 
 #### `engine.collision_entity_remove_lua_timer(entity_id)`
 
@@ -5532,7 +5559,7 @@ function on_player_hit(ctx)
     engine.collision_entity_set_tint(ctx.a.id, 255, 0, 0, 255)
 
     -- Could also set a timer to remove the tint later
-    engine.collision_entity_insert_lua_timer(ctx.a.id, 0.1, "clear_damage_flash")
+    engine.collision_entity_insert_lua_timer_once(ctx.a.id, 0.1, "clear_damage_flash")
 end
 
 function clear_damage_flash(ctx)
@@ -5564,7 +5591,7 @@ Available collision variants:
 -- In collision callback
 function on_enemy_hit(ctx)
     engine.collision_entity_set_tint(ctx.b.id, 255, 50, 50, 255)
-    engine.collision_entity_insert_lua_timer(ctx.b.id, 0.15, "clear_tint")
+    engine.collision_entity_insert_lua_timer_once(ctx.b.id, 0.15, "clear_tint")
 end
 
 function clear_tint(ctx)

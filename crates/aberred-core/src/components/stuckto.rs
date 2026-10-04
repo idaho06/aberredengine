@@ -24,11 +24,11 @@
 //! # use aberred_core::components::timer::Timer;
 //! # use aberred_core::math::Vec2;
 //! # use aberred_core::events::timer::TimerFired;
-//! // One global observer releases every stuck entity whose timer fires. Timers
-//! // repeat until removed, so it removes both components.
+//! // One global observer releases every stuck entity whose timer fires. The
+//! // one-shot timer removes itself.
 //! fn release_stuck(ev: On<TimerFired>, stuck: Query<(), With<StuckTo>>, mut commands: Commands) {
 //!     if stuck.contains(ev.entity) {
-//!         commands.entity(ev.entity).remove::<(StuckTo, Timer)>();
+//!         commands.entity(ev.entity).remove::<StuckTo>();
 //!     }
 //! }
 //!
@@ -41,7 +41,7 @@
 //!     StuckTo::follow_x_only(player_entity)
 //!         .with_offset(Vec2 { x: 0.0, y: -12.0 })
 //!         .with_stored_velocity(Vec2 { x: 300.0, y: -300.0 }),
-//!     Timer::new(2.0),
+//!     Timer::once(2.0),
 //! ));
 //! ```
 //!

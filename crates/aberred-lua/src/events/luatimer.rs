@@ -2,7 +2,7 @@
 //!
 //! When a [`LuaTimer`](crate::components::luatimer::LuaTimer) component reaches its
 //! duration, a [`LuaTimerEvent`] is triggered on the entity. The observer system
-//! calls the named Lua function with the entity ID as a parameter.
+//! calls the named Lua function as `(ctx, input)`.
 //!
 //! # Event Flow
 //!
@@ -15,8 +15,8 @@
 //! # Example Lua Callback
 //!
 //! ```lua
-//! function my_timer_callback(entity_id)
-//!     engine.log("Timer fired for entity: " .. tostring(entity_id))
+//! function my_timer_callback(ctx, input)
+//!     engine.log("Timer fired for entity: " .. tostring(ctx.id))
 //!     engine.play_sound("timer_beep")
 //!     -- Can spawn entities, modify components, etc.
 //! end
@@ -33,8 +33,8 @@ use bevy_ecs::prelude::*;
 /// Event emitted when a Lua timer expires.
 ///
 /// The `entity` field identifies the entity with the timer, and `callback`
-/// contains the Lua function name to invoke. The Lua function will be called
-/// with the entity ID as its parameter.
+/// contains the Lua function name to invoke. The Lua function is called as
+/// `(ctx, input)`.
 #[derive(Event, Debug, Clone)]
 pub struct LuaTimerEvent {
     /// The entity whose timer expired.
