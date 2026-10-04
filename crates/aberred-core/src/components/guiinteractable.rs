@@ -83,7 +83,7 @@ impl GuiInteractable {
     /// the typed parameter forces coercion from the function-item type to
     /// the `fn(...)` pointer type `Query<&GuiInteractable>` expects. Without
     /// the coercion the query silently matches nothing. Mirrors
-    /// `CollisionRule::rust`/`Timer::rust`.
+    /// `CollisionRule::rust`.
     pub fn rust(width: f32, height: f32, callback: GuiRustCallback) -> Self {
         Self {
             on_rust_callback: Some(callback),

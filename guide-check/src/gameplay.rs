@@ -3,38 +3,44 @@ mod timers {
 
     use aberredengine::prelude::*;
 
-    type TimerCallback = fn(Entity, &mut GameCtx, &InputState);
-
-    fn same_as_engine(f: TimerCallback) -> aberredengine::core::components::timer::TimerCallback { f } // GLUE
-
-    fn spawn_repeating(ctx: &mut GameCtx) { // GLUE
+    fn spawn_repeating(mut commands: Commands) { // GLUE
     use aberredengine::prelude::*;
 
-    // Spawn an entity with a 2-second repeating timer
-    ctx.commands.spawn((
-        MapPosition::new(0.0, 0.0),
-        Timer::rust(2.0, on_timer_fire),
-    ));
+    // Spawn an entity with a 2-second repeating timer and a per-entity observer
+    commands
+        .spawn((MapPosition::new(0.0, 0.0), Timer::new(2.0)))
+        .observe(on_timer_fired);
 
-    fn on_timer_fire(entity: Entity, ctx: &mut GameCtx, _input: &InputState) {
-        // This fires every 2 seconds
-        ctx.world_signals.set_string("timer_count", "fired!".to_string());
+    fn on_timer_fired(ev: On<TimerFired>, mut signals: ResMut<WorldSignals>) {
+        // This fires every 2 seconds; ev.entity is the timer's entity
+        signals.set_string("timer_count", "fired!".to_string());
     }
     } // GLUE
 
-    fn spawn_one_shot(ctx: &mut GameCtx) { // GLUE
-    ctx.commands.spawn((
-        MapPosition::new(0.0, 0.0),
-        Timer::rust(5.0, one_shot_callback),
-    ));
+    #[derive(Component)]
+    struct Spawner;
 
-    fn one_shot_callback(entity: Entity, ctx: &mut GameCtx, _input: &InputState) {
-        // Do the one-time action
-        ctx.audio.write(AudioCmd::PlayFx { id: "explosion".into() });
-        // Then despawn to prevent future fires
-        ctx.commands.entity(entity).despawn();
+    fn on_spawner_timer(
+        ev: On<TimerFired>,
+        spawners: Query<&MapPosition, With<Spawner>>,
+        mut commands: Commands,
+    ) {
+        let Ok(pos) = spawners.get(ev.entity) else { return };
+        commands.spawn(MapPosition::new(pos.pos.x, pos.pos.y));
     }
+
+    fn register(builder: EngineBuilder) -> EngineBuilder { // GLUE
+        builder.add_observer(on_spawner_timer) // GLUE
     } // GLUE
+
+    fn spawn_one_shot(mut commands: Commands) { // GLUE
+        commands.spawn(Timer::new(5.0)).observe(one_shot); // GLUE
+    } // GLUE
+
+    fn one_shot(ev: On<TimerFired>, mut commands: Commands, mut audio: MessageWriter<AudioCmd>) {
+        audio.write(AudioCmd::PlayFx { id: "explosion".into() });
+        commands.entity(ev.entity).remove::<Timer>();
+    }
 }
 
 // 7.2 Phase State Machines

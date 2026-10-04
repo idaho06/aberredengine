@@ -23,14 +23,17 @@
 //! # use aberred_core::components::stuckto::StuckTo;
 //! # use aberred_core::components::timer::Timer;
 //! # use aberred_core::math::Vec2;
-//! # use aberred_core::resources::input::InputState;
-//! # use aberred_core::systems::GameCtx;
-//! // Timers repeat until removed, so the callback removes both components.
-//! fn release_ball(ball: Entity, ctx: &mut GameCtx, _input: &InputState) {
-//!     ctx.commands.entity(ball).remove::<(StuckTo, Timer)>();
+//! # use aberred_core::events::timer::TimerFired;
+//! // One global observer releases every stuck entity whose timer fires. Timers
+//! // repeat until removed, so it removes both components.
+//! fn release_stuck(ev: On<TimerFired>, stuck: Query<(), With<StuckTo>>, mut commands: Commands) {
+//!     if stuck.contains(ev.entity) {
+//!         commands.entity(ev.entity).remove::<(StuckTo, Timer)>();
+//!     }
 //! }
 //!
 //! # let mut world = World::new();
+//! world.add_observer(release_stuck);
 //! # let player_entity = world.spawn_empty().id();
 //! # let ball = world.spawn_empty().id();
 //! // Attach ball to player, release after 2 seconds
@@ -38,7 +41,7 @@
 //!     StuckTo::follow_x_only(player_entity)
 //!         .with_offset(Vec2 { x: 0.0, y: -12.0 })
 //!         .with_stored_velocity(Vec2 { x: 300.0, y: -300.0 }),
-//!     Timer::rust(2.0, release_ball),
+//!     Timer::new(2.0),
 //! ));
 //! ```
 //!

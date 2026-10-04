@@ -658,11 +658,12 @@ fn golden_replay_rust_scene_matches_checked_in_trail() {
     // system in the deterministic single-threaded executor's per-tick
     // sequence changes this hash, even for a scenario (like this one) that
     // spawns no `CollisionRule` entity for that system to act on. It also
-    // hashes every `Entity::to_bits()`, and resources are entities, so
-    // inserting a new logic-world resource shifts later ids and changes it.
+    // hashes every `Entity::to_bits()`, and resources and engine-spawned
+    // observers are entities, so adding or removing either shifts later ids
+    // and changes it.
     // The scenario registers no scene, so it runs in the implicit "main"
     // scene: its SceneManager and scene entity are part of the hash too.
-    const GOLDEN_HASH: u64 = 0xff21_e9f4_ecce_6ca5;
+    const GOLDEN_HASH: u64 = 0x7b42_70b4_8c31_eda6;
     let actual = golden_scenario_final_hash(42);
     assert_eq!(
         actual, GOLDEN_HASH,

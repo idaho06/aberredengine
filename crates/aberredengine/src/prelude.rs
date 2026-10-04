@@ -50,6 +50,7 @@ pub use aberred_core::events::animation::AnimationFinishedEvent;
 pub use aberred_core::events::asset::{AssetLoadFailed, AssetLoaded};
 pub use aberred_core::events::input::InputAction;
 pub use aberred_core::events::scene::{SceneEntered, SceneExited};
+pub use aberred_core::events::timer::TimerFired;
 pub use aberred_core::events::tween::TweenFinishedEvent;
 
 pub use aberred_core::protocol::asset_kind::AssetKind;

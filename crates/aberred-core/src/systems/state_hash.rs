@@ -29,7 +29,7 @@ use crate::components::rotation::Rotation;
 use crate::components::scale::Scale;
 use crate::components::screenposition::ScreenPosition;
 use crate::components::signals::Signals;
-use crate::components::timer::{Timer, TimerCallback};
+use crate::components::timer::Timer;
 use crate::components::ttl::Ttl;
 use crate::components::tween::{Easing, LoopMode, Tween, TweenValue};
 use crate::protocol::replay::ReplayHasher;
@@ -209,7 +209,7 @@ pub fn hash_world_state(world: &World) -> u64 {
             h.write_str(&c.current);
             h.write_f32(c.time_in_phase);
         });
-        hash_optional(&mut h, e.get::<Timer<TimerCallback>>(), |h, c| {
+        hash_optional(&mut h, e.get::<Timer>(), |h, c| {
             h.write_f32(c.duration);
             h.write_f32(c.elapsed);
         });
@@ -272,13 +272,6 @@ mod tests {
         world
     }
 
-    fn noop_timer(
-        _: Entity,
-        _: &mut crate::systems::GameCtx,
-        _: &crate::resources::input::InputState,
-    ) {
-    }
-
     /// A world with one entity carrying every component `hash_world_state` hashes, plus
     /// populated WorldSignals, so each mutation below starts from the same full baseline.
     fn full_world() -> (World, Entity) {
@@ -304,7 +297,7 @@ mod tests {
                 BoxCollider::new(8.0, 8.0),
                 signals,
                 Phase::new("idle", phases),
-                Timer::rust(1.0, noop_timer),
+                Timer::new(1.0),
                 Ttl::new(5.0),
                 Animation::new("walk"),
                 GlobalTransform2D {
@@ -402,10 +395,10 @@ mod tests {
                     .time_in_phase = 0.5;
             }),
             ("Timer.duration", |w, e| {
-                w.get_mut::<Timer<TimerCallback>>(e).unwrap().duration = 2.0
+                w.get_mut::<Timer>(e).unwrap().duration = 2.0
             }),
             ("Timer.elapsed", |w, e| {
-                w.get_mut::<Timer<TimerCallback>>(e).unwrap().elapsed = 0.5
+                w.get_mut::<Timer>(e).unwrap().elapsed = 0.5
             }),
             ("Ttl", |w, e| w.get_mut::<Ttl>(e).unwrap().remaining = 4.0),
             ("Animation.key", |w, e| {

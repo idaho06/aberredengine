@@ -519,7 +519,7 @@ fn my_enter(_: On<SceneEntered>, mut commands: Commands) {
 }
 ```
 
-> You can also observe engine-defined events: `CollisionEvent`, `TimerEvent`, `InputEvent`, `GameStateChangedEvent`, `WindowResizedEvent`, etc. Note that not every engine type that crosses a system boundary is an `Event` — `AudioCmd` and `RenderAssetCmd`, for example, are Bevy `Message`s (`MessageWriter`/`MessageReader`, queue-based), a different mechanism from `Commands::trigger`/`.add_observer()`.
+> You can also observe engine-defined events: `CollisionEvent`, `TimerFired`, `InputEvent`, `GameStateChangedEvent`, `WindowResizedEvent`, etc. Note that not every engine type that crosses a system boundary is an `Event` — `AudioCmd` and `RenderAssetCmd`, for example, are Bevy `Message`s (`MessageWriter`/`MessageReader`, queue-based), a different mechanism from `Commands::trigger`/`.add_observer()`.
 
 #### Scene-scoped systems and observers
 
@@ -1298,7 +1298,7 @@ When `WorldSignals` has a value for key `"score"`, the text automatically update
 | `InputControlled` | `InputControlled::symmetric(speed)` (fields `up_velocity`, `down_velocity`, `left_velocity`, `right_velocity` for per-direction speeds) |
 | `AccelerationControlled` | `AccelerationControlled::symmetric(accel)` |
 | `MouseControlled` | `MouseControlled { follow_x: true, follow_y: true }` |
-| `Timer` | `Timer::rust(duration_secs, callback)` — use `::rust()` for Rust callbacks; see §7.1 |
+| `Timer` | `Timer::new(duration_secs)` — triggers `TimerFired` on its entity every `duration_secs`; see §7.1 |
 | `Phase` | `Phase::new("initial_phase", phases)` where `phases: FxHashMap<String, PhaseCallbackFns>` |
 | `CollisionRule` | `CollisionRule::rust("group_a", "group_b", callback)` — use `::rust()` for Rust callbacks; see §7.3 |
 | `Tween<MapPosition>` | `Tween::position(from: Vec2, to: Vec2, duration)` |
@@ -1568,56 +1568,54 @@ fn update(time: Res<WorldTime>, input: Res<InputState>) {
 
 ## 7. Gameplay Systems
 
-The engine provides several gameplay systems: **timers**, **phase state machines**, **collision rules**, **menus**, animation/tween-finished events, and GUI widgets. Each of the first four follows the same pattern: a **component** attached to an entity, a **callback type** (Rust function pointer), and a **context SystemParam** providing full ECS access.
+The engine provides several gameplay systems: **timers**, **phase state machines**, **collision rules**, **menus**, animation/tween-finished events, and GUI widgets. A timer is a data-only **component** that triggers an **event**, which you handle with an ordinary observer. Phases, collision rules and menus follow a callback pattern: a **component** attached to an entity, a **callback type** (Rust function pointer), and a **context SystemParam** providing full ECS access.
 
-All callback types — timers, phases, collisions and menus — receive `&mut GameCtx` (`aberred-core/src/systems/game_ctx.rs`), which provides commands, mutable/write queries, read-only queries, and key resources including `world_signals`, `app_state`, `audio`, `world_time`, `config`, `post_process`, `camera_follow`, `input_bindings`, and `sim_rng` (the RNG deterministic-mode games must draw from for anything that needs to reproduce — see [Determinism and replay](#determinism-and-replay)). `GameCtx` runs on the logic thread and has **no direct texture access** — if a callback needs texture data, load it via `RenderAssetCmd` and read back dimensions from `TextureDimsStore` (see [Section 4](#4-loading-assets)). Callbacks have full ECS access otherwise.
+The callback types — phases, collisions and menus — receive `&mut GameCtx` (`aberred-core/src/systems/game_ctx.rs`), which provides commands, mutable/write queries, read-only queries, and key resources including `world_signals`, `app_state`, `audio`, `world_time`, `config`, `post_process`, `camera_follow`, `input_bindings`, and `sim_rng` (the RNG deterministic-mode games must draw from for anything that needs to reproduce — see [Determinism and replay](#determinism-and-replay)). `GameCtx` runs on the logic thread and has **no direct texture access** — if a callback needs texture data, load it via `RenderAssetCmd` and read back dimensions from `TextureDimsStore` (see [Section 4](#4-loading-assets)). Callbacks have full ECS access otherwise.
 
 ### 7.1 Timers
 
-**Source:** `aberred-core/src/components/timer.rs`, `aberred-core/src/systems/timer.rs`
+**Source:** `aberred-core/src/components/timer.rs`, `aberred-core/src/systems/timer.rs`, `aberred-core/src/events/timer.rs`
 
-`Timer` is a repeating countdown component. When `elapsed >= duration`, it fires a `TimerEvent` and resets by subtracting `duration` (not zeroing) for timing accuracy.
-
-**Callback signature:**
-
-```rust
-use aberredengine::prelude::*;
-
-type TimerCallback = fn(Entity, &mut GameCtx, &InputState);
-```
+`Timer` is a repeating countdown component. When `elapsed >= duration`, it triggers a `TimerFired` event on its entity and resets by subtracting `duration` (not zeroing) for timing accuracy. It fires at most once per sim tick.
 
 **Creating a timer:**
 
 ```rust
 use aberredengine::prelude::*;
 
-// Spawn an entity with a 2-second repeating timer
-ctx.commands.spawn((
-    MapPosition::new(0.0, 0.0),
-    Timer::rust(2.0, on_timer_fire),
-));
+// Spawn an entity with a 2-second repeating timer and a per-entity observer
+commands
+    .spawn((MapPosition::new(0.0, 0.0), Timer::new(2.0)))
+    .observe(on_timer_fired);
 
-fn on_timer_fire(entity: Entity, ctx: &mut GameCtx, _input: &InputState) {
-    // This fires every 2 seconds
-    ctx.world_signals.set_string("timer_count", "fired!".to_string());
+fn on_timer_fired(ev: On<TimerFired>, mut signals: ResMut<WorldSignals>) {
+    // This fires every 2 seconds; ev.entity is the timer's entity
+    signals.set_string("timer_count", "fired!".to_string());
 }
 ```
 
-> **Note:** Use `Timer::rust(duration, callback)` for Rust callbacks. `Timer<C>` is generic — `Timer::rust()` forces the parameter to the concrete `TimerCallback` fn-pointer type that `Query<(Entity, &mut Timer)>` expects. If you use the generic `Timer::new()` with a plain function reference, Rust infers a unique function-item type that the query can never match, and the timer silently never fires.
-
-**One-shot pattern:** Timers always repeat. To make a one-shot timer, despawn the entity in the callback:
+An observer is a system, so it takes any system params. To handle many timers in one place, register one global observer with `EngineBuilder::add_observer` and filter by a marker component. Each per-entity observer is itself an entity, so prefer the global form for thousands of timers. Every global observer runs on every `TimerFired`, so keep one per kind of timer rather than many:
 
 ```rust
-ctx.commands.spawn((
-    MapPosition::new(0.0, 0.0),
-    Timer::rust(5.0, one_shot_callback),
-));
+#[derive(Component)]
+struct Spawner;
 
-fn one_shot_callback(entity: Entity, ctx: &mut GameCtx, _input: &InputState) {
-    // Do the one-time action
-    ctx.audio.write(AudioCmd::PlayFx { id: "explosion".into() });
-    // Then despawn to prevent future fires
-    ctx.commands.entity(entity).despawn();
+fn on_spawner_timer(
+    ev: On<TimerFired>,
+    spawners: Query<&MapPosition, With<Spawner>>,
+    mut commands: Commands,
+) {
+    let Ok(pos) = spawners.get(ev.entity) else { return };
+    commands.spawn(MapPosition::new(pos.pos.x, pos.pos.y));
+}
+```
+
+**One-shot pattern:** Timers repeat. To fire once, remove the `Timer` in a per-entity observer (`.observe(one_shot)`):
+
+```rust
+fn one_shot(ev: On<TimerFired>, mut commands: Commands, mut audio: MessageWriter<AudioCmd>) {
+    audio.write(AudioCmd::PlayFx { id: "explosion".into() });
+    commands.entity(ev.entity).remove::<Timer>();
 }
 ```
 
@@ -2030,7 +2028,7 @@ parented with `ChildOf`, hidden by removing `ScreenPosition`, etc.).
 | `GuiImage` | `GuiImage::new(w, h, "tex_key", offset_x, offset_y)` — add `.with_offset_hover(x, y)` / `.with_offset_pressed(x, y)` / `.with_offset_disabled(x, y)` for per-state atlas offsets | `gui_image_spawn_system` inserts a co-located `GuiInteractable` + `Sprite` (same entity, no child). `gui_image_state_sync_system` re-resolves `Sprite.offset` from `GuiInteractable.state` every sim tick automatically — no game code needed. |
 | `GuiProgressBar` | `GuiProgressBar::new(w, h, value, max)` — `theme_key: Arc<str>` defaults to `"default"`, override with `.with_theme_key(key)`; `.with_direction(ProgressBarDirection)`, `.with_signal_binding(key)` for `WorldSignals` auto-update | No spawn system — rendered directly. Requires `ScreenPosition` + `ZIndex`. `value` clamped to `[0, max]`. `direction` variants: `Horizontal` (default, left→right), `HorizontalReversed`, `Vertical` (bottom→top), `VerticalReversed`. |
 | `Shadow` | `Shadow::new(dx, dy, r, g, b, a)` or `Shadow::default_color(dx, dy)` (50% transparent black) | Pre-pass shadow drawn at entity position + offset before the main sprite/text draw. Bypasses entity shaders. Works for both world-space and screen-space entities (`Sprite` and `DynamicText`). |
-| `GuiInteractable` | `GuiInteractable::rust(w, h, callback)` | Shared hit-test/click runtime state (`Normal`/`Hovered`/`Pressed`/`Disabled`). Use the `::rust()` coercion constructor — mirrors `CollisionRule::rust`/`Timer::rust` — for a Rust fn-pointer callback: `GuiRustCallback = fn(Entity, &mut GameCtx)`. |
+| `GuiInteractable` | `GuiInteractable::rust(w, h, callback)` | Shared hit-test/click runtime state (`Normal`/`Hovered`/`Pressed`/`Disabled`). Use the `::rust()` coercion constructor — mirrors `CollisionRule::rust` — for a Rust fn-pointer callback: `GuiRustCallback = fn(Entity, &mut GameCtx)`. |
 | `GuiOffset` | `GuiOffset(Vec2::new(x, y))` | A child widget's position relative to its `ChildOf` parent. `gui_layout_system` resolves it into the child's `ScreenPosition` every sim tick; `ChildOf` is used for lifecycle (cascade despawn) only, not positioning. |
 
 > **Important:** `GuiButton`/`GuiImage`'s spawn systems use `insert_if_new` for the `GuiInteractable` they

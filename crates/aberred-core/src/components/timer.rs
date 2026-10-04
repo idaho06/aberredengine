@@ -1,110 +1,62 @@
-//! Rust-based timer component for delayed/periodic callbacks.
+//! Repeating countdown timer component.
 //!
-//! The [`Timer`] component counts elapsed time each frame. When the
-//! accumulated time exceeds `duration`, a [`TimerEvent`](crate::events::timer::TimerEvent)
-//! is triggered on the entity, and the timer resets by subtracting the duration.
+//! [`update_timers`](crate::systems::timer::update_timers) accumulates elapsed
+//! time on every [`Timer`] each sim tick. When `elapsed >= duration`, it triggers
+//! a [`TimerFired`](crate::events::timer::TimerFired) event targeted at the
+//! entity, and the timer resets by subtracting the duration.
 //!
-//! # How It Works
-//!
-//! 1. Entity is spawned with a `Timer` containing duration and a Rust callback
-//! 2. The `update_timers` system runs each frame:
-//!    - Accumulates delta time into `elapsed`
-//!    - When `elapsed >= duration`, emits `TimerEvent` and resets
-//! 3. The `timer_observer` receives the event:
-//!    - Calls the Rust callback with `(entity, &mut GameCtx, &InputState)`
-//!    - The callback has full ECS access through [`GameCtx`]
-//!
-//! # Callback Signature and Usage
+//! # Usage
 //!
 //! ```
 //! # use bevy_ecs::prelude::*;
 //! # use aberred_core::components::timer::Timer;
-//! # use aberred_core::math::Vec2;
+//! # use aberred_core::events::timer::TimerFired;
 //! # use aberred_core::protocol::audio::AudioCmd;
-//! # use aberred_core::resources::input::InputState;
-//! # use aberred_core::systems::GameCtx;
-//! fn my_timer_callback(entity: Entity, ctx: &mut GameCtx, input: &InputState) {
-//!     // Full access to ECS queries and resources via ctx
-//!     ctx.audio.write(AudioCmd::PlayFx { id: "beep".into() });
-//!     if let Ok(mut rb) = ctx.rigid_bodies.get_mut(entity) {
-//!         rb.velocity = Vec2::ZERO;
-//!     }
-//! }
-//!
-//! // Use `Timer::rust` for Rust callbacks: it coerces the fn item to the
-//! // fn-pointer type `update_timers` queries for. `Timer::new` with a fn item
-//! // compiles but the timer never fires.
-//! let timer = Timer::rust(2.5, my_timer_callback);
 //! # let mut world = World::new();
-//! # world.spawn(timer);
+//! # let mut commands = world.commands();
+//! commands
+//!     .spawn(Timer::new(2.5))
+//!     .observe(|_: On<TimerFired>, mut audio: MessageWriter<AudioCmd>| {
+//!         audio.write(AudioCmd::PlayFx { id: "beep".into() });
+//!     });
 //! ```
 //!
 //! # Related
 //!
 //! - [`crate::systems::timer::update_timers`] – system that updates and triggers timers
-//! - [`crate::systems::timer::timer_observer`] – observer that executes Rust callbacks
-//! - [`crate::events::timer::TimerEvent`] – event emitted when timer expires
+//! - [`crate::events::timer::TimerFired`] – event triggered when a timer expires
 //! - `aberred_lua::components::luatimer::LuaTimer` – Lua equivalent
 
-use bevy_ecs::prelude::{Component, Entity};
+use bevy_ecs::prelude::Component;
 
-use crate::resources::input::InputState;
-use crate::systems::GameCtx;
-
-/// Callback type for Rust timers.
+/// Repeating countdown timer.
 ///
-/// Receives the entity that owns the timer, a mutable reference to [`GameCtx`]
-/// providing full ECS query/resource access, and the current input state.
-pub type TimerCallback = for<'w, 's> fn(Entity, &mut GameCtx<'w, 's>, &InputState);
-
-/// Generic repeating countdown timer.
-///
-/// The default `Timer` type stores a Rust function pointer via [`TimerCallback`]
-/// and is processed by [`update_timers`](crate::systems::timer::update_timers).
-///
-/// `elapsed` is reset by subtracting `duration` (not zeroed) for timing accuracy.
-#[derive(Component, Clone, Copy)]
-pub struct Timer<C = TimerCallback> {
+/// Fires a [`TimerFired`](crate::events::timer::TimerFired) event every
+/// `duration` seconds. `elapsed` is reset by subtracting `duration` (not zeroed)
+/// for timing accuracy.
+#[derive(Component, Clone, Copy, Debug)]
+pub struct Timer {
     /// Total duration in seconds before the timer fires.
     pub duration: f32,
     /// Elapsed time since last reset.
     pub elapsed: f32,
-    /// Callback payload — a Rust fn pointer for `Timer`.
-    pub callback: C,
 }
 
-impl<C> Timer<C> {
-    /// Create a new Timer with the given duration and callback.
-    ///
-    /// # Arguments
-    ///
-    /// * `duration` - Time in seconds before firing (repeats every `duration` seconds)
-    /// * `callback` - Callback payload to store
-    pub fn new(duration: f32, callback: C) -> Self {
+impl Timer {
+    /// Create a timer that fires every `duration` seconds.
+    pub fn new(duration: f32) -> Self {
         Timer {
             duration,
             elapsed: 0.0,
-            callback,
         }
     }
 
     /// Reset the timer by subtracting the duration from elapsed time.
     ///
     /// This maintains timing accuracy even if processing is delayed,
-    /// allowing for consistent periodic callbacks.
+    /// allowing for consistent periodic firing.
     pub fn reset(&mut self) {
         self.elapsed -= self.duration;
-    }
-}
-
-impl Timer<TimerCallback> {
-    /// Create a timer with a Rust function pointer callback.
-    ///
-    /// Prefer this over `::new`: the typed parameter forces coercion from the
-    /// function-item type to the `fn(...)` pointer type that `Query<&mut Timer>`
-    /// expects.
-    pub fn rust(duration: f32, callback: TimerCallback) -> Self {
-        Self::new(duration, callback)
     }
 }
 
@@ -113,34 +65,11 @@ mod tests {
     use super::*;
     use crate::testing::approx_eq;
 
-    fn dummy_callback(_entity: Entity, _ctx: &mut GameCtx, _input: &InputState) {}
-
-    #[test]
-    fn test_new_sets_duration_and_zero_elapsed() {
-        let timer = Timer::rust(2.5, dummy_callback);
-        assert_eq!(timer.duration, 2.5);
-        assert_eq!(timer.elapsed, 0.0);
-    }
-
     #[test]
     fn test_reset_subtracts_duration() {
-        let mut timer = Timer::rust(1.0, dummy_callback);
+        let mut timer = Timer::new(1.0);
         timer.elapsed = 1.3;
         timer.reset();
         assert!(approx_eq(timer.elapsed, 0.3));
-    }
-
-    #[test]
-    fn test_timer_is_copy() {
-        let timer = Timer::rust(1.0, dummy_callback);
-        let timer2 = timer; // Copy
-        assert_eq!(timer.duration, timer2.duration);
-    }
-
-    #[test]
-    fn timer_rust_ctor_accepts_fn_without_cast() {
-        fn cb(_: Entity, _: &mut GameCtx, _: &InputState) {}
-        let t = Timer::rust(1.0, cb);
-        assert_eq!(t.duration, 1.0);
     }
 }

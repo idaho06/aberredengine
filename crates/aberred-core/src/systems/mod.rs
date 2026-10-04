@@ -85,7 +85,6 @@ pub mod stuckto;
 pub mod tilemap;
 pub mod time;
 pub mod timer;
-pub mod timer_core;
 pub mod transform_compose;
 pub mod ttl;
 pub mod tween;

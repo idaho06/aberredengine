@@ -2,23 +2,22 @@
 //!
 //! [`GameCtx`] is a [`SystemParam`] that bundles every query and resource
 //! a game callback is likely to need. It is the single context type shared by
-//! timers, phases, collision rules, menus, and scene dispatch.
+//! phases, collision rules, menus, and scene dispatch.
 //!
 //! # Usage in callbacks
 //!
 //! ```ignore
-//! fn my_timer(entity: Entity, ctx: &mut GameCtx, input: &InputState) {
+//! fn on_click(entity: Entity, ctx: &mut GameCtx) {
 //!     if let Ok(mut rb) = ctx.rigid_bodies.get_mut(entity) {
 //!         rb.velocity = Vec2::ZERO;
 //!     }
 //!     ctx.audio.write(AudioCmd::PlayFx { id: "beep".into() });
-//!     ctx.world_signals.set_flag("timer_fired");
+//!     ctx.world_signals.set_flag("clicked");
 //! }
 //! ```
 //!
 //! # Related
 //!
-//! - [`crate::components::timer::TimerCallback`] – fn-pointer type for timer callbacks
 //! - [`crate::components::phase::PhaseEnterFn`] etc. – fn-pointer types for phase callbacks
 //! - [`crate::components::collision::CollisionCallback`] – fn-pointer type for collision callbacks
 //! - [`crate::components::menu::MenuRustCallback`] – fn-pointer type for menu callbacks
@@ -55,7 +54,6 @@ use crate::resources::worldtime::WorldTime;
 ///
 /// Provides commands, a complete set of component queries, and the most
 /// commonly needed resources. All Rust callback types —
-/// [`TimerCallback`](crate::components::timer::TimerCallback),
 /// [`PhaseEnterFn`](crate::components::phase::PhaseEnterFn),
 /// [`CollisionCallback`](crate::components::collision::CollisionCallback),
 /// [`MenuRustCallback`](crate::components::menu::MenuRustCallback),

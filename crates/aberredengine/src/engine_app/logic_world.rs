@@ -60,7 +60,6 @@ use aberred_core::systems::rust_collision::rust_collision_observer;
 use aberred_core::systems::scene_dispatch::{
     insert_scene_manager, scene_enter_loading, scene_enter_play, scene_switch_system,
 };
-use aberred_core::systems::timer::timer_observer;
 
 #[cfg(feature = "lua")]
 use aberred_lua::resources::lua_runtime::LuaRuntime;
@@ -343,7 +342,6 @@ impl EngineBuilder {
         }
         #[cfg(not(feature = "lua"))]
         let _ = has_lua;
-        world.spawn((Observer::new(timer_observer), Persistent));
         world.spawn((Observer::new(spawn_map_observer), Persistent));
 
         // Spawn user-registered persistent observers

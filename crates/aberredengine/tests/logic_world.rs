@@ -15,10 +15,12 @@ use aberredengine::core::components::group::Group;
 use aberredengine::core::components::mapposition::MapPosition;
 use aberredengine::core::components::scene::SceneName;
 use aberredengine::core::components::sprite::Sprite;
+use aberredengine::core::components::timer::Timer;
 use aberredengine::core::components::zindex::ZIndex;
 use aberredengine::core::events::asset::{AssetLoadFailed, AssetLoaded};
 use aberredengine::core::events::input::InputAction;
 use aberredengine::core::events::scene::{SceneEntered, SceneExited};
+use aberredengine::core::events::timer::TimerFired;
 use aberredengine::core::math::Color;
 use aberredengine::core::protocol::asset_kind::AssetKind;
 use aberredengine::core::protocol::audio::AudioMessage;
@@ -117,6 +119,32 @@ fn spawn_and_collide_fires_rust_collision_rule() {
     assert!(
         tw.world.resource::<WorldSignals>().has_flag("collided"),
         "overlapping colliders in matching groups must fire the Rust collision rule"
+    );
+}
+
+/// A `Timer` ticked by the real sim schedule triggers `TimerFired` on its
+/// entity on the tick that reaches `duration`, and not before.
+#[test]
+fn timer_fires_timer_fired_through_sim_schedule() {
+    let mut tw = TestWorld::new();
+    tw.tick_to_play(DT, 8);
+
+    tw.world.spawn(Timer::new(DT * 2.5)).observe(
+        |_: On<TimerFired>, mut signals: ResMut<WorldSignals>| {
+            signals.set_flag("timer_fired");
+        },
+    );
+
+    tw.tick(2, DT);
+    assert!(
+        !tw.world.resource::<WorldSignals>().has_flag("timer_fired"),
+        "elapsed 2*DT < 2.5*DT: the timer must not fire yet"
+    );
+
+    tw.tick(1, DT);
+    assert!(
+        tw.world.resource::<WorldSignals>().has_flag("timer_fired"),
+        "elapsed 3*DT >= 2.5*DT: TimerFired must reach the entity's observer"
     );
 }
 
