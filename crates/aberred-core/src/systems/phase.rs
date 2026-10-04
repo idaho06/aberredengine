@@ -1,7 +1,8 @@
 //! Phase state machine system.
 //!
 //! [`phase_system`] applies [`Phase`] transitions once per sim tick and triggers
-//! [`PhaseEntered`] / [`PhaseExited`].
+//! [`PhaseEntered`] / [`PhaseExited`]. It runs at the start of the tick, so a
+//! transition requested at any point in tick N applies in tick N+1.
 //!
 //! # System Flow
 //!

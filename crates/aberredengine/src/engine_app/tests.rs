@@ -1,3 +1,4 @@
+use std::any::TypeId;
 use std::path::PathBuf;
 
 use bevy_ecs::prelude::*;
@@ -23,15 +24,19 @@ use aberred_core::resources::gamestate::{GameState, GameStates};
 use aberred_core::resources::input::InputState;
 use aberred_core::resources::signal_keys as sk;
 use aberred_core::resources::systemsstore::SystemsStore;
+use aberred_core::systems::collision_detector::collision_detector;
+use aberred_core::systems::inputsimplecontroller::input_simple_controller;
+use aberred_core::systems::phase::phase_system;
 use aberred_core::systems::scene_dispatch::WorldDrawCtx;
+use aberred_core::systems::signal_intents::apply_signal_intents;
 use aberred_render::resources::scene_table::GuiCtx;
 
 #[cfg(feature = "lua")]
-use aberred_core::systems::animation::animation_controller;
+use aberred_core::systems::animation::animation;
 #[cfg(feature = "lua")]
 use aberred_core::systems::group::update_group_counts_system;
 #[cfg(feature = "lua")]
-use aberred_core::systems::phase::phase_system;
+use aberred_core::systems::gui_hit_test::gui_hit_test_system;
 #[cfg(feature = "lua")]
 use aberred_lua::systems::luaphase::lua_phase_system;
 #[cfg(feature = "lua")]
@@ -386,38 +391,13 @@ fn test_builder_with_lua() {
 #[cfg(feature = "lua")]
 #[test]
 fn test_build_logic_schedules_without_lua_runtime_omits_lua_only_systems() {
-    let mut world = World::new();
-    let (sim, _present) = EngineBuilder::build_logic_schedules(Vec::new(), &mut world, false)
-        .expect("build_logic_schedules should succeed without Lua runtime");
-    let sim_type_ids: Vec<_> = sim
-        .systems()
-        .expect("build_logic_schedules initializes the sim schedule")
-        .map(|(_, system)| system.system_type())
-        .collect();
-    let phase_system_type = IntoSystem::into_system(phase_system).system_type();
-    let animation_controller_type = IntoSystem::into_system(animation_controller).system_type();
-    let lua_phase_system_type = IntoSystem::into_system(lua_phase_system).system_type();
-    let update_lua_timers_type = IntoSystem::into_system(update_lua_timers).system_type();
-
-    let phase_index = sim_type_ids
-        .iter()
-        .position(|type_id| *type_id == phase_system_type)
-        .expect("phase_system should be present in the sim schedule");
-    let animation_controller_index = sim_type_ids
-        .iter()
-        .position(|type_id| *type_id == animation_controller_type)
-        .expect("animation_controller should be present in the sim schedule");
-
+    let (ids, _) = logic_schedule_type_ids(false);
     assert!(
-        animation_controller_index > phase_index,
-        "animation_controller should still run after phase_system"
-    );
-    assert!(
-        !sim_type_ids.contains(&lua_phase_system_type),
+        !ids.contains(&IntoSystem::into_system(lua_phase_system).system_type()),
         "lua_phase_system should be absent when has_lua is false"
     );
     assert!(
-        !sim_type_ids.contains(&update_lua_timers_type),
+        !ids.contains(&IntoSystem::into_system(update_lua_timers).system_type()),
         "update_lua_timers should be absent when has_lua is false"
     );
 }
@@ -425,66 +405,76 @@ fn test_build_logic_schedules_without_lua_runtime_omits_lua_only_systems() {
 #[cfg(feature = "lua")]
 #[test]
 fn test_build_logic_schedules_with_lua_orders_group_counts_before_lua_phase() {
-    let mut world = World::new();
-    let (sim, present) = EngineBuilder::build_logic_schedules(Vec::new(), &mut world, true)
-        .expect("build_logic_schedules should succeed with has_lua=true");
-
-    let sim_type_ids: Vec<_> = sim
-        .systems()
-        .expect("build_logic_schedules initializes the sim schedule")
-        .map(|(_, system)| system.system_type())
-        .collect();
-    let present_type_ids: Vec<_> = present
-        .systems()
-        .expect("build_logic_schedules initializes the present schedule")
-        .map(|(_, system)| system.system_type())
-        .collect();
-
-    let index_of = |type_ids: &[std::any::TypeId], type_id, label| -> usize {
-        type_ids
-            .iter()
-            .position(|t| *t == type_id)
-            .unwrap_or_else(|| panic!("{label} should be present"))
-    };
-
-    let update_group_counts_index = index_of(
-        &sim_type_ids,
-        IntoSystem::into_system(update_group_counts_system).system_type(),
-        "update_group_counts_system",
-    );
-    let lua_phase_index = index_of(
-        &sim_type_ids,
-        IntoSystem::into_system(lua_phase_system).system_type(),
-        "lua_phase_system",
-    );
-
+    let (sim, present) = logic_schedule_type_ids(true);
     assert!(
-        update_group_counts_index < lua_phase_index,
-        "update_group_counts_system should run before lua_phase_system (both sim-schedule)"
+        sim_index(&sim, update_group_counts_system) < sim_index(&sim, lua_phase_system),
+        "update_group_counts_system should run before lua_phase_system"
     );
-
-    // lua_plugin::update runs on the sim (240Hz) schedule, alongside
-    // update_group_counts_system/lua_phase_system; `present` contains only
-    // build_drawable_snapshot/send_drawable_snapshot
-    // (forward_render_asset_cmds lives on sim).
-    let lua_update_type = IntoSystem::into_system(aberred_lua::lua_plugin::update).system_type();
+    // lua_plugin::update runs on the sim schedule; `present` holds only the
+    // snapshot build/send.
+    let lua_update = IntoSystem::into_system(aberred_lua::lua_plugin::update).system_type();
     assert!(
-        sim_type_ids.contains(&lua_update_type),
-        "lua_plugin::update should be present in the sim schedule"
-    );
-    assert!(
-        !present_type_ids.contains(&lua_update_type),
+        !present.contains(&lua_update),
         "lua_plugin::update should not be present in the present schedule"
     );
-    assert!(
-        sim_type_ids
-            .iter()
-            .position(|t| *t == lua_update_type)
-            .unwrap()
-            > lua_phase_index,
-        "lua_plugin::update should run after lua_phase_system (ordered last among \
-         Lua-touching sim systems each tick)"
-    );
+}
+
+/// System type ids of an initialized schedule, in its execution order.
+fn schedule_type_ids(schedule: &Schedule) -> Vec<TypeId> {
+    schedule
+        .systems()
+        .expect("build_logic_schedules initializes its schedules")
+        .map(|(_, system)| system.system_type())
+        .collect()
+}
+
+/// `(sim, present)` system type ids from `build_logic_schedules`.
+fn logic_schedule_type_ids(has_lua: bool) -> (Vec<TypeId>, Vec<TypeId>) {
+    let mut world = World::new();
+    let (sim, present) = EngineBuilder::build_logic_schedules(Vec::new(), &mut world, has_lua)
+        .expect("build_logic_schedules should succeed");
+    (schedule_type_ids(&sim), schedule_type_ids(&present))
+}
+
+/// Position of `system` in `ids` (from [`logic_schedule_type_ids`]).
+fn sim_index<M>(ids: &[TypeId], system: impl IntoSystem<(), (), M>) -> usize {
+    let system = IntoSystem::into_system(system);
+    let type_id = system.system_type();
+    ids.iter()
+        .position(|t| *t == type_id)
+        .unwrap_or_else(|| panic!("{} should be in the schedule", system.name()))
+}
+
+/// `phase_system` runs right after `SimSet::ApplyIntents`, before every other
+/// engine set, so a transition requested anywhere in a tick applies on the next.
+#[test]
+fn test_build_logic_schedules_runs_phase_system_first() {
+    let (ids, _) = logic_schedule_type_ids(false);
+    let phase = sim_index(&ids, phase_system);
+    assert!(sim_index(&ids, apply_signal_intents) < phase);
+    assert!(phase < sim_index(&ids, crate::systems::menu::menu_spawn_system));
+    assert!(phase < sim_index(&ids, input_simple_controller));
+    assert!(phase < sim_index(&ids, collision_detector));
+}
+
+/// With Lua, `lua_phase_system` and `update_lua_timers` run in
+/// `SimSet::PostCollision`: after the collision and GUI sets, before `Drain`
+/// and before `lua_plugin::update`.
+#[cfg(feature = "lua")]
+#[test]
+fn test_build_logic_schedules_with_lua_keeps_lua_phase_and_timers_in_post_collision() {
+    let (ids, _) = logic_schedule_type_ids(true);
+    let after = sim_index(&ids, collision_detector).max(sim_index(&ids, gui_hit_test_system));
+    let before = sim_index(&ids, animation).min(sim_index(&ids, aberred_lua::lua_plugin::update));
+    for index in [
+        sim_index(&ids, lua_phase_system),
+        sim_index(&ids, update_lua_timers),
+    ] {
+        assert!(
+            after < index && index < before,
+            "must stay in SimSet::PostCollision"
+        );
+    }
 }
 
 // --- SceneManager builder tests ---

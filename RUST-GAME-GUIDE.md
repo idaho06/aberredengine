@@ -1676,7 +1676,7 @@ fn player_phases(
 
 The engine's `phase_system` applies transitions and triggers two events on the phase's entity:
 
-- `PhaseEntered { entity, name, previous }` fires once for the initial phase (`previous` is `None`) on the entity's first sim tick, and again after every transition.
+- `PhaseEntered { entity, name, previous }` fires once for the initial phase (`previous` is `None`) at the start of the first sim tick after the entity spawns, and again after every transition.
 - `PhaseExited { entity, name, next }` fires for the old phase right before the new phase's `PhaseEntered`.
 
 Their observers run after the swap, so `phase.current` is already the new phase in both events of a transition; read the phase from `ev.name`. One-shot effects such as a sound on entering a phase belong in an observer, not in the per-tick system:
@@ -1696,7 +1696,7 @@ fn on_player_phase_entered(
 
 As with timers (§7.1), observe one entity with `.observe(handler)` or many with one global observer filtered by a marker component.
 
-**Transitions:** `phase_system` applies a `next` on its next run: it sets `previous` to the old phase, `current` to the new one, resets `time_in_phase` to 0, and triggers `PhaseExited` then `PhaseEntered`. A `next` set by an observer of either event applies on the following run, so chained transitions advance one per sim tick. Phase names are never validated: `phase.next = Some("jumpin".into())` switches to a phase no system handles, and the entity silently does nothing.
+**Transitions:** `phase_system` runs at the start of every sim tick, in `SimSet::Phases`, before `.add_system()` systems and in every game state. It applies a `next` set at any point in the previous tick: it sets `previous` to the old phase, `current` to the new one, resets `time_in_phase` to 0, and triggers `PhaseExited` then `PhaseEntered`. A transition requested in tick N therefore applies in tick N+1, and chained transitions (a `PhaseEntered` observer setting `next`) advance one per sim tick. Phase names are never validated: `phase.next = Some("jumpin".into())` switches to a phase no system handles, and the entity silently does nothing.
 
 **Phase fields:**
 

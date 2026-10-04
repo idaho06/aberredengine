@@ -80,6 +80,11 @@ pub enum SimSet {
     /// Drain `SignalIntents` queued by the render thread's `GuiCallback` into
     /// `WorldSignals`, before anything this tick reads them.
     ApplyIntents,
+    /// `phase_system`, in every game state: applies `Phase` transitions
+    /// requested during the previous tick and triggers `PhaseEntered`/
+    /// `PhaseExited`. It runs before every later group, so a transition
+    /// requested anywhere in a tick (system or observer) applies on the next.
+    Phases,
     /// One-shot spawns reacting to `Added<T>` (menu/gridlayout/tilemap) and
     /// game-state transitions (`check_pending_state`; `Setup` → `Playing`
     /// is applied at the end of `Bookkeeping` instead).
@@ -101,7 +106,7 @@ pub enum SimSet {
     Movement,
     /// World-space transform propagation and camera follow.
     Transforms,
-    /// Collision detection and its direct reactions (`stuck_to`, `phase`).
+    /// Collision detection and its direct reaction (`stuck_to`).
     Collision,
     /// GUI layout, hit-test, and per-state visual sync.
     Gui,
@@ -241,6 +246,7 @@ impl EngineBuilder {
         sim.configure_sets(
             (
                 SimSet::ApplyIntents,
+                SimSet::Phases,
                 SimSet::Spawn,
                 SimSet::AudioPump,
                 SimSet::ScriptUpdate,
@@ -271,6 +277,7 @@ impl EngineBuilder {
         // implied by SimSet::ApplyIntents preceding every later group in
         // the chain.
         sim.add_systems(apply_signal_intents.in_set(SimSet::ApplyIntents));
+        sim.add_systems(phase_system.in_set(SimSet::Phases));
         sim.add_systems(menu_spawn_system.in_set(SimSet::Spawn));
         sim.add_systems(gridlayout_spawn_system.in_set(SimSet::Spawn));
         // .after(menu_spawn_system): both queue into the logic world's
@@ -365,17 +372,6 @@ impl EngineBuilder {
         sim.add_systems(
             stuck_to_entity_system
                 .after(collision_detector)
-                .in_set(SimSet::Collision),
-        );
-        // .after(stuck_to_entity_system): both write MapPosition with no
-        // prior edge (ambiguity_detection flags it). Phase logic (state
-        // machines, e.g. ground/patrol checks) should react to an entity's
-        // final, stuck-to-resolved position this tick, not a pre-stuck-to
-        // one.
-        sim.add_systems(
-            phase_system
-                .after(collision_detector)
-                .after(stuck_to_entity_system)
                 .in_set(SimSet::Collision),
         );
 

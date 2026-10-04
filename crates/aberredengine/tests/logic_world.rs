@@ -13,12 +13,14 @@ use aberredengine::core::components::collision::{BoxSides, CollisionRule};
 use aberredengine::core::components::dynamictext::DynamicText;
 use aberredengine::core::components::group::Group;
 use aberredengine::core::components::mapposition::MapPosition;
+use aberredengine::core::components::phase::Phase;
 use aberredengine::core::components::scene::SceneName;
 use aberredengine::core::components::sprite::Sprite;
 use aberredengine::core::components::timer::Timer;
 use aberredengine::core::components::zindex::ZIndex;
 use aberredengine::core::events::asset::{AssetLoadFailed, AssetLoaded};
 use aberredengine::core::events::input::InputAction;
+use aberredengine::core::events::phase::{PhaseEntered, PhaseExited};
 use aberredengine::core::events::scene::{SceneEntered, SceneExited};
 use aberredengine::core::events::timer::TimerFired;
 use aberredengine::core::math::Color;
@@ -146,6 +148,98 @@ fn timer_fires_timer_fired_through_sim_schedule() {
         tw.world.resource::<WorldSignals>().has_flag("timer_fired"),
         "elapsed 3*DT >= 2.5*DT: TimerFired must reach the entity's observer"
     );
+}
+
+#[derive(Resource, Default)]
+struct RequestRun(bool);
+
+/// Requests `idle -> run` on every `Phase` once `RequestRun` is set.
+fn request_run(mut request: ResMut<RequestRun>, mut phases: Query<&mut Phase>) {
+    if std::mem::take(&mut request.0) {
+        for mut phase in &mut phases {
+            phase.next = Some("run".into());
+        }
+    }
+}
+
+#[derive(Resource, Default)]
+struct PhaseLog(Vec<String>);
+
+fn log_phase_entered(ev: On<PhaseEntered>, mut log: ResMut<PhaseLog>) {
+    log.0.push(format!("entered:{}", ev.name));
+}
+
+fn log_phase_exited(ev: On<PhaseExited>, mut log: ResMut<PhaseLog>) {
+    log.0.push(format!("exited:{}", ev.name));
+}
+
+fn take_phase_log(tw: &mut TestWorld) -> Vec<String> {
+    std::mem::take(&mut tw.world.resource_mut::<PhaseLog>().0)
+}
+
+/// A transition requested by a system in `SimSet::ScriptUpdate` at tick N is
+/// applied, and its events fire, at tick N+1, never at N.
+#[test]
+fn phase_transition_requested_in_script_update_applies_next_tick() {
+    let mut tw = TestWorld::builder()
+        .add_system(request_run)
+        .add_observer(log_phase_entered)
+        .add_observer(log_phase_exited)
+        .build()
+        .expect("build should succeed");
+    tw.world.init_resource::<RequestRun>();
+    tw.world.init_resource::<PhaseLog>();
+    tw.tick_to_play(DT, 8);
+
+    let entity = tw.world.spawn(Phase::new("idle")).id();
+    tw.tick(1, DT);
+    assert_eq!(take_phase_log(&mut tw), ["entered:idle"]);
+
+    tw.world.resource_mut::<RequestRun>().0 = true;
+    tw.tick(1, DT);
+    assert!(
+        take_phase_log(&mut tw).is_empty(),
+        "tick N: the request must not apply in the tick that made it"
+    );
+    let phase = tw.world.get::<Phase>(entity).unwrap();
+    assert_eq!(phase.current, "idle");
+    assert_eq!(phase.next.as_deref(), Some("run"));
+
+    tw.tick(1, DT);
+    assert_eq!(take_phase_log(&mut tw), ["exited:idle", "entered:run"]);
+    assert_eq!(tw.world.get::<Phase>(entity).unwrap().current, "run");
+}
+
+/// A transition requested by an observer (here of `TimerFired`, triggered
+/// late in the tick) also applies at the start of the next tick.
+#[test]
+fn phase_transition_requested_by_observer_applies_next_tick() {
+    let mut tw = TestWorld::builder()
+        .add_observer(log_phase_entered)
+        .add_observer(log_phase_exited)
+        .build()
+        .expect("build should succeed");
+    tw.world.init_resource::<PhaseLog>();
+    tw.tick_to_play(DT, 8);
+
+    let entity = tw
+        .world
+        .spawn((Phase::new("idle"), Timer::once(DT * 0.5)))
+        .observe(|ev: On<TimerFired>, mut phases: Query<&mut Phase>| {
+            phases.get_mut(ev.entity).unwrap().next = Some("run".into());
+        })
+        .id();
+
+    tw.tick(1, DT);
+    assert_eq!(take_phase_log(&mut tw), ["entered:idle"]);
+    assert_eq!(
+        tw.world.get::<Phase>(entity).unwrap().next.as_deref(),
+        Some("run"),
+        "the timer fired this tick and requested the transition"
+    );
+
+    tw.tick(1, DT);
+    assert_eq!(take_phase_log(&mut tw), ["exited:idle", "entered:run"]);
 }
 
 /// (c) Spawn a map sprite; `present()` and assert it appears in the
