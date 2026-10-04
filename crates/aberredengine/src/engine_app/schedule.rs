@@ -431,7 +431,7 @@ impl EngineBuilder {
                     .after(lua_phase_system)
                     .in_set(SimSet::PostCollision),
             );
-            // .after(lua_phase_system): both touch Timer<LuaTimerCallback>
+            // .after(lua_phase_system): both touch LuaTimer
             // (lua_phase_system's ctx-building reads it for ctx.timer;
             // update_lua_timers advances it) with no prior edge --
             // ambiguity_detection flags it. Pinned so a phase callback's

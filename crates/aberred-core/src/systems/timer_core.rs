@@ -1,11 +1,10 @@
-//! Shared timer tick loop used by both the Rust and Lua timer systems.
+//! Timer tick loop used by the Rust timer system.
 //!
 //! [`run_timer_update`] contains the backend-agnostic logic for advancing
 //! [`Timer<C>`](crate::components::timer::Timer) values. The concrete timer systems
 //! provide a [`TimerRunner`] implementation that bridges the callback payload into
 //! the appropriate dispatch path: the Rust timer path uses `RustTimerRunner` to
-//! trigger a `TimerEvent`, while the Lua timer path uses `LuaTimerRunner` to
-//! trigger a `LuaTimerEvent` for later script dispatch.
+//! trigger a `TimerEvent`.
 
 use bevy_ecs::prelude::*;
 
@@ -13,9 +12,8 @@ use crate::components::timer::Timer;
 
 /// Backend-specific callback dispatcher for the shared timer update loop.
 ///
-/// `C` is the callback payload stored in [`Timer<C>`]. In the Rust timer path
-/// this is [`TimerCallback`](crate::components::timer::TimerCallback); in the Lua
-/// timer path it is `LuaTimerCallback` (`aberred_lua::components::luatimer`).
+/// `C` is the callback payload stored in [`Timer<C>`]; in the Rust timer path
+/// this is [`TimerCallback`](crate::components::timer::TimerCallback).
 /// [`on_fire`](Self::on_fire) is called once for each timer that elapses and is
 /// responsible for invoking or scheduling callback dispatch in whatever way that
 /// backend requires.

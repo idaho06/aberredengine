@@ -1,18 +1,18 @@
 //! Lua-based timer component for delayed callbacks.
 //!
-//! The [`LuaTimer`] component counts elapsed time each frame. When the
+//! The [`LuaTimer`] component counts elapsed time each sim tick. When the
 //! accumulated time exceeds `duration`, a [`LuaTimerEvent`](crate::events::luatimer::LuaTimerEvent)
 //! is triggered on the entity, and the timer resets by subtracting the duration.
 //!
 //! # How It Works
 //!
 //! 1. Entity is spawned with a `LuaTimer` containing duration and callback name
-//! 2. The `update_lua_timers` system runs each frame:
+//! 2. The `update_lua_timers` system runs each sim tick:
 //!    - Accumulates delta time into `elapsed`
 //!    - When `elapsed >= duration`, emits `LuaTimerEvent` and resets
 //! 3. The `lua_timer_observer` receives the event:
 //!    - Looks up the Lua function by name
-//!    - Calls the function with `entity_id` as parameter
+//!    - Calls the function as `(ctx, input)`
 //!    - Processes any commands queued by Lua (spawns, audio, signals, etc.)
 //!
 //! # Lua Callback Signature
@@ -52,7 +52,7 @@
 //! - [`crate::systems::luatimer::lua_timer_observer`] – observer that executes Lua callbacks
 //! - [`crate::events::luatimer::LuaTimerEvent`] – event emitted when timer expires
 
-use aberred_core::components::timer::Timer;
+use bevy_ecs::prelude::Component;
 
 /// Lua callback function name for a timer.
 ///
@@ -64,11 +64,32 @@ pub struct LuaTimerCallback {
     pub name: std::sync::Arc<str>,
 }
 
-/// Countdown timer that calls a Lua function when finished.
-///
-/// Type alias over the generic [`Timer`] using [`LuaTimerCallback`] as the
-/// callback payload. The timer accumulates time from
-/// [`WorldTime`](aberred_core::resources::worldtime::WorldTime) and emits a
-/// [`LuaTimerEvent`](crate::events::luatimer::LuaTimerEvent) when
-/// `elapsed >= duration`.
-pub type LuaTimer = Timer<LuaTimerCallback>;
+/// Repeating countdown timer that calls a Lua function each time it expires;
+/// ticked by [`update_lua_timers`](crate::systems::luatimer::update_lua_timers).
+#[derive(Component, Clone, Debug)]
+pub struct LuaTimer {
+    /// Total duration in seconds before the timer fires.
+    pub duration: f32,
+    /// Elapsed time since last reset.
+    pub elapsed: f32,
+    /// Lua function to call when the timer fires.
+    pub callback: LuaTimerCallback,
+}
+
+impl LuaTimer {
+    /// Create a timer that fires every `duration` seconds.
+    pub fn new(duration: f32, callback: LuaTimerCallback) -> Self {
+        Self {
+            duration,
+            elapsed: 0.0,
+            callback,
+        }
+    }
+
+    /// Reset the timer by subtracting the duration from elapsed time.
+    ///
+    /// Keeping the overshoot (rather than zeroing) keeps periodic firing accurate.
+    pub fn reset(&mut self) {
+        self.elapsed -= self.duration;
+    }
+}

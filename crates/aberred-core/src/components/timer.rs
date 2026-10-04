@@ -61,9 +61,6 @@ pub type TimerCallback = for<'w, 's> fn(Entity, &mut GameCtx<'w, 's>, &InputStat
 ///
 /// The default `Timer` type stores a Rust function pointer via [`TimerCallback`]
 /// and is processed by [`update_timers`](crate::systems::timer::update_timers).
-/// The Lua-facing `LuaTimer` (`aberred_lua::components::luatimer`) alias
-/// reuses this same storage with a `LuaTimerCallback`
-/// payload.
 ///
 /// `elapsed` is reset by subtracting `duration` (not zeroed) for timing accuracy.
 #[derive(Component, Clone, Copy)]
@@ -72,8 +69,7 @@ pub struct Timer<C = TimerCallback> {
     pub duration: f32,
     /// Elapsed time since last reset.
     pub elapsed: f32,
-    /// Callback payload — a Rust fn pointer for `Timer`, or a
-    /// `LuaTimerCallback` for `LuaTimer`.
+    /// Callback payload — a Rust fn pointer for `Timer`.
     pub callback: C,
 }
 

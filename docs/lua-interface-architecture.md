@@ -313,7 +313,7 @@ This system deliberately does not go through the shared `LuaDispatch`/`dispatch_
 
 ### Timer System
 
-`update_lua_timers` accumulates `dt` on every `LuaTimer` component (`Timer<C>` specialized over `LuaTimerCallback`, mirroring `LuaPhase`'s relationship to `Phase<C>`). When `elapsed >= duration`, it fires a `LuaTimerEvent` and resets by subtracting `duration` (not zeroing) — the timer never self-removes, so a "fire once" callback must call `engine.entity_remove_lua_timer()` on itself. `lua_timer_observer` reacts to `LuaTimerEvent` via `LuaDispatch::dispatch_and_drain`, calling the named function as `(ctx, input)`.
+`update_lua_timers` accumulates `dt` on every `LuaTimer` component (a Lua-owned component holding a `LuaTimerCallback` name). When `elapsed >= duration`, it fires a `LuaTimerEvent` and resets by subtracting `duration` (not zeroing) — the timer never self-removes, so a "fire once" callback must call `engine.entity_remove_lua_timer()` on itself. `lua_timer_observer` reacts to `LuaTimerEvent` via `LuaDispatch::dispatch_and_drain`, calling the named function as `(ctx, input)`.
 
 ### Collision System
 

@@ -7,7 +7,7 @@
 //!
 //! # System Flow
 //!
-//! Each frame:
+//! Each sim tick:
 //!
 //! 1. `update_lua_timers` accumulates delta time on all LuaTimer components
 //! 2. When `elapsed >= duration`, emits `LuaTimerEvent` and resets timer
@@ -32,42 +32,32 @@
 
 use bevy_ecs::prelude::*;
 
-use crate::components::luatimer::{LuaTimer, LuaTimerCallback};
+use crate::components::luatimer::LuaTimer;
 use crate::events::luatimer::LuaTimerEvent;
 use crate::systems::lua_commands::{LuaDispatch, dispatch_and_drain};
 use aberred_core::resources::worldtime::WorldTime;
-
-use aberred_core::systems::timer_core::{TimerRunner, run_timer_update};
-
-struct LuaTimerRunner<'a, 'w, 's> {
-    commands: &'a mut Commands<'w, 's>,
-}
-
-impl<'a, 'w, 's> TimerRunner<LuaTimerCallback> for LuaTimerRunner<'a, 'w, 's> {
-    fn on_fire(&mut self, entity: Entity, callback: &LuaTimerCallback) {
-        self.commands.trigger(LuaTimerEvent {
-            entity,
-            callback: callback.name.clone(),
-        });
-    }
-}
 
 /// Update all Lua timer components and emit events when they expire.
 ///
 /// Accumulates delta time on each [`LuaTimer`]
 /// and triggers a [`LuaTimerEvent`] when
-/// `elapsed >= duration`. The timer resets by subtracting duration, allowing for
-/// consistent periodic timing.
+/// `elapsed >= duration`, at most once per tick. The timer resets by subtracting
+/// duration, keeping the overshoot for consistent periodic timing.
 pub fn update_lua_timers(
     world_time: Res<WorldTime>,
     mut query: Query<(Entity, &mut LuaTimer)>,
     mut commands: Commands,
 ) {
-    let delta = world_time.delta;
-    let mut runner = LuaTimerRunner {
-        commands: &mut commands,
-    };
-    run_timer_update(delta, &mut query, &mut runner);
+    for (entity, mut timer) in query.iter_mut() {
+        timer.elapsed += world_time.delta;
+        if timer.elapsed >= timer.duration {
+            commands.trigger(LuaTimerEvent {
+                entity,
+                callback: timer.callback.name.clone(),
+            });
+            timer.reset();
+        }
+    }
 }
 
 pub fn lua_timer_observer(trigger: On<LuaTimerEvent>, mut p: LuaDispatch) {
@@ -78,6 +68,7 @@ pub fn lua_timer_observer(trigger: On<LuaTimerEvent>, mut p: LuaDispatch) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::components::luatimer::LuaTimerCallback;
     use aberred_core::testing::approx_eq;
     use bevy_ecs::system::RunSystemOnce;
 
@@ -310,5 +301,29 @@ mod tests {
 
         tick_lua_timers(&mut world); // elapsed=0.9 >= 0.8, fires, resets to 0.1
         assert_eq!(*fired_count.lock().unwrap(), 1);
+    }
+
+    #[test]
+    fn lua_timer_fires_at_most_once_per_tick_with_large_delta() {
+        // delta covers four durations, but the timer fires once and keeps the
+        // overshoot: no catch-up within a tick.
+        let fired_count = std::sync::Arc::new(std::sync::Mutex::new(0u32));
+        let fired_clone = fired_count.clone();
+
+        let mut world = world_with_delta(2.0);
+        let entity = world
+            .spawn((LuaTimer::new(0.5, LuaTimerCallback { name: "cb".into() }),))
+            .id();
+
+        world.add_observer(move |_trigger: On<LuaTimerEvent>| {
+            *fired_clone.lock().unwrap() += 1;
+        });
+        world.flush();
+
+        tick_lua_timers(&mut world);
+
+        assert_eq!(*fired_count.lock().unwrap(), 1);
+        let timer = world.get::<LuaTimer>(entity).unwrap();
+        assert!(approx_eq(timer.elapsed, 1.5));
     }
 }
