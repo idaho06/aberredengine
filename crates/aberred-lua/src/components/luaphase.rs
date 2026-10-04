@@ -5,17 +5,18 @@
 //!
 //! # How It Works
 //!
-//! 1. Entity is spawned with a `LuaPhase` containing phase definitions
-//! 2. The `lua_phase_system` runs each frame:
-//!    - Looks up the current phase's callback function names
-//!    - Calls the named Lua function (e.g., `scene_playing_update(time)`)
-//!    - Lua can call `engine.phase_transition(entity_id, "next_phase")` to request transitions
-//! 3. Lua has access to world signals, group counts, and can queue audio/spawn commands
+//! 1. An entity is spawned with a `LuaPhase` holding the phase definitions.
+//! 2. `lua_phase_system` runs once per sim tick and calls the current phase's
+//!    named Lua functions: `on_enter(ctx, input)` on the first tick and after each
+//!    transition, `on_exit(ctx)` after a swap (looked up by the old phase's name),
+//!    and `on_update(ctx, input, dt)` every tick.
+//! 3. `on_enter`/`on_update` can return a phase name, or call
+//!    `engine.phase_transition(entity_id, "next_phase")`; either applies on the
+//!    next tick.
 //!
 //! # Lua API
 //!
 //! ```lua
-//! -- Define phases with named callback functions
 //! engine.spawn()
 //!     :with_group("scene_phases")
 //!     :with_phase({
@@ -31,12 +32,11 @@
 //!     })
 //!     :build()
 //!
-//! -- Callback functions receive entity_id and time_in_phase (for update)
-//! function scene_init_update(entity_id, time_in_phase)
-//!     engine.phase_transition(entity_id, "get_started")
+//! function scene_init_update(ctx, input, dt)
+//!     return "get_started"
 //! end
 //!
-//! function scene_get_started_enter(entity_id, previous_phase)
+//! function scene_get_started_enter(ctx, input)
 //!     engine.play_music("player_ready", false)
 //! end
 //! ```
@@ -48,18 +48,18 @@ use rustc_hash::FxHashMap;
 /// Callback function names for a single phase.
 #[derive(Clone, Debug, Default)]
 pub struct PhaseCallbacks {
-    /// Function to call when entering this phase (receives entity_id, previous_phase)
+    /// Function to call when entering this phase: `(ctx, input)`.
     pub on_enter: Option<String>,
-    /// Function to call each frame (receives entity_id, time_in_phase)
+    /// Function to call each sim tick in this phase: `(ctx, input, dt)`.
     pub on_update: Option<String>,
-    /// Function to call when exiting this phase (receives entity_id, next_phase)
+    /// Function to call when exiting this phase: `(ctx)`.
     pub on_exit: Option<String>,
 }
 
 /// Lua-based phase state machine component, processed by
 /// [`lua_phase_system`](crate::systems::luaphase::lua_phase_system).
 ///
-/// Wraps a core [`Phase`], so it follows the same transition rules, and adds the
+/// Wraps a core [`Phase`], sharing its swap and first-run flag, and adds the
 /// names of the Lua callbacks for each phase.
 #[derive(Clone, Debug, Component)]
 pub struct LuaPhase {

@@ -168,6 +168,28 @@ mod tests {
     }
 
     #[test]
+    fn next_equal_to_current_reenters_the_phase() {
+        let mut world = make_phase_world(0.25);
+        let entity = world.spawn(Phase::new("idle")).id();
+        tick_phases(&mut world);
+        take_log(&mut world);
+
+        world.get_mut::<Phase>(entity).unwrap().next = Some("idle".into());
+        tick_phases(&mut world);
+
+        assert_eq!(
+            take_log(&mut world),
+            ["exited:idle:idle@idle", "entered:idle:idle@idle"]
+        );
+        let phase = world.get::<Phase>(entity).unwrap();
+        assert_eq!(phase.previous.as_deref(), Some("idle"));
+        assert!(
+            approx_eq(phase.time_in_phase, 0.25),
+            "time resets on re-entry"
+        );
+    }
+
+    #[test]
     fn time_in_phase_accumulates_and_resets_on_swap() {
         let mut world = make_phase_world(0.25);
         let entity = world.spawn(Phase::new("idle")).id();

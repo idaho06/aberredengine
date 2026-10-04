@@ -2,7 +2,7 @@
 //!
 //! [`GameCtx`] is a [`SystemParam`] that bundles every query and resource
 //! a game callback is likely to need. It is the single context type shared by
-//! phases, collision rules, menus, and scene dispatch.
+//! collision rules, menus, and GUI interactables.
 //!
 //! # Usage in callbacks
 //!
@@ -86,7 +86,7 @@ pub struct GameCtx<'w, 's> {
     pub camera_targets: Query<'w, 's, &'static mut CameraTarget>,
     /// Mutable access to GUI widget hit-test/click state (enable/disable, etc.).
     /// Present here — not only in the click observer — so that any Rust
-    /// callback (`GuiRustCallback`, timer, phase, collision rule) can disable
+    /// callback (`GuiRustCallback`, menu, collision rule) can disable
     /// or re-enable a widget directly via `ctx.gui_interactables.get_mut(id)`.
     pub gui_interactables: Query<'w, 's, &'static mut GuiInteractable>,
     // Read-only queries
