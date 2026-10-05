@@ -2,7 +2,7 @@
 //!
 //! Attach this component (one per tweened type `T`) to any entity whose
 //! `Tween<T>` should invoke a Lua function when it stops playing after
-//! reaching its end — see [`TweenFinishedEvent`](aberred_core::events::tween::TweenFinishedEvent).
+//! reaching its end — see [`TweenFinished`](aberred_core::events::tween::TweenFinished).
 //!
 //! # Lua callback signature
 //!

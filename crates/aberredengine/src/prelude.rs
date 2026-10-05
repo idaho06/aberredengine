@@ -55,7 +55,7 @@ pub use aberred_core::events::menu::MenuSelected;
 pub use aberred_core::events::phase::{PhaseEntered, PhaseExited};
 pub use aberred_core::events::scene::{SceneEntered, SceneExited};
 pub use aberred_core::events::timer::TimerFired;
-pub use aberred_core::events::tween::TweenFinishedEvent;
+pub use aberred_core::events::tween::TweenFinished;
 
 pub use aberred_core::protocol::asset_kind::AssetKind;
 pub use aberred_core::protocol::audio::AudioCmd;

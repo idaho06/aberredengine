@@ -1,6 +1,6 @@
 //! Lua observer for tween-finished events.
 //!
-//! When a [`TweenFinishedEvent<T>`] fires and the entity has a matching
+//! When a [`TweenFinished<T>`] fires and the entity has a matching
 //! [`LuaOnTweenFinished<T>`] component, this observer calls the named Lua
 //! function with `(ctx, input)` — the same signature as timer, phase, and
 //! `on_animation_end` callbacks.
@@ -22,10 +22,10 @@ use bevy_ecs::prelude::*;
 use crate::components::lua_on_tween_finished::LuaOnTweenFinished;
 use crate::systems::lua_commands::{LuaDispatch, dispatch_and_drain};
 use aberred_core::components::tween::TweenValue;
-use aberred_core::events::tween::TweenFinishedEvent;
+use aberred_core::events::tween::TweenFinished;
 
 pub fn lua_tween_finished_observer<T: TweenValue>(
-    trigger: On<TweenFinishedEvent<T>>,
+    trigger: On<TweenFinished<T>>,
     on_finished_query: Query<&LuaOnTweenFinished<T>>,
     mut p: LuaDispatch,
 ) {

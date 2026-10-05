@@ -1914,12 +1914,12 @@ EngineBuilder::new()
 
 **Source:** `aberred-core/src/events/tween.rs`, `aberred-core/src/systems/tween.rs`
 
-`TweenFinishedEvent<T>` is triggered **once** by the tween system for a given `Tween<T>` the frame it stops playing — either a `LoopMode::Once` tween reaching its end, or a zero-duration tween snapping immediately. `LoopMode::Loop` and `LoopMode::PingPong` tweens never trigger it, since they never stop playing on their own.
+`TweenFinished<T>` is triggered **once** by the tween system for a given `Tween<T>` the frame it stops playing — either a `LoopMode::Once` tween reaching its end, or a zero-duration tween snapping immediately. `LoopMode::Loop` and `LoopMode::PingPong` tweens never trigger it, since they never stop playing on their own.
 
 **Event struct (generic over the tweened component type):**
 
 ```rust,ignore
-pub struct TweenFinishedEvent<T: TweenValue> {
+pub struct TweenFinished<T: TweenValue> {
     pub entity: Entity,
 }
 ```
@@ -1930,7 +1930,7 @@ pub struct TweenFinishedEvent<T: TweenValue> {
 use aberredengine::prelude::*;
 
 fn on_move_tween_done(
-    trigger: On<TweenFinishedEvent<MapPosition>>,
+    trigger: On<TweenFinished<MapPosition>>,
     mut commands: Commands,
 ) {
     // Despawn the entity whose move tween just finished

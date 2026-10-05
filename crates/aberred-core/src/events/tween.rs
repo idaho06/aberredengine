@@ -1,6 +1,6 @@
 //! Tween lifecycle events.
 //!
-//! [`TweenFinishedEvent`] is triggered once by [`tween_system`](crate::systems::tween::tween_system)
+//! [`TweenFinished`] is triggered once by [`tween_system`](crate::systems::tween::tween_system)
 //! on the frame a `Tween<T>` stops playing (a `LoopMode::Once` tween reaching
 //! its end, or the zero-duration snap-to-end case). `Loop`/`PingPong` tweens
 //! never trigger it, since they never stop playing.
@@ -20,13 +20,13 @@ use crate::components::tween::TweenValue;
 /// Not re-triggered on subsequent frames while the tween stays stopped.
 /// `LoopMode::Loop`/`LoopMode::PingPong` tweens never trigger this event.
 #[derive(Event, Debug, Clone, Copy)]
-pub struct TweenFinishedEvent<T: TweenValue> {
+pub struct TweenFinished<T: TweenValue> {
     /// The entity whose tween finished.
     pub entity: Entity,
     _marker: PhantomData<T>,
 }
 
-impl<T: TweenValue> TweenFinishedEvent<T> {
+impl<T: TweenValue> TweenFinished<T> {
     pub fn new(entity: Entity) -> Self {
         Self {
             entity,

@@ -235,7 +235,7 @@ mod tween_finished_event {
     use aberredengine::prelude::*;
 
     fn on_move_tween_done(
-        trigger: On<TweenFinishedEvent<MapPosition>>,
+        trigger: On<TweenFinished<MapPosition>>,
         mut commands: Commands,
     ) {
         // Despawn the entity whose move tween just finished

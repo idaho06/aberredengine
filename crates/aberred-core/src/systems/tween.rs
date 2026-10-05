@@ -6,7 +6,7 @@
 //! `tween_system::<Scale>`.
 
 use crate::components::tween::{Easing, LoopMode, Tween, TweenValue};
-use crate::events::tween::TweenFinishedEvent;
+use crate::events::tween::TweenFinished;
 use crate::resources::worldtime::WorldTime;
 use bevy_ecs::prelude::*;
 
@@ -77,7 +77,7 @@ pub(crate) fn advance(
 
 /// Animate components based on their matching [`Tween<T>`] component.
 ///
-/// Triggers [`TweenFinishedEvent<T>`] the frame a tween's `playing` flag
+/// Triggers [`TweenFinished<T>`] the frame a tween's `playing` flag
 /// flips from `true` to `false` — i.e. a `LoopMode::Once` tween reaching its
 /// end, or the zero-duration snap-to-end case. `Loop`/`PingPong` tweens never
 /// stop playing, so they never trigger it.
@@ -121,7 +121,7 @@ pub fn tween_system<T: TweenValue>(
         // `continue` above filters out already-stopped tweens), so a single
         // check here is enough to catch every way either branch can stop it.
         if !tw.playing {
-            commands.trigger(TweenFinishedEvent::<T>::new(entity));
+            commands.trigger(TweenFinished::<T>::new(entity));
         }
     }
 }
@@ -618,7 +618,7 @@ mod tests {
 
     fn count_finished_events<T: TweenValue>(world: &mut World) {
         world.spawn(Observer::new(
-            |_trigger: On<TweenFinishedEvent<T>>, mut count: ResMut<FinishedCount>| {
+            |_trigger: On<TweenFinished<T>>, mut count: ResMut<FinishedCount>| {
                 count.0 += 1;
             },
         ));
@@ -626,7 +626,7 @@ mod tests {
     }
 
     #[test]
-    fn tween_finished_event_fires_once_for_loop_mode_once() {
+    fn tween_finished_fires_once_for_loop_mode_once() {
         let mut world = World::new();
         world.insert_resource(WorldTime {
             delta: 0.6,
@@ -657,7 +657,7 @@ mod tests {
     }
 
     #[test]
-    fn tween_finished_event_fires_for_zero_duration_snap() {
+    fn tween_finished_fires_for_zero_duration_snap() {
         let mut world = World::new();
         world.insert_resource(WorldTime {
             delta: 0.1,
@@ -679,7 +679,7 @@ mod tests {
     }
 
     #[test]
-    fn tween_finished_event_never_fires_for_loop_mode() {
+    fn tween_finished_never_fires_for_loop_mode() {
         let mut world = World::new();
         world.insert_resource(WorldTime {
             delta: 0.6,
@@ -705,7 +705,7 @@ mod tests {
     }
 
     #[test]
-    fn tween_finished_event_never_fires_for_pingpong() {
+    fn tween_finished_never_fires_for_pingpong() {
         let mut world = World::new();
         world.insert_resource(WorldTime {
             delta: 0.6,
