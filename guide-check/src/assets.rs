@@ -356,6 +356,31 @@ mod tilemaps {
     } // GLUE
 }
 
+// Map files
+mod map_files {
+    use aberredengine::prelude::*;
+    use aberredengine::core::events::spawnmap::{MapSpawned, SpawnMapRequested};
+    use aberredengine::core::resources::mapdata::load_map;
+
+    fn spawn_level(_: On<SceneEntered>, mut commands: Commands) {
+        match load_map("assets/levels/level01.json") {
+            Ok(map) => commands.trigger(SpawnMapRequested { map }),
+            Err(e) => log::error!("level01.json: {e}"),
+        }
+    }
+
+    // ev.spawned[i] is the entity spawned for ev.map.entities[i].
+    fn on_map_spawned(ev: On<MapSpawned>) {
+        log::info!("{}: {} entities", ev.map.name, ev.spawned.len());
+    }
+
+    fn register_map(builder: EngineBuilder) -> EngineBuilder {
+        builder
+            .on_scene_enter("level01", spawn_level)
+            .add_observer(on_map_spawned)
+    }
+}
+
 // Camera
 mod camera {
 

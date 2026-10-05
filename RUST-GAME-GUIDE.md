@@ -1206,6 +1206,36 @@ EngineBuilder::new()
 
 > **Note:** `load_tilemap_data` and `spawn_tiles` remain available as low-level utilities for advanced use cases where manual control of the load/spawn cycle is needed.
 
+### Map files
+
+A map file (JSON deserialized into `MapData`, any extension) lists textures, fonts, animations and entity definitions. Load it with `load_map(path)` and trigger `SpawnMapRequested { map }`: the engine queues the map's textures and fonts, fills `AnimationStore` with its animations, and spawns its entities. Don't also queue the map's assets yourself: a texture would load twice, and so would a font you queue after the map (see [Waiting for loads](#waiting-for-loads)). Then the engine triggers `MapSpawned { map, spawned }`:
+
+```rust
+use aberredengine::prelude::*;
+use aberredengine::core::events::spawnmap::{MapSpawned, SpawnMapRequested};
+use aberredengine::core::resources::mapdata::load_map;
+
+fn spawn_level(_: On<SceneEntered>, mut commands: Commands) {
+    match load_map("assets/levels/level01.json") {
+        Ok(map) => commands.trigger(SpawnMapRequested { map }),
+        Err(e) => log::error!("level01.json: {e}"),
+    }
+}
+
+// ev.spawned[i] is the entity spawned for ev.map.entities[i].
+fn on_map_spawned(ev: On<MapSpawned>) {
+    log::info!("{}: {} entities", ev.map.name, ev.spawned.len());
+}
+
+fn register_map(builder: EngineBuilder) -> EngineBuilder {
+    builder
+        .on_scene_enter("level01", spawn_level)
+        .add_observer(on_map_spawned)
+}
+```
+
+A `.deterministic()` game loads a map's assets during `Setup` (see [Assets load during Setup](#assets-load-during-setup)).
+
 ### Camera
 
 `Camera2DRes` is pre-inserted by the engine with `Camera2D::screen_centered(&screen)`: `target` at the origin and `offset` at half the render resolution (center-screen). If you need a different initial position, request `ResMut<Camera2DRes>` and overwrite it — use `ScreenSize` (a logic-side resource) rather than a live raylib handle for the resolution, since `RaylibAccess` isn't available here:

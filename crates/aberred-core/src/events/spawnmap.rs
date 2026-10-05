@@ -1,8 +1,8 @@
 //! Event to request spawning all assets and entities from a [`MapData`].
 //!
 //! Trigger this event after loading a map with
-//! [`crate::resources::mapdata::load_map`] to have the engine populate the
-//! asset stores and spawn all entities defined in the map.
+//! [`crate::resources::mapdata::load_map`] to have the engine queue the map's
+//! assets and spawn its entities (see [`SpawnMapRequested`]).
 //!
 //! The built-in [`crate::systems::mapspawn::spawn_map_observer`] handles this
 //! event automatically; no manual registration is needed. Once the map's
@@ -24,8 +24,11 @@ use bevy_ecs::prelude::{Entity, Event};
 
 use crate::resources::mapdata::MapData;
 
-/// Trigger this event to load all assets in a [`MapData`] into the engine
-/// stores and spawn all entity definitions.
+/// Trigger this event to queue every texture and font in a [`MapData`], fill
+/// `AnimationStore` with its animations, and spawn its entity definitions.
+///
+/// Don't also queue the map's assets yourself: textures always reload, and a
+/// font queued after the map reloads (the map skips fonts already loaded).
 #[derive(Event)]
 pub struct SpawnMapRequested {
     pub map: MapData,
