@@ -2,25 +2,44 @@
 
 This guide explains how to build a 2D game in pure Rust using the Aberred Engine as a library dependency, without Lua scripting.
 
+**Contents**
+
+1. [What the Engine Provides](#1-what-the-engine-provides)
+2. [Project Setup](#2-project-setup)
+3. [How a Game Runs](#3-how-a-game-runs)
+4. [EngineBuilder and Scenes](#4-enginebuilder-and-scenes)
+5. [Writing Game Logic](#5-writing-game-logic)
+6. [Loading Assets](#6-loading-assets)
+7. [Spawning Entities](#7-spawning-entities)
+8. [Gameplay Components and Events](#8-gameplay-components-and-events)
+9. [Render-Side Callbacks](#9-render-side-callbacks)
+10. [Determinism and Replay](#10-determinism-and-replay)
+11. [Engine Resources Quick Reference](#11-engine-resources-quick-reference)
+12. [The config.ini File](#12-the-configini-file)
+13. [Building, Running, and Testing](#13-building-running-and-testing)
+
 ## 1. What the Engine Provides
 
-Aberred Engine is a 2D game engine built on **Bevy ECS 0.19** and **sola-raylib 6.3**. It handles the main loop, windowing, rendering, and a full ECS system schedule. You supply game-specific logic via hook functions.
+Aberred Engine is a 2D game engine built on **Bevy ECS 0.19** and **sola-raylib 6.3**. It handles the main loop, windowing, rendering, and a full ECS system schedule. You supply game logic as ordinary ECS systems and observers.
 
 Built-in systems:
 
 - **Rendering** — sprites, text, per-entity shaders, post-process shader chains, camera, letterboxing
 - **Physics** — velocity, friction, max speed, named acceleration forces, freeze/unfreeze
-- **Collision** — AABB detection with group-based rules and callback dispatch
+- **Collision** — AABB detection with group-based rules that trigger a `Collided` event
 - **Audio** — music and sound playback via a background thread bridge
-- **Input** — keyboard polling with `just_pressed`/`just_released` tracking
-- **Menus** — scrollable interactive menus with selection callbacks
+- **Input** — rebindable actions over keyboard, mouse and gamepad, with `just_pressed`/`just_released` tracking
+- **Menus** — scrollable interactive menus with built-in `MenuActions` and a `MenuSelected` event
 - **Animation** — frame-based sprite animation with controller rules
 - **Particles** — emitter system with templates, shapes, arcs, speed ranges
-- **Scene management** — named scenes with enter/update/exit, GUI, and world-draw callbacks plus auto-despawn
+- **Scene management** — named scenes with `SceneEntered`/`SceneExited` events, scene-scoped systems, optional GUI and world-draw callbacks, and auto-despawn
 - **Tweens** — position, rotation, and scale interpolation with easing and loop modes
 - **Timers** — repeating or one-shot countdown timers that trigger a `TimerFired` event
 - **Phase state machines** — per-entity state machines over named phases, with `PhaseEntered`/`PhaseExited` events
 - **Parent-child hierarchy** — recursive transform propagation (position, rotation, scale)
+- **GUI widgets** — themed windows, buttons, images, labels and progress bars that trigger a `GuiClicked` event
+- **Tilemaps** — tile layers loaded from a PNG atlas and JSON
+- **Determinism and replay** — seeded simulation randomness, input recording and playback
 
 ---
 
@@ -469,7 +488,7 @@ Every logic-thread resource is listed in [Section 11](#11-engine-resources-quick
 
 ### Custom systems and observers
 
-These builder methods let you register multiple independent ECS systems and event observers alongside the existing hooks. **All of them run on the logic thread**, on the same schedule as every other per-tick system in this guide — see [Threading Model](#threading-model-what-your-code-can-access). Like any logic-thread code, they can't take render-thread resources.
+These builder methods register independent ECS systems and event observers. **All of them run on the logic thread**, on the same schedule as every other per-tick system in this guide — see [Threading Model](#threading-model-what-your-code-can-access). Like any logic-thread code, they can't take render-thread resources.
 
 #### `.add_system(system)` — multiple per-sim-tick systems
 
@@ -699,7 +718,7 @@ fn setup(mut assets: AssetLoader) -> Result {
 }
 ```
 
-Each `load_*` returns `Result<(), AssetError>`. It only fails in a `.deterministic()` game that is already `Playing` (see [Determinism and replay](#10-determinism-and-replay)). Hooks and `.add_system()` systems may return bevy's `Result`, so `?` works there. An error from an `.add_system()` system goes to bevy's error handler; an error from a hook is logged as a warning.
+Each `load_*` returns `Result<(), AssetError>`. It only fails in a `.deterministic()` game that is already `Playing` (see [Determinism and replay](#10-determinism-and-replay)). The setup hook and `.add_system()` systems may return bevy's `Result`, so `?` works there. An error from an `.add_system()` system goes to bevy's error handler; an error from the setup hook is logged as a warning.
 
 `AssetLoader` also answers whether a load has landed: `is_texture_loaded(key)`, `texture_size(key)` and `is_font_loaded(key)` return `false`/`None` until the render thread replies, usually a tick or two after the load was queued. Render assets and audio assets have separate key spaces, so a texture and a sound can share a key.
 
@@ -1314,9 +1333,9 @@ When `WorldSignals` has a value for key `"score"`, the text automatically update
 | `InputControlled` | `InputControlled::symmetric(speed)` (fields `up_velocity`, `down_velocity`, `left_velocity`, `right_velocity` for per-direction speeds) |
 | `AccelerationControlled` | `AccelerationControlled::symmetric(accel)` |
 | `MouseControlled` | `MouseControlled { follow_x: true, follow_y: true }` |
-| `Timer` | `Timer::new(duration_secs)` (repeating) or `Timer::once(duration_secs)` — triggers `TimerFired` on its entity; see §8.1 |
-| `Phase` | `Phase::new("initial_phase")` — set `next` to transition; triggers `PhaseEntered`/`PhaseExited`; see §8.2 |
-| `CollisionRule` | `CollisionRule::new("group_a", "group_b")` — observe `Collided` on it; see §8.3 |
+| `Timer` | `Timer::new(duration_secs)` (repeating) or `Timer::once(duration_secs)` — triggers `TimerFired` on its entity; see [§8.1](#81-timers) |
+| `Phase` | `Phase::new("initial_phase")` — set `next` to transition; triggers `PhaseEntered`/`PhaseExited`; see [§8.2](#82-phase-state-machines) |
+| `CollisionRule` | `CollisionRule::new("group_a", "group_b")` — observe `Collided` on it; see [§8.3](#83-collision-rules) |
 | `Tween<MapPosition>` | `Tween::position(from: Vec2, to: Vec2, duration)` |
 | `Tween<Rotation>` | `Tween::rotation(from_degrees, to_degrees, duration)` |
 | `Tween<Scale>` | `Tween::scale(from: Vec2, to: Vec2, duration)` |
@@ -1326,8 +1345,8 @@ When `WorldSignals` has a value for key `"score"`, the text automatically update
 | `GuiLabel` | `GuiLabel::new(width, height, "Text")` — add `.with_signal_binding(key)` / `.with_signal_binding_format("fmt {}") ` to bind text to `WorldSignals` |
 | `GuiImage` | `GuiImage::new(width, height, "tex_key", offset_x, offset_y)` — add `.with_offset_hover(x, y)` / `.with_offset_pressed(x, y)` / `.with_offset_disabled(x, y)` for per-state atlas offsets |
 | `GuiProgressBar` | `GuiProgressBar::new(w, h, value, max)` — add `.with_direction(ProgressBarDirection)`, `.with_signal_binding(key)`, `.with_theme_key(key)`; requires `ScreenPosition` + `ZIndex` |
-| `Shadow` | `Shadow::new(dx, dy, r, g, b, a)` or `Shadow::default_color(dx, dy)` — pre-pass shadow for `Sprite` and `DynamicText` entities; see §8.7 |
-| `GuiInteractable` | `GuiInteractable::new(width, height)` — hit-test/click state; observe `GuiClicked` for clicks; see §8.7 |
+| `Shadow` | `Shadow::new(dx, dy, r, g, b, a)` or `Shadow::default_color(dx, dy)` — pre-pass shadow for `Sprite` and `DynamicText` entities; see [§8.7](#87-gui-widgets) |
+| `GuiInteractable` | `GuiInteractable::new(width, height)` — hit-test/click state; observe `GuiClicked` for clicks; see [§8.7](#87-gui-widgets) |
 | `GuiOffset` | `GuiOffset(Vec2::new(x, y))` — position relative to a `ChildOf` parent |
 
 **Animation controller rules.** `with_rule` takes a `Condition` (`aberredengine::core::components::animation::{Condition, CmpOp}`) evaluated against the entity's **own** `Signals` component, not `WorldSignals`. An entity without `Signals` is skipped. Rules run in order every sim tick and the first match sets the animation; when none matches, the fallback key plays. `Condition` variants: `ScalarCmp`, `ScalarRange`, `IntegerCmp`, `IntegerRange`, `HasFlag`, `LacksFlag`, and the combinators `All`, `Any`, `Not`.
@@ -1563,7 +1582,7 @@ fn on_player_phase_entered(
 }
 ```
 
-As with timers (§8.1), observe one entity with `.observe(handler)` or many with one global observer filtered by a marker component.
+As with timers ([§8.1](#81-timers)), observe one entity with `.observe(handler)` or many with one global observer filtered by a marker component.
 
 **Transitions:** `phase_system` runs at the start of every sim tick, in `SimSet::Phases`, before `.add_system()` systems and in every game state. It applies a `next` set at any point in the previous tick: it sets `previous` to the old phase, `current` to the new one, resets `time_in_phase` to 0, and triggers `PhaseExited` then `PhaseEntered`. A transition requested in tick N therefore applies in tick N+1, and chained transitions (a `PhaseEntered` observer setting `next`) advance one per sim tick. Setting `next` to the current phase re-enters it: both events fire with the same name and `time_in_phase` resets. Phase names are never validated: `phase.next = Some("jumpin".into())` switches to a phase no system handles, and the entity silently does nothing.
 
@@ -1826,7 +1845,7 @@ clickable images. It is plain ECS components and systems, fully usable from pure
 `gui_hit_test_system`) are registered automatically by `EngineBuilder`
 regardless of the `lua` feature — there's nothing extra to wire up.
 
-This is distinct from the ImGui GUI callback covered in Section 9 — ImGui is for editor/debug
+This is distinct from the ImGui GUI callback covered in [ImGui GUI callback](#imgui-gui-callback-rust-only) (Section 9) — ImGui is for editor/debug
 tooling rendered every frame via a callback; this widget system is for in-game UI made of regular entities
 that participate in the normal render/collision/hierarchy pipeline (positioned with `ScreenPosition`,
 parented with `ChildOf`, hidden by removing `ScreenPosition`, etc.).
@@ -1875,7 +1894,7 @@ fn setup_gui_theme(mut theme_store: ResMut<GuiThemeStore>) {
 ```
 
 `GuiNinePatch::new(tex_key, source, border)` maps onto raylib's `NPatchInfo`: the `source` region of the texture, with a
-`border`-pixel border on every side (`.with_borders(left, top, right, bottom)` for per-side widths). `tex_key` must already be loaded into `TextureStore` (see Section 6). `theme.font` defaults to an empty key — if it's
+`border`-pixel border on every side (`.with_borders(left, top, right, bottom)` for per-side widths). `tex_key` must already be loaded into `TextureStore` (see [Section 6](#6-loading-assets)). `theme.font` defaults to an empty key — if it's
 still unset when a non-empty caption is about to spawn, the engine logs an `error!`; the caption entity still
 spawns, it just renders no visible glyphs.
 
@@ -2028,7 +2047,7 @@ fn launch_ball(
 
 ## 9. Render-Side Callbacks
 
-Two optional per-scene callbacks run on the render thread instead of the logic thread (see [Threading Model](#threading-model-what-your-code-can-access)): an ImGui GUI callback and a world-space draw callback. They are plain functions, not systems. The render thread holds no live game state, so each takes a context struct with a drawing handle and read-only views of game state (a `SignalSnapshot`, not the live [`WorldSignals`](#worldsignals-api)). Only the GUI callback has a write side: it queues signal writes for the logic thread.
+Each scene can have two optional callbacks that run on the render thread instead of the logic thread (see [Threading Model](#threading-model-what-your-code-can-access)): an ImGui GUI callback and a world-space draw callback. They are plain functions, not systems. The render thread holds no live game state, so each takes a context struct with a drawing handle and read-only views of game state (a `SignalSnapshot`, not the live [`WorldSignals`](#worldsignals-api)). Only the GUI callback has a write side: it queues signal writes for the logic thread.
 
 ### ImGui GUI callback (Rust-only)
 
@@ -2241,7 +2260,7 @@ All resources are accessed as Bevy ECS system parameters. Use `Res<T>` / `ResMut
 | `SceneManager` | `Res` | Scene registry (only present with `.add_scene()`) |
 | `Camera2DRes` | `ResMut` | 2D camera (target, offset, zoom, rotation) |
 | `AnimationStore` | `Res` / `ResMut` | Animation definitions |
-| `GuiThemeStore` | `ResMut` | Named GUI theme registry (`FxHashMap<Arc<str>, GuiTheme>`); each theme holds panel/button/label/progress_bar nine-patches, font settings, and optional shadows; see §8.7 |
+| `GuiThemeStore` | `ResMut` | Named GUI theme registry (`FxHashMap<Arc<str>, GuiTheme>`); each theme holds panel/button/label/progress_bar nine-patches, font settings, and optional shadows; see [§8.7](#87-gui-widgets) |
 | `GuiInputState` | `Res` | `click_consumed_this_frame: bool` — set by `gui_hit_test_system` when any `GuiInteractable` absorbs a click; reset each frame |
 | `FontMetricsStore` | `Res` | CPU-side glyph measurement, keyed like `FontStore`. Populated asynchronously after a `RenderAssetCmd::Font` load completes — see [Section 6](#6-loading-assets). |
 | `TextureDimsStore` | `Res` | Pixel `(width, height)` per loaded texture key, via `.get(key)`/`.width(key)`. Populated asynchronously after a `RenderAssetCmd::Texture` load completes — see [Section 6](#6-loading-assets). |
@@ -2354,7 +2373,7 @@ Use `AppState` for richer GUI/editor snapshots and view-models that do not belon
 **How render-side callbacks see it:** the live `AppState` exists only in the logic world. Render-thread callbacks (GUI and world-draw callbacks) receive a cloned, read-only copy carried in the snapshot. A `generation` counter decides when that copy is refreshed:
 
 - `insert` and `get_mut` always bump `generation` (`get_mut` even if you don't end up writing); `remove` bumps it only when a value was removed; `get` never does.
-- The snapshot clones `AppState` again only when `generation` has changed since the last publish. Inserting every tick (as the §9 editor example does for brevity) therefore forces a full clone on every snapshot — insert or `get_mut` only when the value actually changes.
+- The snapshot clones `AppState` again only when `generation` has changed since the last publish. Inserting every tick (as the editor example in [Section 9](#imgui-gui-callback-rust-only) does for brevity) therefore forces a full clone on every snapshot — insert or `get_mut` only when the value actually changes.
 - Nothing a render-side callback does to its copy reaches the logic world. Send changes back through `SignalIntents` instead.
 - For state that both sides must share mutably (e.g. an editor cache), store an `Arc<Mutex<T>>` (or `Arc<RwLock<T>>`): cloning it copies the pointer, so both sides see the same data. A bare `Mutex<T>` is not `Clone` and cannot be inserted.
 
@@ -2472,7 +2491,7 @@ fn setup_controls(mut bindings: ResMut<InputBindings>) {
 
 ## 12. The config.ini File
 
-Section 2 showed the basics. This is the complete reference.
+[Section 2](#configini) showed the basics. This is the complete reference.
 
 ### Complete key reference
 
