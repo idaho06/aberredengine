@@ -1,7 +1,7 @@
 //! Public tilemap loading and tile-spawning utilities.
 //!
-//! These functions are always compiled (no feature gates) so Rust-only downstream
-//! crates can use them without enabling the `lua` feature.
+//! These functions have no feature gates, so Rust-only downstream crates can
+//! use them.
 
 use std::io::Read;
 use std::sync::Arc;

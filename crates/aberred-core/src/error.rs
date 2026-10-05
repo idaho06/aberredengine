@@ -80,7 +80,7 @@ pub enum EngineError {
     Imgui { message: String },
 
     /// Carries `mlua::Error`'s `Display` output as a plain `String` --
-    /// `aberred-core` cannot depend on `mlua` (Lua is facade-only), so the
+    /// `aberred-core` cannot depend on `mlua` (only `aberred-lua` does), so the
     /// Lua-side caller converts via `.map_err(|e| EngineError::Lua(e.to_string()))`
     /// instead of `#[from]`.
     #[error("Failed to create Lua runtime: {0}")]

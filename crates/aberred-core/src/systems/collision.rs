@@ -4,8 +4,7 @@
 //! common to `lua_collision` (`aberred-lua`) and
 //! [`collision_rule`](crate::systems::collision_rule).
 //!
-//! All functions are pure Rust with no Lua dependency and are always compiled
-//! regardless of the `lua` feature flag.
+//! All functions are pure Rust with no Lua dependency.
 //!
 //! # Related
 //!
