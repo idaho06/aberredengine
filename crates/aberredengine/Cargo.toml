@@ -45,7 +45,7 @@ embed-resource.workspace = true
 bevy_ecs = { workspace = true, features = ["debug"] }
 tempfile.workspace = true
 # `aberred-core`'s own `cfg(test)` never fires from this (dependent) crate's
-# test build -- unlike `lua`/`tracy`/`test-support` above, which only turn on
+# test build -- unlike `tracy`/`test-support` above, which only turn on
 # when the facade opts in, `aberred-core/test-support` must be enabled
 # UNCONDITIONALLY here so plain `cargo test` on the facade (which implies
 # `cfg(test)`, not the `test-support` feature) still reaches
@@ -55,6 +55,6 @@ aberred-core = { path = "../aberred-core", features = ["test-support"] }
 
 [features]
 default = ["lua"]
-lua   = ["dep:aberred-lua", "aberred-core/lua"]
+lua   = ["dep:aberred-lua"]
 tracy = ["dep:tracy-client", "dep:tracy-client-sys", "aberred-core/tracy", "aberred-audio/tracy", "aberred-render/tracy", "aberred-lua?/tracy"]  # profiling — never in default
 test-support = ["aberred-core/test-support"]  # headless TestWorld harness — never in default

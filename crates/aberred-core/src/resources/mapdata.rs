@@ -132,11 +132,11 @@ pub struct EntityDef {
     /// Color tint `[r, g, b, a]` in 0–255 (maps to [`crate::components::tint::Tint`]).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tint: Option<[u8; 4]>,
-    /// *(feature = "lua")* Lua function to call once when this entity is first seen by the engine
+    /// In a game that runs Lua: Lua function to call once when this entity is first seen by the engine
     /// (maps to `aberred_lua::components::luasetup::LuaSetup`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub lua_setup: Option<String>,
-    /// *(feature = "lua")* Lua function to call once when the entity's non-looped animation first finishes
+    /// In a game that runs Lua: Lua function to call once when the entity's non-looped animation first finishes
     /// (maps to `aberred_lua::components::lua_on_animation_end::LuaOnAnimationEnd`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub on_animation_end: Option<String>,

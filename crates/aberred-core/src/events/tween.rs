@@ -7,7 +7,7 @@
 //!
 //! Rust consumers can observe it via `EngineBuilder::add_observer`.
 //! Lua consumers attach a `LuaOnTweenFinished` (`aberred_lua::components::lua_on_tween_finished`)
-//! component to the entity (feature = "lua").
+//! component to the entity in a game that runs Lua.
 
 use std::marker::PhantomData;
 
