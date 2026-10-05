@@ -10,6 +10,7 @@
 //! - [`appstate`] – typed state store passed to `GuiCallback`; one slot per Rust type
 //! - [`camera2d`] – shared 2D camera used for world/screen transforms
 //! - [`camerafollowconfig`] – configuration for the camera-follow system
+//! - [`collision_contacts`] – ruled collision pairs touching last tick, for started/ended contacts
 //! - [`collision_rule_index`] – pre-filters collision rule entities by group pair, avoiding a per-event linear scan
 //! - [`debugmode`] – presence toggles optional debug overlays and logs
 //! - [`debugoverlayconfig`] – per-overlay toggles for the imgui debug HUD
@@ -35,6 +36,7 @@ pub mod animationstore;
 pub mod appstate;
 pub mod camera2d;
 pub mod camerafollowconfig;
+pub mod collision_contacts;
 pub mod collision_rule_index;
 pub mod debugmode;
 pub mod debugoverlayconfig;
