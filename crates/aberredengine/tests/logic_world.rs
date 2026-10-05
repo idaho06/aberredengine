@@ -129,7 +129,7 @@ fn spawn_and_collide_triggers_collided_on_the_rule() {
 
     assert!(
         tw.world.resource::<WorldSignals>().has_flag("collided"),
-        "overlapping colliders in matching groups must fire the Rust collision rule"
+        "overlapping colliders in matching groups must trigger Collided on the rule"
     );
 }
 

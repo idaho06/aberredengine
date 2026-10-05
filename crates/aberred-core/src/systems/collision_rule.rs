@@ -25,7 +25,7 @@ use crate::components::collision::CollisionRule;
 use crate::components::group::Group;
 use crate::events::collision::{Collided, CollisionEvent};
 use crate::resources::collision_rule_index::CollisionRuleIndex;
-use crate::systems::collision::{ColliderRects, compute_sides, find_matching_rule, resolve_groups};
+use crate::systems::collision::{ColliderRects, compute_sides, resolve_groups};
 
 /// Observer that turns a [`CollisionEvent`] into a [`Collided`] on the
 /// matching [`CollisionRule`] entity.
@@ -54,12 +54,7 @@ pub fn collision_rule_observer(
         return;
     };
 
-    let Some(bucket) = index.bucket(ga, gb) else {
-        return;
-    };
-
-    let lookup = |e| rules.get(e).ok().map(|r| (&*r.group_a, &*r.group_b, e));
-    let Some((rule, ent_a, ent_b)) = find_matching_rule(bucket, lookup, a, b, ga, gb) else {
+    let Some((rule, _, ent_a, ent_b)) = index.find_match(&rules, a, b, ga, gb) else {
         return;
     };
 

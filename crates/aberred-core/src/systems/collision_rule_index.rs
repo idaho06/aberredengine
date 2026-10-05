@@ -19,7 +19,8 @@
 
 use bevy_ecs::prelude::*;
 
-use crate::resources::collision_rule_index::{RuleGroups, RuleIndex};
+use crate::components::collision::RuleGroups;
+use crate::resources::collision_rule_index::RuleIndex;
 
 /// Rebuilds [`RuleIndex<T>`] from every `T` entity when one changed or was
 /// removed since the last run.

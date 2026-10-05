@@ -18,7 +18,7 @@ use bevy_ecs::prelude::*;
 use bevy_ecs::system::SystemParam;
 
 use crate::components::boxcollider::BoxCollider;
-use crate::components::collision::{BoxSides, get_colliding_sides, match_groups};
+use crate::components::collision::{BoxSides, get_colliding_sides};
 use crate::components::globaltransform2d::GlobalTransform2D;
 use crate::components::group::Group;
 use crate::components::mapposition::MapPosition;
@@ -97,33 +97,6 @@ pub fn resolve_groups<'q>(
     let ga = groups.get(a).ok()?;
     let gb = groups.get(b).ok()?;
     Some((ga.name(), gb.name()))
-}
-
-/// Scan a [`CollisionRuleIndex`](crate::resources::collision_rule_index::CollisionRuleIndex)
-/// bucket for the first rule whose groups still match `(ga, gb)`, skipping
-/// any entity that despawned between this tick's index rebuild and now.
-///
-/// `lookup` returns a rule entity's `(group_a, group_b, rule)`, or `None` if
-/// it no longer is a rule; `rule` is whatever the caller needs back. Returns
-/// `(rule, ent_a, ent_b)`, with `ent_a`/`ent_b` ordered to match the rule's
-/// `group_a`/`group_b`.
-///
-/// Shared by [`collision_rule_observer`](crate::systems::collision_rule::collision_rule_observer)
-/// and `lua_collision_observer` (`aberred-lua`), which query different rule
-/// components.
-pub fn find_matching_rule<'q, R>(
-    bucket: &[Entity],
-    lookup: impl Fn(Entity) -> Option<(&'q str, &'q str, R)>,
-    a: Entity,
-    b: Entity,
-    ga: &str,
-    gb: &str,
-) -> Option<(R, Entity, Entity)> {
-    bucket.iter().find_map(|&rule_entity| {
-        let (rule_a, rule_b, rule) = lookup(rule_entity)?;
-        let (ent_a, ent_b) = match_groups(rule_a, rule_b, a, b, ga, gb)?;
-        Some((rule, ent_a, ent_b))
-    })
 }
 
 #[cfg(test)]

@@ -39,7 +39,17 @@ use bevy_ecs::prelude::*;
 use smallvec::SmallVec;
 
 use crate::math::Rect;
-use crate::resources::collision_rule_index::RuleGroups;
+
+/// A rule component matched by a pair of group names.
+///
+/// Implemented by [`CollisionRule`] and by `aberred-lua`'s
+/// `LuaCollisionRule`, so both share
+/// [`RuleIndex`](crate::resources::collision_rule_index::RuleIndex) and its
+/// matching.
+pub trait RuleGroups: Component {
+    /// The rule's `(group_a, group_b)`.
+    fn groups(&self) -> (&str, &str);
+}
 
 /// Matches collisions between two entity groups.
 ///
@@ -75,7 +85,7 @@ impl RuleGroups for CollisionRule {
 /// entities ordered to match `rule_a` and `rule_b`.
 ///
 /// This is the core matching logic used by
-/// [`find_matching_rule`](crate::systems::collision::find_matching_rule).
+/// [`RuleIndex::find_match`](crate::resources::collision_rule_index::RuleIndex::find_match).
 pub fn match_groups(
     rule_a: &str,
     rule_b: &str,

@@ -16,17 +16,11 @@
 
 use std::marker::PhantomData;
 
-use bevy_ecs::prelude::{Component, Entity, Resource};
+use bevy_ecs::prelude::{Entity, Query, Resource};
 use rustc_hash::FxHashMap;
 use smallvec::SmallVec;
 
-use crate::components::collision::CollisionRule;
-
-/// A rule component matched by a pair of group names.
-pub trait RuleGroups: Component {
-    /// The rule's `(group_a, group_b)`.
-    fn groups(&self) -> (&str, &str);
-}
+use crate::components::collision::{CollisionRule, RuleGroups, match_groups};
 
 /// Normalizes an unordered group-name pair so `(a, b)` and `(b, a)` produce
 /// the same key. Borrows rather than allocates, so a per-`CollisionEvent`
@@ -70,6 +64,28 @@ impl<T: RuleGroups> RuleIndex<T> {
     pub fn bucket(&self, ga: &str, gb: &str) -> Option<&[Entity]> {
         let (lo, hi) = normalize_pair(ga, gb);
         self.buckets.get(lo)?.get(hi).map(|v| v.as_slice())
+    }
+
+    /// The first rule covering the colliding pair `(a, b)` in groups
+    /// `(ga, gb)`, as `(rule_entity, rule, ent_a, ent_b)` with `ent_a`/`ent_b`
+    /// ordered to match the rule's `group_a`/`group_b`.
+    ///
+    /// Scans the pair's bucket in `Entity` order, skipping any entity that
+    /// stopped being a rule (or despawned) since the last rebuild.
+    pub fn find_match<'q>(
+        &self,
+        rules: &'q Query<&T>,
+        a: Entity,
+        b: Entity,
+        ga: &str,
+        gb: &str,
+    ) -> Option<(Entity, &'q T, Entity, Entity)> {
+        self.bucket(ga, gb)?.iter().find_map(|&rule_entity| {
+            let rule = rules.get(rule_entity).ok()?;
+            let (rule_a, rule_b) = rule.groups();
+            let (ent_a, ent_b) = match_groups(rule_a, rule_b, a, b, ga, gb)?;
+            Some((rule_entity, rule, ent_a, ent_b))
+        })
     }
 
     /// Clears and refills from `rules`, sorting each resulting sub-bucket by

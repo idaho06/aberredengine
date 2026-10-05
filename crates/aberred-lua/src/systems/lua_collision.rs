@@ -58,7 +58,7 @@ use aberred_core::resources::animationstore::AnimationStore;
 use aberred_core::resources::systemsstore::SystemsStore;
 use aberred_core::resources::worldsignals::WorldSignals;
 use aberred_core::systems::collision::{
-    compute_sides, find_matching_rule, resolve_collider_rect, resolve_groups, resolve_world_pos,
+    compute_sides, resolve_collider_rect, resolve_groups, resolve_world_pos,
 };
 use log::{error, warn};
 
@@ -99,12 +99,9 @@ pub fn lua_collision_observer(
         None => return,
     };
 
-    let Some(bucket) = params.index.bucket(ga, gb) else {
-        return;
-    };
-
-    let lookup = |e| (params.lua_rules.get(e).ok()).map(|r| (&*r.group_a, &*r.group_b, r));
-    let Some((lua_rule, ent_a, ent_b)) = find_matching_rule(bucket, lookup, a, b, ga, gb) else {
+    let Some((_, lua_rule, ent_a, ent_b)) =
+        params.index.find_match(&params.lua_rules, a, b, ga, gb)
+    else {
         return;
     };
 

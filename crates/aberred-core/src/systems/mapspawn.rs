@@ -389,8 +389,8 @@ mod tests {
         };
         queue.apply(&mut world);
 
-        // One entity per `map.entities` entry -- callers zip the two by
-        // index (see spawn_map's doc comment), so this length must hold.
+        // One entity per `map.entities` entry -- `MapSpawned` observers zip
+        // `spawned` against `map.entities` by index, so this length must hold.
         assert_eq!(entities.len(), map.entities.len());
         assert_eq!(render_asset_cmds.len(), 2);
         match &render_asset_cmds[0] {

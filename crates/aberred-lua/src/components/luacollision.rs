@@ -26,7 +26,8 @@
 
 use std::sync::Arc;
 
-use aberred_core::resources::collision_rule_index::{RuleGroups, RuleIndex};
+use aberred_core::components::collision::RuleGroups;
+use aberred_core::resources::collision_rule_index::RuleIndex;
 use bevy_ecs::prelude::*;
 
 /// Collision rule that invokes a Lua callback function.
