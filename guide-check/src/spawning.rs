@@ -128,36 +128,3 @@ mod spawning_context_observers_and_systems {
         commands.spawn(( /* ... */ ));
     }
 }
-
-// Your own components and resources
-mod own_components_and_resources {
-    use aberredengine::prelude::*; // GLUE
-
-    fn register() -> EngineBuilder { // GLUE
-    use aberredengine::prelude::*;
-
-    #[derive(Component)]
-    struct Health(i32);
-
-    #[derive(Resource, Default)]
-    struct Score(u32);
-
-    fn setup(mut commands: Commands) {
-        commands.insert_resource(Score::default());
-    }
-
-    fn remove_dead(mut commands: Commands, mut score: ResMut<Score>, query: Query<(Entity, &Health)>) {
-        for (entity, health) in &query {
-            if health.0 <= 0 {
-                commands.entity(entity).despawn();
-                score.0 += 100;
-            }
-        }
-    }
-
-    EngineBuilder::new()
-        .on_setup(setup)
-        .add_system(remove_dead)
-        // …
-    } // GLUE
-}

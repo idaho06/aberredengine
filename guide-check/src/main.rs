@@ -9,6 +9,7 @@
 mod assets;
 mod gameplay;
 mod gui;
+mod logic;
 mod resources;
 mod scene_manager;
 mod scenes;

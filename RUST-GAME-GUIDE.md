@@ -190,8 +190,8 @@ The engine owns the main loop. You configure it through `EngineBuilder`: registe
 | `.initial_scene(name)` | Which scene starts first (required with `.add_scene()`) |
 | `.loading_scene(name)` | A registered scene shown while Setup waits for assets. See [Loading screen](#loading-screen). |
 | `.track_group(name)` | Count group `name`'s entities for the whole game (published as `"group_count:<name>"`, kept across scene switches). Can be called multiple times. See [Group tracking across scenes](#group-tracking-across-scenes). |
-| `.add_system(system)` | Add a per-sim-tick system, run only while `Playing` (`run_if(state_is_playing)`, ordered alongside script-update systems). Can be called multiple times. A sim tick is not the same as a render frame; see [The sim tick and `dt`](#the-sim-tick-and-dt). |
-| `.configure_schedule(closure)` | Add systems to the same schedule `.add_system()` targets, with full ordering control — no auto-constraints applied. Use this for custom ordering relative to the engine's own systems (via `SimSet` or `.after()`/`.before()`). |
+| `.add_system(system)` | Add a per-sim-tick system, run only while `Playing` (`run_if(state_is_playing)`, ordered alongside script-update systems). Can be called multiple times. See [Custom systems and observers](#custom-systems-and-observers). |
+| `.configure_schedule(closure)` | Add systems to the same schedule `.add_system()` targets, with full ordering control — no auto-constraints applied. Use this for custom ordering relative to the engine's own systems (via `SimSet` or `.after()`/`.before()`). See [Custom systems and observers](#custom-systems-and-observers). |
 | `.add_system_if(system, condition)` | `.add_system()` plus a run condition, e.g. `in_scene("level01")`. The condition is a separate argument because a `.run_if(..)`-configured system can't be passed to the builder. |
 | `.add_scene_system(scene, system)` | A per-sim-tick system that runs whenever `scene` is active (like `.add_system_if(system, in_scene(scene))`, and also during `Setup` if `scene` is active then). |
 | `.add_observer(observer_fn)` | Register a persistent observer for a custom or engine event. See [Custom systems and observers](#custom-systems-and-observers). |
@@ -434,7 +434,7 @@ Prefer `EngineBuilder::try_run()` in Rust applications. It returns `Result<(), a
 
 ## 5. Writing Game Logic
 
-Each hook and system is a standard Bevy ECS system — it receives queries and resources as parameters. For example:
+Game logic is ordinary Bevy systems and observers. Each one takes the queries and resources it needs as parameters:
 
 ```rust
 use aberredengine::prelude::*;
@@ -450,9 +450,26 @@ Bound actions are looked up by `InputAction` (`input.action(..)`, or
 `input.action_mut(..)` in tests). The raw `mouse_left_button`, the mouse
 coordinates, `scroll_y` and the gamepad axes are plain fields.
 
+### System params you'll use
+
+| Parameter | Use it for |
+|-----------|------------|
+| `Commands` | Spawn and despawn entities, insert and remove components, trigger events, insert resources. Applied after the system runs. |
+| `Query<D, F>` | Read or write the components of matching entities, e.g. `Query<&mut MapPosition, With<Player>>`. |
+| `Res<InputState>` | Bound actions, mouse and gamepad. See [InputState key bindings](#inputstate-key-bindings). |
+| `Res<WorldTime>` | `delta`, the fixed tick length (see [The sim tick and `dt`](#the-sim-tick-and-dt)), and elapsed game time. |
+| `ResMut<WorldSignals>` | Shared scalars, integers, strings, flags and entity refs; scene and quit requests. See [WorldSignals API](#worldsignals-api). |
+| `ResMut<SimRng>` | Randomness that reproduces under `.deterministic()`. See [Section 10](#10-determinism-and-replay). |
+| `AssetLoader` | Queue texture, font, shader, tilemap, sound and music loads; check whether a texture or font has loaded. See [Section 6](#6-loading-assets). |
+| `MessageWriter<AudioCmd>` | Play, stop and unload sounds and music. A system that takes `AssetLoader` writes through `assets.audio()` instead. |
+| `ResMut<NextGameState>` | Request a game-state change, e.g. quitting (`aberredengine::core::resources::gamestate`). |
+| `Res<TextureDimsStore>` | Pixel size of a loaded texture (`aberredengine::core::resources::texturedims`). `AssetLoader::texture_size` reads it too. |
+
+Every logic-thread resource is listed in [Section 11](#11-engine-resources-quick-reference).
+
 ### Custom systems and observers
 
-These builder methods let you register multiple independent ECS systems and event observers alongside the existing hooks. **All of them run on the logic thread**, on the same schedule as every other per-tick system in this guide — see [Threading Model](#threading-model-what-your-code-can-access). None of them can take `RaylibAccess`/`NonSend<FontStore>`/`NonSend<ShaderStore>`/`Res<TextureStore>`; such a system panics the first time it runs, whichever of these methods registered it.
+These builder methods let you register multiple independent ECS systems and event observers alongside the existing hooks. **All of them run on the logic thread**, on the same schedule as every other per-tick system in this guide — see [Threading Model](#threading-model-what-your-code-can-access). None of them can take `RaylibAccess`/`NonSend<FontStore>`/`NonSend<ShaderStore>`/`Res<TextureStore>`; such a system panics the first time it runs.
 
 #### `.add_system(system)` — multiple per-sim-tick systems
 
@@ -516,7 +533,7 @@ EngineBuilder::new()
     .expect("engine startup failed");
 ```
 
-Engine system functions are `pub` and importable from `aberredengine::core::systems::*`. Use them directly as `.after()` / `.before()` arguments — but only systems that live on this same logic-thread schedule; render-thread systems like `render_system` are never reachable from here, ordering relative to them is not expressible. No automatic `run_if` or `after` constraints are applied — you control everything.
+Engine system functions are `pub` and importable from `aberredengine::core::systems::*`. Use them directly as `.after()` / `.before()` arguments. Only systems on this logic-thread schedule work there: render-thread systems such as `render_system` can't be ordered against. No automatic `run_if` or `after` constraints are applied — you control everything.
 
 #### `.add_observer(observer_fn)` — persistent event observers
 
@@ -575,6 +592,90 @@ fn my_enter(_: On<SceneEntered>, mut commands: Commands) {
 ```
 
 > You can also observe engine-defined events: `Overlapping`, `TimerFired`, `InputEvent`, `GameStateChangedEvent`, `WindowResizedEvent`, etc. Note that not every engine type that crosses a system boundary is an `Event` — `AudioCmd` and `RenderAssetCmd`, for example, are Bevy `Message`s (`MessageWriter`/`MessageReader`, queue-based), a different mechanism from `Commands::trigger`/`.add_observer()`.
+
+### Your own components and resources
+
+Game state that the engine's components don't cover goes in your own Bevy types. Derive them as usual.
+
+```rust
+use aberredengine::prelude::*;
+
+#[derive(Component)]
+struct Health(i32);
+
+#[derive(Resource, Default)]
+struct Score(u32);
+
+fn setup(mut commands: Commands) {
+    commands.insert_resource(Score::default());
+}
+
+fn remove_dead(mut commands: Commands, mut score: ResMut<Score>, query: Query<(Entity, &Health)>) {
+    for (entity, health) in &query {
+        if health.0 <= 0 {
+            commands.entity(entity).despawn();
+            score.0 += 100;
+        }
+    }
+}
+
+EngineBuilder::new()
+    .on_setup(setup)
+    .add_system(remove_dead)
+    // …
+```
+
+- `EngineBuilder` has no `insert_resource`. Insert your resources from the setup hook (as above) or any other system with `commands.insert_resource(...)`. A system that takes `Res<Score>` panics the first time it runs while the resource is missing; take `Option<Res<Score>>` if it may run earlier.
+- Resources survive scene switches. Entities carrying your components are despawned on a scene switch like any other entity, unless they also have `Persistent`.
+- GUI and world-draw callbacks run on the render thread and can't read your resources. Copy what they need into `AppState` (see [AppState API](#appstate-api)).
+
+### Define your own `SystemParam` bundle
+
+When many systems take the same handful of parameters, bundle them into one struct with `#[derive(SystemParam)]`. The struct is a system parameter like any other: a system takes it next to its own queries, an observer takes it after `On<E>`, and it carries helper methods:
+
+```rust
+use aberredengine::bevy_ecs::system::SystemParam;
+use aberredengine::core::resources::gamestate::{GameStates, NextGameState};
+use aberredengine::prelude::*;
+
+/// What this game's gameplay systems reach for, as one parameter.
+#[derive(SystemParam)]
+pub struct Game<'w, 's> {
+    pub commands: Commands<'w, 's>,
+    pub signals: ResMut<'w, WorldSignals>,
+    pub time: Res<'w, WorldTime>,
+    pub rng: ResMut<'w, SimRng>,
+    pub assets: AssetLoader<'w>,
+    next_state: ResMut<'w, NextGameState>,
+}
+
+impl Game<'_, '_> {
+    pub fn play_sfx(&mut self, id: &str) {
+        self.assets.audio().write(AudioCmd::PlayFx { id: id.into() });
+    }
+
+    pub fn quit(&mut self) {
+        self.next_state.set(GameStates::Quitting);
+    }
+}
+
+#[derive(Component)]
+struct Enemy;
+
+fn enemy_tick(mut game: Game, enemies: Query<(Entity, &MapPosition), With<Enemy>>) {
+    for (entity, pos) in &enemies {
+        if pos.pos.y > 600.0 {
+            game.commands.entity(entity).despawn();
+            game.play_sfx("splash");
+        }
+    }
+}
+```
+
+Two rules keep a bundle usable:
+
+- **No overlapping access.** A system can't take the bundle plus another parameter that reaches the same data, when either side writes it. `Game` holds `ResMut<WorldSignals>`, so `fn f(game: Game, signals: Res<WorldSignals>)` panics the first time the system is initialized, at startup (Bevy error B0002). Queries follow the same rule: a bundle holding `Query<&mut MapPosition>` conflicts with a sibling `Query<&MapPosition>` (B0001). Reach the data through the bundle, or keep queries out of it, as `Game` does.
+- **`AssetLoader` holds the render and audio command writers**, so a system with it, directly or inside a bundle, can't also take `MessageWriter<AudioCmd>` or `MessageWriter<RenderAssetCmd>` (B0002). Write other commands through `assets.audio()`/`assets.render()`, as `play_sfx` does; see [Section 6](#6-loading-assets).
 
 ---
 
@@ -1330,42 +1431,6 @@ fn my_update(mut commands: Commands) {
 ```
 
 Both are standard Bevy `Commands` — the API is identical.
-
-### Your own components and resources
-
-Game state that the engine's components don't cover goes in your own Bevy types. Derive them as usual; the prelude puts the `bevy_ecs` crate in scope for the derive macros.
-
-```rust
-use aberredengine::prelude::*;
-
-#[derive(Component)]
-struct Health(i32);
-
-#[derive(Resource, Default)]
-struct Score(u32);
-
-fn setup(mut commands: Commands) {
-    commands.insert_resource(Score::default());
-}
-
-fn remove_dead(mut commands: Commands, mut score: ResMut<Score>, query: Query<(Entity, &Health)>) {
-    for (entity, health) in &query {
-        if health.0 <= 0 {
-            commands.entity(entity).despawn();
-            score.0 += 100;
-        }
-    }
-}
-
-EngineBuilder::new()
-    .on_setup(setup)
-    .add_system(remove_dead)
-    // …
-```
-
-- `EngineBuilder` has no `insert_resource`. Insert your resources from the setup hook (as above) or any other system with `commands.insert_resource(...)`. A system that takes `Res<Score>` panics the first time it runs while the resource is missing; take `Option<Res<Score>>` if it may run earlier.
-- Resources survive scene switches. Entities carrying your components are despawned on a scene switch like any other entity, unless they also have `Persistent`.
-- GUI and world-draw callbacks run on the render thread and can't read your resources. Copy what they need into `AppState` (see [AppState API](#appstate-api)).
 
 ---
 
