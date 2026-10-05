@@ -197,7 +197,7 @@ The engine owns the main loop. You configure it through `EngineBuilder`: registe
 | `.add_observer(observer_fn)` | Register a persistent observer for a custom or engine event. See [Custom systems and observers](#custom-systems-and-observers). |
 | `.on_scene_enter(scene, observer_fn)` / `.on_scene_exit(scene, observer_fn)` | Observe `SceneEntered`/`SceneExited` for one scene only. See [Scene-scoped systems and observers](#scene-scoped-systems-and-observers). |
 | `.with_lua(path)` | **Lua builds only** (`lua` feature). Run a Lua game from the `main.lua` at `path`; a pure-Rust game never calls it. |
-| `.deterministic(seed)` | Seed `SimRng` from `seed` instead of entropy, pinning simulation randomness to a known value. Mutually exclusive with `.with_lua()`. See [Determinism and replay](#determinism-and-replay) below. |
+| `.deterministic(seed)` | Seed `SimRng` from `seed` instead of entropy, pinning simulation randomness to a known value. Mutually exclusive with `.with_lua()`. See [Determinism and replay](#10-determinism-and-replay) below. |
 | `.record_replay(path, game_version)` | Record this session's input stream to `path`. Requires `.deterministic(seed)` first; mutually exclusive with `.play_replay()`. |
 | `.play_replay(path)` | Replay a previously recorded file from `path` instead of live input. The seed comes from the file's header — do not also call `.deterministic()`. Mutually exclusive with `.record_replay()`. |
 | `.try_run()` | Start the engine; a startup failure is returned as `Err(EngineError)`. See [Startup error handling](#startup-error-handling). |
@@ -469,7 +469,7 @@ Every logic-thread resource is listed in [Section 11](#11-engine-resources-quick
 
 ### Custom systems and observers
 
-These builder methods let you register multiple independent ECS systems and event observers alongside the existing hooks. **All of them run on the logic thread**, on the same schedule as every other per-tick system in this guide — see [Threading Model](#threading-model-what-your-code-can-access). None of them can take `RaylibAccess`/`NonSend<FontStore>`/`NonSend<ShaderStore>`/`Res<TextureStore>`; such a system panics the first time it runs.
+These builder methods let you register multiple independent ECS systems and event observers alongside the existing hooks. **All of them run on the logic thread**, on the same schedule as every other per-tick system in this guide — see [Threading Model](#threading-model-what-your-code-can-access). Like any logic-thread code, they can't take render-thread resources.
 
 #### `.add_system(system)` — multiple per-sim-tick systems
 
@@ -681,7 +681,7 @@ Two rules keep a bundle usable:
 
 ## 6. Loading Assets
 
-The setup hook is a standard Bevy ECS system running on the **logic thread** (see [Threading Model](#threading-model-what-your-code-can-access)). That means it **cannot** take `RaylibAccess`, `NonSendMut<FontStore>`, `NonSendMut<ShaderStore>`, or `ResMut<TextureStore>` — those resources exist only in the render world, on the render thread. Requesting any of them from `setup()` (or any other logic-side system) panics the first time that system runs.
+The setup hook is a standard Bevy ECS system running on the **logic thread** (see [Threading Model](#threading-model-what-your-code-can-access)). Like any logic-thread system, it can't take render-thread resources such as `RaylibAccess` or `TextureStore`.
 
 Instead, asset loading is **queued** from the logic thread and **performed** elsewhere: textures, fonts and shaders on the render thread, sounds and music on the audio thread. Take the `AssetLoader` system param and call its `load_*` methods. Each load is asynchronous relative to the tick that requested it.
 
@@ -699,7 +699,7 @@ fn setup(mut assets: AssetLoader) -> Result {
 }
 ```
 
-Each `load_*` returns `Result<(), AssetError>`. It only fails in a `.deterministic()` game that is already `Playing` (see [Determinism and replay](#determinism-and-replay)). Hooks and `.add_system()` systems may return bevy's `Result`, so `?` works there. An error from an `.add_system()` system goes to bevy's error handler; an error from a hook is logged as a warning.
+Each `load_*` returns `Result<(), AssetError>`. It only fails in a `.deterministic()` game that is already `Playing` (see [Determinism and replay](#10-determinism-and-replay)). Hooks and `.add_system()` systems may return bevy's `Result`, so `?` works there. An error from an `.add_system()` system goes to bevy's error handler; an error from a hook is logged as a warning.
 
 `AssetLoader` also answers whether a load has landed: `is_texture_loaded(key)`, `texture_size(key)` and `is_font_loaded(key)` return `false`/`None` until the render thread replies, usually a tick or two after the load was queued. Render assets and audio assets have separate key spaces, so a texture and a sound can share a key.
 
@@ -1114,7 +1114,7 @@ commands.spawn((
 ));
 ```
 
-A `.deterministic()` game preloads the atlas in Setup with `assets.load_tilemap("assets/tilemaps/level01")` (see [Determinism and replay](#determinism-and-replay)).
+A `.deterministic()` game preloads the atlas in Setup with `assets.load_tilemap("assets/tilemaps/level01")` (see [Determinism and replay](#10-determinism-and-replay)).
 
 Move the whole tilemap at runtime by updating the root entity's `MapPosition`:
 
@@ -2028,11 +2028,13 @@ fn launch_ball(
 
 ## 9. Render-Side Callbacks
 
+Two optional per-scene callbacks run on the render thread instead of the logic thread (see [Threading Model](#threading-model-what-your-code-can-access)): an ImGui GUI callback and a world-space draw callback. They are plain functions, not systems. The render thread holds no live game state, so each takes a context struct with a drawing handle and read-only views of game state (a `SignalSnapshot`, not the live [`WorldSignals`](#worldsignals-api)). Only the GUI callback has a write side: it queues signal writes for the logic thread.
+
 ### ImGui GUI callback (Rust-only)
 
 A scene's GUI callback, registered with `.add_scene_gui(scene, callback)`, draws an ImGui overlay every frame while that scene is active — useful for editors, debug tools, and dev GUIs. It runs whether or not F11 debug mode is active, inside the same ImGui frame as the debug panels.
 
-**This callback runs on the render thread** (see [Threading Model](#threading-model-what-your-code-can-access) above) — unlike every other hook in this guide, which runs on the logic thread. That's why it can't reach a live `&mut WorldSignals`: the render thread never holds one. Instead it takes a `&mut GuiCtx`, whose fields are a read-only snapshot and a write-queue:
+It takes a `&mut GuiCtx`:
 
 - `ui: &imgui::Ui` for drawing widgets
 - `signals: &SignalSnapshot` — a read-only, frame-stale-by-one-tick copy of `WorldSignals`. Read it with the same getters as `WorldSignals` (`ctx.signals.get_scalar("key")`, `ctx.signals.has_flag("key")`, etc.), which both types implement through the `SignalsRead` trait in the prelude.
@@ -2096,15 +2098,13 @@ Register both for the scene:
 
 A scene's world-draw callback, registered with `.add_scene_world_draw(scene, callback)`, draws world-space overlays every frame while that scene is active, inside the render pass's `begin_mode2D` block. Use it for things like debug paths, editor gizmos, selection boxes, or navigation links that should follow the active camera transform.
 
-**Like the GUI callback, this runs on the render thread** (see [Threading Model](#threading-model-what-your-code-can-access)) — its signals are a read-only `&SignalSnapshot`, not a live `&WorldSignals`.
-
 The callback takes a `&mut WorldDrawCtx` with these fields:
 
 - `draw: &mut dyn WorldDraw` with a minimal object-safe drawing API
 - `camera: &Camera2D` for the active render camera
 - `screen: &ScreenSize` for the internal game resolution
 - `app_state: &AppState` for typed Rust-only snapshots
-- `signals: &SignalSnapshot` for read-only signal access (the `SignalsRead` getters — `ctx.signals.has_flag("key")`; there's no write side here, a world-draw callback only draws)
+- `signals: &SignalSnapshot` for read-only signal access (the `SignalsRead` getters, e.g. `ctx.signals.has_flag("key")`)
 
 Use the fields through `ctx`, or unpack them with `let WorldDrawCtx { draw, camera, .. } = ctx;`. Either `ctx.draw` or the unpacked `draw` passes straight to your own helpers that take `&mut dyn WorldDraw`, as below.
 
@@ -2138,9 +2138,7 @@ Register both render callbacks for the scene:
 
 ## 10. Determinism and Replay
 
-### Determinism and replay
-
-By default, simulation randomness is seeded from entropy and every run of your game plays out differently. Call `.deterministic(seed)` to pin `SimRng` (the one RNG resource systems and observers should draw from for anything that must reproduce — using `rand::thread_rng()` or any other RNG source instead breaks determinism even with `.deterministic()` set) to a known seed. Combined with the engine's fixed-`dt` sim tick and single-threaded schedule executor, this makes a run fully reproducible from its seed and input stream alone.
+By default, simulation randomness is seeded from entropy and every run of your game plays out differently. Call `.deterministic(seed)` to pin `SimRng`, the engine's simulation RNG, to a known seed. Combined with the engine's [fixed-`dt` sim tick](#the-sim-tick-and-dt) and single-threaded schedule executor, this makes a run fully reproducible from its seed and input stream alone.
 
 ```rust
 EngineBuilder::new()
@@ -2151,7 +2149,9 @@ EngineBuilder::new()
     .expect("engine startup failed");
 ```
 
-**Drawing random numbers.** `SimRng` (`aberredengine::core::resources::sim_rng::SimRng`) is pre-inserted in every game, deterministic or not. Its field is a `fastrand::Rng`: call its methods (`f32()`, `usize(range)`, `i32(range)`, `bool()`, `shuffle(..)`, …) through `ResMut<SimRng>` in a system or observer. Calling methods needs no `fastrand` dependency; naming the `fastrand::Rng` type does.
+### Drawing random numbers
+
+`SimRng` (`aberredengine::core::resources::sim_rng::SimRng`) is pre-inserted in every game, deterministic or not. Its field is a `fastrand::Rng`: call its methods (`f32()`, `usize(range)`, `i32(range)`, `bool()`, `shuffle(..)`, …) through `ResMut<SimRng>` in a system or observer. Calling methods needs no `fastrand` dependency; naming the `fastrand::Rng` type does.
 
 ```rust
 use aberredengine::prelude::*;
@@ -2164,9 +2164,11 @@ fn pick_spawn_point(mut rng: ResMut<SimRng>) {
 }
 ```
 
-The engine's particle emitters draw from the same `SimRng`. A run reproduces only if the same draws happen in the same order, so draw from it only in sim-side code (systems and observers), and keep any other RNG out of gameplay. Without `.deterministic()`, the engine logs the seed it picked at startup (`Non-deterministic mode: SimRng entropy-seeded with …`), so a surprising session's seed is in the log.
+The engine's particle emitters draw from the same `SimRng`. A run reproduces only if the same draws happen in the same order, so draw from it only in sim-side code (systems and observers), and keep any other RNG (such as `rand::thread_rng()`) out of gameplay: it breaks determinism even with `.deterministic()` set. Without `.deterministic()`, the engine logs the seed it picked at startup (`Non-deterministic mode: SimRng entropy-seeded with …`), so a surprising session's seed is in the log.
 
-Once deterministic mode is on, you can record or replay the input stream that drove a session:
+### Recording and replaying input
+
+You can record the input stream that drove a deterministic session, then replay it:
 
 ```rust
 // Record this session's input to a file:
@@ -2190,16 +2192,20 @@ EngineBuilder::new()
 
 This is useful for automated testing (replay a fixed input script, assert on the resulting state), bug reports (a player-submitted replay reproduces the exact conditions that triggered a bug), and any gameplay mode that depends on reproducible simulation.
 
-**The envelope starts at `Playing`.** Setup lasts as long as its asset loads take, which varies from run to run. So the reproducible part of a session starts at the first `Playing` tick:
+### Reproducibility starts at `Playing`
+
+[Setup](#game-lifecycle) lasts as long as its asset loads take, which varies from run to run. So the reproducible part of a session starts at the first `Playing` tick:
 
 - `WorldTime` doesn't advance during Setup (in every mode): `elapsed` and `frame_count` are `0` on the first `Playing` tick, and `delta` stays `0` until then.
 - A replay records and plays back from the first `Playing` tick; Setup runs live, loads included, in both.
 - In deterministic mode, input that arrives during Setup is held back. Key and mouse samples are dropped, so F10/F11 do nothing while loading. GUI intents and the latest screen size are applied on the first `Playing` tick.
 - Engine systems that don't use `delta` still run during Setup: collision rules, `phase_system` (phase events), group counts. Spawn gameplay entities in the initial scene's `SceneEntered` observer, not in the setup hook, so a longer Setup can't change them.
 
-**Assets load during Setup.** A load finishes at a wall-clock time, so a deterministic game can't change its loaded assets while `Playing`:
+### Assets load during Setup
 
-- `AssetLoader::load_*` for a key that is already loaded returns `Ok` and does nothing. For a key that isn't, it returns `Err(AssetError::AssetChangeDuringDeterministicPlay { .. })` and queues nothing.
+A load finishes at a wall-clock time, so a deterministic game can't change its loaded assets while `Playing`:
+
+- `AssetLoader::load_*` ([Section 6](#6-loading-assets)) for a key that is already loaded returns `Ok` and does nothing. For a key that isn't, it returns `Err(AssetError::AssetChangeDuringDeterministicPlay { .. })` and queues nothing.
 - A command written through a raw `MessageWriter<RenderAssetCmd>`/`MessageWriter<AudioCmd>` (or `assets.render()`/`assets.audio()`) has no result to return. A new load, or a removal, rename or unload of a loaded asset, is dropped and logged as an error, and panics in debug builds. Commands that change nothing (reloading a loaded key, removing one that isn't loaded) are dropped silently.
 - Texture filter changes and audio playback work as usual.
 - Engine features that load on the fly follow the same rule. Load each tilemap's atlas in Setup with `assets.load_tilemap(dir)` (same `dir` as its `TileMap`), spawn maps whose assets were loaded in Setup, and keep menus on dynamic text (the default; `with_dynamic_text(false)` rasterizes labels into new textures).
@@ -2216,7 +2222,7 @@ All resources are accessed as Bevy ECS system parameters. Use `Res<T>` / `ResMut
 
 | Resource | Access | Purpose |
 |----------|--------|---------|
-| `WorldTime` | `Res` | `elapsed`, `delta` (the fixed sim period, `1.0 / hz`, scaled by `time_scale` — never a measured value), `time_scale`, `frame_count` |
+| `WorldTime` | `Res` | `elapsed`, `delta` (the fixed sim period, `1.0 / hz`, scaled by `time_scale`; see [The sim tick and `dt`](#the-sim-tick-and-dt)), `time_scale`, `frame_count` |
 | `WorldSignals` | `ResMut` | Global cross-system communication (scalars, integers, strings, flags, entities) |
 | `AppState` | `ResMut` | Rust-only typed state store keyed by Rust type; useful for GUI/editor snapshots and view-models |
 | `TrackedGroups` | `ResMut` | Group names to count — engine publishes counts to `WorldSignals` each sim tick |
