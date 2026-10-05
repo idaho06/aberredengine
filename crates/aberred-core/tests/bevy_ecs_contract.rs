@@ -150,6 +150,45 @@ fn commands_trigger_fires_observer_on_apply() {
     assert!(*received.lock().unwrap());
 }
 
+#[derive(EntityEvent)]
+struct Ping {
+    entity: Entity,
+}
+
+fn count_ping(_trigger: On<Ping>, mut counter: ResMut<Counter>) {
+    counter.0 += 1;
+}
+
+// `CollisionEnded` targets the rule entity, which may already be despawned
+// when the pair stops touching. Triggered through a system's `Commands` (the
+// engine's call path): a global observer still sees the event, the dead
+// entity's own observers are gone, and the trigger does not panic.
+#[test]
+fn commands_trigger_at_despawned_target_reaches_global_observers_only() {
+    let mut world = World::new();
+    world.insert_resource(Counter(0));
+
+    let global = Arc::new(Mutex::new(Vec::new()));
+    let global_clone = global.clone();
+    world.add_observer(move |trigger: On<Ping>| {
+        global_clone.lock().unwrap().push(trigger.event().entity);
+    });
+
+    let target = world.spawn_empty().observe(count_ping).id();
+    world.flush();
+    world.despawn(target);
+
+    let mut state = SystemState::<Commands>::new(&mut world);
+    state
+        .get_mut(&mut world)
+        .expect("Commands should fetch")
+        .trigger(Ping { entity: target });
+    state.apply(&mut world);
+
+    assert_eq!(*global.lock().unwrap(), vec![target]);
+    assert_eq!(world.resource::<Counter>().0, 0);
+}
+
 // =============================================================================
 // Registered systems
 // =============================================================================
@@ -433,15 +472,6 @@ fn cleanup_despawns_non_persistent_observers_only() {
 // `EntityCommands::observe` spawns its observer as a separate entity
 // without `Persistent`; cleanup must keep it while the watched entity is
 // `Persistent` (`SceneCleanup`), and bevy drops it with a watched scene entity.
-#[derive(EntityEvent)]
-struct Ping {
-    entity: Entity,
-}
-
-fn count_ping(_trigger: On<Ping>, mut counter: ResMut<Counter>) {
-    counter.0 += 1;
-}
-
 fn observer_count(world: &mut World) -> usize {
     world.query::<&Observer>().iter(world).count()
 }
