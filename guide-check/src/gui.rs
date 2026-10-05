@@ -1,4 +1,4 @@
-// GUI Widgets
+// GUI widgets
 mod gui_widgets {
     use aberredengine::prelude::*;
     use std::sync::Arc;
@@ -61,7 +61,7 @@ mod gui_widgets {
     }
 }
 
-// Particle Emitters
+// Particle emitters
 mod particle_emitters {
     use aberredengine::prelude::*;
 
@@ -93,7 +93,7 @@ mod particle_emitters {
     }
 }
 
-// Attaching Entities (StuckTo)
+// Attaching entities (StuckTo)
 mod stuck_to {
     use aberredengine::prelude::*;
 

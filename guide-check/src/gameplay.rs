@@ -53,7 +53,7 @@ mod timers {
     }
 }
 
-// Phase State Machines
+// Phase state machines
 mod phase_state_machines {
 
     use aberredengine::prelude::*;
@@ -106,7 +106,7 @@ mod phase_state_machines {
     }
 }
 
-// Collision Rules
+// Collision rules
 mod collision_rules {
     use aberredengine::prelude::*; // GLUE
 
@@ -205,7 +205,7 @@ mod menus {
     }
 }
 
-// Animation Finished Event
+// Animation finished event
 mod animation_finished_event {
     use aberredengine::prelude::*; // GLUE
 
@@ -227,7 +227,7 @@ mod animation_finished_event {
     } // GLUE
 }
 
-// Tween Finished Event
+// Tween finished event
 mod tween_finished_event {
     use aberredengine::prelude::*; // GLUE
 

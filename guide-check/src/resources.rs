@@ -33,7 +33,7 @@ mod appstate_api {
         });
     }
 
-    // GUI callback reads it (render thread — see Threading Model)
+    // GUI callback reads it (render thread — see Threading model)
     fn inspector_gui(ctx: &mut GuiCtx) {
         if let Some(snapshot) = ctx.app_state.get::<InspectorSnapshot>() {
             ctx.ui.text(format!("Selected: {}", snapshot.selected_name));

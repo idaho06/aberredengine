@@ -155,7 +155,7 @@ gamepad_deadzone = 0.15        ; Analog-stick deadzone radius for InputBinding::
 
 This section covers where your code runs, how often it runs, and the states a game moves through.
 
-### Threading Model: What Your Code Can Access
+### Threading model: what your code can access
 
 The engine runs **three separate ECS worlds on three threads**: render (the main thread — owns the raylib window and GPU resources), logic/sim (a spawned thread — this is where **all your game code runs**), and audio (a spawned thread, talked to via message queues you already use for sound/music).
 
@@ -488,7 +488,7 @@ Every logic-thread resource is listed in [Section 11](#11-engine-resources-quick
 
 ### Custom systems and observers
 
-These builder methods register independent ECS systems and event observers. **All of them run on the logic thread**, on the same schedule as every other per-tick system in this guide — see [Threading Model](#threading-model-what-your-code-can-access). Like any logic-thread code, they can't take render-thread resources.
+These builder methods register independent ECS systems and event observers. **All of them run on the logic thread**, on the same schedule as every other per-tick system in this guide — see [Threading model](#threading-model-what-your-code-can-access). Like any logic-thread code, they can't take render-thread resources.
 
 #### `.add_system(system)` — multiple per-sim-tick systems
 
@@ -701,7 +701,7 @@ Two rules keep a bundle usable:
 
 ## 6. Loading Assets
 
-The setup hook is a standard Bevy ECS system running on the **logic thread** (see [Threading Model](#threading-model-what-your-code-can-access)). Like any logic-thread system, it can't take render-thread resources such as `RaylibAccess` or `TextureStore`.
+The setup hook is a standard Bevy ECS system running on the **logic thread** (see [Threading model](#threading-model-what-your-code-can-access)). Like any logic-thread system, it can't take render-thread resources such as `RaylibAccess` or `TextureStore`.
 
 Instead, asset loading is **queued** from the logic thread and **performed** elsewhere: textures, fonts and shaders on the render thread, sounds and music on the audio thread. Take the `AssetLoader` system param and call its `load_*` methods. Each load is asynchronous relative to the tick that requested it.
 
@@ -1106,7 +1106,7 @@ anim_store.insert(
 );
 ```
 
-`AnimationResource::new(tex_key, frame_width, frame_count, fps)` loops, starts at the texture's top-left and steps `frame_width` pixels per frame on one row; `tex_key` must match a loaded texture key. `.with_position(v)` moves frame 0, `.with_vertical_displacement(row_height)` wraps frames that run past the texture's right edge onto the next row, and `.with_looped(false)` plays once (see [Animation Finished Event](#85-animation-finished-event)).
+`AnimationResource::new(tex_key, frame_width, frame_count, fps)` loops, starts at the texture's top-left and steps `frame_width` pixels per frame on one row; `tex_key` must match a loaded texture key. `.with_position(v)` moves frame 0, `.with_vertical_displacement(row_height)` wraps frames that run past the texture's right edge onto the next row, and `.with_looped(false)` plays once (see [Animation finished event](#animation-finished-event)).
 
 ### Tilemaps
 
@@ -1179,7 +1179,7 @@ EngineBuilder::new()
     // …
 ```
 
-> **Warning:** every tile that gets a collider joins `collision_detector`'s all-pairs test (see [Collision Rules](#83-collision-rules)). A 100×50 map has 5,000 tiles: about 12.5 million pair tests every sim tick. Collide only the tiles that must be solid. Filter by layer `ZIndex` or by the tile's `Sprite.offset` in the atlas, or use a few large colliders on plain entities instead of one per tile.
+> **Warning:** every tile that gets a collider joins `collision_detector`'s all-pairs test (see [Collision rules](#collision-rules)). A 100×50 map has 5,000 tiles: about 12.5 million pair tests every sim tick. Collide only the tiles that must be solid. Filter by layer `ZIndex` or by the tile's `Sprite.offset` in the atlas, or use a few large colliders on plain entities instead of one per tile.
 
 > **Note:** `load_tilemap_data` and `spawn_tiles` remain available as low-level utilities for advanced use cases where manual control of the load/spawn cycle is needed.
 
@@ -1334,9 +1334,9 @@ When `WorldSignals` has a value for key `"score"`, the text automatically update
 | `InputControlled` | `InputControlled::symmetric(speed)` (fields `up_velocity`, `down_velocity`, `left_velocity`, `right_velocity` for per-direction speeds) |
 | `AccelerationControlled` | `AccelerationControlled::symmetric(accel)` |
 | `MouseControlled` | `MouseControlled { follow_x: true, follow_y: true }` |
-| `Timer` | `Timer::new(duration_secs)` (repeating) or `Timer::once(duration_secs)` — triggers `TimerFired` on its entity; see [§8.1](#81-timers) |
-| `Phase` | `Phase::new("initial_phase")` — set `next` to transition; triggers `PhaseEntered`/`PhaseExited`; see [§8.2](#82-phase-state-machines) |
-| `CollisionRule` | `CollisionRule::new("group_a", "group_b")` — observe `Collided` on it; see [§8.3](#83-collision-rules) |
+| `Timer` | `Timer::new(duration_secs)` (repeating) or `Timer::once(duration_secs)` — triggers `TimerFired` on its entity; see [Timers](#timers) |
+| `Phase` | `Phase::new("initial_phase")` — set `next` to transition; triggers `PhaseEntered`/`PhaseExited`; see [Phase state machines](#phase-state-machines) |
+| `CollisionRule` | `CollisionRule::new("group_a", "group_b")` — observe `Collided` on it; see [Collision rules](#collision-rules) |
 | `Tween<MapPosition>` | `Tween::position(from: Vec2, to: Vec2, duration)` |
 | `Tween<Rotation>` | `Tween::rotation(from_degrees, to_degrees, duration)` |
 | `Tween<Scale>` | `Tween::scale(from: Vec2, to: Vec2, duration)` |
@@ -1346,8 +1346,8 @@ When `WorldSignals` has a value for key `"score"`, the text automatically update
 | `GuiLabel` | `GuiLabel::new(width, height, "Text")` — add `.with_signal_binding(key)` / `.with_signal_binding_format("fmt {}") ` to bind text to `WorldSignals` |
 | `GuiImage` | `GuiImage::new(width, height, "tex_key", offset_x, offset_y)` — add `.with_offset_hover(x, y)` / `.with_offset_pressed(x, y)` / `.with_offset_disabled(x, y)` for per-state atlas offsets |
 | `GuiProgressBar` | `GuiProgressBar::new(w, h, value, max)` — add `.with_direction(ProgressBarDirection)`, `.with_signal_binding(key)`, `.with_theme_key(key)`; requires `ScreenPosition` + `ZIndex` |
-| `Shadow` | `Shadow::new(dx, dy, r, g, b, a)` or `Shadow::default_color(dx, dy)` — pre-pass shadow for `Sprite` and `DynamicText` entities; see [§8.7](#87-gui-widgets) |
-| `GuiInteractable` | `GuiInteractable::new(width, height)` — hit-test/click state; observe `GuiClicked` for clicks; see [§8.7](#87-gui-widgets) |
+| `Shadow` | `Shadow::new(dx, dy, r, g, b, a)` or `Shadow::default_color(dx, dy)` — pre-pass shadow for `Sprite` and `DynamicText` entities; see [GUI widgets](#gui-widgets) |
+| `GuiInteractable` | `GuiInteractable::new(width, height)` — hit-test/click state; observe `GuiClicked` for clicks; see [GUI widgets](#gui-widgets) |
 | `GuiOffset` | `GuiOffset(Vec2::new(x, y))` — position relative to a `ChildOf` parent |
 
 **Animation controller rules.** `with_rule` takes a `Condition` (`aberredengine::core::components::animation::{Condition, CmpOp}`) evaluated against the entity's **own** `Signals` component, not `WorldSignals`. An entity without `Signals` is skipped. Rules run in order every sim tick and the first match sets the animation; when none matches, the fallback key plays. `Condition` variants: `ScalarCmp`, `ScalarRange`, `IntegerCmp`, `IntegerRange`, `HasFlag`, `LacksFlag`, and the combinators `All`, `Any`, `Not`.
@@ -1460,7 +1460,7 @@ The engine provides several gameplay systems: **timers**, **phase state machines
 
 Gameplay code is ordinary Bevy systems and observers that take `Commands`, queries and resources such as `WorldSignals` or `SimRng` as parameters (see [Section 11](#11-engine-resources-quick-reference)). It runs on the logic thread and has **no direct texture access** — if a system needs texture data, load it via `RenderAssetCmd` and read back dimensions from `TextureDimsStore` (see [Section 6](#6-loading-assets)).
 
-### 8.1 Timers
+### Timers
 
 **Source:** `aberred-core/src/components/timer.rs`, `aberred-core/src/systems/timer.rs`, `aberred-core/src/events/timer.rs`
 
@@ -1521,7 +1521,7 @@ fn end_invulnerability(
 }
 ```
 
-### 8.2 Phase State Machines
+### Phase state machines
 
 **Source:** `aberred-core/src/components/phase.rs`, `aberred-core/src/systems/phase.rs`, `aberred-core/src/events/phase.rs`
 
@@ -1583,7 +1583,7 @@ fn on_player_phase_entered(
 }
 ```
 
-As with timers ([§8.1](#81-timers)), observe one entity with `.observe(handler)` or many with one global observer filtered by a marker component.
+As with [timers](#timers), observe one entity with `.observe(handler)` or many with one global observer filtered by a marker component.
 
 **Transitions:** `phase_system` runs at the start of every sim tick, in `SimSet::Phases`, before `.add_system()` systems and in every game state. It applies a `next` set at any point in the previous tick: it sets `previous` to the old phase, `current` to the new one, resets `time_in_phase` to 0, and triggers `PhaseExited` then `PhaseEntered`. A transition requested in tick N therefore applies in tick N+1, and chained transitions (a `PhaseEntered` observer setting `next`) advance one per sim tick. Setting `next` to the current phase re-enters it: both events fire with the same name and `time_in_phase` resets. Phase names are never validated: `phase.next = Some("jumpin".into())` switches to a phase no system handles, and the entity silently does nothing.
 
@@ -1596,7 +1596,7 @@ As with timers ([§8.1](#81-timers)), observe one entity with `.observe(handler)
 | `next` | `Option<String>` | Set to request a transition; cleared when applied |
 | `time_in_phase` | `f32` | Seconds since entering the current phase; grows by `dt` every sim tick |
 
-### 8.3 Collision Rules
+### Collision rules
 
 **Source:** `aberred-core/src/components/collision.rs`, `aberred-core/src/systems/collision_rule.rs`, `aberred-core/src/systems/collision_detector.rs`
 
@@ -1666,7 +1666,7 @@ fn ball_brick_collision(
 }
 ```
 
-### 8.4 Menus
+### Menus
 
 **Source:** `aberred-core/src/components/menu.rs`, `aberred-core/src/systems/menu.rs`
 
@@ -1764,7 +1764,7 @@ fn enter(_: On<SceneEntered>, mut commands: Commands) {
 }
 ```
 
-### 8.5 Animation Finished Event
+### Animation finished event
 
 **Source:** `aberred-core/src/events/animation.rs`, `aberred-core/src/systems/animation.rs` (fires the event)
 
@@ -1799,7 +1799,7 @@ EngineBuilder::new()
 
 **Lua consumers (Lua builds only):** attach `LuaOnAnimationEnd::new("fn_name")` to the entity (or use `:with_on_animation_end("fn_name")` in the Lua spawn builder). The Lua callback signature is `fn(ctx, input)` — the same as timer and phase callbacks.
 
-### 8.6 Tween Finished Event
+### Tween finished event
 
 **Source:** `aberred-core/src/events/tween.rs`, `aberred-core/src/systems/tween.rs`
 
@@ -1836,7 +1836,7 @@ EngineBuilder::new()
 `:with_tween_{position,rotation,scale,screen_position}_on_finished("fn_name")` builder method). The Lua
 callback signature is `fn(ctx, input)` — the same as the animation-finished and timer/phase callbacks.
 
-### 8.7 GUI Widgets
+### GUI widgets
 
 **Source:** `aberred-core/src/components/{guiwindow,guibutton,guilabel,guiimage,guiinteractable,guioffset}.rs`, `aberred-core/src/resources/guitheme.rs`, `aberred-core/src/systems/{gui_spawn,gui_layout,gui_hit_test}.rs`, `aberred-core/src/events/gui_interactable.rs`
 
@@ -1961,7 +1961,7 @@ the parent's `ScreenPosition` plus `GuiOffset`.
 Observe it per widget with `.observe(handler)`, as above, or once with `EngineBuilder::add_observer` for
 cross-cutting logic such as a UI click sound. A disabled widget never triggers it.
 
-### 8.8 Particle Emitters
+### Particle emitters
 
 **Source:** `aberred-core/src/components/particleemitter.rs`, `aberred-core/src/systems/particleemitter.rs`
 
@@ -2004,7 +2004,7 @@ fn spawn_smoke(mut commands: Commands) {
 - Templates are regular entities: a scene switch despawns them (and the emitter) unless they're `Persistent`. An emitter skips templates that no longer exist.
 - `EmittedParticle(Entity)` names the emitter that spawned a particle, e.g. to despawn one emitter's particles.
 
-### 8.9 Attaching Entities (StuckTo)
+### Attaching entities (StuckTo)
 
 **Source:** `aberred-core/src/components/stuckto.rs`, `aberred-core/src/systems/stuckto.rs`
 
@@ -2048,7 +2048,7 @@ fn launch_ball(
 
 ## 9. Render-Side Callbacks
 
-Each scene can have two optional callbacks that run on the render thread instead of the logic thread (see [Threading Model](#threading-model-what-your-code-can-access)): an ImGui GUI callback and a world-space draw callback. They are plain functions, not systems. The render thread holds no live game state, so each takes a context struct with a drawing handle and read-only views of game state (a `SignalSnapshot`, not the live [`WorldSignals`](#worldsignals-api)). Only the GUI callback has a write side: it queues signal writes for the logic thread.
+Each scene can have two optional callbacks that run on the render thread instead of the logic thread (see [Threading model](#threading-model-what-your-code-can-access)): an ImGui GUI callback and a world-space draw callback. They are plain functions, not systems. The render thread holds no live game state, so each takes a context struct with a drawing handle and read-only views of game state (a `SignalSnapshot`, not the live [`WorldSignals`](#worldsignals-api)). Only the GUI callback has a write side: it queues signal writes for the logic thread.
 
 ### ImGui GUI callback (Rust-only)
 
@@ -2236,7 +2236,7 @@ A load finishes at a wall-clock time, so a deterministic game can't change its l
 
 All resources are accessed as Bevy ECS system parameters. Use `Res<T>` / `ResMut<T>` for Send resources, `NonSend<T>` / `NonSendMut<T>` for main-thread-only resources.
 
-**Read this table by thread, not just by Send/NonSend** — see [Threading Model](#threading-model-what-your-code-can-access). The tables below are split into logic-thread resources (everything your `setup` hook, systems and observers can request) and render-thread-only resources (things only `process_render_asset_cmds`/`render_system` touch — a logic-side system that requests one panics the first time it runs, whether through `Res` or `NonSend`).
+**Read this table by thread, not just by Send/NonSend** — see [Threading model](#threading-model-what-your-code-can-access). The tables below are split into logic-thread resources (everything your `setup` hook, systems and observers can request) and render-thread-only resources (things only `process_render_asset_cmds`/`render_system` touch — a logic-side system that requests one panics the first time it runs, whether through `Res` or `NonSend`).
 
 ### Logic-thread resources (Send) — what your game code can use
 
@@ -2261,7 +2261,7 @@ All resources are accessed as Bevy ECS system parameters. Use `Res<T>` / `ResMut
 | `SceneManager` | `Res` | Scene registry (only present with `.add_scene()`) |
 | `Camera2DRes` | `ResMut` | 2D camera (target, offset, zoom, rotation) |
 | `AnimationStore` | `Res` / `ResMut` | Animation definitions |
-| `GuiThemeStore` | `ResMut` | Named GUI theme registry (`FxHashMap<Arc<str>, GuiTheme>`); each theme holds panel/button/label/progress_bar nine-patches, font settings, and optional shadows; see [§8.7](#87-gui-widgets) |
+| `GuiThemeStore` | `ResMut` | Named GUI theme registry (`FxHashMap<Arc<str>, GuiTheme>`); each theme holds panel/button/label/progress_bar nine-patches, font settings, and optional shadows; see [GUI widgets](#gui-widgets) |
 | `GuiInputState` | `Res` | `click_consumed_this_frame: bool` — set by `gui_hit_test_system` when any `GuiInteractable` absorbs a click; reset each frame |
 | `FontMetricsStore` | `Res` | CPU-side glyph measurement, keyed like `FontStore`. Populated asynchronously after a `RenderAssetCmd::Font` load completes — see [Section 6](#6-loading-assets). |
 | `TextureDimsStore` | `Res` | Pixel `(width, height)` per loaded texture key, via `.get(key)`/`.width(key)`. Populated asynchronously after a `RenderAssetCmd::Texture` load completes — see [Section 6](#6-loading-assets). |
@@ -2280,7 +2280,7 @@ These exist only in the render world. `RaylibAccess`/`NonSend<FontStore>`/`NonSe
 
 ### Render-thread-only resources used by GUI and world-draw callbacks
 
-Since those two callbacks are the one exception that runs render-side (see [Threading Model](#threading-model-what-your-code-can-access) and [Section 9](#imgui-gui-callback-rust-only)), they're handed these as fields of their `GuiCtx`/`WorldDrawCtx` instead of fetched as `Res<T>`/`ResMut<T>` — and instead of the live `WorldSignals`:
+Since those two callbacks are the one exception that runs render-side (see [Threading model](#threading-model-what-your-code-can-access) and [Section 9](#imgui-gui-callback-rust-only)), they're handed these as fields of their `GuiCtx`/`WorldDrawCtx` instead of fetched as `Res<T>`/`ResMut<T>` — and instead of the live `WorldSignals`:
 
 | Resource | Purpose |
 |----------|---------|
@@ -2393,7 +2393,7 @@ fn inspector_system(mut app_state: ResMut<AppState>) {
     });
 }
 
-// GUI callback reads it (render thread — see Threading Model)
+// GUI callback reads it (render thread — see Threading model)
 fn inspector_gui(ctx: &mut GuiCtx) {
     if let Some(snapshot) = ctx.app_state.get::<InspectorSnapshot>() {
         ctx.ui.text(format!("Selected: {}", snapshot.selected_name));
