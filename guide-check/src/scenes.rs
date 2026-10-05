@@ -157,6 +157,28 @@ mod scene_scoped_systems_and_observers {
     }
 }
 
+// Scene-scoped systems and observers: a late-in-tick scene system
+mod late_scene_system {
+    use aberredengine::prelude::*;
+
+    // Sees positions after this tick's movement.
+    fn level_late(mut signals: ResMut<WorldSignals>, players: Query<&MapPosition, With<Group>>) {
+        if players.iter().any(|p| p.pos.y > 600.0) {
+            signals.set_flag("player_fell");
+        }
+    }
+
+    fn register_late(builder: EngineBuilder) -> EngineBuilder {
+        builder.configure_schedule(|schedule| {
+            schedule.add_systems(
+                level_late
+                    .in_set(SimSet::PostCollision)
+                    .run_if(state_is_playing.and_then(in_scene("level01"))),
+            );
+        })
+    }
+}
+
 // Observers that live for one scene
 mod scene_scoped_observers {
     #[derive(Event)] // GLUE

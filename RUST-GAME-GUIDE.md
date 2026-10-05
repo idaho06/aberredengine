@@ -335,6 +335,29 @@ fn register(builder: EngineBuilder) -> EngineBuilder {
 
 Scene systems run in `SimSet::ScriptUpdate`, before movement and collision, so they see the state the previous tick left.
 
+For a scene system that must see the same tick's movement, collision and GUI results, add it with [`.configure_schedule()`](#configure_scheduleclosure--full-ordering-control) in `SimSet::PostCollision`, gated by `in_scene` and, unless it should also run during `Setup` for a loading scene, `state_is_playing`. `PostCollision` runs before the scene switch is applied:
+
+```rust
+use aberredengine::prelude::*;
+
+// Sees positions after this tick's movement.
+fn level_late(mut signals: ResMut<WorldSignals>, players: Query<&MapPosition, With<Group>>) {
+    if players.iter().any(|p| p.pos.y > 600.0) {
+        signals.set_flag("player_fell");
+    }
+}
+
+fn register_late(builder: EngineBuilder) -> EngineBuilder {
+    builder.configure_schedule(|schedule| {
+        schedule.add_systems(
+            level_late
+                .in_set(SimSet::PostCollision)
+                .run_if(state_is_playing.and_then(in_scene("level01"))),
+        );
+    })
+}
+```
+
 ### Observers that live for one scene
 
 Observers registered with `.add_observer()` are always active. For observers that should only fire within a specific scene, spawn them from the scene's `SceneEntered` observer **without** the `Persistent` component:
