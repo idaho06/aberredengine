@@ -19,7 +19,7 @@
 //!
 //! - [`crate::systems::collision_detector`] – collision detection system
 //! - [`crate::components::collision::CollisionRule`] – defines collision handlers
-//! - [`crate::events::collision::CollisionEvent`] – emitted on collisions
+//! - [`crate::events::collision::Overlapping`] – emitted on overlaps
 
 use crate::math::Vec2;
 use bevy_ecs::prelude::Component;

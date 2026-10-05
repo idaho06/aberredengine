@@ -36,7 +36,7 @@ struct Counter(i32);
 struct DebugOn(bool);
 
 #[derive(Event, Debug, Clone)]
-struct CollisionEvent {
+struct Overlapping {
     a: Entity,
     b: Entity,
 }
@@ -104,7 +104,7 @@ fn messages_cleared_after_second_update() {
 // Observers
 // =============================================================================
 
-// Engine events (`CollisionEvent`, `AnimationFinished`, ...) are observed
+// Engine events (`Overlapping`, `AnimationFinished`, ...) are observed
 // via `add_observer` and fired with `World::trigger`.
 #[test]
 fn observer_receives_event_payload() {
@@ -112,7 +112,7 @@ fn observer_receives_event_payload() {
 
     let seen = Arc::new(Mutex::new(Vec::new()));
     let seen_clone = seen.clone();
-    world.add_observer(move |trigger: On<CollisionEvent>| {
+    world.add_observer(move |trigger: On<Overlapping>| {
         let event = trigger.event();
         seen_clone.lock().unwrap().extend([event.a, event.b]);
     });
@@ -120,7 +120,7 @@ fn observer_receives_event_payload() {
 
     let e1 = world.spawn_empty().id();
     let e2 = world.spawn_empty().id();
-    world.trigger(CollisionEvent { a: e1, b: e2 });
+    world.trigger(Overlapping { a: e1, b: e2 });
 
     assert_eq!(*seen.lock().unwrap(), vec![e1, e2]);
 }

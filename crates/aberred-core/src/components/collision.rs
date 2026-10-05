@@ -32,7 +32,7 @@
 //! - [`crate::systems::collision_detector`] – collision detection system
 //! - [`crate::systems::collision_rule`] – triggers `Collided` for matched rules
 //! - `aberred_lua::systems::lua_collision` – Lua collision observer
-//! - [`crate::events::collision::CollisionEvent`] – raw overlap event
+//! - [`crate::events::collision::Overlapping`] – raw overlap event
 //! - [`super::group::Group`] – group tag used for rule matching
 
 use bevy_ecs::prelude::*;

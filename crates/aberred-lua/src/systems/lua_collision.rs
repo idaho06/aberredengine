@@ -2,13 +2,13 @@
 //!
 //! This module provides the Lua-specific collision handling:
 //!
-//! - [`lua_collision_observer`] – receives [`CollisionEvent`]s
+//! - [`lua_collision_observer`] – receives [`Overlapping`] events
 //!   and dispatches to [`LuaCollisionRule`] callbacks
 //!
 //! # Collision Flow
 //!
 //! 1. [`collision_detector`](aberred_core::systems::collision_detector::collision_detector) detects overlaps
-//!    and emits `CollisionEvent`s
+//!    and emits `Overlapping` events
 //! 2. `lua_collision_observer` looks up matching Lua collision rules by
 //!    [`Group`] names
 //! 3. For each match, calls `call_lua_collision_callback` with pooled context tables
@@ -34,7 +34,7 @@
 //! - [`aberred_core::systems::collision_detector`] – pure Rust collision detection
 //! - [`crate::components::luacollision::LuaCollisionRule`] – defines Lua collision handlers
 //! - [`aberred_core::components::boxcollider::BoxCollider`] – axis-aligned collider
-//! - [`aberred_core::events::collision::CollisionEvent`] – emitted on each collision
+//! - [`aberred_core::events::collision::Overlapping`] – emitted for each overlapping pair
 
 use bevy_ecs::prelude::*;
 use bevy_ecs::system::SystemParam;
@@ -52,7 +52,7 @@ use crate::systems::lua_commands::{
 use aberred_core::components::boxcollider::BoxCollider;
 use aberred_core::components::group::Group;
 use aberred_core::components::signals::Signals;
-use aberred_core::events::collision::CollisionEvent;
+use aberred_core::events::collision::Overlapping;
 use aberred_core::protocol::audio::AudioCmd;
 use aberred_core::resources::animationstore::AnimationStore;
 use aberred_core::resources::systemsstore::SystemsStore;
@@ -79,10 +79,10 @@ pub struct LuaCollisionObserverParams<'w, 's> {
     pub animation_store: Res<'w, AnimationStore>,
 }
 
-/// Observes `CollisionEvent`, invokes the matching Lua collision callback, and
+/// Observes `Overlapping`, invokes the matching Lua collision callback, and
 /// queues any phase/animation/timer effects it requests.
 pub fn lua_collision_observer(
-    trigger: On<CollisionEvent>,
+    trigger: On<Overlapping>,
     mut params: LuaCollisionObserverParams,
     mut phase_buf: Local<Vec<PhaseCmd>>,
     mut effect_bufs: Local<EffectCmdBufs>,

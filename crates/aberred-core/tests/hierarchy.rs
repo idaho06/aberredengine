@@ -13,7 +13,7 @@ use bevy_ecs::system::RunSystemOnce;
 use aberred_core::components::boxcollider::BoxCollider;
 use aberred_core::components::globaltransform2d::GlobalTransform2D;
 use aberred_core::components::mapposition::MapPosition;
-use aberred_core::events::collision::CollisionEvent;
+use aberred_core::events::collision::Overlapping;
 use aberred_core::math::Vec2;
 use aberred_core::systems::collision_detector::collision_detector;
 use aberred_core::systems::propagate_transforms::{
@@ -156,11 +156,9 @@ struct CollisionLog {
 
 fn setup_collision_world(world: &mut World) {
     world.insert_resource(CollisionLog::default());
-    world.add_observer(
-        |trigger: On<CollisionEvent>, mut log: ResMut<CollisionLog>| {
-            log.pairs.push((trigger.event().a, trigger.event().b));
-        },
-    );
+    world.add_observer(|trigger: On<Overlapping>, mut log: ResMut<CollisionLog>| {
+        log.pairs.push((trigger.event().a, trigger.event().b));
+    });
 }
 
 fn tick_collision(world: &mut World) {

@@ -1,8 +1,7 @@
 //! Collision detection system.
 //!
 //! This module provides the [`collision_detector`] system which performs pairwise
-//! AABB overlap checks and emits [`CollisionEvent`]
-//! for each detected collision.
+//! AABB overlap checks and emits [`Overlapping`] for each overlapping pair.
 //!
 //! This system is pure Rust with no Lua dependency and is shared by both
 //! the Lua and Rust game paths.
@@ -11,19 +10,19 @@
 //!
 //! - `aberred_lua::systems::lua_collision` – Lua-based collision observer
 //! - [`crate::components::boxcollider::BoxCollider`] – axis-aligned collider
-//! - [`crate::events::collision::CollisionEvent`] – emitted on each collision
+//! - [`crate::events::collision::Overlapping`] – emitted for each overlapping pair
 
 use bevy_ecs::prelude::*;
 
 use crate::components::boxcollider::BoxCollider;
 use crate::components::globaltransform2d::GlobalTransform2D;
 use crate::components::mapposition::MapPosition;
-use crate::events::collision::CollisionEvent;
+use crate::events::collision::Overlapping;
 
 /// Broad-phase pairwise overlap test with event emission.
 ///
 /// Uses ECS `iter_combinations_mut()` to efficiently iterate unique pairs,
-/// checks overlap, and triggers an event for each collision. Observers can
+/// checks overlap, and triggers an [`Overlapping`] for each overlapping pair. Observers can
 /// react to despawn, apply damage, or play sounds.
 pub fn collision_detector(
     mut query: Query<(
@@ -49,7 +48,7 @@ pub fn collision_detector(
         let rect_a = collider_a.as_rectangle(world_pos_a);
         let rect_b = collider_b.as_rectangle(world_pos_b);
         if rect_a.overlaps(&rect_b) {
-            commands.trigger(CollisionEvent {
+            commands.trigger(Overlapping {
                 a: entity_a,
                 b: entity_b,
             });

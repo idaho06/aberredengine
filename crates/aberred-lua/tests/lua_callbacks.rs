@@ -12,7 +12,7 @@ use aberred_core::components::group::Group;
 use aberred_core::components::mapposition::MapPosition;
 use aberred_core::components::signals::Signals;
 use aberred_core::components::ttl::Ttl;
-use aberred_core::events::collision::CollisionEvent;
+use aberred_core::events::collision::Overlapping;
 use aberred_core::protocol::audio::AudioCmd;
 use aberred_core::resources::animationstore::AnimationStore;
 use aberred_core::resources::input::InputState;
@@ -97,7 +97,7 @@ fn collision_pipeline_triggers_lua_side_effects() {
     let saw_collision_clone = saw_collision.clone();
 
     // Register the test observer to track collision events
-    world.add_observer(move |_trigger: On<CollisionEvent>| {
+    world.add_observer(move |_trigger: On<Overlapping>| {
         *saw_collision_clone.lock().unwrap() = true;
     });
 
@@ -106,7 +106,7 @@ fn collision_pipeline_triggers_lua_side_effects() {
 
     world.flush();
 
-    // Run collision detection - this will trigger CollisionEvent which fires both observers
+    // Run collision detection - this will trigger Overlapping which fires both observers
     tick_collision_detector(&mut world);
 
     assert!(*saw_collision.lock().unwrap());

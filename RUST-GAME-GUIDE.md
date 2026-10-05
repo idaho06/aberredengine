@@ -518,7 +518,7 @@ fn my_enter(_: On<SceneEntered>, mut commands: Commands) {
 }
 ```
 
-> You can also observe engine-defined events: `CollisionEvent`, `TimerFired`, `InputEvent`, `GameStateChangedEvent`, `WindowResizedEvent`, etc. Note that not every engine type that crosses a system boundary is an `Event` — `AudioCmd` and `RenderAssetCmd`, for example, are Bevy `Message`s (`MessageWriter`/`MessageReader`, queue-based), a different mechanism from `Commands::trigger`/`.add_observer()`.
+> You can also observe engine-defined events: `Overlapping`, `TimerFired`, `InputEvent`, `GameStateChangedEvent`, `WindowResizedEvent`, etc. Note that not every engine type that crosses a system boundary is an `Event` — `AudioCmd` and `RenderAssetCmd`, for example, are Bevy `Message`s (`MessageWriter`/`MessageReader`, queue-based), a different mechanism from `Commands::trigger`/`.add_observer()`.
 
 #### Scene-scoped systems and observers
 
@@ -1719,7 +1719,7 @@ As with timers (§7.1), observe one entity with `.observe(handler)` or many with
 
 1. `collision_detector` system iterates all entity pairs with `MapPosition` + `BoxCollider`
 2. Uses AABB overlap via `BoxCollider::as_rectangle()` + `Rect::overlaps()`
-3. On overlap, triggers a `CollisionEvent { a, b }` (observe it directly for "any overlap" logic)
+3. On overlap, triggers an `Overlapping { a, b }` (observe it directly for "any overlap" logic)
 4. `collision_rule_observer` receives the event, looks up `Group` names, finds a matching `CollisionRule`, computes collision sides, and triggers `Collided` on the rule entity
 
 **Bidirectional matching:** A rule for `("ball", "brick")` matches regardless of which entity is `ball` vs `brick`. `Collided.a` is always the `group_a` entity and `Collided.b` the `group_b` entity.

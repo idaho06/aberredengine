@@ -1,6 +1,6 @@
 //! Collision event types.
 //!
-//! [`CollisionEvent`] is the raw overlap event:
+//! [`Overlapping`] is the raw overlap event:
 //! [`collision_detector`](crate::systems::collision_detector::collision_detector)
 //! triggers it for every overlapping pair, every tick. Observe it for
 //! "any overlap" logic.
@@ -21,14 +21,16 @@ use bevy_ecs::prelude::*;
 
 use crate::components::collision::BoxSides;
 
-/// Event fired when two entities with BoxCollider overlap.
+/// The raw, unruled overlap: triggered for every pair of overlapping
+/// `BoxCollider` entities, every tick they overlap. [`Collided`] is the
+/// rule-matched event.
 ///
-/// The two fields, [`CollisionEvent::a`] and [`CollisionEvent::b`], are the
+/// The two fields, [`Overlapping::a`] and [`Overlapping::b`], are the
 /// entity IDs of the participants. No ordering guarantees are provided.
 /// Additional collision details (normals, penetration, etc.) can be added by
 /// extending this type when needed.
 #[derive(Event, Debug, Clone, Copy)]
-pub struct CollisionEvent {
+pub struct Overlapping {
     pub a: Entity,
     pub b: Entity,
 }

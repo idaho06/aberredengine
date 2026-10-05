@@ -1,13 +1,13 @@
 //! Rule-matched collision events.
 //!
-//! [`collision_rule_observer`] receives each [`CollisionEvent`], finds the
+//! [`collision_rule_observer`] receives each [`Overlapping`], finds the
 //! [`CollisionRule`] covering the pair's groups, and triggers [`Collided`] on
 //! that rule's entity.
 //!
 //! # Collision Flow
 //!
 //! 1. [`collision_detector`](crate::systems::collision_detector::collision_detector) detects overlaps
-//!    and triggers `CollisionEvent`s
+//!    and triggers `Overlapping` events
 //! 2. `collision_rule_observer` looks up the matching rule by
 //!    [`Group`] names
 //! 3. It computes the contact sides and triggers `Collided` on the rule entity
@@ -17,17 +17,17 @@
 //! - [`crate::systems::collision_detector`] – collision detection
 //! - [`crate::components::collision::CollisionRule`] – group-pair rule
 //! - [`crate::components::boxcollider::BoxCollider`] – axis-aligned collider
-//! - [`crate::events::collision`] – `CollisionEvent` and `Collided`
+//! - [`crate::events::collision`] – `Overlapping` and `Collided`
 
 use bevy_ecs::prelude::*;
 
 use crate::components::collision::CollisionRule;
 use crate::components::group::Group;
-use crate::events::collision::{Collided, CollisionEvent};
+use crate::events::collision::{Collided, Overlapping};
 use crate::resources::collision_rule_index::CollisionRuleIndex;
 use crate::systems::collision::{ColliderRects, compute_sides, resolve_groups};
 
-/// Observer that turns a [`CollisionEvent`] into a [`Collided`] on the
+/// Observer that turns an [`Overlapping`] into a [`Collided`] on the
 /// matching [`CollisionRule`] entity.
 ///
 /// 1. Looks up [`Group`] names for both entities (returns early if missing)
@@ -37,7 +37,7 @@ use crate::systems::collision::{ColliderRects, compute_sides, resolve_groups};
 /// 3. Computes contact sides via [`compute_sides`]
 /// 4. Triggers `Collided` with `a`/`b` in the rule's group order
 pub fn collision_rule_observer(
-    trigger: On<CollisionEvent>,
+    trigger: On<Overlapping>,
     rules: Query<&CollisionRule>,
     index: Res<CollisionRuleIndex>,
     groups: Query<&Group>,
@@ -48,7 +48,7 @@ pub fn collision_rule_observer(
         return;
     }
 
-    let CollisionEvent { a, b } = *trigger.event();
+    let Overlapping { a, b } = *trigger.event();
 
     let Some((ga, gb)) = resolve_groups(&groups, a, b) else {
         return;

@@ -4,7 +4,7 @@
 //! `rebuild_rule_index::<CollisionRule>` always runs in `SimSet::Collision`,
 //! `.before(collision_detector)`, so the index reflects this tick's rules
 //! (including ones spawned this same tick via `SimSet::Spawn`) before any
-//! `CollisionEvent` fires. A Lua game adds `rebuild_rule_index` for its own
+//! `Overlapping` fires. A Lua game adds `rebuild_rule_index` for its own
 //! rule component in the same slot.
 //!
 //! Full rebuild on any change -- rules are few and changes are rare (scene
