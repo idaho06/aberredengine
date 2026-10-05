@@ -4,7 +4,7 @@
 //! clickable GUI widgets, letting `gui_hit_test_system` serve any clickable
 //! widget (`GuiButton`, `GuiImage`) without duplicating the
 //! winner-resolution algorithm. `GuiButton`/`GuiImage` still carry their own
-//! full spawn-time data (size, caption/tex_key, callback_name, theme_key); the
+//! full spawn-time data (size, caption/tex_key, theme_key); the
 //! `gui_button_spawn_system`/`gui_image_spawn_system` reactive spawn systems
 //! (`systems/gui_spawn.rs`) react on `Added<GuiButton>`/`Added<GuiImage>` to
 //! insert the co-located `GuiInteractable` one frame later.
@@ -35,8 +35,6 @@ pub enum GuiWidgetState {
 pub struct GuiInteractable {
     pub size: Vec2,
     pub state: GuiWidgetState,
-    /// Lua callback name, called on click when the game runs a Lua script.
-    pub on_click_callback: Option<String>,
 }
 
 impl GuiInteractable {
@@ -44,13 +42,7 @@ impl GuiInteractable {
         Self {
             size: Vec2::new(width, height),
             state: GuiWidgetState::Normal,
-            on_click_callback: None,
         }
-    }
-
-    pub fn with_on_click_callback(mut self, callback: impl Into<String>) -> Self {
-        self.on_click_callback = Some(callback.into());
-        self
     }
 
     pub fn with_disabled(mut self) -> Self {

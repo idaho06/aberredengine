@@ -1,7 +1,7 @@
 //! Themed button widget data.
 //!
 //! `GuiButton` carries the spawn-time data for a themed button (size,
-//! caption, click callback name, disabled state). Hit-testing and click
+//! caption, disabled state, theme). Hit-testing and click
 //! dispatch run on a co-located `GuiInteractable` component (see
 //! `guiinteractable.rs`), inserted by `gui_button_spawn_system`
 //! (`systems/gui_spawn.rs`) reacting on `Added<GuiButton>` — mirrors how
@@ -28,10 +28,6 @@ pub struct GuiButton {
     pub size: Vec2,
     /// Empty string = captionless button, no caption child spawned.
     pub caption: String,
-    /// Lua callback name, checked first by the click dispatch chain. Empty
-    /// string = no callback wired (`GuiInteractable.on_click_callback` stays
-    /// `None`).
-    pub callback_name: Arc<str>,
     /// Authored disabled state, applied to the spawned `GuiInteractable.state`
     /// once at spawn time. Mutating this field after spawn has no further
     /// effect — toggle `GuiInteractable.state` directly for runtime
@@ -47,26 +43,8 @@ impl GuiButton {
         Self {
             size: Vec2::new(width, height),
             caption: caption.into(),
-            callback_name: Arc::from(""),
             disabled: false,
             theme_key: Arc::from(DEFAULT_GUI_THEME_KEY),
-        }
-    }
-
-    /// Lua-only constructor: sets `callback_name`, the Lua function called on
-    /// click. Rust callers use `::new` and observe `GuiClicked` on the entity
-    /// instead. `callback_name` has no effect once a `GuiInteractable` is
-    /// already present (`insert_if_new`).
-    #[cfg(feature = "lua")]
-    pub fn with_lua_callback(
-        width: f32,
-        height: f32,
-        caption: impl Into<String>,
-        callback_name: impl Into<Arc<str>>,
-    ) -> Self {
-        Self {
-            callback_name: callback_name.into(),
-            ..Self::new(width, height, caption)
         }
     }
 

@@ -897,7 +897,7 @@ pub fn render_system(
             // GUI categories are read straight off their mirror queries
             // (borrowed, not cloned into an owned scratch buffer) --
             // unlike sprites/texts above, several GuiX component fields
-            // (caption, callback_name, ...) are heap-allocated Strings that
+            // (caption, tex_key, ...) are heap-allocated Strings that
             // a per-frame Vec<Entry> rebuild would needlessly clone.
             draw_screen_space(
                 &mut d,
@@ -1231,7 +1231,7 @@ fn draw_screen_space<'m>(
     screen_texts: &mut Vec<ScreenTextBufferItem>,
     // Read straight off the mirror query iterators (borrowed, no per-frame
     // Vec<Entry> materialization) -- several GuiX component fields
-    // (caption, callback_name, ...) are heap-allocated Strings that an
+    // (caption, tex_key, ...) are heap-allocated Strings that an
     // owned scratch-buffer rebuild would needlessly clone every frame.
     gui_windows: impl Iterator<Item = (&'m SimMirror, &'m GuiWindow, &'m ScreenPosition, &'m ZIndex)>,
     gui_buttons: impl Iterator<

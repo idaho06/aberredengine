@@ -8,7 +8,7 @@
 //!   co-located `Sprite` on `Added<GuiImage>`
 //!
 //! `GuiButton`/`GuiLabel`/`GuiImage` carry all the data needed to spawn
-//! themselves (size, caption/tex_key, callback name) — these systems read
+//! themselves (size, caption/tex_key, theme) — these systems read
 //! that data and insert the secondary components/children, the same
 //! pattern [`menu_spawn_system`](super::menu::menu_spawn_system) already
 //! uses for `Menu`'s items. Using `insert_if_new` (not `insert`) for the
@@ -121,9 +121,6 @@ pub fn gui_button_spawn_system(
 ) {
     for (entity, button, z_index) in &query {
         let mut interactable = GuiInteractable::new(button.size.x, button.size.y);
-        if !button.callback_name.is_empty() {
-            interactable = interactable.with_on_click_callback(button.callback_name.to_string());
-        }
         if button.disabled {
             interactable = interactable.with_disabled();
         }
@@ -176,12 +173,8 @@ pub fn gui_image_spawn_system(
     query: Query<(Entity, &GuiImage), Added<GuiImage>>,
 ) {
     for (entity, image) in &query {
-        let mut interactable = GuiInteractable::new(image.size.x, image.size.y);
-        if !image.callback_name.is_empty() {
-            interactable = interactable.with_on_click_callback(image.callback_name.to_string());
-        }
         commands.entity(entity).insert_if_new((
-            interactable,
+            GuiInteractable::new(image.size.x, image.size.y),
             Sprite {
                 tex_key: Arc::from(image.tex_key.as_str()),
                 width: image.size.x,
@@ -235,10 +228,7 @@ mod tests {
         world.insert_resource(GuiThemeWarnCache::default());
         let button_entity = world
             .spawn((
-                GuiButton {
-                    callback_name: "on_start_clicked".into(),
-                    ..GuiButton::new(80.0, 24.0, "Start")
-                },
+                GuiButton::new(80.0, 24.0, "Start"),
                 ScreenPosition::new(10.0, 20.0),
                 ZIndex(5.0),
             ))
@@ -249,13 +239,9 @@ mod tests {
         world
             .get::<GuiButton>(button_entity)
             .expect("button entity should still carry GuiButton");
-        let interactable = world
+        world
             .get::<GuiInteractable>(button_entity)
             .expect("gui_button_spawn_system should insert GuiInteractable");
-        assert_eq!(
-            interactable.on_click_callback.as_deref(),
-            Some("on_start_clicked")
-        );
 
         let (caption_parent, caption_text, caption_zindex) = world
             .query::<(&ChildOf, &DynamicText, &ZIndex)>()
@@ -275,10 +261,7 @@ mod tests {
         let mut world = World::new();
         insert_empty_theme_store(&mut world);
         world.spawn((
-            GuiButton {
-                callback_name: "on_start_clicked".into(),
-                ..GuiButton::new(80.0, 24.0, "")
-            },
+            GuiButton::new(80.0, 24.0, ""),
             ScreenPosition::new(10.0, 20.0),
             ZIndex(5.0),
         ));
@@ -653,10 +636,7 @@ mod tests {
     #[test]
     fn gui_image_spawn_creates_interactable_and_sprite_no_caption() {
         let mut world = World::new();
-        world.spawn(GuiImage {
-            callback_name: "on_item_clicked".into(),
-            ..GuiImage::new(32.0, 32.0, "item_sword", 0.0, 0.0)
-        });
+        world.spawn(GuiImage::new(32.0, 32.0, "item_sword", 0.0, 0.0));
 
         tick(&mut world, gui_image_spawn_system);
 
@@ -667,31 +647,12 @@ mod tests {
             .expect("image entity with GuiInteractable + Sprite should be spawned");
         assert!(approx_eq(interactable.size.x, 32.0));
         assert!(approx_eq(interactable.size.y, 32.0));
-        assert_eq!(
-            interactable.on_click_callback.as_deref(),
-            Some("on_item_clicked")
-        );
         assert_eq!(&*sprite.tex_key, "item_sword");
         assert_eq!(
             world.query::<&ChildOf>().iter(&world).count(),
             0,
             "GuiImage spawns no caption child, unlike GuiButton/GuiLabel"
         );
-    }
-
-    #[test]
-    fn gui_image_spawn_with_empty_callback_name_skips_callback_wiring() {
-        let mut world = World::new();
-        world.spawn(GuiImage::new(32.0, 32.0, "item_sword", 0.0, 0.0));
-
-        tick(&mut world, gui_image_spawn_system);
-
-        let interactable = world
-            .query::<&GuiInteractable>()
-            .iter(&world)
-            .next()
-            .expect("image entity should be spawned");
-        assert!(interactable.on_click_callback.is_none());
     }
 
     #[test]

@@ -7,6 +7,7 @@
 use aberred_core::math::Vec2;
 use bevy_ecs::prelude::*;
 
+use crate::components::lua_on_click::LuaOnClick;
 use crate::components::lua_on_menu_select::LuaOnMenuSelect;
 use crate::components::luaphase::{LuaPhase, PhaseCallbacks};
 use crate::components::luasetup::LuaSetup;
@@ -100,6 +101,9 @@ pub(super) fn apply_components(
     }
     if let Some(img) = cmd.gui_image {
         entity_commands.insert(img);
+    }
+    if let Some(callback) = cmd.lua_on_click {
+        entity_commands.insert(LuaOnClick::new(callback));
     }
     if let Some(bar) = cmd.gui_progress_bar {
         entity_commands.insert(bar);
@@ -1345,6 +1349,33 @@ mod tests {
         assert!(matches!(actions.get("play"), MenuAction::SetScene(s) if s == "level01"));
         assert!(matches!(actions.get("opts"), MenuAction::SetScene(s) if s == "options"));
         assert!(matches!(actions.get("quit"), MenuAction::QuitGame));
+    }
+
+    #[test]
+    fn lua_gui_click_callbacks_become_lua_on_click() {
+        let mut world = World::new();
+        let mut signals = WorldSignals::default();
+        let mut on_click = |script: &str| {
+            let e = spawn_from_lua(&mut world, &mut signals, script);
+            world.get::<LuaOnClick>(e).map(|c| c.callback.to_string())
+        };
+
+        assert_eq!(
+            on_click("engine.spawn():with_gui_button(80, 20, 'Start', 'on_start'):build()"),
+            Some("on_start".to_string())
+        );
+        assert_eq!(
+            on_click("engine.spawn():with_gui_image(16, 16, 'atlas', 0, 0, 'on_icon'):build()"),
+            Some("on_icon".to_string())
+        );
+        assert_eq!(
+            on_click("engine.spawn():with_gui_button(80, 20, 'Start', ''):build()"),
+            None
+        );
+        assert_eq!(
+            on_click("engine.spawn():with_gui_image(16, 16, 'atlas', 0, 0, ''):build()"),
+            None
+        );
     }
 
     #[test]

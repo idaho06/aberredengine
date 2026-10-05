@@ -822,14 +822,12 @@ mod tests {
             GuiButton {
                 size: Vec2::new(100.0, 30.0),
                 caption: "Play".to_string(),
-                callback_name: "on_play".into(),
                 disabled: false,
                 theme_key: Arc::from("default"),
             },
             GuiInteractable {
                 size: Vec2::new(100.0, 30.0),
                 state: GuiWidgetState::Hovered,
-                on_click_callback: Some("on_play".to_string()),
             },
             ScreenPosition::new(10.0, 20.0),
             ZIndex(5.0),

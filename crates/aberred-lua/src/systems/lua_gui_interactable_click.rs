@@ -1,31 +1,26 @@
 //! Lua GUI interactable click dispatch.
 //!
 //! [`lua_gui_interactable_click_observer`] is spawned only in games that run
-//! a Lua script. It calls the clicked widget's named Lua callback; Rust code
-//! observes the same `GuiClicked` event directly.
+//! a Lua script. It calls the clicked widget's [`LuaOnClick`] callback; Rust
+//! code observes the same `GuiClicked` event directly.
 
+use crate::components::lua_on_click::LuaOnClick;
 use crate::resources::lua_runtime::LuaRuntime;
-use aberred_core::components::guiinteractable::GuiInteractable;
 use aberred_core::events::gui_interactable::GuiClicked;
 use bevy_ecs::prelude::*;
-use log::warn;
 
-/// Reacts to `GuiClicked` by calling the widget's Lua callback
-/// (`GuiInteractable::on_click_callback`) with a `{ entity_id }` table.
+/// Reacts to `GuiClicked` by calling the widget's [`LuaOnClick`] callback
+/// with a `{ entity_id }` table. A widget without one is skipped.
 pub fn lua_gui_interactable_click_observer(
     trigger: On<GuiClicked>,
-    interactables: Query<&GuiInteractable>,
+    on_clicks: Query<&LuaOnClick>,
     lua_runtime: NonSend<LuaRuntime>,
 ) {
     let entity = trigger.event().entity;
-    let Ok(interactable) = interactables.get(entity) else {
-        warn!("lua_gui_interactable_click_observer: entity {entity:?} not found");
+    let Ok(on_click) = on_clicks.get(entity) else {
         return;
     };
-    let Some(callback_name) = &interactable.on_click_callback else {
-        return;
-    };
-    lua_runtime.call_named(callback_name, "GUI interactable", |f| {
+    lua_runtime.call_named(&on_click.callback, "GUI interactable", |f| {
         let lua_ctx = lua_runtime.lua().create_table()?;
         lua_ctx.set("entity_id", entity.to_bits())?;
         f.call::<()>(lua_ctx)
@@ -35,6 +30,7 @@ pub fn lua_gui_interactable_click_observer(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use aberred_core::components::guiinteractable::GuiInteractable;
 
     fn setup_world() -> World {
         let mut world = World::new();
@@ -55,7 +51,10 @@ mod tests {
             .expect("failed to load Lua function");
 
         let button = world
-            .spawn(GuiInteractable::new(80.0, 24.0).with_on_click_callback("on_gui_button_clicked"))
+            .spawn((
+                GuiInteractable::new(80.0, 24.0),
+                LuaOnClick::new("on_gui_button_clicked"),
+            ))
             .id();
         world.trigger(GuiClicked { entity: button });
         world.flush();

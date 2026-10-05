@@ -1972,8 +1972,7 @@ parented with `ChildOf`, hidden by removing `ScreenPosition`, etc.).
 
 > **Note:** `GuiButton`/`GuiImage`'s spawn systems use `insert_if_new` for the `GuiInteractable` they
 > add, so they never overwrite one you pre-spawned in the same bundle (for example, to give the widget a
-> different hit area). The spawn system copies the widget's `callback_name` (if non-empty) into
-> `GuiInteractable.on_click_callback`, the Lua function a Lua game calls on click.
+> different hit area).
 
 **Theming:** Themes are stored in `GuiThemeStore` — a `FxHashMap<Arc<str>, GuiTheme>` pre-inserted by the engine. Each widget carries a `theme_key: Arc<str>` (default `"default"`) that is resolved against `GuiThemeStore` at render time. Set up themes in your setup system before spawning any widgets:
 

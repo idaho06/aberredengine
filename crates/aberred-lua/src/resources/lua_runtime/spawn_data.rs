@@ -474,7 +474,10 @@ pub struct SpawnCmd {
     pub lua_setup: Option<String>,
     /// LuaOnAnimationEnd callback name — called once when the non-looped animation first finishes
     pub lua_on_animation_end: Option<String>,
-    /// GuiButton component (size, caption, click callback, disabled state) —
+    /// LuaOnClick callback name — called on each `GuiClicked` of the entity's
+    /// GuiButton/GuiImage; set by their builders when the name is non-empty
+    pub lua_on_click: Option<String>,
+    /// GuiButton component (size, caption, disabled state) —
     /// inserted as-is; `gui_button_spawn_system` reacts on `Added<GuiButton>`
     /// to spawn the co-located `GuiInteractable` and caption child.
     pub gui_button: Option<GuiButton>,
@@ -482,7 +485,7 @@ pub struct SpawnCmd {
     /// `gui_label_spawn_system` reacts on `Added<GuiLabel>` to spawn the
     /// caption child.
     pub gui_label: Option<GuiLabel>,
-    /// GuiImage component (size, texture, click callback) — inserted as-is;
+    /// GuiImage component (size, texture, per-state offsets) — inserted as-is;
     /// `gui_image_spawn_system` reacts on `Added<GuiImage>` to spawn the
     /// co-located `GuiInteractable` + `Sprite`.
     pub gui_image: Option<GuiImage>,

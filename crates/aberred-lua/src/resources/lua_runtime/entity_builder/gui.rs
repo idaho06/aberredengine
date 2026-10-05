@@ -47,12 +47,8 @@ pub(super) fn register<M: LuaUserDataMethods<LuaEntityBuilder>>(
         |_,
          this: &mut LuaEntityBuilder,
          (width, height, label, callback_name): (f32, f32, String, String)| {
-            this.cmd.gui_button = Some(GuiButton::with_lua_callback(
-                width,
-                height,
-                label,
-                callback_name,
-            ));
+            this.cmd.gui_button = Some(GuiButton::new(width, height, label));
+            this.cmd.lua_on_click = (!callback_name.is_empty()).then_some(callback_name);
             Ok(())
         }
     );
@@ -163,7 +159,7 @@ pub(super) fn register<M: LuaUserDataMethods<LuaEntityBuilder>>(
         methods,
         meta,
         "with_gui_image",
-        "Set GuiImage component; gui_image_spawn_system spawns a co-located GuiInteractable + Sprite on Added<GuiImage> (no caption child, unlike GuiButton/GuiLabel). `offset_x`/`offset_y` select the atlas sub-rect within `tex_key` (mirrors Sprite.offset; size doubles as source-rect size and render size) — this is the Normal-state offset; see :with_gui_image_hover_offset()/:with_gui_image_pressed_offset()/:with_gui_image_disabled_offset() for per-state offsets (each falls back to this one when unset). An empty `callback_name` skips wiring a click callback (the image still hit-tests/hovers/presses, it just has nothing to dispatch). Requires :with_screen_position() (or :with_parent()+:with_gui_offset()) and :with_zindex() to render.",
+        "Set GuiImage component; gui_image_spawn_system spawns a co-located GuiInteractable + Sprite on Added<GuiImage> (no caption child, unlike GuiButton/GuiLabel). `offset_x`/`offset_y` select the atlas sub-rect within `tex_key` (mirrors Sprite.offset; size doubles as source-rect size and render size) — this is the Normal-state offset; see :with_gui_image_hover_offset()/:with_gui_image_pressed_offset()/:with_gui_image_disabled_offset() for per-state offsets (each falls back to this one when unset). A non-empty `callback_name` attaches a LuaOnClick callback; an empty one attaches none (the image still hit-tests/hovers/presses, it just has nothing to dispatch). Requires :with_screen_position() (or :with_parent()+:with_gui_offset()) and :with_zindex() to render.",
         [
             ("width", "number"),
             ("height", "number"),
@@ -182,14 +178,8 @@ pub(super) fn register<M: LuaUserDataMethods<LuaEntityBuilder>>(
             f32,
             String
         )| {
-            this.cmd.gui_image = Some(GuiImage::with_lua_callback(
-                width,
-                height,
-                tex_key,
-                offset_x,
-                offset_y,
-                callback_name,
-            ));
+            this.cmd.gui_image = Some(GuiImage::new(width, height, tex_key, offset_x, offset_y));
+            this.cmd.lua_on_click = (!callback_name.is_empty()).then_some(callback_name);
             Ok(())
         }
     );
@@ -396,12 +386,11 @@ mod tests {
 
     #[test]
     fn with_gui_button_sets_caption_callback_and_disabled() {
-        let btn = built(":with_gui_button(80, 20, 'Start', 'on_start')")
-            .gui_button
-            .unwrap();
+        let cmd = built(":with_gui_button(80, 20, 'Start', 'on_start')");
+        assert_eq!(cmd.lua_on_click.as_deref(), Some("on_start"));
+        let btn = cmd.gui_button.unwrap();
         assert_eq!(btn.size, Vec2::new(80.0, 20.0));
         assert_eq!(btn.caption, "Start");
-        assert_eq!(&*btn.callback_name, "on_start");
         assert!(!btn.disabled);
 
         let btn = built(":with_gui_button(80, 20, '', 'cb'):with_gui_button_disabled()")
@@ -456,13 +445,12 @@ mod tests {
 
     #[test]
     fn with_gui_image_sets_normal_and_per_state_offsets() {
-        let img = built(":with_gui_image(16, 16, 'atlas', 32, 0, 'on_icon')")
-            .gui_image
-            .unwrap();
+        let cmd = built(":with_gui_image(16, 16, 'atlas', 32, 0, 'on_icon')");
+        assert_eq!(cmd.lua_on_click.as_deref(), Some("on_icon"));
+        let img = cmd.gui_image.unwrap();
         assert_eq!(img.size, Vec2::new(16.0, 16.0));
         assert_eq!(img.tex_key, "atlas");
         assert_eq!(img.offset, Vec2::new(32.0, 0.0));
-        assert_eq!(&*img.callback_name, "on_icon");
         assert_eq!(
             (img.offset_hover, img.offset_pressed, img.offset_disabled),
             (None, None, None)

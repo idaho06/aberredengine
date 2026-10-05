@@ -298,7 +298,7 @@ fn process_physics_cmd(cmd: EntityCmd, queries: &mut EntityCmdQueries) {
 
 /// Query-mutation handler for GUI widget enable/disable. Mutates
 /// `GuiInteractable.state` only — never `try_insert`s a fresh component,
-/// since that would wipe `on_click_callback`/`size`.
+/// since that would wipe its `size`.
 fn process_gui_interactable_cmd(entity_id: u64, disabled: bool, queries: &mut EntityCmdQueries) {
     let Some(entity) = resolve_entity(entity_id) else {
         return;
@@ -1884,9 +1884,7 @@ mod tests {
     #[test]
     fn set_gui_disabled_true_sets_state_disabled() {
         let mut world = World::new();
-        let entity = world
-            .spawn(GuiInteractable::new(80.0, 24.0).with_on_click_callback("on_start_clicked"))
-            .id();
+        let entity = world.spawn(GuiInteractable::new(80.0, 24.0)).id();
 
         run_gui_disabled_cmd(
             &mut world,
@@ -1898,10 +1896,7 @@ mod tests {
 
         let interactable = world.get::<GuiInteractable>(entity).unwrap();
         assert_eq!(interactable.state, GuiWidgetState::Disabled);
-        assert_eq!(
-            interactable.on_click_callback.as_deref(),
-            Some("on_start_clicked")
-        );
+        assert_eq!(interactable.size, Vec2::new(80.0, 24.0));
     }
 
     #[test]
