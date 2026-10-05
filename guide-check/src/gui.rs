@@ -22,13 +22,13 @@ mod gui_widgets {
         // theme.text_shadow = Some(Shadow::default_color(1.0, 1.0));
     }
 
-    fn hud_theme(mut theme_store: ResMut<GuiThemeStore>, ctx: &mut GameCtx) { // GLUE
+    fn hud_theme(mut theme_store: ResMut<GuiThemeStore>, mut commands: Commands) { // GLUE
     let hud_theme = theme_store.themes.entry(Arc::from("hud")).or_default();
     hud_theme.panel = GuiNinePatch::new("hud_panel", Rect::new(0.0, 0.0, 48.0, 48.0), 4);
     hud_theme.font = "hud_font".into();
 
     // Spawn a widget using the "hud" theme
-    ctx.commands.spawn((
+    commands.spawn((
         GuiWindow::new(200.0, 40.0).with_theme_key("hud"),
         ScreenPosition::new(10.0, 10.0),
         ZIndex(5.0),

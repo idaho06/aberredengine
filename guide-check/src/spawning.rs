@@ -2,10 +2,10 @@
 mod example_1_sprite_entity {
     use aberredengine::prelude::*; // GLUE
 
-    fn enter(ctx: &mut GameCtx) { // GLUE
+    fn enter(mut commands: Commands) { // GLUE
     use aberredengine::prelude::*;
 
-    ctx.commands.spawn((
+    commands.spawn((
         MapPosition::new(100.0, 200.0),
         Sprite::new("player", 32.0, 32.0).centered(),
         ZIndex(1.0),
@@ -18,10 +18,10 @@ mod example_1_sprite_entity {
 mod example_2_physics_entity {
     use aberredengine::prelude::*; // GLUE
 
-    fn enter(ctx: &mut GameCtx) { // GLUE
+    fn enter(mut commands: Commands) { // GLUE
     use aberredengine::prelude::*;
 
-    ctx.commands.spawn((
+    commands.spawn((
         MapPosition::new(100.0, 200.0),
         Sprite::new("player", 32.0, 32.0).centered(),
         ZIndex(1.0),
@@ -39,10 +39,10 @@ mod example_2_physics_entity {
 mod example_3_ui_text_with_signal_binding {
     use aberredengine::prelude::*; // GLUE
 
-    fn enter(ctx: &mut GameCtx) { // GLUE
+    fn enter(mut commands: Commands) { // GLUE
     use aberredengine::prelude::*;
 
-    ctx.commands.spawn((
+    commands.spawn((
         ScreenPosition::new(10.0, 10.0),
         DynamicText::new("0", "arcade", 16.0, Color::WHITE),
         SignalBinding::new("score").with_format("Score: {}"),
@@ -55,11 +55,11 @@ mod example_3_ui_text_with_signal_binding {
 mod animation_controller_rules {
     use aberredengine::prelude::*; // GLUE
 
-    fn enter(ctx: &mut GameCtx) { // GLUE
+    fn enter(mut commands: Commands) { // GLUE
     use aberredengine::prelude::*;
     use aberredengine::core::components::animation::{CmpOp, Condition};
 
-    ctx.commands.spawn((
+    commands.spawn((
         Animation::new("player_idle"),
         AnimationController::new("player_idle")
             .with_rule(Condition::HasFlag { key: "dead".into() }, "player_dead")
@@ -76,10 +76,10 @@ mod animation_controller_rules {
 mod tween_components_in_rust {
     use aberredengine::prelude::*; // GLUE
 
-    fn map_position(ctx: &mut GameCtx) { // GLUE
+    fn map_position(mut commands: Commands) { // GLUE
     use aberredengine::prelude::*;
 
-    ctx.commands.spawn((
+    commands.spawn((
         MapPosition::new(0.0, 0.0),
         Tween::position(Vec2::ZERO, Vec2::new(200.0, 120.0), 1.5)
             .with_easing(Easing::CubicOut)
@@ -87,29 +87,29 @@ mod tween_components_in_rust {
     ));
     } // GLUE
 
-    fn rotation(ctx: &mut GameCtx) { // GLUE
+    fn rotation(mut commands: Commands) { // GLUE
     use aberredengine::prelude::*;
 
-    ctx.commands.spawn((
+    commands.spawn((
         Rotation::new(0.0),
         Tween::rotation(0.0, 360.0, 2.0),
     ));
     } // GLUE
 
-    fn scale(ctx: &mut GameCtx) { // GLUE
+    fn scale(mut commands: Commands) { // GLUE
     use aberredengine::prelude::*;
 
-    ctx.commands.spawn((
+    commands.spawn((
         Scale::new(1.0, 1.0),
         Tween::scale(Vec2::ONE, Vec2::new(1.5, 0.75), 0.75)
             .with_backwards(),
     ));
     } // GLUE
 
-    fn screen_position(ctx: &mut GameCtx) { // GLUE
+    fn screen_position(mut commands: Commands) { // GLUE
     use aberredengine::prelude::*;
 
-    ctx.commands.spawn((
+    commands.spawn((
         ScreenPosition::new(-200.0, 50.0),
         Tween::screen_position(Vec2::new(-200.0, 50.0), Vec2::new(20.0, 50.0), 0.4),
     ));
@@ -145,10 +145,10 @@ mod triggering_scene_transitions {
 mod persistent_entities {
     use aberredengine::prelude::*; // GLUE
 
-    fn enter(ctx: &mut GameCtx) { // GLUE
+    fn enter(mut commands: Commands) { // GLUE
     use aberredengine::prelude::*;
 
-    ctx.commands.spawn((
+    commands.spawn((
         ScreenPosition::new(10.0, 10.0),
         DynamicText::new("0", "arcade", 16.0, Color::WHITE),
         SignalBinding::new("score").with_format("Score: {}"),

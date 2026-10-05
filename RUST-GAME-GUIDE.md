@@ -363,7 +363,7 @@ Setup ──→ Playing ──→ Quitting
 1. **Setup** — The engine calls the `setup` hook once, on the logic thread. Load assets here (textures, fonts, sounds, shaders, animations) — see [Section 4](#4-loading-assets) for how texture/font/shader loading works. Omit `.on_setup()` if you have nothing to load. With `.loading_scene(name)`, that scene is entered right after the hook and stays active until Setup ends. Once the hook has run, the engine moves to `Playing` on its own, as soon as every load queued so far has been answered (see [Waiting for loads](#waiting-for-loads)); a failed load counts as answered. A hook that requests `Playing` itself waits the same way. A hook that requests another state through `ResMut<NextGameState>` (e.g. `GameStates::Quitting`) gets it at once.
 2. **Playing** — The engine transitions to playing, enters the initial scene (triggering `SceneEntered`), then runs your `.add_system()` systems (and the active scene's `.add_scene_system()` systems) once per sim tick.
 3. **Scene switches** — `WorldSignals::request_scene(name)` (which sets the `"switch_scene"` flag) runs the exit→enter sequence on the next sim tick; a `MenuAction::SetScene` menu item switches right away.
-4. **Quitting** — When the game state becomes `GameStates::Quitting` (via `NextGameState::set(GameStates::Quitting)`, `WorldSignals::request_quit()`, or a `MenuAction::QuitGame` menu item) or the window is closed, the engine shuts down. Collision and menu callbacks use `ctx.world_signals.request_quit()`, since `GameCtx` has no `NextGameState`; observers and systems can take `ResMut<WorldSignals>` or `ResMut<NextGameState>` directly.
+4. **Quitting** — When the game state becomes `GameStates::Quitting` (via `NextGameState::set(GameStates::Quitting)`, `WorldSignals::request_quit()`, or a `MenuAction::QuitGame` menu item) or the window is closed, the engine shuts down. Observers and systems take `ResMut<WorldSignals>` or `ResMut<NextGameState>` to request it.
 
 ### Builder method reference
 
@@ -591,7 +591,7 @@ This is the standard pattern for scene-scoped behaviour in the engine — no spe
 
 ### Determinism and replay
 
-By default, simulation randomness is seeded from entropy and every run of your game plays out differently. Call `.deterministic(seed)` to pin `SimRng` (the one RNG resource `GameCtx`/systems should draw from for anything that must reproduce — using `rand::thread_rng()` or any other RNG source instead breaks determinism even with `.deterministic()` set) to a known seed. Combined with the engine's fixed-`dt` sim tick and single-threaded schedule executor, this makes a run fully reproducible from its seed and input stream alone.
+By default, simulation randomness is seeded from entropy and every run of your game plays out differently. Call `.deterministic(seed)` to pin `SimRng` (the one RNG resource systems and observers should draw from for anything that must reproduce — using `rand::thread_rng()` or any other RNG source instead breaks determinism even with `.deterministic()` set) to a known seed. Combined with the engine's fixed-`dt` sim tick and single-threaded schedule executor, this makes a run fully reproducible from its seed and input stream alone.
 
 ```rust
 EngineBuilder::new()
@@ -602,7 +602,7 @@ EngineBuilder::new()
     .expect("engine startup failed");
 ```
 
-**Drawing random numbers.** `SimRng` (`aberredengine::core::resources::sim_rng::SimRng`) is pre-inserted in every game, deterministic or not. Its field is a `fastrand::Rng`: call its methods (`f32()`, `usize(range)`, `i32(range)`, `bool()`, `shuffle(..)`, …) through `ResMut<SimRng>` in a system or `ctx.sim_rng` in a callback. Calling methods needs no `fastrand` dependency; naming the `fastrand::Rng` type does.
+**Drawing random numbers.** `SimRng` (`aberredengine::core::resources::sim_rng::SimRng`) is pre-inserted in every game, deterministic or not. Its field is a `fastrand::Rng`: call its methods (`f32()`, `usize(range)`, `i32(range)`, `bool()`, `shuffle(..)`, …) through `ResMut<SimRng>` in a system or observer. Calling methods needs no `fastrand` dependency; naming the `fastrand::Rng` type does.
 
 ```rust
 use aberredengine::prelude::*;
@@ -613,14 +613,9 @@ fn pick_spawn_point(mut rng: ResMut<SimRng>) {
     let lane = rng.0.usize(0..4); // 0, 1, 2 or 3
     let flip = rng.0.bool();
 }
-
-// In a GameCtx callback
-fn roll_damage(ctx: &mut GameCtx) -> i32 {
-    ctx.sim_rng.0.i32(5..=10)
-}
 ```
 
-The engine's particle emitters draw from the same `SimRng`. A run reproduces only if the same draws happen in the same order, so draw from it only in sim-side code (systems and `GameCtx` callbacks), and keep any other RNG out of gameplay. Without `.deterministic()`, the engine logs the seed it picked at startup (`Non-deterministic mode: SimRng entropy-seeded with …`), so a surprising session's seed is in the log.
+The engine's particle emitters draw from the same `SimRng`. A run reproduces only if the same draws happen in the same order, so draw from it only in sim-side code (systems and observers), and keep any other RNG out of gameplay. Without `.deterministic()`, the engine logs the seed it picked at startup (`Non-deterministic mode: SimRng entropy-seeded with …`), so a surprising session's seed is in the log.
 
 Once deterministic mode is on, you can record or replay the input stream that drove a session:
 
@@ -686,7 +681,7 @@ Each `load_*` returns `Result<(), AssetError>`. It only fails in a `.determinist
 
 `AssetLoader` also answers whether a load has landed: `is_texture_loaded(key)`, `texture_size(key)` and `is_font_loaded(key)` return `false`/`None` until the render thread replies, usually a tick or two after the load was queued. Render assets and audio assets have separate key spaces, so a texture and a sound can share a key.
 
-`AssetLoader` holds the `MessageWriter<RenderAssetCmd>` and the `MessageWriter<AudioCmd>`. A system that takes it must not also take either writer, or `GameCtx` (which holds the audio writer): Bevy rejects that system at startup with a conflicting-access panic. Write any other command through its passthroughs, `assets.audio()` and `assets.render()`, instead:
+`AssetLoader` holds the `MessageWriter<RenderAssetCmd>` and the `MessageWriter<AudioCmd>`. A system that takes it must not also take either writer: Bevy rejects that system at startup with a conflicting-access panic. Write any other command through its passthroughs, `assets.audio()` and `assets.render()`, instead:
 
 ```rust
 use aberredengine::prelude::*;
@@ -1226,7 +1221,7 @@ A minimal visible entity needs a position, a sprite, a draw order, and optionall
 ```rust
 use aberredengine::prelude::*;
 
-ctx.commands.spawn((
+commands.spawn((
     MapPosition::new(100.0, 200.0),
     Sprite::new("player", 32.0, 32.0).centered(),
     ZIndex(1.0),
@@ -1241,7 +1236,7 @@ Add `RigidBody`, `BoxCollider`, and `AccelerationControlled` for a player charac
 ```rust
 use aberredengine::prelude::*;
 
-ctx.commands.spawn((
+commands.spawn((
     MapPosition::new(100.0, 200.0),
     Sprite::new("player", 32.0, 32.0).centered(),
     ZIndex(1.0),
@@ -1261,7 +1256,7 @@ Screen-space text that auto-updates from `WorldSignals`:
 ```rust
 use aberredengine::prelude::*;
 
-ctx.commands.spawn((
+commands.spawn((
     ScreenPosition::new(10.0, 10.0),
     DynamicText::new("0", "arcade", 16.0, Color::WHITE),
     SignalBinding::new("score").with_format("Score: {}"),
@@ -1319,7 +1314,7 @@ When `WorldSignals` has a value for key `"score"`, the text automatically update
 use aberredengine::prelude::*;
 use aberredengine::core::components::animation::{CmpOp, Condition};
 
-ctx.commands.spawn((
+commands.spawn((
     Animation::new("player_idle"),
     AnimationController::new("player_idle")
         .with_rule(Condition::HasFlag { key: "dead".into() }, "player_dead")
@@ -1351,7 +1346,7 @@ Use the target component type as `T`:
 ```rust
 use aberredengine::prelude::*;
 
-ctx.commands.spawn((
+commands.spawn((
     MapPosition::new(0.0, 0.0),
     Tween::position(Vec2::ZERO, Vec2::new(200.0, 120.0), 1.5)
         .with_easing(Easing::CubicOut)
@@ -1364,7 +1359,7 @@ ctx.commands.spawn((
 ```rust
 use aberredengine::prelude::*;
 
-ctx.commands.spawn((
+commands.spawn((
     Rotation::new(0.0),
     Tween::rotation(0.0, 360.0, 2.0),
 ));
@@ -1375,7 +1370,7 @@ ctx.commands.spawn((
 ```rust
 use aberredengine::prelude::*;
 
-ctx.commands.spawn((
+commands.spawn((
     Scale::new(1.0, 1.0),
     Tween::scale(Vec2::ONE, Vec2::new(1.5, 0.75), 0.75)
         .with_backwards(),
@@ -1387,7 +1382,7 @@ ctx.commands.spawn((
 ```rust
 use aberredengine::prelude::*;
 
-ctx.commands.spawn((
+commands.spawn((
     ScreenPosition::new(-200.0, 50.0),
     Tween::screen_position(Vec2::new(-200.0, 50.0), Vec2::new(20.0, 50.0), 0.4),
 ));
@@ -1507,7 +1502,7 @@ Typical uses:
 ```rust
 use aberredengine::prelude::*;
 
-ctx.commands.spawn((
+commands.spawn((
     ScreenPosition::new(10.0, 10.0),
     DynamicText::new("0", "arcade", 16.0, Color::WHITE),
     SignalBinding::new("score").with_format("Score: {}"),
@@ -1541,13 +1536,13 @@ EngineBuilder::new()
     // …
 ```
 
-Scene callbacks then read the counts through `ctx.world_signals.get_group_count("enemies")`.
+Read the counts with `Res<WorldSignals>`: `signals.get_group_count("enemies")`.
 
 Key behaviors:
 
 - The engine publishes `"group_count:enemies"` to `WorldSignals` each sim tick
 - Group names are limited to `MAX_GROUP_NAME_LEN` (52) bytes; a longer `.track_group()` name is a startup error (`EngineError::GroupNameTooLong`)
-- **Per-scene groups** — a system with `ResMut<TrackedGroups>` can call `add_group("bullets")` at runtime (`GameCtx` has no `TrackedGroups` field). A scene switch drops these and keeps only the `.track_group()` groups
+- **Per-scene groups** — a system with `ResMut<TrackedGroups>` can call `add_group("bullets")` at runtime. A scene switch drops these and keeps only the `.track_group()` groups
 - Bind a `SignalBinding::new("group_count:enemies")` to auto-display the count in UI text
 
 ### 6.5 Per-sim-tick scene updates
@@ -1569,7 +1564,7 @@ fn update(time: Res<WorldTime>, input: Res<InputState>) {
 
 The engine provides several gameplay systems: **timers**, **phase state machines**, **collision rules**, **menus**, animation/tween-finished events, and GUI widgets. Timers, phases, collision rules and menus are data **components** that trigger **events**, which you handle with ordinary observers and systems.
 
-`GameCtx` (`aberred-core/src/systems/game_ctx.rs`) is an optional `SystemParam` that bundles what gameplay code commonly needs: commands, mutable/write queries, read-only queries, and key resources including `world_signals`, `app_state`, `audio`, `world_time`, `config`, `post_process`, `camera_follow`, `input_bindings`, and `sim_rng` (the RNG deterministic-mode games must draw from for anything that needs to reproduce — see [Determinism and replay](#determinism-and-replay)). `GameCtx` runs on the logic thread and has **no direct texture access** — if a system needs texture data, load it via `RenderAssetCmd` and read back dimensions from `TextureDimsStore` (see [Section 4](#4-loading-assets)).
+Gameplay code is ordinary Bevy systems and observers that take `Commands`, queries and resources such as `WorldSignals` or `SimRng` as parameters (see [Section 8](#8-engine-resources-quick-reference)). It runs on the logic thread and has **no direct texture access** — if a system needs texture data, load it via `RenderAssetCmd` and read back dimensions from `TextureDimsStore` (see [Section 4](#4-loading-assets)).
 
 ### 7.1 Timers
 
@@ -1817,7 +1812,7 @@ let actions = MenuActions::new()
     .with("options", MenuAction::SetScene("options_menu".to_string()))
     .with("quit", MenuAction::QuitGame);
 
-ctx.commands.spawn((menu, actions));
+commands.spawn((menu, actions));
 ```
 
 `MenuAction` variants:
@@ -1860,7 +1855,7 @@ A global observer registered with `EngineBuilder::add_observer` sees every menu'
 ```rust
 use aberredengine::prelude::*;
 
-fn enter(ctx: &mut GameCtx) {
+fn enter(_: On<SceneEntered>, mut commands: Commands) {
     let menu = Menu::new(
         &[("play", "Play"), ("quit", "Quit")],
         Vec2::new(200.0, 150.0),
@@ -1876,7 +1871,7 @@ fn enter(ctx: &mut GameCtx) {
         .with("play", MenuAction::SetScene("level01".to_string()))
         .with("quit", MenuAction::QuitGame);
 
-    ctx.commands.spawn((menu, actions));
+    commands.spawn((menu, actions));
 }
 ```
 
@@ -2032,7 +2027,7 @@ hud_theme.panel = GuiNinePatch::new("hud_panel", Rect::new(0.0, 0.0, 48.0, 48.0)
 hud_theme.font = "hud_font".into();
 
 // Spawn a widget using the "hud" theme
-ctx.commands.spawn((
+commands.spawn((
     GuiWindow::new(200.0, 40.0).with_theme_key("hud"),
     ScreenPosition::new(10.0, 10.0),
     ZIndex(5.0),
@@ -2165,9 +2160,9 @@ fn launch_ball(
 
 ## 8. Engine Resources Quick Reference
 
-All resources are accessed as Bevy ECS system parameters. Use `Res<T>` / `ResMut<T>` for Send resources, `NonSend<T>` / `NonSendMut<T>` for main-thread-only resources. Scene callbacks access most of these through `GameCtx` fields.
+All resources are accessed as Bevy ECS system parameters. Use `Res<T>` / `ResMut<T>` for Send resources, `NonSend<T>` / `NonSendMut<T>` for main-thread-only resources.
 
-**Read this table by thread, not just by Send/NonSend** — see [Threading Model](#threading-model-what-your-code-can-access). The tables below are split into logic-thread resources (everything your `setup`/scene callbacks/custom systems can request) and render-thread-only resources (things only `process_render_asset_cmds`/`render_system` touch — a logic-side system that requests one panics the first time it runs, whether through `Res` or `NonSend`).
+**Read this table by thread, not just by Send/NonSend** — see [Threading Model](#threading-model-what-your-code-can-access). The tables below are split into logic-thread resources (everything your `setup` hook, systems and observers can request) and render-thread-only resources (things only `process_render_asset_cmds`/`render_system` touch — a logic-side system that requests one panics the first time it runs, whether through `Res` or `NonSend`).
 
 ### Logic-thread resources (Send) — what your game code can use
 
@@ -2199,7 +2194,7 @@ All resources are accessed as Bevy ECS system parameters. Use `Res<T>` / `ResMut
 
 ### Render-thread-only resources — inaccessible from your game code
 
-These exist only in the render world. `RaylibAccess`/`NonSend<FontStore>`/`NonSend<ShaderStore>`/`Res<TextureStore>` as a parameter on any `setup`/scene-callback/`.add_system()`/`.configure_schedule()` system panics the first time that system runs — there is no way around this from a custom Rust system. Listed here for completeness (e.g. if you're reading engine source), not because you can request them:
+These exist only in the render world. `RaylibAccess`/`NonSend<FontStore>`/`NonSend<ShaderStore>`/`Res<TextureStore>` as a parameter on any `setup` hook, observer or `.add_system()`/`.configure_schedule()` system panics the first time that system runs — there is no way around this from a custom Rust system. Listed here for completeness (e.g. if you're reading engine source), not because you can request them:
 
 | Resource | Access (render-side only) | Purpose |
 |----------|---------------------------|---------|

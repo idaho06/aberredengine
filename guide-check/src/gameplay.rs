@@ -149,7 +149,7 @@ mod collision_rules {
 mod menus {
     use aberredengine::prelude::*; // GLUE
 
-    fn spawn_with_actions(ctx: &mut GameCtx) { // GLUE
+    fn spawn_with_actions(mut commands: Commands) { // GLUE
     use aberredengine::prelude::*;
 
     let menu = Menu::new(
@@ -166,7 +166,7 @@ mod menus {
         .with("options", MenuAction::SetScene("options_menu".to_string()))
         .with("quit", MenuAction::QuitGame);
 
-    ctx.commands.spawn((menu, actions));
+    commands.spawn((menu, actions));
     } // GLUE
 
     fn spawn_with_observer(mut commands: Commands, menu: Menu) { // GLUE
@@ -185,7 +185,7 @@ mod menus {
 
     use aberredengine::prelude::*;
 
-    fn enter(ctx: &mut GameCtx) {
+    fn enter(_: On<SceneEntered>, mut commands: Commands) {
         let menu = Menu::new(
             &[("play", "Play"), ("quit", "Quit")],
             Vec2::new(200.0, 150.0),
@@ -201,7 +201,7 @@ mod menus {
             .with("play", MenuAction::SetScene("level01".to_string()))
             .with("quit", MenuAction::QuitGame);
 
-        ctx.commands.spawn((menu, actions));
+        commands.spawn((menu, actions));
     }
 }
 
