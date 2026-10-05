@@ -33,6 +33,7 @@ use crate::events::scene::{SceneEntered, SceneExited};
 use crate::math::{Color, Vec2};
 use crate::resources::appstate::AppState;
 use crate::resources::camera2d::Camera2D;
+use crate::resources::collision_contacts::CollisionContacts;
 use crate::resources::gamestate::{GameState, GameStates};
 use crate::resources::group::TrackedGroups;
 use crate::resources::scenemanager::SceneManager;
@@ -198,6 +199,8 @@ pub fn scene_switch_system(world: &mut World, state: &mut SystemState<SceneTeard
         .and_then(|prev| Some((Arc::<str>::from(prev), scene_manager.scene_entity(prev)?)));
 
     if let Some((prev, scene)) = &exited {
+        // The old scene's pairs are despawned: forget them without ending them.
+        world.resource_mut::<CollisionContacts>().clear();
         world.trigger(SceneExited {
             scene: *scene,
             name: prev.clone(),

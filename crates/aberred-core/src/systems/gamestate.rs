@@ -16,6 +16,7 @@ use crate::components::persistent::SceneCleanup;
 use crate::events::gamestate::GameStateChangedEvent;
 use crate::protocol::endpoints::RenderTx;
 use crate::protocol::render_logic::RenderMsg;
+use crate::resources::collision_contacts::CollisionContacts;
 use crate::resources::gamestate::{GameState, GameStates, NextGameState, NextGameStates};
 use crate::resources::pending_assets::PendingAssets;
 use crate::resources::signal_keys as sk;
@@ -102,9 +103,15 @@ pub fn quit_game(render_tx: Res<RenderTx>) {
 }
 
 /// Despawn all entities that are not marked [`Persistent`](crate::components::persistent::Persistent),
-/// keeping the observers of persistent entities (see [`SceneCleanup`]).
-pub fn clean_all_entities(mut commands: Commands, scene_cleanup: SceneCleanup) {
+/// keeping the observers of persistent entities (see [`SceneCleanup`]), and
+/// forget every [`CollisionContacts`] contact without ending it.
+pub fn clean_all_entities(
+    mut commands: Commands,
+    scene_cleanup: SceneCleanup,
+    mut contacts: ResMut<CollisionContacts>,
+) {
     scene_cleanup.despawn_all(&mut commands);
+    contacts.clear();
 }
 
 #[cfg(test)]
@@ -127,6 +134,27 @@ mod tests {
         assert!(runs_in(GameStates::Setup));
         assert!(runs_in(GameStates::Playing));
         assert!(!runs_in(GameStates::Quitting));
+    }
+
+    /// Cleanup despawns the touching pairs, so their contacts are forgotten
+    /// without ending: the next `end_tick` reports none.
+    #[test]
+    fn clean_all_entities_forgets_collision_contacts() {
+        let mut world = World::new();
+        let [rule, a, b] = [(); 3].map(|_| world.spawn_empty().id());
+        let mut contacts = CollisionContacts::default();
+        contacts.begin(rule, a, b);
+        contacts.end_tick();
+        world.insert_resource(contacts);
+
+        world.run_system_once(clean_all_entities).unwrap();
+
+        assert!(
+            world
+                .resource_mut::<CollisionContacts>()
+                .end_tick()
+                .is_empty()
+        );
     }
 
     /// Number of `GameStateChangedEvent`s observed.

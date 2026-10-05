@@ -11,6 +11,7 @@
 //! ```
 
 use aberred_core::components::persistent::Persistent;
+use aberred_core::resources::collision_contacts::CollisionContacts;
 use aberred_core::systems::gamestate::clean_all_entities;
 use bevy_ecs::observer::On;
 use bevy_ecs::prelude::*;
@@ -67,6 +68,7 @@ fn increment_counter(mut counter: ResMut<Counter>) {
 }
 
 fn run_scene_cleanup(world: &mut World) {
+    world.init_resource::<CollisionContacts>();
     world
         .run_system_once(clean_all_entities)
         .expect("clean_all_entities should run");

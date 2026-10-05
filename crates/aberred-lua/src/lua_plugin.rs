@@ -24,6 +24,7 @@ use aberred_core::protocol::render_assets::RenderAssetCmd;
 use aberred_core::resources::animationstore::AnimationStore;
 use aberred_core::resources::camera2d::Camera2DRes;
 use aberred_core::resources::camerafollowconfig::CameraFollowConfig;
+use aberred_core::resources::collision_contacts::CollisionContacts;
 use aberred_core::resources::gameconfig::GameConfig;
 use aberred_core::resources::gamestate::NextGameState;
 use aberred_core::resources::group::TrackedGroups;
@@ -473,6 +474,7 @@ pub fn switch_scene(
     mut common_bufs: Local<CommonCmdBufs>,
     gui_theme_store: Res<GuiThemeStore>,
     mut gui_theme_warn_cache: ResMut<GuiThemeWarnCache>,
+    mut contacts: ResMut<CollisionContacts>,
 ) {
     let lua_runtime = &scripting.lua_runtime;
     debug!("switch_scene: System called!");
@@ -487,6 +489,8 @@ pub fn switch_scene(
     lua_runtime.clear_function_cache();
 
     scene_cleanup.despawn_all(&mut commands);
+    // The old scene's pairs are despawned: forget them without ending them.
+    contacts.clear();
 
     // Clear entity registrations for despawned (non-persistent) entities
     let persistent_set = scene_cleanup.persistent_set();
@@ -578,6 +582,7 @@ mod tests {
         world.insert_resource(AnimationStore::default());
         world.insert_resource(InputBindings::default());
         world.insert_resource(TrackedGroups::default());
+        world.insert_resource(CollisionContacts::default());
         world.insert_resource(Messages::<AudioCmd>::default());
         world.insert_resource(GuiThemeStore::default());
         world.insert_resource(GuiThemeWarnCache::default());
@@ -740,6 +745,28 @@ mod tests {
         assert!(
             !world.resource::<WorldSignals>().has_flag("stale_flag"),
             "scene-scoped signal_commands should still be cleared by switch_scene"
+        );
+    }
+
+    /// The old scene's pairs are despawned, so their contacts are forgotten
+    /// without ending: the next `end_tick` reports none.
+    #[test]
+    fn switch_scene_forgets_collision_contacts() {
+        let mut world = new_drain_test_world();
+        let [rule, a, b] = [(); 3].map(|_| world.spawn_empty().id());
+        {
+            let mut contacts = world.resource_mut::<CollisionContacts>();
+            contacts.begin(rule, a, b);
+            contacts.end_tick();
+        }
+
+        world.run_system_once(switch_scene).unwrap();
+
+        assert!(
+            world
+                .resource_mut::<CollisionContacts>()
+                .end_tick()
+                .is_empty()
         );
     }
 

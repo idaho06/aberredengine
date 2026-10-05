@@ -2,7 +2,9 @@
 //!
 //! [`collision_rule_observer`] receives each [`Overlapping`], finds the
 //! [`CollisionRule`] covering the pair's groups, and triggers [`Collided`] on
-//! that rule's entity.
+//! that rule's entity, preceded by [`CollisionStarted`] when the contact is
+//! new. [`collision_ended_system`] triggers [`CollisionEnded`] for the
+//! contacts that stopped this tick.
 //!
 //! # Collision Flow
 //!
@@ -10,20 +12,25 @@
 //!    and triggers `Overlapping` events
 //! 2. `collision_rule_observer` looks up the matching rule by
 //!    [`Group`] names
-//! 3. It computes the contact sides and triggers `Collided` on the rule entity
+//! 3. It computes the contact sides, records the contact in
+//!    [`CollisionContacts`], and triggers `CollisionStarted` (new contacts
+//!    only) and `Collided` on the rule entity
+//! 4. After detection, `collision_ended_system` triggers `CollisionEnded` for
+//!    each contact that did not touch this tick
 //!
 //! # Related
 //!
 //! - [`crate::systems::collision_detector`] – collision detection
 //! - [`crate::components::collision::CollisionRule`] – group-pair rule
 //! - [`crate::components::boxcollider::BoxCollider`] – axis-aligned collider
-//! - [`crate::events::collision`] – `Overlapping` and `Collided`
+//! - [`crate::events::collision`] – `Overlapping`, `Collided` and the contact events
 
 use bevy_ecs::prelude::*;
 
 use crate::components::collision::CollisionRule;
 use crate::components::group::Group;
-use crate::events::collision::{Collided, Overlapping};
+use crate::events::collision::{Collided, CollisionEnded, CollisionStarted, Overlapping};
+use crate::resources::collision_contacts::CollisionContacts;
 use crate::resources::collision_rule_index::CollisionRuleIndex;
 use crate::systems::collision::{ColliderRects, compute_sides, resolve_groups};
 
@@ -35,13 +42,16 @@ use crate::systems::collision::{ColliderRects, compute_sides, resolve_groups};
 ///    matching rule (deterministic lowest-`Entity`-first if more than one
 ///    covers the pair)
 /// 3. Computes contact sides via [`compute_sides`]
-/// 4. Triggers `Collided` with `a`/`b` in the rule's group order
+/// 4. Records the contact in [`CollisionContacts`]; a new one triggers
+///    [`CollisionStarted`] first
+/// 5. Triggers `Collided` with `a`/`b` in the rule's group order
 pub fn collision_rule_observer(
     trigger: On<Overlapping>,
     rules: Query<&CollisionRule>,
     index: Res<CollisionRuleIndex>,
     groups: Query<&Group>,
     rects: ColliderRects,
+    mut contacts: ResMut<CollisionContacts>,
     mut commands: Commands,
 ) {
     if index.is_empty() {
@@ -60,6 +70,15 @@ pub fn collision_rule_observer(
 
     let (sides_a, sides_b) = compute_sides(rects.rect(ent_a), rects.rect(ent_b));
 
+    if contacts.begin(rule, ent_a, ent_b) {
+        commands.trigger(CollisionStarted {
+            rule,
+            a: ent_a,
+            b: ent_b,
+            sides_a: sides_a.clone(),
+            sides_b: sides_b.clone(),
+        });
+    }
     commands.trigger(Collided {
         rule,
         a: ent_a,
@@ -67,4 +86,20 @@ pub fn collision_rule_observer(
         sides_a,
         sides_b,
     });
+}
+
+/// Triggers [`CollisionEnded`] for each [`CollisionContacts`] contact that
+/// touched last tick but not this one, in `(rule, a, b)` order.
+///
+/// Runs after [`collision_detector`](crate::systems::collision_detector::collision_detector),
+/// once this tick's [`collision_rule_observer`] calls have recorded the
+/// contacts that still touch.
+pub fn collision_ended_system(mut contacts: ResMut<CollisionContacts>, mut commands: Commands) {
+    for contact in contacts.end_tick() {
+        commands.trigger(CollisionEnded {
+            rule: contact.rule,
+            a: contact.a,
+            b: contact.b,
+        });
+    }
 }

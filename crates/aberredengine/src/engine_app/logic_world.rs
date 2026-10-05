@@ -26,6 +26,7 @@ use aberred_core::resources::animationstore::AnimationStore;
 use aberred_core::resources::appstate::AppState;
 use aberred_core::resources::camera2d::{Camera2D, Camera2DRes};
 use aberred_core::resources::camerafollowconfig::CameraFollowConfig;
+use aberred_core::resources::collision_contacts::CollisionContacts;
 use aberred_core::resources::collision_rule_index::CollisionRuleIndex;
 use aberred_core::resources::debugoverlayconfig::DebugOverlayConfig;
 use aberred_core::resources::deterministic_mode::DeterministicMode;
@@ -119,6 +120,7 @@ impl EngineBuilder {
         }
         world.insert_resource(tracked_groups);
         world.insert_resource(CollisionRuleIndex::default());
+        world.insert_resource(CollisionContacts::default());
         let screen = ScreenSize {
             w: render_width as i32,
             h: render_height as i32,

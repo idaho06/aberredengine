@@ -13,6 +13,7 @@ use aberred_core::components::collision::{BoxSide, CollisionRule};
 use aberred_core::components::group::Group;
 use aberred_core::components::mapposition::MapPosition;
 use aberred_core::events::collision::Collided;
+use aberred_core::resources::collision_contacts::CollisionContacts;
 use aberred_core::resources::collision_rule_index::CollisionRuleIndex;
 use aberred_core::systems::collision_detector::collision_detector;
 use aberred_core::systems::collision_rule::collision_rule_observer;
@@ -29,6 +30,7 @@ fn record(trigger: On<Collided>, mut hits: ResMut<Hits>) {
 fn make_world() -> World {
     let mut world = World::new();
     world.insert_resource(CollisionRuleIndex::default());
+    world.insert_resource(CollisionContacts::default());
     world.init_resource::<Hits>();
     world.add_observer(collision_rule_observer);
     world

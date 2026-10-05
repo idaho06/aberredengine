@@ -11,6 +11,11 @@
 //! entity whose groups match the pair. Observe it per rule
 //! (`commands.spawn(rule).observe(handler)`) or globally (`add_observer(handler)`).
 //!
+//! [`CollisionStarted`] and [`CollisionEnded`] are the rule-matched contact
+//! events: a pair's first touching tick triggers `CollisionStarted` (before
+//! that tick's `Collided`), and its first tick apart triggers
+//! `CollisionEnded`.
+//!
 //! # Related
 //!
 //! - [`crate::systems::collision_detector`] – collision detection system
@@ -54,4 +59,46 @@ pub struct Collided {
     pub sides_a: BoxSides,
     /// Sides of `b`'s collider that touch `a`.
     pub sides_b: BoxSides,
+}
+
+/// Triggered on a [`CollisionRule`](crate::components::collision::CollisionRule)
+/// entity when entities of its two groups start touching: on the first tick
+/// they overlap, before that tick's [`Collided`].
+///
+/// Fields match [`Collided`]. A pair that stops touching and touches again
+/// starts again. A scene switch forgets every contact, so a `Persistent`
+/// pair still touching after a switch starts again too.
+#[derive(EntityEvent, Clone, Debug)]
+pub struct CollisionStarted {
+    /// The matched rule entity, the event's target.
+    #[event_target]
+    pub rule: Entity,
+    /// The entity in the rule's `group_a`.
+    pub a: Entity,
+    /// The entity in the rule's `group_b`.
+    pub b: Entity,
+    /// Sides of `a`'s collider that touch `b`.
+    pub sides_a: BoxSides,
+    /// Sides of `b`'s collider that touch `a`.
+    pub sides_b: BoxSides,
+}
+
+/// Triggered on a [`CollisionRule`](crate::components::collision::CollisionRule)
+/// entity on the first tick a started contact no longer overlaps or no
+/// longer matches the rule.
+///
+/// Any of `rule`, `a` and `b` may already be despawned (an entity despawned
+/// while touching ends its contact on the next tick), so look them up with
+/// `get`/`try_*` and never assume they are alive. A despawned rule's own
+/// observers are gone; global observers still see the event. A scene switch
+/// forgets contacts without ending them.
+#[derive(EntityEvent, Clone, Copy, Debug)]
+pub struct CollisionEnded {
+    /// The matched rule entity, the event's target.
+    #[event_target]
+    pub rule: Entity,
+    /// The entity in the rule's `group_a`.
+    pub a: Entity,
+    /// The entity in the rule's `group_b`.
+    pub b: Entity,
 }

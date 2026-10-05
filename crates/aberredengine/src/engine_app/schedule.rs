@@ -19,6 +19,7 @@ use aberred_core::systems::audio_bridge::{
 };
 use aberred_core::systems::camera_follow::camera_follow_system;
 use aberred_core::systems::collision_detector::collision_detector;
+use aberred_core::systems::collision_rule::collision_ended_system;
 use aberred_core::systems::collision_rule_index::rebuild_rule_index;
 use aberred_core::systems::dynamictext_size::dynamictext_size_system;
 use aberred_core::systems::entity_registrations::prune_dead_entity_registrations;
@@ -398,6 +399,11 @@ impl EngineBuilder {
                 .in_set(SimSet::Collision),
         );
         sim.add_systems(collision_detector.in_set(SimSet::Collision));
+        sim.add_systems(
+            collision_ended_system
+                .after(collision_detector)
+                .in_set(SimSet::Collision),
+        );
         sim.add_systems(
             stuck_to_entity_system
                 .after(collision_detector)

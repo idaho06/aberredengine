@@ -51,7 +51,7 @@ pub use aberred_core::components::zindex::ZIndex;
 
 pub use aberred_core::events::animation::AnimationFinished;
 pub use aberred_core::events::asset::{AssetLoadFailed, AssetLoaded};
-pub use aberred_core::events::collision::Collided;
+pub use aberred_core::events::collision::{Collided, CollisionEnded, CollisionStarted};
 pub use aberred_core::events::gui_interactable::GuiClicked;
 pub use aberred_core::events::input::InputAction;
 pub use aberred_core::events::menu::MenuSelected;

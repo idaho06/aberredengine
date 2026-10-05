@@ -10,6 +10,7 @@ use bevy_ecs::world::World;
 use glam::Vec2;
 
 use crate::components::sprite::Sprite;
+use crate::resources::collision_contacts::CollisionContacts;
 use crate::resources::group::TrackedGroups;
 use crate::resources::worldsignals::WorldSignals;
 
@@ -48,6 +49,7 @@ pub fn sprite_with_origin(w: f32, h: f32, origin_x: f32, origin_y: f32) -> Sprit
 pub fn insert_scene_switch_resources(world: &mut World) {
     world.insert_resource(WorldSignals::default());
     world.insert_resource(TrackedGroups::default());
+    world.insert_resource(CollisionContacts::default());
 }
 
 #[cfg(test)]

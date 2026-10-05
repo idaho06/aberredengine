@@ -9,7 +9,7 @@
 
 use aberredengine::bevy_ecs::prelude::*;
 use aberredengine::core::components::boxcollider::BoxCollider;
-use aberredengine::core::components::collision::CollisionRule;
+use aberredengine::core::components::collision::{BoxSides, CollisionRule};
 use aberredengine::core::components::dynamictext::DynamicText;
 use aberredengine::core::components::group::Group;
 use aberredengine::core::components::guiinteractable::GuiInteractable;
@@ -23,7 +23,7 @@ use aberredengine::core::components::sprite::Sprite;
 use aberredengine::core::components::timer::Timer;
 use aberredengine::core::components::zindex::ZIndex;
 use aberredengine::core::events::asset::{AssetLoadFailed, AssetLoaded};
-use aberredengine::core::events::collision::Collided;
+use aberredengine::core::events::collision::{Collided, CollisionEnded, CollisionStarted};
 use aberredengine::core::events::gui_interactable::GuiClicked;
 use aberredengine::core::events::input::InputAction;
 use aberredengine::core::events::phase::{PhaseEntered, PhaseExited};
@@ -131,6 +131,201 @@ fn spawn_and_collide_triggers_collided_on_the_rule() {
         tw.world.resource::<WorldSignals>().has_flag("collided"),
         "overlapping colliders in matching groups must trigger Collided on the rule"
     );
+}
+
+/// One collision event as `(kind, rule, a, b, sides_a)`; `Ended` has no sides.
+type ContactEntry = (&'static str, Entity, Entity, Entity, Option<BoxSides>);
+
+#[derive(Resource, Default)]
+struct ContactLog(Vec<ContactEntry>);
+
+fn log_started(ev: On<CollisionStarted>, mut log: ResMut<ContactLog>) {
+    log.0
+        .push(("started", ev.rule, ev.a, ev.b, Some(ev.sides_a.clone())));
+}
+
+fn log_collided(ev: On<Collided>, mut log: ResMut<ContactLog>) {
+    log.0
+        .push(("collided", ev.rule, ev.a, ev.b, Some(ev.sides_a.clone())));
+}
+
+fn log_ended(ev: On<CollisionEnded>, mut log: ResMut<ContactLog>) {
+    log.0.push(("ended", ev.rule, ev.a, ev.b, None));
+}
+
+fn contact_world(builder: TestWorldBuilder) -> TestWorld {
+    let mut tw = builder
+        .add_observer(log_started)
+        .add_observer(log_collided)
+        .add_observer(log_ended)
+        .build()
+        .expect("build should succeed");
+    tw.world.init_resource::<ContactLog>();
+    tw.tick_to_play(DT, 8);
+    tw
+}
+
+fn take_contacts(tw: &mut TestWorld) -> Vec<ContactEntry> {
+    std::mem::take(&mut tw.world.resource_mut::<ContactLog>().0)
+}
+
+fn spawn_box(tw: &mut TestWorld, group: &str, x: f32, extra: impl Bundle) -> Entity {
+    tw.world
+        .spawn((
+            Group::new(group),
+            MapPosition::new(x, 0.0),
+            BoxCollider::new(10.0, 10.0),
+            extra,
+        ))
+        .id()
+}
+
+fn move_to(tw: &mut TestWorld, e: Entity, x: f32) {
+    tw.world.get_mut::<MapPosition>(e).unwrap().pos.x = x;
+}
+
+/// A contact starts once (before that tick's `Collided`, with the same
+/// sides), stays with `Collided` every tick, ends once, and starts again on
+/// re-entry.
+#[test]
+fn collision_contact_starts_stays_ends_and_restarts() {
+    let mut tw = contact_world(TestWorld::builder());
+    let rule = tw.world.spawn(CollisionRule::new("a", "b")).id();
+    let a = spawn_box(&mut tw, "a", 0.0, ());
+    let b = spawn_box(&mut tw, "b", 5.0, ());
+
+    tw.tick(1, DT);
+    let first = take_contacts(&mut tw);
+    let sides = first[0].4.clone();
+    assert!(sides.as_ref().is_some_and(|s| !s.is_empty()));
+    assert_eq!(
+        first,
+        vec![
+            ("started", rule, a, b, sides.clone()),
+            ("collided", rule, a, b, sides.clone()),
+        ]
+    );
+
+    tw.tick(1, DT);
+    assert_eq!(
+        take_contacts(&mut tw),
+        vec![("collided", rule, a, b, sides)]
+    );
+
+    move_to(&mut tw, b, 100.0);
+    tw.tick(1, DT);
+    assert_eq!(take_contacts(&mut tw), vec![("ended", rule, a, b, None)]);
+    tw.tick(1, DT);
+    assert!(take_contacts(&mut tw).is_empty());
+
+    move_to(&mut tw, b, 5.0);
+    tw.tick(1, DT);
+    let kinds: Vec<_> = take_contacts(&mut tw).iter().map(|e| e.0).collect();
+    assert_eq!(kinds, ["started", "collided"]);
+}
+
+fn despawn_b(ev: On<Collided>, mut commands: Commands) {
+    commands.entity(ev.b).despawn();
+}
+
+/// An entity despawned by a `Collided` observer ends its contact on the next
+/// tick, with the dead entity's id.
+#[test]
+fn collision_contact_ends_next_tick_when_an_entity_is_despawned() {
+    let mut tw = contact_world(TestWorld::builder());
+    let rule = tw
+        .world
+        .spawn(CollisionRule::new("a", "b"))
+        .observe(despawn_b)
+        .id();
+    let a = spawn_box(&mut tw, "a", 0.0, ());
+    let b = spawn_box(&mut tw, "b", 5.0, ());
+
+    tw.tick(1, DT);
+    take_contacts(&mut tw);
+    assert!(tw.world.get_entity(b).is_err());
+
+    tw.tick(1, DT);
+    assert_eq!(take_contacts(&mut tw), vec![("ended", rule, a, b, None)]);
+}
+
+/// A rule despawned while its pair touches still ends the contact, through
+/// a global observer.
+#[test]
+fn collision_contact_ends_when_the_rule_is_despawned() {
+    let mut tw = contact_world(TestWorld::builder());
+    let rule = tw.world.spawn(CollisionRule::new("a", "b")).id();
+    let a = spawn_box(&mut tw, "a", 0.0, ());
+    let b = spawn_box(&mut tw, "b", 5.0, ());
+    tw.tick(1, DT);
+    take_contacts(&mut tw);
+
+    tw.world.despawn(rule);
+    tw.tick(1, DT);
+
+    assert_eq!(take_contacts(&mut tw), vec![("ended", rule, a, b, None)]);
+}
+
+/// Contacts ending on the same tick arrive sorted by `(rule, a, b)`.
+#[test]
+fn collision_contacts_ending_together_arrive_in_entity_order() {
+    let mut tw = contact_world(TestWorld::builder());
+    tw.world.spawn(CollisionRule::new("a", "b"));
+    let pairs: Vec<_> = (0..4)
+        .map(|i| {
+            let x = i as f32 * 100.0;
+            (
+                spawn_box(&mut tw, "a", x, ()),
+                spawn_box(&mut tw, "b", x + 5.0, ()),
+            )
+        })
+        .collect();
+    tw.tick(1, DT);
+    take_contacts(&mut tw);
+
+    for (i, &(_, b)) in pairs.iter().enumerate() {
+        move_to(&mut tw, b, 10_000.0 + i as f32 * 100.0);
+    }
+    tw.tick(1, DT);
+
+    let log = take_contacts(&mut tw);
+    assert_eq!(log.len(), 4);
+    assert!(log.iter().all(|e| e.0 == "ended"));
+    assert!(log.iter().map(|e| (e.1, e.2, e.3)).is_sorted());
+}
+
+/// A scene switch forgets contacts without ending them: the despawned
+/// pair never ends, and a `Persistent` pair still touching starts again.
+#[test]
+fn scene_switch_clears_collision_contacts_without_ending_them() {
+    use aberredengine::core::components::persistent::Persistent;
+
+    let mut tw = contact_world(
+        TestWorld::builder()
+            .add_scene("one")
+            .add_scene("two")
+            .initial_scene("one"),
+    );
+    let rule = tw
+        .world
+        .spawn((CollisionRule::new("a", "b"), Persistent))
+        .id();
+    let a = spawn_box(&mut tw, "a", 0.0, Persistent);
+    let b = spawn_box(&mut tw, "b", 5.0, Persistent);
+    spawn_box(&mut tw, "a", 500.0, ());
+    spawn_box(&mut tw, "b", 505.0, ());
+    tw.tick(1, DT);
+    take_contacts(&mut tw);
+
+    tw.world.resource_mut::<WorldSignals>().request_scene("two");
+    tw.tick(2, DT);
+
+    let kinds: Vec<_> = take_contacts(&mut tw)
+        .into_iter()
+        .filter(|e| (e.1, e.2, e.3) == (rule, a, b) || e.0 == "ended")
+        .map(|e| e.0)
+        .collect();
+    assert_eq!(kinds, ["collided", "started", "collided"]);
 }
 
 /// A `Timer` ticked by the real sim schedule triggers `TimerFired` on its
