@@ -120,7 +120,7 @@ vsync = true                   ; Enable vertical sync
 fullscreen = false             ; Start in fullscreen mode
 
 [simulation]
-hz = 240                       ; Logic thread's sim tick rate (see Threading Model, Section 3)
+hz = 240                       ; Logic thread's sim tick rate (see The sim tick and dt, Section 3)
 ; snapshot_skip = 1             ; Optional; PRESENT runs every N+1th sim tick; defaults to round(hz/target_fps)-1
 
 [audio]
@@ -134,13 +134,28 @@ gamepad_deadzone = 0.15        ; Analog-stick deadzone radius for InputBinding::
 
 ## 3. How a Game Runs
 
+This section covers where your code runs, how often it runs, and the states a game moves through.
+
 ### Threading Model: What Your Code Can Access
 
-The engine runs **three separate ECS worlds on three threads**: render (the main thread — owns the raylib window and GPU resources), logic/sim (a spawned thread — this is where **all your game code runs**), and audio (a spawned thread, talked to via message queues you already use for sound/music). Understanding this is required to use the rest of this guide correctly.
+The engine runs **three separate ECS worlds on three threads**: render (the main thread — owns the raylib window and GPU resources), logic/sim (a spawned thread — this is where **all your game code runs**), and audio (a spawned thread, talked to via message queues you already use for sound/music).
 
-- **Every hook and callback you write — `on_setup`, scene observers and systems (`.on_scene_enter()`/`.on_scene_exit()`/`.add_scene_system()`), systems added via `.add_system()`/`.configure_schedule()`, and observers (`.add_observer()`, `.observe()`, e.g. on `TimerFired` or `Collided`) — runs on the LOGIC thread**, once per **sim tick**. Sim ticks happen at a configurable rate (`[simulation] hz` in `config.ini`, default 240) **decoupled from your render frame rate** — a sim tick is not the same thing as a rendered frame. `dt` is always the fixed constant `1.0 / hz` (scaled by `WorldTime.time_scale`), never a measured wall-clock value — a render stall does not spike `dt` or replay missed ticks, it simply dilates game time until the stall clears, and sim ticks keep running throughout.
-- **Scene GUI and world-draw callbacks (`.add_scene_gui()`/`.add_scene_world_draw()`) are the one exception** — they run on the RENDER thread, inside the render pass itself. This is why they take a context struct (`GuiCtx`/`WorldDrawCtx`) of read-only snapshots instead of live, mutable `WorldSignals` — see below.
-- **A direct consequence**: logic-thread code (everything in the first bullet) can **never** take `RaylibAccess`, `NonSend<FontStore>`, `NonSend<ShaderStore>`, or `Res<TextureStore>` as a system parameter — those resources only exist in the render world. A logic-side system that requests one panics the first time it runs: Bevy checks a system's resources when the system runs, not when the schedule is built. There is no escape hatch to register a custom system on the render thread. This is why asset loading (Section 6) goes through a message queue instead of calling `rl.load_texture(...)` directly inside `setup()`.
+- **All your game logic runs on the LOGIC thread**: the `.on_setup()` hook, scene observers and systems (`.on_scene_enter()`/`.on_scene_exit()`/`.add_scene_system()`), systems added via `.add_system()`/`.configure_schedule()`, and observers (`.add_observer()`, `.observe()`, e.g. on `TimerFired` or `Collided`). `.on_setup()` runs once, observers run when their event fires, and systems run on the **sim tick**.
+- **Scene GUI and world-draw callbacks (`.add_scene_gui()`/`.add_scene_world_draw()`) are the one exception** — they run on the RENDER thread, inside the render pass itself. They read snapshots, not live game state — see [Section 9](#9-render-side-callbacks).
+- **A direct consequence**: logic-thread code can **never** take `RaylibAccess`, `NonSend<FontStore>`, `NonSend<ShaderStore>`, or `Res<TextureStore>` as a system parameter — those resources only exist in the render world. A logic-side system that requests one panics the first time it runs: Bevy checks a system's resources when the system runs, not when the schedule is built. There is no escape hatch to register a custom system on the render thread. This is why asset loading ([Section 6](#6-loading-assets)) goes through a message queue instead of calling `rl.load_texture(...)` directly inside `setup()`.
+
+### The sim tick and `dt`
+
+Sim ticks happen at a configurable rate (`[simulation] hz` in `config.ini`, default 240), **decoupled from your render frame rate**: a sim tick is not a rendered frame. Each sim tick runs your registered systems once: `.add_system()` systems while `Playing`, and a `.add_scene_system(scene, system)` system while `scene` is active (including `Setup`, for a loading scene), and `.configure_schedule()` systems under the run conditions you give them. A system takes whatever system parameters it needs:
+
+```rust
+fn update(time: Res<WorldTime>, input: Res<InputState>) {
+    let dt = time.delta; // the fixed sim period, 1.0 / hz, scaled by time_scale
+    // input = current action state (just_pressed, active, just_released)
+}
+```
+
+`WorldTime.delta` is always the fixed constant `1.0 / hz`, scaled only by `WorldTime.time_scale`. It is never measured: a render stall doesn't spike `dt` or replay missed ticks. Game time dilates until the stall clears, and sim ticks keep running throughout. Use `dt` for frame-rate-independent logic (e.g. `speed * dt`) exactly as you would a measured delta; its fixed value matters only when you reason about stalls or [determinism](#10-determinism-and-replay).
 
 ### Game lifecycle
 
@@ -150,23 +165,10 @@ Setup ──→ Playing ──→ Quitting
           scene switches
 ```
 
-1. **Setup** — The engine calls the `setup` hook once, on the logic thread. Load assets here (textures, fonts, sounds, shaders, animations) — see [Section 6](#6-loading-assets) for how texture/font/shader loading works. Omit `.on_setup()` if you have nothing to load. With `.loading_scene(name)`, that scene is entered right after the hook and stays active until Setup ends. Once the hook has run, the engine moves to `Playing` on its own, as soon as every load queued so far has been answered (see [Waiting for loads](#waiting-for-loads)); a failed load counts as answered. A hook that requests `Playing` itself waits the same way. A hook that requests another state through `ResMut<NextGameState>` (e.g. `GameStates::Quitting`) gets it at once.
-2. **Playing** — The engine transitions to playing, enters the initial scene (triggering `SceneEntered`), then runs your `.add_system()` systems (and the active scene's `.add_scene_system()` systems) once per sim tick.
+1. **Setup** — The engine calls the `setup` hook once, on the logic thread. Load assets here (textures, fonts, sounds, shaders, animations; see [Section 6](#6-loading-assets)). Omit `.on_setup()` if you have nothing to load. With `.loading_scene(name)`, that scene is entered right after the hook and stays active until Setup ends. Once the hook has run, the engine moves to `Playing` on its own, as soon as every load queued so far has been answered (see [Waiting for loads](#waiting-for-loads)); a failed load counts as answered. A hook that requests `Playing` itself waits the same way. A hook that requests another state through `ResMut<NextGameState>` (e.g. `GameStates::Quitting`) gets it at once.
+2. **Playing** — The engine enters the initial scene (triggering `SceneEntered`) and runs your systems every sim tick.
 3. **Scene switches** — `WorldSignals::request_scene(name)` (which sets the `"switch_scene"` flag) runs the exit→enter sequence on the next sim tick; a `MenuAction::SetScene` menu item switches right away.
-4. **Quitting** — When the game state becomes `GameStates::Quitting` (via `NextGameState::set(GameStates::Quitting)`, `WorldSignals::request_quit()`, or a `MenuAction::QuitGame` menu item) or the window is closed, the engine shuts down. Observers and systems take `ResMut<WorldSignals>` or `ResMut<NextGameState>` to request it.
-
-### Per-sim-tick scene updates
-
-A system registered with `.add_scene_system(scene, system)` runs once per sim tick while `scene` is active — not once per rendered frame; see [Threading Model](#threading-model-what-your-code-can-access) for why those differ. It takes whatever system parameters it needs:
-
-```rust
-fn update(time: Res<WorldTime>, input: Res<InputState>) {
-    let dt = time.delta; // the fixed sim period, 1.0 / hz, scaled by time_scale
-    // input = current action state (just_pressed, active, just_released)
-}
-```
-
-`WorldTime.delta` — always the fixed constant `1.0 / hz` (`[simulation] hz` in `config.ini`), scaled only by `WorldTime.time_scale`. It is never a measured, render-frame-dependent value — a render stall dilates game time instead of spiking `dt`. Use it for frame-rate-independent logic (e.g., `speed * dt`) exactly as you would a measured delta; the fixed-constant behavior only matters if you're reasoning about stalls or determinism.
+4. **Quitting** — When the game state becomes `GameStates::Quitting` (via `NextGameState::set(GameStates::Quitting)`, `WorldSignals::request_quit()`, or a `MenuAction::QuitGame` menu item) or the window is closed, the engine shuts down. Request it from any system or observer through `ResMut<WorldSignals>` or `ResMut<NextGameState>`.
 
 ---
 
@@ -290,7 +292,7 @@ coordinates, `scroll_y` and the gamepad axes are plain fields.
 | `.initial_scene(name)` | Which scene starts first (required with `.add_scene()`) |
 | `.loading_scene(name)` | A registered scene shown while Setup waits for assets. See [Loading screen](#loading-screen). |
 | `.track_group(name)` | Count group `name`'s entities for the whole game (published as `"group_count:<name>"`, kept across scene switches). Can be called multiple times. See [Group tracking across scenes](#group-tracking-across-scenes). |
-| `.add_system(system)` | Add a per-sim-tick system, run only while `Playing` (`run_if(state_is_playing)`, ordered alongside script-update systems). Can be called multiple times. A sim tick is not the same as a render frame; see [Threading Model](#threading-model-what-your-code-can-access). |
+| `.add_system(system)` | Add a per-sim-tick system, run only while `Playing` (`run_if(state_is_playing)`, ordered alongside script-update systems). Can be called multiple times. A sim tick is not the same as a render frame; see [The sim tick and `dt`](#the-sim-tick-and-dt). |
 | `.configure_schedule(closure)` | Add systems to the same schedule `.add_system()` targets, with full ordering control — no auto-constraints applied. Use this for custom ordering relative to the engine's own systems (via `SimSet` or `.after()`/`.before()`). |
 | `.add_system_if(system, condition)` | `.add_system()` plus a run condition, e.g. `in_scene("level01")`. The condition is a separate argument because a `.run_if(..)`-configured system can't be passed to the builder. |
 | `.add_scene_system(scene, system)` | A per-sim-tick system that runs whenever `scene` is active (like `.add_system_if(system, in_scene(scene))`, and also during `Setup` if `scene` is active then). |
@@ -2453,7 +2455,7 @@ Section 2 showed the basics. This is the complete reference.
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| `hz` | `f64` | `240` | Logic thread's sim tick rate — see [Threading Model](#threading-model-what-your-code-can-access). Read once at startup; a runtime `GameConfig` change has no effect. Clamped to `[15, 1000]`, out-of-range values warn and clamp rather than error. |
+| `hz` | `f64` | `240` | Logic thread's sim tick rate — see [The sim tick and `dt`](#the-sim-tick-and-dt). Read once at startup; a runtime `GameConfig` change has no effect. Clamped to `[15, 1000]`, out-of-range values warn and clamp rather than error. |
 | `snapshot_skip` | `u32` | `round(hz / effective_fps) - 1`, `effective_fps` = `[window] target_fps` (default `120`, so the default skip is `1`), or `60` when `target_fps = 0` | Number of sim ticks the PRESENT schedule skips between publishes of render state to the render thread — `0` publishes every tick, `N` publishes every `N+1`th tick (effective rate `hz / (N+1)`). Re-resolved from `hz`/`target_fps` whenever this key isn't set explicitly. Clamped to `[0, 1000]`. |
 
 **`[audio]` section:**
