@@ -54,8 +54,11 @@ impl<T: RuleGroups> Default for RuleContacts<T> {
 
 impl<T: RuleGroups> RuleContacts<T> {
     /// Records that `rule` matched the touching pair `a`/`b` this tick.
+    /// Called by the engine's rule observers; a game calling it fakes a
+    /// contact.
     /// Returns `true` when the contact just started (it was not touching
     /// last tick).
+    #[doc(hidden)]
     pub fn begin(&mut self, rule: Entity, a: Entity, b: Entity) -> bool {
         let contact = Contact { rule, a, b };
         self.current.insert(contact);
@@ -64,6 +67,9 @@ impl<T: RuleGroups> RuleContacts<T> {
 
     /// Ends the tick: returns the contacts that touched last tick but not
     /// this one, sorted, and makes this tick's contacts the previous ones.
+    /// Called by the engine's ended systems; a game calling it swallows the
+    /// ended events.
+    #[doc(hidden)]
     pub fn end_tick(&mut self) -> Vec<Contact> {
         let mut ended: Vec<_> = self.previous.difference(&self.current).copied().collect();
         ended.sort_unstable();

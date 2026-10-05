@@ -19,7 +19,7 @@ use aberred_core::systems::audio_bridge::{
 };
 use aberred_core::systems::camera_follow::camera_follow_system;
 use aberred_core::systems::collision_detector::collision_detector;
-use aberred_core::systems::collision_rule::collision_ended_system;
+use aberred_core::systems::collision_rule::{collision_ended_system, has_rule_contacts};
 use aberred_core::systems::collision_rule_index::rebuild_rule_index;
 use aberred_core::systems::dynamictext_size::dynamictext_size_system;
 use aberred_core::systems::entity_registrations::prune_dead_entity_registrations;
@@ -61,7 +61,7 @@ use aberred_render::systems::render_system;
 #[cfg(feature = "lua")]
 use aberred_lua::components::luacollision::LuaCollisionRule;
 #[cfg(feature = "lua")]
-use aberred_lua::systems::lua_collision::{has_lua_collision_contacts, lua_collision_ended_system};
+use aberred_lua::systems::lua_collision::lua_collision_ended_system;
 #[cfg(feature = "lua")]
 use aberred_lua::systems::lua_mapspawn::process_lua_map_commands;
 #[cfg(feature = "lua")]
@@ -401,9 +401,12 @@ impl EngineBuilder {
                 .in_set(SimSet::Collision),
         );
         sim.add_systems(collision_detector.in_set(SimSet::Collision));
+        // .before(stuck_to_entity_system): CollisionEnded observers may move entities.
         sim.add_systems(
             collision_ended_system
+                .run_if(has_rule_contacts::<CollisionRule>)
                 .after(collision_detector)
+                .before(stuck_to_entity_system)
                 .in_set(SimSet::Collision),
         );
         sim.add_systems(
@@ -457,8 +460,8 @@ impl EngineBuilder {
             // .before(stuck_to_entity_system): exit callbacks may move entities.
             sim.add_systems(
                 lua_collision_ended_system
-                    .run_if(has_lua_collision_contacts)
-                    .after(collision_detector)
+                    .run_if(has_rule_contacts::<LuaCollisionRule>)
+                    .after(collision_ended_system)
                     .before(stuck_to_entity_system)
                     .in_set(SimSet::Collision),
             );

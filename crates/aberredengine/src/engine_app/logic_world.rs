@@ -238,6 +238,12 @@ impl EngineBuilder {
             register_persistent_system(
                 world,
                 &mut systems_store,
+                hook_keys::CLEAN_ALL_ENTITIES,
+                lua_plugin::lua_clean_all_entities,
+            );
+            register_persistent_system(
+                world,
+                &mut systems_store,
                 hook_keys::ENTER_PLAY,
                 lua_plugin::enter_play,
             );
@@ -283,12 +289,18 @@ impl EngineBuilder {
         }
 
         register_persistent_system(world, &mut systems_store, hook_keys::QUIT_GAME, quit_game);
-        register_persistent_system(
-            world,
-            &mut systems_store,
-            hook_keys::CLEAN_ALL_ENTITIES,
-            clean_all_entities,
-        );
+        // A Lua game registered its own cleanup (it also forgets Lua contacts).
+        if !systems_store
+            .map
+            .contains_key(hook_keys::CLEAN_ALL_ENTITIES)
+        {
+            register_persistent_system(
+                world,
+                &mut systems_store,
+                hook_keys::CLEAN_ALL_ENTITIES,
+                clean_all_entities,
+            );
+        }
 
         let menu_despawn_system_id = world.register_system(menu_despawn);
         world

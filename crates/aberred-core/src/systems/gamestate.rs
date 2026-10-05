@@ -137,7 +137,7 @@ mod tests {
     }
 
     /// Cleanup despawns the touching pairs, so their contacts are forgotten
-    /// without ending: the next `end_tick` reports none.
+    /// without ending.
     #[test]
     fn clean_all_entities_forgets_collision_contacts() {
         let mut world = World::new();
@@ -149,12 +149,7 @@ mod tests {
 
         world.run_system_once(clean_all_entities).unwrap();
 
-        assert!(
-            world
-                .resource_mut::<CollisionContacts>()
-                .end_tick()
-                .is_empty()
-        );
+        assert!(world.resource::<CollisionContacts>().is_empty());
     }
 
     /// Number of `GameStateChangedEvent`s observed.

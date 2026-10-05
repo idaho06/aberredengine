@@ -28,9 +28,10 @@
 use bevy_ecs::prelude::*;
 
 use crate::components::collision::CollisionRule;
+use crate::components::collision::RuleGroups;
 use crate::components::group::Group;
 use crate::events::collision::{Collided, CollisionEnded, CollisionStarted, Overlapping};
-use crate::resources::collision_contacts::CollisionContacts;
+use crate::resources::collision_contacts::{CollisionContacts, RuleContacts};
 use crate::resources::collision_rule_index::CollisionRuleIndex;
 use crate::systems::collision::{ColliderRects, compute_sides, resolve_groups};
 
@@ -86,6 +87,12 @@ pub fn collision_rule_observer(
         sides_a,
         sides_b,
     });
+}
+
+/// Run condition: some `T`-ruled contact touched last tick or this one, so
+/// an ended system has something to report or rotate.
+pub fn has_rule_contacts<T: RuleGroups>(contacts: Res<RuleContacts<T>>) -> bool {
+    !contacts.is_empty()
 }
 
 /// Triggers [`CollisionEnded`] for each [`CollisionContacts`] contact that

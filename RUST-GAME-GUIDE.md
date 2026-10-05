@@ -377,7 +377,7 @@ Both paths run `scene_switch_system`, a one-shot system registered in `SystemsSt
 When the `scene_switch_system` runs, it performs these steps in order:
 
 1. **Read and check the target scene** — reads `WorldSignals["scene"]` for the target scene name (defaults to `"menu"` if unset). If no scene is registered under that name, the system logs "No scene registered" and returns: nothing below runs, and the current scene keeps running untouched
-2. **Trigger `SceneExited`** — if a scene was active, its exit observers run while its entities, `WorldSignals` entity registrations and group counts are all still in place
+2. **Forget collision contacts, then trigger `SceneExited`** — if a scene was active, the touching pairs are forgotten without a `CollisionEnded` (see [Contact events](#contact-events)), then its exit observers run while its entities, `WorldSignals` entity registrations and group counts are all still in place
 3. **Despawn non-persistent entities** — every entity *without* the `Persistent` component is despawned
 4. **Clear entity registrations** — non-persistent entity refs stored in `WorldSignals` are removed
 5. **Reset group tracking** — `TrackedGroups` (the set of counted groups, see [Group tracking across scenes](#group-tracking-across-scenes)) drops every group except the `.track_group()` ones, and `WorldSignals` group counts are wiped (they are published again on the next tick)

@@ -102,7 +102,7 @@ pub struct LuaCollisionEffects<'w, 's> {
 
 /// One side of a pooled collision context. `Default` leaves everything but
 /// `id` and `group` nil (the exit callback's ctx).
-#[derive(Default)]
+#[derive(Clone, Copy, Default)]
 struct CollisionSide<'a> {
     id: u64,
     group: Option<&'a str>,
@@ -287,12 +287,6 @@ pub fn lua_collision_ended_system(
     }
 }
 
-/// Whether [`lua_collision_ended_system`] has anything to do: some contact
-/// touched last tick or this one.
-pub fn has_lua_collision_contacts(contacts: Res<LuaCollisionContacts>) -> bool {
-    !contacts.is_empty()
-}
-
 /// Convert BoxSide to string representation.
 fn box_side_to_str(side: &aberred_core::components::collision::BoxSide) -> &'static str {
     match side {
@@ -320,14 +314,18 @@ fn populate_collision_entity(
     signals_table: &mlua::Table,
     signals_inner: &SignalsCtxTables,
     occupancy: &CtxOccupancy,
-    id: u64,
-    group: Option<&str>,
-    speed_sq: f32,
-    pos: Option<(f32, f32)>,
-    vel: Option<(f32, f32)>,
-    rect: Option<(f32, f32, f32, f32)>,
-    signals: Option<&Signals>,
+    side: &CollisionSide,
 ) -> mlua::Result<()> {
+    let CollisionSide {
+        id,
+        group,
+        pos,
+        vel,
+        speed_sq,
+        rect,
+        signals,
+        ..
+    } = *side;
     entity_table.raw_set("id", id)?;
     entity_table.raw_set("speed_sq", speed_sq)?;
 
@@ -399,13 +397,7 @@ fn call_lua_collision_callback(
             &tables.signals_a,
             &tables.signals_a_inner,
             &tables.occupancy_a,
-            a.id,
-            a.group,
-            a.speed_sq,
-            a.pos,
-            a.vel,
-            a.rect,
-            a.signals,
+            &a,
         )?;
         populate_collision_entity(
             &tables.entity_b,
@@ -415,13 +407,7 @@ fn call_lua_collision_callback(
             &tables.signals_b,
             &tables.signals_b_inner,
             &tables.occupancy_b,
-            b.id,
-            b.group,
-            b.speed_sq,
-            b.pos,
-            b.vel,
-            b.rect,
-            b.signals,
+            &b,
         )?;
         for (table, sides) in [(&tables.sides_a, a.sides), (&tables.sides_b, b.sides)] {
             clear_table(table)?;
@@ -478,13 +464,10 @@ mod tests {
             &t.signals,
             &t.signals_inner,
             &occupancy,
-            1,
-            None,
-            0.0,
-            None,
-            None,
-            None,
-            None,
+            &CollisionSide {
+                id: 1,
+                ..Default::default()
+            },
         )
         .unwrap();
 
@@ -506,13 +489,11 @@ mod tests {
             &t.signals,
             &t.signals_inner,
             &occupancy,
-            1,
-            Some("enemy"),
-            0.0,
-            None,
-            None,
-            None,
-            None,
+            &CollisionSide {
+                id: 1,
+                group: Some("enemy"),
+                ..Default::default()
+            },
         )
         .unwrap();
 
@@ -581,13 +562,11 @@ mod tests {
                 &t.signals,
                 &t.signals_inner,
                 &occupancy,
-                1,
-                None,
-                0.0,
-                Some((1.0, 2.0)),
-                None,
-                None,
-                None,
+                &CollisionSide {
+                    id: 1,
+                    pos: Some((1.0, 2.0)),
+                    ..Default::default()
+                },
             )
             .unwrap();
             assert_sparse_collision_ctx_shape(&t.entity);
@@ -609,13 +588,11 @@ mod tests {
             &t.signals,
             &t.signals_inner,
             &occupancy,
-            1,
-            None,
-            0.0,
-            Some((1.0, 2.0)),
-            None,
-            None,
-            None,
+            &CollisionSide {
+                id: 1,
+                pos: Some((1.0, 2.0)),
+                ..Default::default()
+            },
         )
         .unwrap();
 
@@ -627,13 +604,15 @@ mod tests {
             &t.signals,
             &t.signals_inner,
             &occupancy,
-            1,
-            Some("enemy"),
-            0.0,
-            Some((1.0, 2.0)),
-            Some((3.0, 4.0)),
-            Some((0.0, 0.0, 10.0, 10.0)),
-            Some(&signals),
+            &CollisionSide {
+                id: 1,
+                group: Some("enemy"),
+                pos: Some((1.0, 2.0)),
+                vel: Some((3.0, 4.0)),
+                rect: Some((0.0, 0.0, 10.0, 10.0)),
+                signals: Some(&signals),
+                ..Default::default()
+            },
         )
         .unwrap();
         assert_full_collision_ctx_shape(&t.entity);
@@ -654,13 +633,15 @@ mod tests {
             &t.signals,
             &t.signals_inner,
             &occupancy,
-            1,
-            Some("enemy"),
-            0.0,
-            Some((1.0, 2.0)),
-            Some((3.0, 4.0)),
-            Some((0.0, 0.0, 10.0, 10.0)),
-            Some(&signals),
+            &CollisionSide {
+                id: 1,
+                group: Some("enemy"),
+                pos: Some((1.0, 2.0)),
+                vel: Some((3.0, 4.0)),
+                rect: Some((0.0, 0.0, 10.0, 10.0)),
+                signals: Some(&signals),
+                ..Default::default()
+            },
         )
         .unwrap();
 
@@ -672,13 +653,11 @@ mod tests {
             &t.signals,
             &t.signals_inner,
             &occupancy,
-            1,
-            None,
-            0.0,
-            Some((1.0, 2.0)),
-            None,
-            None,
-            None,
+            &CollisionSide {
+                id: 1,
+                pos: Some((1.0, 2.0)),
+                ..Default::default()
+            },
         )
         .unwrap();
         assert_sparse_collision_ctx_shape(&t.entity);

@@ -114,16 +114,8 @@ fn spawn_and_collide_triggers_collided_on_the_rule() {
     tw.world
         .spawn(CollisionRule::new("a", "b"))
         .observe(collision_bump_flag);
-    tw.world.spawn((
-        Group::new("a"),
-        MapPosition::new(0.0, 0.0),
-        BoxCollider::new(10.0, 10.0),
-    ));
-    tw.world.spawn((
-        Group::new("b"),
-        MapPosition::new(2.0, 2.0),
-        BoxCollider::new(10.0, 10.0),
-    ));
+    spawn_box(&mut tw, "a", 0.0, ());
+    spawn_box(&mut tw, "b", 2.0, ());
 
     tw.tick(1, DT);
 
@@ -1507,17 +1499,17 @@ fn take_lua_log(tw: &mut TestWorld) -> Vec<String> {
 }
 
 #[cfg(feature = "lua")]
+/// A Lua rule for groups `a`/`b` calling `on_enter`/`on_exit` and, if set,
+/// the stay `callback`.
 fn lua_rule(
     callback: Option<&str>,
-    on_enter: &str,
-    on_exit: &str,
 ) -> aberredengine::lua::components::luacollision::LuaCollisionRule {
     aberredengine::lua::components::luacollision::LuaCollisionRule {
         group_a: "a".into(),
         group_b: "b".into(),
         callback: callback.map(Into::into),
-        on_enter: Some(on_enter.into()),
-        on_exit: Some(on_exit.into()),
+        on_enter: Some("on_enter".into()),
+        on_exit: Some("on_exit".into()),
     }
 }
 
@@ -1536,8 +1528,7 @@ fn lua_collision_enter_runs_before_stay_and_exit_gets_ids_and_groups() {
              ctx.a.group, ctx.b.group, tostring(ctx.a.pos == nil and ctx.b.pos == nil))\n\
          end\n",
     );
-    tw.world
-        .spawn(lua_rule(Some("on_stay"), "on_enter", "on_exit"));
+    tw.world.spawn(lua_rule(Some("on_stay")));
     let a = spawn_box(&mut tw, "a", 0.0, ());
     let b = spawn_box(&mut tw, "b", 5.0, ());
 
@@ -1568,11 +1559,9 @@ fn lua_collision_stay_sees_what_enter_applied() {
     let mut tw = lua_script_world(
         "drain",
         "function on_enter(ctx) engine.collision_set_flag('entered') end\n\
-         function on_stay(ctx) LOG[#LOG + 1] = tostring(engine.has_flag('entered')) end\n\
-         function on_exit(ctx) end\n",
+         function on_stay(ctx) LOG[#LOG + 1] = tostring(engine.has_flag('entered')) end\n",
     );
-    tw.world
-        .spawn(lua_rule(Some("on_stay"), "on_enter", "on_exit"));
+    tw.world.spawn(lua_rule(Some("on_stay")));
     spawn_box(&mut tw, "a", 0.0, ());
     spawn_box(&mut tw, "b", 5.0, ());
 
@@ -1591,7 +1580,7 @@ fn lua_collision_enter_and_exit_apply_collision_commands() {
         "function on_enter(ctx) engine.collision_set_flag('entered') end\n\
          function on_exit(ctx) engine.collision_set_flag('exited') end\n",
     );
-    tw.world.spawn(lua_rule(None, "on_enter", "on_exit"));
+    tw.world.spawn(lua_rule(None));
     spawn_box(&mut tw, "a", 0.0, ());
     let b = spawn_box(&mut tw, "b", 5.0, ());
 
@@ -1602,6 +1591,32 @@ fn lua_collision_enter_and_exit_apply_collision_commands() {
     move_to(&mut tw, b, 100.0);
     tw.tick(1, DT);
     assert!(tw.world.resource::<WorldSignals>().has_flag("exited"));
+}
+
+/// A Lua game's `clean_all_entities` hook forgets the Lua contacts too, so
+/// no `on_exit` fires for the despawned pairs.
+#[cfg(feature = "lua")]
+#[test]
+fn lua_game_clean_all_entities_hook_forgets_lua_contacts() {
+    use aberredengine::core::resources::systemsstore::{self as hook_keys, SystemsStore};
+    use aberredengine::lua::components::luacollision::LuaCollisionContacts;
+
+    let mut tw = lua_script_world("clean_all", "");
+    tw.world.spawn(lua_rule(None));
+    spawn_box(&mut tw, "a", 0.0, ());
+    spawn_box(&mut tw, "b", 5.0, ());
+    tw.tick(1, DT);
+    assert!(!tw.world.resource::<LuaCollisionContacts>().is_empty());
+
+    let hook = *tw
+        .world
+        .resource::<SystemsStore>()
+        .map
+        .get(hook_keys::CLEAN_ALL_ENTITIES)
+        .unwrap();
+    tw.world.run_system(hook).unwrap();
+
+    assert!(tw.world.resource::<LuaCollisionContacts>().is_empty());
 }
 
 /// A map entity's `lua_setup` names a Lua function, so a Rust-only game (no

@@ -461,6 +461,18 @@ pub fn update(
 }
 
 pub use aberred_core::systems::gamestate::clean_all_entities;
+
+/// The `clean_all_entities` hook of a Lua game: core's cleanup, plus
+/// forgetting the Lua collision contacts without calling `on_exit`.
+pub fn lua_clean_all_entities(
+    commands: Commands,
+    scene_cleanup: SceneCleanup,
+    contacts: ResMut<CollisionContacts>,
+    mut lua_contacts: ResMut<LuaCollisionContacts>,
+) {
+    clean_all_entities(commands, scene_cleanup, contacts);
+    lua_contacts.clear();
+}
 /// Processes scene switching: despawns old entities, calls Lua callbacks,
 /// and processes all queued commands for the new scene.
 #[allow(clippy::too_many_arguments, private_interfaces)]
@@ -752,36 +764,41 @@ mod tests {
         );
     }
 
+    /// Seeds one contact that touched last tick in both contact sets.
+    fn seed_contacts(world: &mut World) {
+        let [rule, a, b] = [(); 3].map(|_| world.spawn_empty().id());
+        let mut contacts = world.resource_mut::<CollisionContacts>();
+        contacts.begin(rule, a, b);
+        contacts.end_tick();
+        let mut lua_contacts = world.resource_mut::<LuaCollisionContacts>();
+        lua_contacts.begin(rule, a, b);
+        lua_contacts.end_tick();
+    }
+
     /// The old scene's pairs are despawned, so their contacts are forgotten
-    /// without ending: the next `end_tick` reports none.
+    /// without ending.
     #[test]
     fn switch_scene_forgets_collision_contacts() {
         let mut world = new_drain_test_world();
-        let [rule, a, b] = [(); 3].map(|_| world.spawn_empty().id());
-        {
-            let mut contacts = world.resource_mut::<CollisionContacts>();
-            contacts.begin(rule, a, b);
-            contacts.end_tick();
-            let mut lua_contacts = world.resource_mut::<LuaCollisionContacts>();
-            lua_contacts.begin(rule, a, b);
-            lua_contacts.end_tick();
-        }
+        seed_contacts(&mut world);
 
         world.run_system_once(switch_scene).unwrap();
 
-        assert!(
-            world
-                .resource_mut::<LuaCollisionContacts>()
-                .end_tick()
-                .is_empty()
-        );
+        assert!(world.resource::<CollisionContacts>().is_empty());
+        assert!(world.resource::<LuaCollisionContacts>().is_empty());
+    }
 
-        assert!(
-            world
-                .resource_mut::<CollisionContacts>()
-                .end_tick()
-                .is_empty()
-        );
+    /// Like `switch_scene`, the Lua game's cleanup hook forgets both contact
+    /// sets without ending them.
+    #[test]
+    fn lua_clean_all_entities_forgets_both_contact_sets() {
+        let mut world = new_drain_test_world();
+        seed_contacts(&mut world);
+
+        world.run_system_once(lua_clean_all_entities).unwrap();
+
+        assert!(world.resource::<CollisionContacts>().is_empty());
+        assert!(world.resource::<LuaCollisionContacts>().is_empty());
     }
 
     #[test]

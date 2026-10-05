@@ -66,8 +66,8 @@ pub struct LuaCollisionRule {
 }
 
 impl LuaCollisionRule {
-    /// Create a rule calling the Lua function `callback` when `group_a` and
-    /// `group_b` collide.
+    /// Create a rule calling the Lua function `callback` every tick `group_a`
+    /// and `group_b` touch, with no enter/exit callbacks.
     pub fn new(
         group_a: impl Into<String>,
         group_b: impl Into<String>,
