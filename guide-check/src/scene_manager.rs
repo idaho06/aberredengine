@@ -1,4 +1,4 @@
-// Approach A — SceneManager (recommended for multi-scene games)
+// Multi-scene games
 use aberredengine::prelude::*;
 
 mod scenes;

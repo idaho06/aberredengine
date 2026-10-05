@@ -1,4 +1,4 @@
-// Approach A — SceneManager: scene observer/system signatures and scene switch
+// Multi-scene games: scene observer/system signatures
 mod scene_callbacks {
     use aberredengine::prelude::*;
 
@@ -11,26 +11,8 @@ mod scene_callbacks {
     // Observes SceneExited: runs when the scene is left, before its entities are despawned (logic thread)
     fn exit(_: On<SceneExited>, mut signals: ResMut<WorldSignals>) { /* save state */ }
 
-    // Called every render frame to draw ImGui widgets — Rust-only, optional, RENDER thread
-    fn my_gui(ctx: &mut GuiCtx) { /* draw with ctx.ui, queue signal writes, read typed state */ }
-
-    // Called every render frame inside begin_mode2D in world space — Rust-only, optional, RENDER thread
-    fn my_world_draw(ctx: &mut WorldDrawCtx) { /* draw with ctx.draw, read camera/screen/app state */ }
-
     fn register(builder: EngineBuilder) -> EngineBuilder { // GLUE
         builder.on_scene_enter("a", enter).add_scene_system("a", update).on_scene_exit("a", exit) // GLUE
-            .add_scene_gui("a", my_gui).add_scene_world_draw("a", my_world_draw) // GLUE
-    } // GLUE
-
-    mod switch { // GLUE
-    use super::*; // GLUE
-    fn some_condition() -> bool { true } // GLUE
-
-    fn update(mut signals: ResMut<WorldSignals>) {
-        if some_condition() {
-            signals.request_scene("level01");
-        }
-    }
     } // GLUE
 }
 
@@ -291,6 +273,63 @@ mod scene_scoped_observers {
 
     fn on_tile_selected(trigger: On<TileSelectedEvent>, /* params */) {
         // only fires while the editor scene is active
+    }
+}
+
+// Triggering scene transitions
+mod triggering_scene_transitions {
+    use aberredengine::prelude::*; // GLUE
+    fn player_reached_exit() -> bool { false } // GLUE
+
+    fn update(mut signals: ResMut<WorldSignals>) {
+        if player_reached_exit() {
+            signals.request_scene("level02");
+        }
+    }
+}
+
+// Persistent entities
+mod persistent_entities {
+    use aberredengine::prelude::*; // GLUE
+
+    fn enter(mut commands: Commands) { // GLUE
+    use aberredengine::prelude::*;
+
+    commands.spawn((
+        ScreenPosition::new(10.0, 10.0),
+        DynamicText::new("0", "arcade", 16.0, Color::WHITE),
+        SignalBinding::new("score").with_format("Score: {}"),
+        ZIndex(100.0),
+        Persistent,  // survives scene switches
+    ));
+    } // GLUE
+
+    use aberredengine::core::components::persistent::SceneCleanup;
+
+    fn my_cleanup(scene_cleanup: SceneCleanup, mut commands: Commands) {
+        scene_cleanup.despawn_all(&mut commands);
+    }
+}
+
+// Group tracking across scenes
+mod group_tracking_across_scenes {
+    use aberredengine::prelude::*; // GLUE
+
+    fn register() -> EngineBuilder { // GLUE
+    EngineBuilder::new()
+        .track_group("enemies")
+        .track_group("bricks")
+        // …
+    } // GLUE
+}
+
+// The sim tick and `dt`
+mod sim_tick_and_dt {
+    use aberredengine::prelude::*; // GLUE
+
+    fn update(time: Res<WorldTime>, input: Res<InputState>) {
+        let dt = time.delta; // the fixed sim period, 1.0 / hz, scaled by time_scale
+        // input = current action state (just_pressed, active, just_released)
     }
 }
 

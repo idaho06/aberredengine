@@ -167,18 +167,47 @@ Setup ──→ Playing ──→ Quitting
 
 1. **Setup** — The engine calls the `setup` hook once, on the logic thread. Load assets here (textures, fonts, sounds, shaders, animations; see [Section 6](#6-loading-assets)). Omit `.on_setup()` if you have nothing to load. With `.loading_scene(name)`, that scene is entered right after the hook and stays active until Setup ends. Once the hook has run, the engine moves to `Playing` on its own, as soon as every load queued so far has been answered (see [Waiting for loads](#waiting-for-loads)); a failed load counts as answered. A hook that requests `Playing` itself waits the same way. A hook that requests another state through `ResMut<NextGameState>` (e.g. `GameStates::Quitting`) gets it at once.
 2. **Playing** — The engine enters the initial scene (triggering `SceneEntered`) and runs your systems every sim tick.
-3. **Scene switches** — `WorldSignals::request_scene(name)` (which sets the `"switch_scene"` flag) runs the exit→enter sequence on the next sim tick; a `MenuAction::SetScene` menu item switches right away.
+3. **Scene switches** — `WorldSignals::request_scene(name)` or a `MenuAction::SetScene` menu item runs the exit→enter sequence; see [Triggering scene transitions](#triggering-scene-transitions).
 4. **Quitting** — When the game state becomes `GameStates::Quitting` (via `NextGameState::set(GameStates::Quitting)`, `WorldSignals::request_quit()`, or a `MenuAction::QuitGame` menu item) or the window is closed, the engine shuts down. Request it from any system or observer through `ResMut<WorldSignals>` or `ResMut<NextGameState>`.
 
 ---
 
 ## 4. EngineBuilder and Scenes
 
-The engine owns the main loop. You configure it through `EngineBuilder` and supply game logic via hook functions. There are two approaches depending on whether your game has multiple scenes.
+The engine owns the main loop. You configure it through `EngineBuilder`: register scenes, attach observers and systems to them, then start the engine with `.try_run()`.
 
-### Approach A — SceneManager (recommended for multi-scene games)
+### Builder method reference
 
-Register named scenes, then attach behavior to them: `.on_scene_enter()`/`.on_scene_exit()` observers run when a scene becomes active or is left, and `.add_scene_system()` systems run once per sim tick while it is active (see [Scene-scoped systems and observers](#scene-scoped-systems-and-observers)). A scene's optional GUI and world-space draw callbacks are registered with `.add_scene_gui()`/`.add_scene_world_draw()`. Every scene switch despawns the non-persistent entities.
+| Method | Description |
+|--------|-------------|
+| `.config(path)` | Path to `config.ini` (default: `"config.ini"`) |
+| `.config_str(content)` | Load INI config from an embedded `&'static str` instead of a file. Takes precedence over `.config(path)`. Useful for tests or games that ship with bundled defaults. |
+| `.title(name)` | Window title (overrides config) |
+| `.on_setup(system)` | Asset loading hook (called once in the `Setup` state, on the logic thread). Optional; the engine moves to `Playing` after it runs. |
+| `.add_scene(name)` | Register a named scene. See [Multi-scene games](#multi-scene-games). |
+| `.add_scene_gui(scene, callback)` | Draw ImGui widgets every render frame while `scene` is active (render thread). See [ImGui GUI callback](#imgui-gui-callback-rust-only). |
+| `.add_scene_world_draw(scene, callback)` | Draw world-space overlays every render frame while `scene` is active (render thread). See [World-space draw callback](#world-space-draw-callback-rust-only). |
+| `.initial_scene(name)` | Which scene starts first (required with `.add_scene()`) |
+| `.loading_scene(name)` | A registered scene shown while Setup waits for assets. See [Loading screen](#loading-screen). |
+| `.track_group(name)` | Count group `name`'s entities for the whole game (published as `"group_count:<name>"`, kept across scene switches). Can be called multiple times. See [Group tracking across scenes](#group-tracking-across-scenes). |
+| `.add_system(system)` | Add a per-sim-tick system, run only while `Playing` (`run_if(state_is_playing)`, ordered alongside script-update systems). Can be called multiple times. A sim tick is not the same as a render frame; see [The sim tick and `dt`](#the-sim-tick-and-dt). |
+| `.configure_schedule(closure)` | Add systems to the same schedule `.add_system()` targets, with full ordering control — no auto-constraints applied. Use this for custom ordering relative to the engine's own systems (via `SimSet` or `.after()`/`.before()`). |
+| `.add_system_if(system, condition)` | `.add_system()` plus a run condition, e.g. `in_scene("level01")`. The condition is a separate argument because a `.run_if(..)`-configured system can't be passed to the builder. |
+| `.add_scene_system(scene, system)` | A per-sim-tick system that runs whenever `scene` is active (like `.add_system_if(system, in_scene(scene))`, and also during `Setup` if `scene` is active then). |
+| `.add_observer(observer_fn)` | Register a persistent observer for a custom or engine event. See [Custom systems and observers](#custom-systems-and-observers). |
+| `.on_scene_enter(scene, observer_fn)` / `.on_scene_exit(scene, observer_fn)` | Observe `SceneEntered`/`SceneExited` for one scene only. See [Scene-scoped systems and observers](#scene-scoped-systems-and-observers). |
+| `.with_lua(path)` | **Lua builds only** (`lua` feature). Run a Lua game from the `main.lua` at `path`; a pure-Rust game never calls it. |
+| `.deterministic(seed)` | Seed `SimRng` from `seed` instead of entropy, pinning simulation randomness to a known value. Mutually exclusive with `.with_lua()`. See [Determinism and replay](#determinism-and-replay) below. |
+| `.record_replay(path, game_version)` | Record this session's input stream to `path`. Requires `.deterministic(seed)` first; mutually exclusive with `.play_replay()`. |
+| `.play_replay(path)` | Replay a previously recorded file from `path` instead of live input. The seed comes from the file's header — do not also call `.deterministic()`. Mutually exclusive with `.record_replay()`. |
+| `.try_run()` | Start the engine; a startup failure is returned as `Err(EngineError)`. See [Startup error handling](#startup-error-handling). |
+| `.run()` | Like `.try_run()`, but exits the process with status 1 on startup failure. |
+
+**Conflict rules:** `.add_scene()` cannot be combined with `.with_lua()` — a Lua game drives scenes from `main.lua`'s scene registry instead. `.add_scene()` requires `.initial_scene(...)`, and that name must match a registered scene — a missing or misspelled `.initial_scene(...)` is a startup error, and so is calling `.initial_scene(...)` with no `.add_scene()` calls at all. `.with_lua()` also conflicts with an explicit `.on_setup()` call, in either order — it installs its own setup hook, and mixing in yours is ambiguous. `.add_system()` combines with `.with_lua()` freely. Every rule here is checked at startup; see [Startup error handling](#startup-error-handling).
+
+### Multi-scene games
+
+Register named scenes, then attach behavior to them: `.on_scene_enter()`/`.on_scene_exit()` observers run when a scene becomes active or is left, and `.add_scene_system()` systems run once per sim tick while it is active (see [Scene-scoped systems and observers](#scene-scoped-systems-and-observers)). A scene's optional GUI and world-space draw callbacks are registered with `.add_scene_gui()`/`.add_scene_world_draw()` (see [Section 9](#9-render-side-callbacks)). Every scene switch despawns the non-persistent entities.
 
 ```rust
 use aberredengine::prelude::*;
@@ -216,25 +245,7 @@ fn update(time: Res<WorldTime>, input: Res<InputState>) { /* per-tick logic */ }
 
 // Observes SceneExited: runs when the scene is left, before its entities are despawned (logic thread)
 fn exit(_: On<SceneExited>, mut signals: ResMut<WorldSignals>) { /* save state */ }
-
-// Called every render frame to draw ImGui widgets — Rust-only, optional, RENDER thread
-fn my_gui(ctx: &mut GuiCtx) { /* draw with ctx.ui, queue signal writes, read typed state */ }
-
-// Called every render frame inside begin_mode2D in world space — Rust-only, optional, RENDER thread
-fn my_world_draw(ctx: &mut WorldDrawCtx) { /* draw with ctx.draw, read camera/screen/app state */ }
 ```
-
-To trigger a scene transition from a system or observer, call `WorldSignals::request_scene(name)`. It sets the target scene name (`sk::SCENE`) and the `sk::SWITCH_SCENE` flag; the engine's `scene_switch_poll` system (registered automatically for every Rust game) picks up the flag each sim tick and triggers the transition.
-
-```rust
-fn update(mut signals: ResMut<WorldSignals>) {
-    if some_condition() {
-        signals.request_scene("level01");
-    }
-}
-```
-
-> **Tip:** Scene transitions can be triggered from any logic-thread system or observer by setting the `"switch_scene"` flag on `WorldSignals` — the engine polls this automatically. For menu-driven transitions, `MenuAction::SetScene` handles the switch internally. See [Triggering scene transitions](#triggering-scene-transitions) for details.
 
 ### Single-scene games
 
@@ -256,65 +267,14 @@ fn main() -> Result<(), EngineError> {
 
 Add scenes with `.add_scene()` later and the same observers and systems move to their scenes.
 
-### Startup error handling
-
-Prefer `EngineBuilder::try_run()` in Rust applications. It returns `Result<(), aberredengine::EngineError>` for startup failures such as invalid builder configuration, an unreadable or unparsable `config.ini`, render-target creation failures, and Lua runtime creation failures.
-
-`EngineBuilder::run()` is still available as a convenience wrapper around `.try_run()`, but on startup failure it logs the error, prints it to stderr, and exits the process with status 1 instead of returning it to your `main` function.
-
-Each hook and system is a standard Bevy ECS system — it receives queries and resources as parameters. For example:
-
-```rust
-use aberredengine::prelude::*;
-
-fn my_update(signals: ResMut<WorldSignals>, input: Res<InputState>) {
-    if input.action(InputAction::Action1).just_pressed {
-        // ...
-    }
-}
-```
-
-Bound actions are looked up by `InputAction` (`input.action(..)`, or
-`input.action_mut(..)` in tests). The raw `mouse_left_button`, the mouse
-coordinates, `scroll_y` and the gamepad axes are plain fields.
-
-### Builder method reference
-
-| Method | Description |
-|--------|-------------|
-| `.config(path)` | Path to `config.ini` (default: `"config.ini"`) |
-| `.config_str(content)` | Load INI config from an embedded `&'static str` instead of a file. Takes precedence over `.config(path)`. Useful for tests or games that ship with bundled defaults. |
-| `.title(name)` | Window title (overrides config) |
-| `.on_setup(system)` | Asset loading hook (called once in the `Setup` state, on the logic thread). Optional; the engine moves to `Playing` after it runs. |
-| `.add_scene(name, descriptor)` | Register a named scene (SceneManager path) |
-| `.add_scene_gui(scene, callback)` | Draw ImGui widgets every render frame while `scene` is active (render thread). See [ImGui GUI callback](#imgui-gui-callback-rust-only). |
-| `.add_scene_world_draw(scene, callback)` | Draw world-space overlays every render frame while `scene` is active (render thread). See [World-space draw callback](#world-space-draw-callback-rust-only). |
-| `.initial_scene(name)` | Which scene starts first (required with `.add_scene()`) |
-| `.loading_scene(name)` | A registered scene shown while Setup waits for assets. See [Loading screen](#loading-screen). |
-| `.track_group(name)` | Count group `name`'s entities for the whole game (published as `"group_count:<name>"`, kept across scene switches). Can be called multiple times. See [Group tracking across scenes](#group-tracking-across-scenes). |
-| `.add_system(system)` | Add a per-sim-tick system, run only while `Playing` (`run_if(state_is_playing)`, ordered alongside script-update systems). Can be called multiple times. A sim tick is not the same as a render frame; see [The sim tick and `dt`](#the-sim-tick-and-dt). |
-| `.configure_schedule(closure)` | Add systems to the same schedule `.add_system()` targets, with full ordering control — no auto-constraints applied. Use this for custom ordering relative to the engine's own systems (via `SimSet` or `.after()`/`.before()`). |
-| `.add_system_if(system, condition)` | `.add_system()` plus a run condition, e.g. `in_scene("level01")`. The condition is a separate argument because a `.run_if(..)`-configured system can't be passed to the builder. |
-| `.add_scene_system(scene, system)` | A per-sim-tick system that runs whenever `scene` is active (like `.add_system_if(system, in_scene(scene))`, and also during `Setup` if `scene` is active then). |
-| `.add_observer(observer_fn)` | Register a persistent observer for a custom or engine event. |
-| `.on_scene_enter(scene, observer_fn)` / `.on_scene_exit(scene, observer_fn)` | Observe `SceneEntered`/`SceneExited` for one scene only. See [Scene-scoped systems and observers](#scene-scoped-systems-and-observers). |
-| `.with_lua(path)` | **Lua builds only** (`lua` feature). Run a Lua game from the `main.lua` at `path`. Listed here because the conflict rules below refer to it; a pure-Rust game never calls it. |
-| `.deterministic(seed)` | Seed `SimRng` from `seed` instead of entropy, pinning simulation randomness to a known value. Mutually exclusive with `.with_lua()`. See [Determinism and replay](#determinism-and-replay) below. |
-| `.record_replay(path, game_version)` | Record this session's input stream to `path`. Requires `.deterministic(seed)` first; mutually exclusive with `.play_replay()`. |
-| `.play_replay(path)` | Replay a previously recorded file from `path` instead of live input. The seed comes from the file's header — do not also call `.deterministic()`. Mutually exclusive with `.record_replay()`. |
-| `.try_run()` | Start the engine and return `Result<(), aberredengine::EngineError>` on startup failure. Recommended for Rust `main`. |
-| `.run()` | Convenience wrapper around `.try_run()` that logs the error, prints it to stderr, and exits the process with status 1 on startup failure. |
-
-**Conflict rules:** `.add_scene()` cannot be combined with `.with_lua()` — a Lua game drives scenes from `main.lua`'s scene registry instead. `.add_scene()` requires `.initial_scene(...)`, and that name must match a scene actually registered via `.add_scene()` — a missing or misspelled `.initial_scene(...)` is a startup error, and so is calling `.initial_scene(...)` with no `.add_scene()` calls at all. Every scene named by `.add_scene_system()`, `.on_scene_enter()`/`.on_scene_exit()` or `.add_scene_gui()`/`.add_scene_world_draw()` must be registered too (the implicit `"main"` counts). `.with_lua()` also conflicts with an explicit `.on_setup()` call, in either order — it installs its own setup hook, and mixing in yours is ambiguous. `.add_system()` combines with `.with_lua()` freely. With `.try_run()`, all of these are returned as startup errors instead of panicking; `.run()` prints the error to stderr and exits with a nonzero status instead of failing silently.
-
 ### Scene-scoped systems and observers
 
-With `.add_scene()`, every scene has a persistent scene entity. A Rust game that registers no scene (and no `.initial_scene()`) runs in an implicit scene named `"main"` (`signal_keys::MAIN_SCENE`), so these methods work with `"main"` too. Each scene switch triggers `SceneExited` for the old scene, then `SceneEntered` for the new one, both targeted at that entity:
+With `.add_scene()`, every scene has a persistent scene entity. These methods also accept the implicit `"main"` scene of a [single-scene game](#single-scene-games) (`signal_keys::MAIN_SCENE`). Each scene switch triggers `SceneExited` for the old scene, then `SceneEntered` for the new one, both targeted at that entity:
 
 - `SceneExited { scene, name, next }` fires before the old scene is torn down: its entities are still alive.
 - `SceneEntered { scene, name, previous }` fires after the teardown, so entities its observers spawn belong to the new scene. It also fires for the initial scene, with `previous: None`.
 
-`.on_scene_enter(scene, ..)`/`.on_scene_exit(scene, ..)` attach an observer to one scene's entity; `.add_observer()` sees every scene and reads `name` from the event. `.add_scene_system(scene, ..)` and `.add_system_if(.., in_scene(..))` run a system only while a scene is active. Every scene these methods name must be registered with `.add_scene()`, or startup fails with `EngineError::SceneNotRegistered`.
+`.on_scene_enter(scene, ..)`/`.on_scene_exit(scene, ..)` attach an observer to one scene's entity; `.add_observer()` sees every scene and reads `name` from the event. `.add_scene_system(scene, ..)` and `.add_system_if(.., in_scene(..))` run a system only while a scene is active. Every scene these methods name, and every scene given to `.add_scene_gui()`/`.add_scene_world_draw()`, must be registered with `.add_scene()` (the implicit `"main"` counts), or startup fails with `EngineError::SceneNotRegistered`.
 
 ```rust
 use aberredengine::prelude::*;
@@ -356,7 +316,7 @@ fn register(builder: EngineBuilder) -> EngineBuilder {
 
 Scene systems run in `SimSet::ScriptUpdate`, before movement and collision, so they see the state the previous tick left.
 
-### Scene-scoped (transient) observers
+### Observers that live for one scene
 
 Observers registered with `.add_observer()` are always active. For observers that should only fire within a specific scene, spawn them from the scene's `SceneEntered` observer **without** the `Persistent` component:
 
@@ -374,9 +334,24 @@ fn on_tile_selected(trigger: On<TileSelectedEvent>, /* params */) {
 }
 ```
 
-This is the standard pattern for scene-scoped behaviour in the engine — no special API needed.
+### Triggering scene transitions
 
-Section 3 introduced `SceneManager` at the API level. This section covers internals and practical patterns.
+There are two ways to switch scenes:
+
+- **From a menu:** a `MenuAction::SetScene("level01")` item switches in the same tick; the menu selection observer runs the switch itself.
+- **From a system or observer:** call `WorldSignals::request_scene(name)`. It sets the target scene name (`signal_keys::SCENE`) and the `signal_keys::SWITCH_SCENE` flag. The engine's `scene_switch_poll` system (registered automatically for every Rust game) picks up the flag in `SimSet::Drain`, late in the tick after your systems, and runs the switch; a flag set after that point is picked up on the next tick.
+
+```rust
+fn update(mut signals: ResMut<WorldSignals>) {
+    if player_reached_exit() {
+        signals.request_scene("level02");
+    }
+}
+```
+
+Both paths run `scene_switch_system`, a one-shot system registered in `SystemsStore` under the key `"switch_scene"`. After `request_scene`, the new scene's `.add_scene_system()` systems start on the next sim tick. A menu selection is handled before the tick's systems run, so after `SetScene` they run in that same tick.
+
+> **Note:** a mistyped scene name only logs an error ("No scene registered for '…'", followed by the list of registered scenes), so it is easy to miss. Prefer constants over repeated string literals.
 
 ### What happens during a scene switch
 
@@ -386,34 +361,12 @@ When the `scene_switch_system` runs, it performs these steps in order:
 2. **Trigger `SceneExited`** — if a scene was active, its exit observers run while its entities, `WorldSignals` entity registrations and group counts are all still in place
 3. **Despawn non-persistent entities** — every entity *without* the `Persistent` component is despawned
 4. **Clear entity registrations** — non-persistent entity refs stored in `WorldSignals` are removed
-5. **Reset group tracking** — `TrackedGroups` drops every group except the `.track_group()` ones, and `WorldSignals` group counts are wiped (they are published again on the next tick)
+5. **Reset group tracking** — `TrackedGroups` (the set of counted groups, see [Group tracking across scenes](#group-tracking-across-scenes)) drops every group except the `.track_group()` ones, and `WorldSignals` group counts are wiped (they are published again on the next tick)
 6. **Write `previous_scene`** — the old active scene name is stored in `WorldSignals["previous_scene"]`
 7. **Set active scene** — updates `SceneManager.active_scene` to the new scene name
 8. **Trigger `SceneEntered`** — the new scene's enter observers run, typically spawning entities and setting up initial state; what they spawn belongs to the new scene
 
 Steps 2–6 tear down the scene being left, so they run only when a scene is active. Entering the first scene skips them: entities spawned before it (during Setup) survive into it.
-
-The new scene's `.add_scene_system()` systems start running on the next sim tick.
-
-> **Note:** a mistyped scene name only logs an error ("No scene registered for '…'", followed by the list of registered scenes), so it is easy to miss. Prefer constants over repeated string literals.
-
-### Triggering scene transitions
-
-Scene transitions work by running the `scene_switch_system` as a one-shot system via `commands.run_system()`. The system is registered in `SystemsStore` under the key `"switch_scene"` when you use `EngineBuilder::add_scene()`.
-
-**Approaches:**
-
-**1. Menu-driven (recommended):** Use `MenuAction::SetScene("level01")` — the menu selection observer calls `commands.run_system()` internally, so the switch lands in the same tick.
-
-**2. Flag-based from systems and observers:** Call `WorldSignals::request_scene(name)`, which sets the target scene name and the `sk::SWITCH_SCENE` flag. The engine's `scene_switch_poll` system (registered automatically for every Rust game) picks up the flag each sim tick and triggers the transition:
-
-```rust
-fn update(mut signals: ResMut<WorldSignals>) {
-    if player_reached_exit() {
-        signals.request_scene("level02");
-    }
-}
-```
 
 ### Persistent entities
 
@@ -471,9 +424,31 @@ Key behaviors:
 - **Per-scene groups** — a system with `ResMut<TrackedGroups>` can call `add_group("bullets")` at runtime. A scene switch drops these and keeps only the `.track_group()` groups
 - Bind a `SignalBinding::new("group_count:enemies")` to auto-display the count in UI text
 
+### Startup error handling
+
+Prefer `EngineBuilder::try_run()` in Rust applications. It returns `Result<(), aberredengine::EngineError>` for startup failures such as invalid builder configuration, an unreadable or unparsable `config.ini`, render-target creation failures, and Lua runtime creation failures.
+
+`EngineBuilder::run()` is a convenience wrapper around `.try_run()`: on startup failure it logs the error, prints it to stderr, and exits the process with status 1 instead of returning it to your `main` function.
+
 ---
 
 ## 5. Writing Game Logic
+
+Each hook and system is a standard Bevy ECS system — it receives queries and resources as parameters. For example:
+
+```rust
+use aberredengine::prelude::*;
+
+fn my_update(signals: ResMut<WorldSignals>, input: Res<InputState>) {
+    if input.action(InputAction::Action1).just_pressed {
+        // ...
+    }
+}
+```
+
+Bound actions are looked up by `InputAction` (`input.action(..)`, or
+`input.action_mut(..)` in tests). The raw `mouse_left_button`, the mouse
+coordinates, `scroll_y` and the gamepad axes are plain fields.
 
 ### Custom systems and observers
 

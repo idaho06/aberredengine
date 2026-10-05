@@ -129,63 +129,6 @@ mod spawning_context_observers_and_systems {
     }
 }
 
-// 6.2 Triggering scene transitions
-mod triggering_scene_transitions {
-    use aberredengine::prelude::*; // GLUE
-    fn player_reached_exit() -> bool { false } // GLUE
-
-    fn update(mut signals: ResMut<WorldSignals>) {
-        if player_reached_exit() {
-            signals.request_scene("level02");
-        }
-    }
-}
-
-// 6.3 Persistent entities
-mod persistent_entities {
-    use aberredengine::prelude::*; // GLUE
-
-    fn enter(mut commands: Commands) { // GLUE
-    use aberredengine::prelude::*;
-
-    commands.spawn((
-        ScreenPosition::new(10.0, 10.0),
-        DynamicText::new("0", "arcade", 16.0, Color::WHITE),
-        SignalBinding::new("score").with_format("Score: {}"),
-        ZIndex(100.0),
-        Persistent,  // survives scene switches
-    ));
-    } // GLUE
-
-    use aberredengine::core::components::persistent::SceneCleanup;
-
-    fn my_cleanup(scene_cleanup: SceneCleanup, mut commands: Commands) {
-        scene_cleanup.despawn_all(&mut commands);
-    }
-}
-
-// 6.4 Group tracking across scenes
-mod group_tracking_across_scenes {
-    use aberredengine::prelude::*; // GLUE
-
-    fn register() -> EngineBuilder { // GLUE
-    EngineBuilder::new()
-        .track_group("enemies")
-        .track_group("bricks")
-        // …
-    } // GLUE
-}
-
-// 6.5 Per-sim-tick scene updates
-mod per_sim_tick_scene_updates {
-    use aberredengine::prelude::*; // GLUE
-
-    fn update(time: Res<WorldTime>, input: Res<InputState>) {
-        let dt = time.delta; // the fixed sim period, 1.0 / hz, scaled by time_scale
-        // input = current action state (just_pressed, active, just_released)
-    }
-}
-
 // Your own components and resources
 mod own_components_and_resources {
     use aberredengine::prelude::*; // GLUE
