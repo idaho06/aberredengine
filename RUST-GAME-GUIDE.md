@@ -655,7 +655,6 @@ EngineBuilder::new()
 When many systems take the same handful of parameters, bundle them into one struct with `#[derive(SystemParam)]`. The struct is a system parameter like any other: a system takes it next to its own queries, an observer takes it after `On<E>`, and it carries helper methods:
 
 ```rust
-use aberredengine::bevy_ecs::system::SystemParam;
 use aberredengine::core::resources::gamestate::{GameStates, NextGameState};
 use aberredengine::prelude::*;
 

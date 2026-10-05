@@ -1,9 +1,11 @@
 //! One glob import for downstream games: `use aberredengine::prelude::*;`.
 //!
 //! Brings in the `bevy_ecs` prelude (and the `bevy_ecs` crate itself, so
-//! `#[derive(Component)]`, `#[derive(Resource)]` and `#[derive(Event)]` resolve), the
-//! engine's math types, the common components, resources, events and commands, and the
-//! builder types. Less common items keep their full `aberredengine::core::...` path.
+//! `#[derive(Component)]`, `#[derive(Resource)]` and `#[derive(Event)]` resolve),
+//! `SystemParam` for `#[derive(SystemParam)]` bundles (the `bevy_ecs` prelude leaves it
+//! out), the engine's math types, the common components, resources, events and commands,
+//! and the builder types. Less common items keep their full `aberredengine::core::...`
+//! path.
 //!
 //! The `bevy_ecs` prelude exports its own `Result` (`Result<T = (), E = BevyError>`) and
 //! a lifecycle event named `Add`, so they shadow `std::result::Result` and
@@ -12,6 +14,7 @@
 
 pub use crate::{EngineError, bevy_ecs, imgui};
 pub use bevy_ecs::prelude::*;
+pub use bevy_ecs::system::SystemParam;
 
 pub use aberred_core::math::{Color, Rect, Vec2};
 
