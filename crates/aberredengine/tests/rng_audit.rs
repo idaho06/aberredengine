@@ -6,7 +6,7 @@
 //! workspace member's `src/` tree:
 //!
 //! 1. No `Local<...Rng>` anywhere -- every sim-schedule system must draw from
-//!    the shared `ResMut<SimRng>` (or `GameCtx::sim_rng`), never a private
+//!    the shared `ResMut<SimRng>`, never a private
 //!    per-system stream (which would reintroduce cross-run nondeterminism:
 //!    a `Local` RNG's internal state depends on how many times its owning
 //!    system happened to run, not on `SimRng`'s single seeded stream).

@@ -6,20 +6,12 @@
 //! sim/present schedules; a test that depends on system ordering uses the
 //! facade's `TestWorld` instead.
 
-use bevy_ecs::message::Messages;
 use bevy_ecs::world::World;
 use glam::Vec2;
 
 use crate::components::sprite::Sprite;
-use crate::protocol::audio::AudioCmd;
-use crate::resources::appstate::AppState;
-use crate::resources::camerafollowconfig::CameraFollowConfig;
-use crate::resources::gameconfig::GameConfig;
-use crate::resources::input_bindings::InputBindings;
-use crate::resources::postprocessshader::PostProcessShader;
-use crate::resources::sim_rng::SimRng;
+use crate::resources::group::TrackedGroups;
 use crate::resources::worldsignals::WorldSignals;
-use crate::resources::worldtime::WorldTime;
 
 /// Allowed error, in float steps (`f32::EPSILON` scaled to the compared
 /// values' magnitude), for [`approx_eq`] and [`vec2_approx_eq`]. The worst
@@ -48,25 +40,20 @@ pub fn sprite_with_origin(w: f32, h: f32, origin_x: f32, origin_y: f32) -> Sprit
     Sprite::new("test", w, h).with_origin(Vec2::new(origin_x, origin_y))
 }
 
-/// Insert the resources a `GameCtx` system param reads, with default values
-/// (`SimRng` seeded with 0). Callers that need a specific `WorldTime` insert
-/// their own afterward.
-pub fn insert_game_ctx_resources(world: &mut World) {
+/// Insert the default resources [`scene_switch_system`] reads besides the
+/// `SceneManager`, which the caller adds with [`insert_scene_manager`].
+///
+/// [`scene_switch_system`]: crate::systems::scene_dispatch::scene_switch_system
+/// [`insert_scene_manager`]: crate::systems::scene_dispatch::insert_scene_manager
+pub fn insert_scene_switch_resources(world: &mut World) {
     world.insert_resource(WorldSignals::default());
-    world.insert_resource(AppState::default());
-    world.insert_resource(Messages::<AudioCmd>::default());
-    world.insert_resource(WorldTime::default());
-    world.insert_resource(GameConfig::default());
-    world.insert_resource(PostProcessShader::default());
-    world.insert_resource(CameraFollowConfig::default());
-    world.insert_resource(InputBindings::default());
-    world.insert_resource(SimRng::from_seed(0));
+    world.insert_resource(TrackedGroups::default());
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::systems::game_ctx::GameCtx;
+    use crate::systems::scene_dispatch::{insert_scene_manager, scene_switch_system};
     use bevy_ecs::system::RunSystemOnce;
 
     #[test]
@@ -99,11 +86,12 @@ mod tests {
     }
 
     #[test]
-    fn insert_game_ctx_resources_satisfies_game_ctx() {
+    fn insert_scene_switch_resources_satisfies_scene_switch_system() {
         let mut world = World::new();
-        insert_game_ctx_resources(&mut world);
+        insert_scene_switch_resources(&mut world);
+        insert_scene_manager(&mut world, ["main".to_owned()], None, None);
         world
-            .run_system_once(|_ctx: GameCtx| {})
-            .expect("GameCtx should find every resource it needs");
+            .run_system_once(scene_switch_system)
+            .expect("scene_switch_system should find every resource it needs");
     }
 }

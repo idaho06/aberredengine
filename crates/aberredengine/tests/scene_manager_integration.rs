@@ -5,7 +5,6 @@
 //! and entity registrations on every switch.
 
 use aberredengine::core::events::scene::{SceneEntered, SceneExited};
-use aberredengine::core::resources::group::TrackedGroups;
 use aberredengine::core::resources::scenemanager::SceneManager;
 use aberredengine::core::resources::signal_keys as sk;
 use aberredengine::core::resources::systemsstore::SystemsStore;
@@ -21,7 +20,7 @@ use bevy_ecs::system::SystemState;
 use aberredengine::core::components::persistent::{CleanableEntity, Persistent};
 use aberredengine::core::protocol::audio::AudioCmd;
 
-use aberredengine::core::testing::insert_game_ctx_resources;
+use aberredengine::core::testing::insert_scene_switch_resources;
 
 mod common;
 
@@ -40,8 +39,8 @@ impl SceneLog {
 /// every scene event into [`SceneLog`]. No scene is active yet.
 fn scene_world(scenes: &[&str]) -> World {
     let mut world = World::new();
-    insert_game_ctx_resources(&mut world);
-    world.insert_resource(TrackedGroups::default());
+    insert_scene_switch_resources(&mut world);
+    world.insert_resource(Messages::<AudioCmd>::default());
     world.insert_resource(SystemsStore::new());
     world.init_resource::<SceneLog>();
     insert_scene_manager(

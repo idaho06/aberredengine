@@ -15,7 +15,7 @@
 //!
 //! # Integration with Other Systems
 //!
-//! - [`CollisionRule`](crate::components::collision::CollisionRule) callbacks access it via [`GameCtx`](crate::systems::GameCtx)
+//! - Systems and observers (e.g. of [`Collided`](crate::events::collision::Collided)) take it as `Res<WorldSignals>`/`ResMut<WorldSignals>`
 //! - [`SignalBinding`](crate::components::signalbinding::SignalBinding) binds UI text to world signal values
 //! - [`TrackedGroups`](crate::resources::group::TrackedGroups) + group system publish entity counts here
 //!

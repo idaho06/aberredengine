@@ -342,7 +342,7 @@ fn switch_to(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::testing::insert_game_ctx_resources;
+    use crate::testing::insert_scene_switch_resources;
     use bevy_ecs::system::{IntoObserverSystem, RunSystemOnce};
 
     #[derive(Default)]
@@ -385,12 +385,10 @@ mod tests {
     /// `WorldSignals[scene]` set to `target`.
     fn world_in_menu_switching_to(target: &str) -> (World, Entity) {
         let mut world = World::new();
-        insert_game_ctx_resources(&mut world);
+        insert_scene_switch_resources(&mut world);
         insert_scene_manager(&mut world, ["menu".into(), "level".into()], None, None);
         world.resource_mut::<SceneManager>().active_scene = Some("menu".to_owned());
-        let mut groups = TrackedGroups::default();
-        groups.add_group("enemies");
-        world.insert_resource(groups);
+        world.resource_mut::<TrackedGroups>().add_group("enemies");
         world
             .resource_mut::<WorldSignals>()
             .set_string(sk::SCENE, target);

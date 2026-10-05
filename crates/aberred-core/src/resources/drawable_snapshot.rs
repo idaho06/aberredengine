@@ -265,7 +265,7 @@ pub struct DrawableSnapshot {
     /// animation.
     pub world_time: WorldTime,
     /// Post-process shader chain + uniforms. Logic-owned
-    /// (`GameCtx.post_process`, Lua render commands); captured on change.
+    /// (`ResMut<PostProcessShader>`, Lua render commands); captured on change.
     pub post_process: PostProcessShader,
     /// GUI themes. Logic-owned (`set_gui_theme_*` Lua commands
     /// re-insert the resource); captured on change — themes mutate rarely.

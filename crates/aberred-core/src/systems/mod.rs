@@ -38,8 +38,6 @@
 //! `aberred-render`, and the Lua-callback systems (`lua_collision`,
 //! `luaphase`, `lua_commands`, ...) in `aberred-lua`.
 
-pub use game_ctx::GameCtx;
-
 pub mod animation;
 pub mod asset_gate;
 pub mod asset_loader;
@@ -52,7 +50,6 @@ pub mod collision_rule;
 pub mod collision_rule_index;
 pub mod dynamictext_size;
 pub mod entity_registrations;
-pub mod game_ctx;
 pub mod gamestate;
 pub mod gridlayout;
 pub mod group;

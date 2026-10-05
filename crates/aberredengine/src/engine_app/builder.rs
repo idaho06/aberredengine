@@ -299,7 +299,7 @@ impl EngineBuilder {
     /// #[derive(Event)]
     /// struct TilemapLoaded { path: String }
     ///
-    /// fn on_tilemap_loaded(trigger: On<TilemapLoaded>, mut ctx: GameCtx) {
+    /// fn on_tilemap_loaded(trigger: On<TilemapLoaded>, mut commands: Commands) {
     ///     // react to the event …
     /// }
     ///
@@ -308,7 +308,7 @@ impl EngineBuilder {
     ///     // …
     /// ```
     ///
-    /// To trigger the event from a system or scene callback:
+    /// To trigger the event from a system or observer:
     /// ```rust,ignore
     /// commands.trigger(TilemapLoaded { path: "…".into() });
     /// ```

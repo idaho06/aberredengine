@@ -9,9 +9,9 @@
 use bevy_ecs::prelude::Resource;
 
 /// The engine's single [`fastrand::Rng`] instance, available to sim-schedule
-/// systems and to Rust game callbacks via `GameCtx::sim_rng`. The tuple field
+/// systems and observers as `ResMut<SimRng>`. The tuple field
 /// is `pub` so game code can call any `fastrand::Rng` method directly (e.g.
-/// `ctx.sim_rng.0.f32()`) -- `SimRng` deliberately doesn't wrap that surface.
+/// `rng.0.f32()`) -- `SimRng` deliberately doesn't wrap that surface.
 ///
 /// Deliberately does **not** implement/derive `Default` -- a `Default` impl
 /// would silently entropy-seed via `fastrand::Rng::new()`, defeating the

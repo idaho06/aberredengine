@@ -39,8 +39,8 @@ use crate::resources::worldtime::WorldTime;
 /// time, and spawns particles by cloning templates when thresholds are met.
 ///
 /// Draws from the shared [`SimRng`] rather than a private per-system stream
-/// -- its draw order relative to other `SimRng`-drawing systems (`GameCtx`'s
-/// timer/collision/phase callbacks) matters for determinism, and is fixed by
+/// -- its draw order relative to other `SimRng`-drawing systems (and the
+/// timer/collision/phase observers) matters for determinism, and is fixed by
 /// the `SimSet` chain (`src/engine_app/schedule.rs`): this system runs in
 /// `SimSet::Movement`, strictly before `SimSet::Collision`/`SimSet::Drain`
 /// where the other `SimRng` consumers live.

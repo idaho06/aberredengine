@@ -58,11 +58,10 @@ impl std::error::Error for AssetError {}
 /// and returns `Ok`.
 ///
 /// `AssetLoader` holds the writers for [`RenderAssetCmd`] and [`AudioCmd`], so
-/// a system that takes it must not also take `MessageWriter<RenderAssetCmd>`,
-/// `MessageWriter<AudioCmd>` or `GameCtx` (which holds an audio writer). Bevy
-/// rejects such a system at startup with a conflicting-access panic. The
-/// same goes for `ResMut<GameState>` and `ResMut<LoadedAssets>`, which it
-/// reads. Use
+/// a system that takes it must not also take `MessageWriter<RenderAssetCmd>`
+/// or `MessageWriter<AudioCmd>`. Bevy rejects such a system at startup with a
+/// conflicting-access panic. The same goes for `ResMut<GameState>` and
+/// `ResMut<LoadedAssets>`, which it reads. Use
 /// [`audio`](Self::audio) and [`render`](Self::render) to write any other
 /// command, e.g. `assets.audio().write(AudioCmd::PlayFx { id: "jump".into() })`.
 #[derive(SystemParam)]
