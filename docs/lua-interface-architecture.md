@@ -77,7 +77,7 @@ crates/aberred-lua/src/resources/lua_runtime/
 │   ├── gui.rs            # with_gui_window/button/label/image/progress_bar/offset/theme_key and their per-state offset variants
 │   ├── menu.rs           # with_menu and its with_menu_* configuration methods
 │   ├── tween.rs          # with_tween_position/rotation/scale/screen_position and their *_easing/*_loop/*_backwards/*_on_finished variants
-│   └── behavior.rs       # with_phase, with_lua_timer, with_lua_timer_once, with_lua_collision_rule, with_lua_setup, with_on_animation_end, with_signal*, with_group, with_persistent, with_grid_layout, with_tilemap, with_particle_emitter, with_mouse_controlled, with_text
+│   └── behavior.rs       # with_phase, with_lua_timer, with_lua_timer_once, with_lua_collision_rule, with_lua_collision_enter, with_lua_collision_exit, with_lua_setup, with_on_animation_end, with_signal*, with_group, with_persistent, with_grid_layout, with_tilemap, with_particle_emitter, with_mouse_controlled, with_text
 ├── engine_api/          # engine.* API registration, split by category
 │   ├── mod.rs          # Re-exports, module declarations
 │   ├── macros.rs       # register_cmd!, register_getter!, define_cmd_twins! (+ its define_*_cmd_twins!/define_entity_cmds! specializations), push_fn_meta()
@@ -645,6 +645,8 @@ with_tween_screen_position_on_finished
 with_phase
 with_lua_timer
 with_lua_collision_rule
+with_lua_collision_enter
+with_lua_collision_exit
 with_lua_setup
 with_on_animation_end
 with_signal_binding

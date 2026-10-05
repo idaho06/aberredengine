@@ -462,11 +462,13 @@ fn apply_behavior_components(entity_commands: &mut EntityCommands, b: BehaviorCo
     }
     if let Some(rule_data) = lua_collision_rule {
         use crate::components::luacollision::LuaCollisionRule;
-        entity_commands.insert(LuaCollisionRule::new(
-            rule_data.group_a,
-            rule_data.group_b,
-            rule_data.callback,
-        ));
+        entity_commands.insert(LuaCollisionRule {
+            group_a: rule_data.group_a,
+            group_b: rule_data.group_b,
+            callback: rule_data.callback.map(Into::into),
+            on_enter: rule_data.on_enter.map(Into::into),
+            on_exit: rule_data.on_exit.map(Into::into),
+        });
     }
     if let Some(callback) = lua_setup {
         entity_commands.insert(LuaSetup::new(callback));
@@ -1264,14 +1266,37 @@ mod tests {
             (
                 rule.group_a.as_str(),
                 rule.group_b.as_str(),
-                &*rule.callback
+                rule.callback.as_deref()
             ),
-            ("player", "enemy", "on_hit")
+            ("player", "enemy", Some("on_hit"))
         );
         assert_eq!(&*world.get::<LuaSetup>(e).unwrap().callback, "setup_fn");
         assert_eq!(
             &*world.get::<LuaOnAnimationEnd>(e).unwrap().callback,
             "anim_done"
+        );
+    }
+
+    #[test]
+    fn lua_spawn_puts_enter_and_exit_callbacks_on_the_collision_rule() {
+        use crate::components::luacollision::LuaCollisionRule;
+        let mut world = World::new();
+        let mut signals = WorldSignals::default();
+        let e = spawn_from_lua(
+            &mut world,
+            &mut signals,
+            "engine.spawn():with_lua_collision_rule('a', 'b', nil)\
+             :with_lua_collision_enter('in'):with_lua_collision_exit('out'):build()",
+        );
+
+        let rule = world.get::<LuaCollisionRule>(e).unwrap();
+        assert_eq!(
+            (
+                rule.callback.as_deref(),
+                rule.on_enter.as_deref(),
+                rule.on_exit.as_deref()
+            ),
+            (None, Some("in"), Some("out"))
         );
     }
 

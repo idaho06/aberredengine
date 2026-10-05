@@ -1784,10 +1784,20 @@ function EntityBuilder:with_gui_theme_key(key) end
 ---@return EntityBuilder
 function EntityBuilder:with_gui_window(width, height) end
 
----Add collision callback between two groups
+---Set the Lua collision rule's callback for when the groups start touching (requires with_lua_collision_rule first)
+---@param callback string
+---@return EntityBuilder
+function EntityBuilder:with_lua_collision_enter(callback) end
+
+---Set the Lua collision rule's callback for when the groups stop touching (requires with_lua_collision_rule first)
+---@param callback string
+---@return EntityBuilder
+function EntityBuilder:with_lua_collision_exit(callback) end
+
+---Add collision callback between two groups, called every tick they touch (nil for none)
 ---@param group_a string
 ---@param group_b string
----@param callback string
+---@param callback string|nil
 ---@return EntityBuilder
 function EntityBuilder:with_lua_collision_rule(group_a, group_b, callback) end
 
@@ -2359,10 +2369,20 @@ function CollisionEntityBuilder:with_gui_theme_key(key) end
 ---@return CollisionEntityBuilder
 function CollisionEntityBuilder:with_gui_window(width, height) end
 
----Add collision callback between two groups
+---Set the Lua collision rule's callback for when the groups start touching (requires with_lua_collision_rule first)
+---@param callback string
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_lua_collision_enter(callback) end
+
+---Set the Lua collision rule's callback for when the groups stop touching (requires with_lua_collision_rule first)
+---@param callback string
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_lua_collision_exit(callback) end
+
+---Add collision callback between two groups, called every tick they touch (nil for none)
 ---@param group_a string
 ---@param group_b string
----@param callback string
+---@param callback string|nil
 ---@return CollisionEntityBuilder
 function CollisionEntityBuilder:with_lua_collision_rule(group_a, group_b, callback) end
 

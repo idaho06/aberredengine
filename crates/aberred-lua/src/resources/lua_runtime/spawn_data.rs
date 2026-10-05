@@ -180,7 +180,12 @@ pub struct TweenScaleData {
 pub struct LuaCollisionRuleData {
     pub group_a: String,
     pub group_b: String,
-    pub callback: String,
+    /// Every-tick callback; `None` when the rule only has enter/exit callbacks.
+    pub callback: Option<String>,
+    /// Callback when the groups start touching.
+    pub on_enter: Option<String>,
+    /// Callback when the groups stop touching.
+    pub on_exit: Option<String>,
 }
 
 /// Animation component data for spawning.
