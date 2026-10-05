@@ -265,7 +265,7 @@ mod per_entity_shaders {
         let mut shader = EntityShader::new("glow");
         shader.set_uniform("uIntensity", UniformValue::Float(0.8));
         commands.spawn((
-            // MapPosition, Sprite, ZIndex, … as in Section 5
+            // MapPosition, Sprite, ZIndex, … as in Section 7
             shader,
         ));
     }
