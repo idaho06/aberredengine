@@ -1,4 +1,4 @@
-// 4. Loading Assets
+// Loading Assets
 mod loading_assets {
     use aberredengine::prelude::*;
 

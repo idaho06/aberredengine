@@ -277,7 +277,8 @@ fn containment_ignores_indentation_and_blank_lines_but_not_gaps() {
 fn heading_slugs_follow_github_rules() {
     let md = "# Title\n## 6.1 What `ctx` does (today)\n### Approach A — SceneManager\n\
               ```rust\n#[derive(Component)]\n```\n> ```\n> # Quoted fence\n> ```\n\
-              #### Dup\n#### Dup\n#### Dup\n#not-a-heading\n";
+              #### Dup\n#### Dup\n#### Dup\n#not-a-heading\n\
+              ## 12. The config.ini File\n### System params you'll use\n";
     assert_eq!(
         heading_slugs(md),
         vec![
@@ -287,6 +288,8 @@ fn heading_slugs_follow_github_rules() {
             "dup",
             "dup-1",
             "dup-2",
+            "12-the-configini-file",
+            "system-params-youll-use",
         ]
     );
 }

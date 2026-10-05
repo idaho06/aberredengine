@@ -118,107 +118,6 @@ mod single_scene_games {
     }
 }
 
-// `.add_system(system)` — multiple per-sim-tick systems
-mod add_system {
-    use aberredengine::prelude::*; // GLUE
-    fn load_assets() {} // GLUE
-    fn tilemap_save_system() {} // GLUE
-
-    fn main() { // GLUE
-    EngineBuilder::new()
-        .config("config.ini")
-        .on_setup(load_assets)
-        .add_system(tilemap_load_system)   // checks a signal each tick, then queues a load
-        .add_system(tilemap_save_system)   // independent second system
-        .add_scene("editor")
-        .initial_scene("editor")
-        .try_run()
-        .expect("engine startup failed");
-    } // GLUE
-
-    use aberredengine::prelude::*;
-
-    fn tilemap_load_system(
-        mut world_signals: ResMut<WorldSignals>,
-        mut asset_cmds: MessageWriter<RenderAssetCmd>,
-    ) {
-        let Some(path) = world_signals.remove_string("pending_load_path") else {
-            return; // nothing to do this tick
-        };
-        asset_cmds.write(RenderAssetCmd::Texture {
-            key: path.clone(),
-            path,
-            filter: TextureFilter::Nearest,
-        });
-        // spawn tile entities, etc. — the texture itself loads asynchronously
-    }
-}
-
-// `.configure_schedule(closure)` — full ordering control
-mod configure_schedule {
-    use aberredengine::prelude::*; // GLUE
-    fn undo_system() {} // GLUE
-
-    fn main() { // GLUE
-    use aberredengine::core::systems::movement::movement;
-    use aberredengine::core::systems::camera_follow::camera_follow_system;
-    use aberredengine::prelude::*;
-
-    EngineBuilder::new()
-        .configure_schedule(|schedule| {
-            schedule.add_systems(
-                undo_system
-                    .run_if(state_is_playing)
-                    .after(movement)
-                    .before(camera_follow_system),
-            );
-        })
-        // …
-        .try_run()
-        .expect("engine startup failed");
-    } // GLUE
-}
-
-// `.add_observer(observer_fn)` — persistent event observers
-mod add_observer {
-
-    use aberredengine::prelude::*;
-
-    #[derive(Event)]
-    struct TilemapLoaded {
-        pub path: String,
-    }
-
-    use aberredengine::prelude::*;
-
-    fn on_tilemap_loaded(
-        trigger: On<TilemapLoaded>,
-        mut world_signals: ResMut<WorldSignals>,
-    ) {
-        let path = &trigger.event().path;
-        world_signals.set_string("last_loaded_tilemap", path.clone());
-        log::info!("Tilemap loaded: {}", path);
-    }
-
-    fn main() { // GLUE
-    EngineBuilder::new()
-        .add_observer(on_tilemap_loaded)
-        // …
-        .try_run()
-        .expect("engine startup failed");
-    } // GLUE
-
-    // From a Bevy ECS system:
-    fn my_system(mut commands: Commands) {
-        commands.trigger(TilemapLoaded { path: "maps/level01.json".into() });
-    }
-
-    // From a scene observer:
-    fn my_enter(_: On<SceneEntered>, mut commands: Commands) {
-        commands.trigger(TilemapLoaded { path: "maps/intro.json".into() });
-    }
-}
-
 // Scene-scoped systems and observers
 mod scene_scoped_systems_and_observers {
     use aberredengine::prelude::*;
@@ -258,7 +157,7 @@ mod scene_scoped_systems_and_observers {
     }
 }
 
-// Scene-scoped (transient) observers
+// Observers that live for one scene
 mod scene_scoped_observers {
     #[derive(Event)] // GLUE
     struct TileSelectedEvent; // GLUE

@@ -90,7 +90,7 @@ use aberredengine::prelude::*;
 
 It brings in the `bevy_ecs` prelude (`Commands`, `Query`, `Res`, `On`, …) and the `bevy_ecs` crate itself, so `#[derive(Component)]`, `#[derive(Resource)]` and `#[derive(Event)]` work; the math types (`Vec2`, `Color`, `Rect`); the common components, resources, events and commands; the scene events (`SceneEntered`, `SceneExited`) and the `in_scene` run condition; and `EngineBuilder`, `SimSet` and `EngineError`. Less common items keep their full path under `aberredengine::core::...`, and the examples below import those explicitly. The render-thread types a GUI callback receives (`TextureStore`, `FontStore`, `GuiCtx`, `GuiCallback`) are in the prelude and in `aberredengine::render`; the rest of the render thread is out of reach of game code.
 
-The `bevy_ecs` prelude has its own `Result` (`Result<T = (), E = BevyError>`) and a lifecycle event named `Add`, so in a module that glob-imports the prelude they shadow `std::result::Result` and `std::ops::Add`. `Result<T, E>` with an explicit error type is still the standard `Result`; write `std::ops::Add` in full when implementing it.
+The `bevy_ecs` prelude has its own `Result` (`Result<T = (), E = BevyError>`) and a lifecycle event named `Add`, so in a module that glob-imports the prelude they shadow `std::result::Result` and `std::ops::Add`. `Result<T, E>` with an explicit error type is the standard `Result`; write `std::ops::Add` in full when implementing it.
 
 ### Recommended directory layout
 
@@ -113,7 +113,7 @@ my_game/
 
 ### config.ini
 
-The engine reads `config.ini` at startup for window and rendering settings. The file is optional: if it is missing, the engine logs a warning and starts with all defaults, and individual missing keys fall back to safe defaults too. A file that exists but cannot be read or parsed is a startup error. Out-of-range numbers are clamped with a warning; values that fail to parse (e.g. `hz = abc`, `vsync = no`) silently keep their defaults, with no warning.
+The engine reads `config.ini` at startup for window and rendering settings. The file is optional, and so is every key: anything missing falls back to its default. See [Parsing behavior](#parsing-behavior) for the exact rules.
 
 > **Alternative:** Use `EngineBuilder::config_str(content)` to supply the INI content as a `&'static str` instead of a file. This is useful for tests or games that embed their configuration. When `.config_str()` is called, the file at `.config()` path is not read.
 
@@ -209,7 +209,7 @@ The engine owns the main loop. You configure it through `EngineBuilder`: registe
 | `.initial_scene(name)` | Which scene starts first (required with `.add_scene()`) |
 | `.loading_scene(name)` | A registered scene shown while Setup waits for assets. See [Loading screen](#loading-screen). |
 | `.track_group(name)` | Count group `name`'s entities for the whole game (published as `"group_count:<name>"`, kept across scene switches). Can be called multiple times. See [Group tracking across scenes](#group-tracking-across-scenes). |
-| `.add_system(system)` | Add a per-sim-tick system, run only while `Playing` (`run_if(state_is_playing)`, ordered alongside script-update systems). Can be called multiple times. See [Custom systems and observers](#custom-systems-and-observers). |
+| `.add_system(system)` | Add a per-sim-tick system, run only while `Playing` (`run_if(state_is_playing)`, in [`SimSet::ScriptUpdate`](#configure_scheduleclosure--full-ordering-control)). Can be called multiple times. See [Custom systems and observers](#custom-systems-and-observers). |
 | `.configure_schedule(closure)` | Add systems to the same schedule `.add_system()` targets, with full ordering control — no auto-constraints applied. Use this for custom ordering relative to the engine's own systems (via `SimSet` or `.after()`/`.before()`). See [Custom systems and observers](#custom-systems-and-observers). |
 | `.add_system_if(system, condition)` | `.add_system()` plus a run condition, e.g. `in_scene("level01")`. The condition is a separate argument because a `.run_if(..)`-configured system can't be passed to the builder. |
 | `.add_scene_system(scene, system)` | A per-sim-tick system that runs whenever `scene` is active (like `.add_system_if(system, in_scene(scene))`, and also during `Setup` if `scene` is active then). |
@@ -226,7 +226,7 @@ The engine owns the main loop. You configure it through `EngineBuilder`: registe
 
 ### Multi-scene games
 
-Register named scenes, then attach behavior to them: `.on_scene_enter()`/`.on_scene_exit()` observers run when a scene becomes active or is left, and `.add_scene_system()` systems run once per sim tick while it is active (see [Scene-scoped systems and observers](#scene-scoped-systems-and-observers)). A scene's optional GUI and world-space draw callbacks are registered with `.add_scene_gui()`/`.add_scene_world_draw()` (see [Section 9](#9-render-side-callbacks)). Every scene switch despawns the non-persistent entities.
+Register named scenes, then attach behavior to them: `.on_scene_enter()`/`.on_scene_exit()` observers run when a scene becomes active or is left, and `.add_scene_system()` systems run once per sim tick while it is active (see [Scene-scoped systems and observers](#scene-scoped-systems-and-observers)). A scene's optional GUI and world-space draw callbacks are registered with `.add_scene_gui()`/`.add_scene_world_draw()` (see [Section 9](#9-render-side-callbacks)). Every scene switch despawns the entities that aren't [`Persistent`](#persistent-entities).
 
 ```rust
 use aberredengine::prelude::*;
@@ -357,7 +357,7 @@ fn on_tile_selected(trigger: On<TileSelectedEvent>, /* params */) {
 
 There are two ways to switch scenes:
 
-- **From a menu:** a `MenuAction::SetScene("level01")` item switches in the same tick; the menu selection observer runs the switch itself.
+- **From a menu:** a `MenuAction::SetScene("level01")` item; the menu selection observer runs the switch itself.
 - **From a system or observer:** call `WorldSignals::request_scene(name)`. It sets the target scene name (`signal_keys::SCENE`) and the `signal_keys::SWITCH_SCENE` flag. The engine's `scene_switch_poll` system (registered automatically for every Rust game) picks up the flag in `SimSet::Drain`, late in the tick after your systems, and runs the switch; a flag set after that point is picked up on the next tick.
 
 ```rust
@@ -554,6 +554,8 @@ EngineBuilder::new()
 
 Engine system functions are `pub` and importable from `aberredengine::core::systems::*`. Use them directly as `.after()` / `.before()` arguments. Only systems on this logic-thread schedule work there: render-thread systems such as `render_system` can't be ordered against. No automatic `run_if` or `after` constraints are applied — you control everything.
 
+The sim schedule runs its `SimSet` groups in this order: `ApplyIntents`, `Phases`, `Spawn`, `AudioPump`, `ScriptUpdate`, `Controllers`, `Movement`, `Transforms`, `Collision`, `Gui`, `PostCollision`, `Drain`, `Bookkeeping`. Place a system relative to a whole group with `.in_set(SimSet::X)`, `.before(SimSet::X)` or `.after(SimSet::X)`.
+
 #### `.add_observer(observer_fn)` — persistent event observers
 
 Registers a Bevy ECS observer that fires when a specific event is triggered. The observer survives scene transitions (spawned with the `Persistent` component) — it is always active, not tied to a specific scene.
@@ -734,7 +736,7 @@ fn play_jump(mut assets: AssetLoader, input: Res<InputState>) {
 }
 ```
 
-#### Waiting for loads
+### Waiting for loads
 
 Every queued load stays in the `PendingAssets` resource until the render or audio thread answers it, whether it succeeded or failed. `PendingAssets::is_empty()` says every load has been answered; `len()` counts the loads still in flight and `contains(AssetKind::Texture, "player")` checks one. Each answer also triggers one global event, after the reply's data (texture size, font metrics) is stored:
 
@@ -760,7 +762,7 @@ EngineBuilder::new()
 
 Setup waits for `PendingAssets` to empty (see [Game lifecycle](#game-lifecycle)). Loads count no matter how they were queued: through `AssetLoader`, a raw `MessageWriter<RenderAssetCmd>`/`MessageWriter<AudioCmd>`, a map spawn or a tilemap. Loading the same key twice counts twice and is answered twice.
 
-#### Loading screen
+### Loading screen
 
 `.loading_scene(name)` shows a registered scene while Setup waits. The engine enters it right after the setup hook, runs its `.add_scene_system()` systems every sim tick while loads are pending, and on `Playing` leaves it for the initial scene:
 
@@ -2538,7 +2540,7 @@ fn setup_controls(mut bindings: ResMut<InputBindings>) {
 ### Parsing behavior
 
 - **`config_str()`** — alternative to a file: pass INI content as a `&'static str`. The file path is ignored when this is set.
-- **Missing file** -> startup error from `EngineBuilder::try_run()`
+- **Missing file** -> a logged warning; the game starts with all defaults
 - **Unreadable or malformed INI** -> startup error from `EngineBuilder::try_run()`
 - **Missing key** -> default for that key
 - **Out-of-range value** -> numeric fields (`simulation.hz`, `audio.hz`, `simulation.snapshot_skip`, `input.gamepad_deadzone`) warn and clamp to the nearest valid bound; `render_target_filter` warns and falls back to its default (`nearest`)
