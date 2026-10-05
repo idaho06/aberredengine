@@ -1463,15 +1463,7 @@ fn gui_click_observer_fires_once_without_lua() {
 fn lua_game_indexes_lua_collision_rules() {
     use aberredengine::lua::components::luacollision::{LuaCollisionRule, LuaCollisionRuleIndex};
 
-    let script =
-        std::env::temp_dir().join(format!("aberred_lua_rule_index_{}.lua", std::process::id()));
-    std::fs::write(&script, "-- empty game script\n").unwrap();
-    let mut tw = TestWorld::builder()
-        .with_lua(&script)
-        .build()
-        .expect("build should succeed");
-    std::fs::remove_file(&script).ok();
-    tw.tick_to_play(DT, 8);
+    let mut tw = lua_script_world("rule_index", "-- empty game script\n");
 
     let rule = tw
         .world
@@ -1481,6 +1473,135 @@ fn lua_game_indexes_lua_collision_rules() {
 
     let index = tw.world.resource::<LuaCollisionRuleIndex>();
     assert_eq!(index.bucket("brick", "ball"), Some(&[rule][..]));
+}
+
+/// Lua game running `script_body`, after `LOG = {}` (a global table its
+/// callbacks can append to; see `take_lua_log`).
+#[cfg(feature = "lua")]
+fn lua_script_world(name: &str, script_body: &str) -> TestWorld {
+    let script = std::env::temp_dir().join(format!(
+        "aberred_lua_script_{name}_{}.lua",
+        std::process::id()
+    ));
+    std::fs::write(&script, format!("LOG = {{}}\n{script_body}")).unwrap();
+    let mut tw = TestWorld::builder()
+        .with_lua(&script)
+        .build()
+        .expect("build should succeed");
+    std::fs::remove_file(&script).ok();
+    tw.tick_to_play(DT, 8);
+    tw
+}
+
+/// Drains the script's `LOG` table.
+#[cfg(feature = "lua")]
+fn take_lua_log(tw: &mut TestWorld) -> Vec<String> {
+    use aberredengine::lua::resources::lua_runtime::LuaRuntime;
+    let runtime = tw.world.non_send::<LuaRuntime>();
+    let joined: String = runtime
+        .lua()
+        .load("local s = table.concat(LOG, '\\n'); LOG = {}; return s")
+        .eval()
+        .unwrap();
+    joined.lines().map(str::to_owned).collect()
+}
+
+#[cfg(feature = "lua")]
+fn lua_rule(
+    callback: Option<&str>,
+    on_enter: &str,
+    on_exit: &str,
+) -> aberredengine::lua::components::luacollision::LuaCollisionRule {
+    aberredengine::lua::components::luacollision::LuaCollisionRule {
+        group_a: "a".into(),
+        group_b: "b".into(),
+        callback: callback.map(Into::into),
+        on_enter: Some(on_enter.into()),
+        on_exit: Some(on_exit.into()),
+    }
+}
+
+/// A Lua rule's `on_enter` runs once before the stay callback on the first
+/// touching tick; `on_exit` runs once on the first tick apart with the ids
+/// and groups only; touching again enters again.
+#[cfg(feature = "lua")]
+#[test]
+fn lua_collision_enter_runs_before_stay_and_exit_gets_ids_and_groups() {
+    let mut tw = lua_script_world(
+        "order",
+        "function on_enter(ctx) LOG[#LOG + 1] = 'enter ' .. ctx.a.group .. ' ' .. ctx.b.group end\n\
+         function on_stay(ctx) LOG[#LOG + 1] = 'stay' end\n\
+         function on_exit(ctx)\n\
+           LOG[#LOG + 1] = string.format('exit %d %d %s %s %s', ctx.a.id, ctx.b.id,\n\
+             ctx.a.group, ctx.b.group, tostring(ctx.a.pos == nil and ctx.b.pos == nil))\n\
+         end\n",
+    );
+    tw.world
+        .spawn(lua_rule(Some("on_stay"), "on_enter", "on_exit"));
+    let a = spawn_box(&mut tw, "a", 0.0, ());
+    let b = spawn_box(&mut tw, "b", 5.0, ());
+
+    tw.tick(1, DT);
+    assert_eq!(take_lua_log(&mut tw), ["enter a b", "stay"]);
+    tw.tick(1, DT);
+    assert_eq!(take_lua_log(&mut tw), ["stay"]);
+
+    move_to(&mut tw, b, 100.0);
+    tw.tick(1, DT);
+    assert_eq!(
+        take_lua_log(&mut tw),
+        [format!("exit {} {} a b true", a.to_bits(), b.to_bits())]
+    );
+    tw.tick(1, DT);
+    assert!(take_lua_log(&mut tw).is_empty());
+
+    move_to(&mut tw, b, 5.0);
+    tw.tick(1, DT);
+    assert_eq!(take_lua_log(&mut tw), ["enter a b", "stay"]);
+}
+
+/// The commands `on_enter` queues are applied before the stay callback runs,
+/// so it sees them.
+#[cfg(feature = "lua")]
+#[test]
+fn lua_collision_stay_sees_what_enter_applied() {
+    let mut tw = lua_script_world(
+        "drain",
+        "function on_enter(ctx) engine.collision_set_flag('entered') end\n\
+         function on_stay(ctx) LOG[#LOG + 1] = tostring(engine.has_flag('entered')) end\n\
+         function on_exit(ctx) end\n",
+    );
+    tw.world
+        .spawn(lua_rule(Some("on_stay"), "on_enter", "on_exit"));
+    spawn_box(&mut tw, "a", 0.0, ());
+    spawn_box(&mut tw, "b", 5.0, ());
+
+    tw.tick(1, DT);
+
+    assert_eq!(take_lua_log(&mut tw), ["true"]);
+}
+
+/// `engine.collision_*` commands queued in `on_enter`/`on_exit` are applied,
+/// on a rule without a stay callback.
+#[cfg(feature = "lua")]
+#[test]
+fn lua_collision_enter_and_exit_apply_collision_commands() {
+    let mut tw = lua_script_world(
+        "commands",
+        "function on_enter(ctx) engine.collision_set_flag('entered') end\n\
+         function on_exit(ctx) engine.collision_set_flag('exited') end\n",
+    );
+    tw.world.spawn(lua_rule(None, "on_enter", "on_exit"));
+    spawn_box(&mut tw, "a", 0.0, ());
+    let b = spawn_box(&mut tw, "b", 5.0, ());
+
+    tw.tick(1, DT);
+    assert!(tw.world.resource::<WorldSignals>().has_flag("entered"));
+    assert!(!tw.world.resource::<WorldSignals>().has_flag("exited"));
+
+    move_to(&mut tw, b, 100.0);
+    tw.tick(1, DT);
+    assert!(tw.world.resource::<WorldSignals>().has_flag("exited"));
 }
 
 /// A map entity's `lua_setup` names a Lua function, so a Rust-only game (no

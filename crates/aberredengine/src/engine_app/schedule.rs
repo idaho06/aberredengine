@@ -61,6 +61,8 @@ use aberred_render::systems::render_system;
 #[cfg(feature = "lua")]
 use aberred_lua::components::luacollision::LuaCollisionRule;
 #[cfg(feature = "lua")]
+use aberred_lua::systems::lua_collision::{has_lua_collision_contacts, lua_collision_ended_system};
+#[cfg(feature = "lua")]
 use aberred_lua::systems::lua_mapspawn::process_lua_map_commands;
 #[cfg(feature = "lua")]
 use aberred_lua::systems::lua_setup_entity::lua_setup_entity_system;
@@ -450,6 +452,14 @@ impl EngineBuilder {
             sim.add_systems(
                 rebuild_rule_index::<LuaCollisionRule>
                     .before(collision_detector)
+                    .in_set(SimSet::Collision),
+            );
+            // .before(stuck_to_entity_system): exit callbacks may move entities.
+            sim.add_systems(
+                lua_collision_ended_system
+                    .run_if(has_lua_collision_contacts)
+                    .after(collision_detector)
+                    .before(stuck_to_entity_system)
                     .in_set(SimSet::Collision),
             );
             sim.add_systems(

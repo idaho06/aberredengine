@@ -3,20 +3,26 @@
 //! This module provides the Lua-specific collision handling:
 //!
 //! - [`lua_collision_observer`] – receives [`Overlapping`] events
-//!   and dispatches to [`LuaCollisionRule`] callbacks
+//!   and dispatches to [`LuaCollisionRule`] enter and every-tick callbacks
+//! - [`lua_collision_ended_system`] – dispatches exit callbacks
 //!
 //! # Collision Flow
 //!
 //! 1. [`collision_detector`](aberred_core::systems::collision_detector::collision_detector) detects overlaps
 //!    and emits `Overlapping` events
 //! 2. `lua_collision_observer` looks up matching Lua collision rules by
-//!    [`Group`] names
-//! 3. For each match, calls `call_lua_collision_callback` with pooled context tables
+//!    [`Group`] names and records each contact in [`LuaCollisionContacts`]
+//! 3. For each match, calls `on_enter` (new contacts only) and then the
+//!    every-tick callback with one pooled context table
+//! 4. After detection, `lua_collision_ended_system` calls `on_exit` for each
+//!    contact that did not touch this tick
 //!
 //! # Lua Collision Callbacks
 //!
-//! Lua collision rules are defined via `engine.spawn():with_lua_collision_rule()`.
-//! The callback receives a context table with entity data for both colliders:
+//! Lua collision rules are defined via `engine.spawn():with_lua_collision_rule()`,
+//! with optional `:with_lua_collision_enter()`/`:with_lua_collision_exit()`.
+//! The enter and every-tick callbacks receive a context table with entity
+//! data for both colliders:
 //!
 //! ```lua
 //! function on_player_enemy(ctx)
@@ -24,6 +30,9 @@
 //!     -- ctx.sides.a and ctx.sides.b contain collision sides
 //! end
 //! ```
+//!
+//! The exit callback's context carries only `ctx.a.id`/`ctx.a.group` and
+//! `ctx.b.id`/`ctx.b.group`; either entity may already be despawned.
 //!
 //! **Performance**: Context tables are pooled and reused between collisions to
 //! reduce GC pressure. See `CollisionCtxTables`
@@ -39,7 +48,9 @@
 use bevy_ecs::prelude::*;
 use bevy_ecs::system::SystemParam;
 
-use crate::components::luacollision::{LuaCollisionRule, LuaCollisionRuleIndex};
+use crate::components::luacollision::{
+    LuaCollisionContacts, LuaCollisionRule, LuaCollisionRuleIndex,
+};
 use crate::components::luaphase::LuaPhase;
 use crate::resources::lua_runtime::{
     CtxOccupancy, LuaRuntime, OccMask, PhaseCmd, SignalsCtxTables, clear_table,
@@ -50,9 +61,11 @@ use crate::systems::lua_commands::{
     process_phase_command,
 };
 use aberred_core::components::boxcollider::BoxCollider;
+use aberred_core::components::collision::BoxSide;
 use aberred_core::components::group::Group;
 use aberred_core::components::signals::Signals;
 use aberred_core::events::collision::Overlapping;
+use aberred_core::math::Rect;
 use aberred_core::protocol::audio::AudioCmd;
 use aberred_core::resources::animationstore::AnimationStore;
 use aberred_core::resources::systemsstore::SystemsStore;
@@ -60,16 +73,24 @@ use aberred_core::resources::worldsignals::WorldSignals;
 use aberred_core::systems::collision::{
     compute_sides, resolve_collider_rect, resolve_groups, resolve_world_pos,
 };
-use log::{error, warn};
+use log::{debug, error};
 
-/// System parameters for the Lua collision observer.
+/// What the Lua collision observer and `lua_collision_ended_system` read to
+/// find a rule and its contacts.
 #[derive(SystemParam)]
-pub struct LuaCollisionObserverParams<'w, 's> {
-    pub commands: Commands<'w, 's>,
+pub struct LuaCollisionLookup<'w, 's> {
     pub groups: Query<'w, 's, &'static Group>,
     pub lua_rules: Query<'w, 's, &'static LuaCollisionRule>,
     pub index: Res<'w, LuaCollisionRuleIndex>,
     pub box_colliders: Query<'w, 's, &'static BoxCollider>,
+    pub contacts: ResMut<'w, LuaCollisionContacts>,
+}
+
+/// What a Lua collision callback reads (its ctx) and what its
+/// `engine.collision_*` commands write.
+#[derive(SystemParam)]
+pub struct LuaCollisionEffects<'w, 's> {
+    pub commands: Commands<'w, 's>,
     pub luaphase_query: Query<'w, 's, (Entity, &'static mut LuaPhase)>,
     pub entity_cmds: EntityCmdQueries<'w, 's>,
     pub world_signals: ResMut<'w, WorldSignals>,
@@ -79,145 +100,197 @@ pub struct LuaCollisionObserverParams<'w, 's> {
     pub animation_store: Res<'w, AnimationStore>,
 }
 
-/// Observes `Overlapping`, invokes the matching Lua collision callback, and
-/// queues any phase/animation/timer effects it requests.
+/// One side of a pooled collision context. `Default` leaves everything but
+/// `id` and `group` nil (the exit callback's ctx).
+#[derive(Default)]
+struct CollisionSide<'a> {
+    id: u64,
+    group: Option<&'a str>,
+    pos: Option<(f32, f32)>,
+    vel: Option<(f32, f32)>,
+    speed_sq: f32,
+    rect: Option<(f32, f32, f32, f32)>,
+    sides: &'a [BoxSide],
+    signals: Option<&'a Signals>,
+}
+
+impl LuaCollisionEffects<'_, '_> {
+    /// The full ctx side of a live entity, touching the other side on `sides`.
+    fn live_side<'a>(
+        &'a self,
+        entity: Entity,
+        group: &'a str,
+        rect: Option<Rect>,
+        sides: &'a [BoxSide],
+    ) -> CollisionSide<'a> {
+        let pos = resolve_world_pos(
+            &self.entity_cmds.positions.as_readonly(),
+            &self.entity_cmds.global_transforms,
+            entity,
+        );
+        let velocity = self
+            .entity_cmds
+            .rigid_bodies
+            .get(entity)
+            .ok()
+            .map(|rb| rb.velocity);
+        CollisionSide {
+            id: entity.to_bits(),
+            group: Some(group),
+            pos: pos.map(|v| (v.x, v.y)),
+            vel: velocity.map(|v| (v.x, v.y)),
+            speed_sq: velocity.map_or(0.0, |v| v.length_squared()),
+            rect: rect.map(|r| (r.x, r.y, r.width, r.height)),
+            sides,
+            signals: self.entity_cmds.signals.get(entity).ok(),
+        }
+    }
+
+    /// Refreshes the cached world-signal snapshot only when something has
+    /// changed since the last refresh. lua_plugin::update primes the cache
+    /// every frame; within a collision-heavy frame the common case (no
+    /// signal writes between collisions) skips the snapshot entirely,
+    /// avoiding a full per-collision re-clone of the dirtied domains.
+    fn refresh_signal_cache(&mut self) {
+        if self.world_signals.is_dirty() {
+            self.lua_runtime
+                .update_signal_cache(self.world_signals.snapshot());
+        }
+    }
+
+    /// Applies the `engine.collision_*` commands a callback just queued.
+    fn drain_collision_commands(
+        &mut self,
+        phase_buf: &mut Vec<PhaseCmd>,
+        effect_bufs: &mut EffectCmdBufs,
+    ) {
+        self.lua_runtime
+            .drain_collision_phase_commands_into(phase_buf);
+        for cmd in phase_buf.drain(..) {
+            process_phase_command(&mut self.luaphase_query, cmd);
+        }
+
+        drain_and_process_effect_commands(
+            &self.lua_runtime,
+            DrainScope::Collision,
+            effect_bufs,
+            &mut self.commands,
+            &mut self.world_signals,
+            &mut self.entity_cmds,
+            &mut self.audio_cmds,
+            &self.systems_store,
+            &self.animation_store,
+        );
+    }
+}
+
+/// Observes `Overlapping`, invokes the matching Lua rule's `on_enter` (new
+/// contacts only) and then its every-tick callback, each with a fresh ctx and
+/// with its `engine.collision_*` commands applied right after it.
+///
+/// Contacts are recorded only for rules with an `on_enter` or `on_exit`.
 pub fn lua_collision_observer(
     trigger: On<Overlapping>,
-    mut params: LuaCollisionObserverParams,
+    mut lookup: LuaCollisionLookup,
+    mut effects: LuaCollisionEffects,
     mut phase_buf: Local<Vec<PhaseCmd>>,
     mut effect_bufs: Local<EffectCmdBufs>,
 ) {
-    if params.index.is_empty() {
+    if lookup.index.is_empty() {
         return;
     }
 
-    let a = trigger.event().a;
-    let b = trigger.event().b;
+    let Overlapping { a, b } = *trigger.event();
 
-    let (ga, gb) = match resolve_groups(&params.groups, a, b) {
-        Some(names) => names,
-        None => return,
+    let Some((ga, gb)) = resolve_groups(&lookup.groups, a, b) else {
+        return;
     };
 
-    let Some((_, lua_rule, ent_a, ent_b)) =
-        params.index.find_match(&params.lua_rules, a, b, ga, gb)
+    let Some((rule_entity, lua_rule, ent_a, ent_b)) =
+        lookup.index.find_match(&lookup.lua_rules, a, b, ga, gb)
     else {
         return;
     };
 
-    let Some(callback_name) = lua_rule.callback.as_deref() else {
-        return;
-    };
-    let pos_a = resolve_world_pos(
-        &params.entity_cmds.positions.as_readonly(),
-        &params.entity_cmds.global_transforms,
-        ent_a,
-    )
-    .map(|v| (v.x, v.y));
-    let pos_b = resolve_world_pos(
-        &params.entity_cmds.positions.as_readonly(),
-        &params.entity_cmds.global_transforms,
-        ent_b,
-    )
-    .map(|v| (v.x, v.y));
-
-    let (vel_a, speed_sq_a) = params
-        .entity_cmds
-        .rigid_bodies
-        .get(ent_a)
-        .ok()
-        .map(|rb| {
-            (
-                Some((rb.velocity.x, rb.velocity.y)),
-                rb.velocity.length_squared(),
-            )
-        })
-        .unwrap_or((None, 0.0));
-    let (vel_b, speed_sq_b) = params
-        .entity_cmds
-        .rigid_bodies
-        .get(ent_b)
-        .ok()
-        .map(|rb| {
-            (
-                Some((rb.velocity.x, rb.velocity.y)),
-                rb.velocity.length_squared(),
-            )
-        })
-        .unwrap_or((None, 0.0));
-
-    let rect_a = resolve_collider_rect(
-        &params.entity_cmds.positions.as_readonly(),
-        &params.entity_cmds.global_transforms,
-        &params.box_colliders,
-        ent_a,
-    );
-    let rect_b = resolve_collider_rect(
-        &params.entity_cmds.positions.as_readonly(),
-        &params.entity_cmds.global_transforms,
-        &params.box_colliders,
-        ent_b,
-    );
-    let (sides_a, sides_b) = compute_sides(rect_a, rect_b);
-
-    let signals_a = params.entity_cmds.signals.get(ent_a).ok();
-    let signals_b = params.entity_cmds.signals.get(ent_b).ok();
+    let started = (lua_rule.on_enter.is_some() || lua_rule.on_exit.is_some())
+        && lookup.contacts.begin(rule_entity, ent_a, ent_b);
+    let callbacks = [
+        lua_rule.on_enter.as_deref().filter(|_| started),
+        lua_rule.callback.as_deref(),
+    ];
     let (group_a, group_b) = if ent_a == a { (ga, gb) } else { (gb, ga) };
 
-    // Refresh the cached world-signal snapshot only when something has
-    // changed since the last refresh. lua_plugin::update primes the
-    // cache every frame; within a collision-heavy frame the common case
-    // (no signal writes between collisions) skips the snapshot entirely,
-    // avoiding a full per-collision re-clone of the dirtied domains.
-    if params.world_signals.is_dirty() {
-        params
-            .lua_runtime
-            .update_signal_cache(params.world_signals.snapshot());
+    for name in callbacks.into_iter().flatten() {
+        effects.refresh_signal_cache();
+        {
+            let rect_of = |entity| {
+                resolve_collider_rect(
+                    &effects.entity_cmds.positions.as_readonly(),
+                    &effects.entity_cmds.global_transforms,
+                    &lookup.box_colliders,
+                    entity,
+                )
+            };
+            let (rect_a, rect_b) = (rect_of(ent_a), rect_of(ent_b));
+            let (sides_a, sides_b) = compute_sides(rect_a, rect_b);
+            call_lua_collision_callback(
+                &effects.lua_runtime,
+                name,
+                effects.live_side(ent_a, group_a, rect_a, &sides_a),
+                effects.live_side(ent_b, group_b, rect_b, &sides_b),
+            );
+        }
+        effects.drain_collision_commands(&mut phase_buf, &mut effect_bufs);
     }
+}
 
-    let callback_result = call_lua_collision_callback(
-        &params.lua_runtime,
-        callback_name,
-        ent_a.to_bits(),
-        ent_b.to_bits(),
-        pos_a,
-        pos_b,
-        vel_a,
-        vel_b,
-        speed_sq_a,
-        speed_sq_b,
-        rect_a.map(|r| (r.x, r.y, r.width, r.height)),
-        rect_b.map(|r| (r.x, r.y, r.width, r.height)),
-        &sides_a,
-        &sides_b,
-        signals_a,
-        signals_b,
-        Some(group_a),
-        Some(group_b),
-    );
+/// Calls the `on_exit` callback of each [`LuaCollisionRule`] contact that
+/// touched last tick but not this one, in `(rule, a, b)` order.
+///
+/// Runs after `collision_detector`, once this tick's `lua_collision_observer`
+/// calls have recorded the contacts that still touch. Either entity may
+/// already be despawned, so the ctx carries only `id` and `group` per side
+/// (from the rule's groups); `pos`, `vel`, `rect` and `signals` are nil and
+/// the sides are empty. A contact whose rule entity lost its
+/// `LuaCollisionRule` is skipped.
+pub fn lua_collision_ended_system(
+    mut lookup: LuaCollisionLookup,
+    mut effects: LuaCollisionEffects,
+    mut phase_buf: Local<Vec<PhaseCmd>>,
+    mut effect_bufs: Local<EffectCmdBufs>,
+) {
+    for contact in lookup.contacts.end_tick() {
+        let Ok(rule) = lookup.lua_rules.get(contact.rule) else {
+            debug!(target: "lua", "Collision exit skipped: rule {:?} is gone", contact.rule);
+            continue;
+        };
+        let Some(on_exit) = rule.on_exit.as_deref() else {
+            continue;
+        };
 
-    params
-        .lua_runtime
-        .drain_collision_phase_commands_into(&mut phase_buf);
-    for cmd in phase_buf.drain(..) {
-        process_phase_command(&mut params.luaphase_query, cmd);
+        effects.refresh_signal_cache();
+        call_lua_collision_callback(
+            &effects.lua_runtime,
+            on_exit,
+            CollisionSide {
+                id: contact.a.to_bits(),
+                group: Some(&rule.group_a),
+                ..Default::default()
+            },
+            CollisionSide {
+                id: contact.b.to_bits(),
+                group: Some(&rule.group_b),
+                ..Default::default()
+            },
+        );
+        effects.drain_collision_commands(&mut phase_buf, &mut effect_bufs);
     }
+}
 
-    drain_and_process_effect_commands(
-        &params.lua_runtime,
-        DrainScope::Collision,
-        &mut effect_bufs,
-        &mut params.commands,
-        &mut params.world_signals,
-        &mut params.entity_cmds,
-        &mut params.audio_cmds,
-        &params.systems_store,
-        &params.animation_store,
-    );
-
-    if let Err(e) = callback_result {
-        error!(target: "lua", "Collision callback '{}' error: {}", callback_name, e);
-    }
+/// Whether [`lua_collision_ended_system`] has anything to do: some contact
+/// touched last tick or this one.
+pub fn has_lua_collision_contacts(contacts: Res<LuaCollisionContacts>) -> bool {
+    !contacts.is_empty()
 }
 
 /// Convert BoxSide to string representation.
@@ -308,85 +381,62 @@ fn populate_collision_entity(
     Ok(())
 }
 
-/// Call a Lua collision callback with context data.
-/// Uses pooled tables for fixed-structure data to reduce allocations.
-#[allow(clippy::too_many_arguments)]
+/// Fills the pooled collision context from `a` and `b` and calls the Lua
+/// function `name` with it, logging any error.
 fn call_lua_collision_callback(
     lua_runtime: &LuaRuntime,
-    callback_name: &str,
-    entity_a_id: u64,
-    entity_b_id: u64,
-    pos_a: Option<(f32, f32)>,
-    pos_b: Option<(f32, f32)>,
-    vel_a: Option<(f32, f32)>,
-    vel_b: Option<(f32, f32)>,
-    speed_sq_a: f32,
-    speed_sq_b: f32,
-    rect_a: Option<(f32, f32, f32, f32)>,
-    rect_b: Option<(f32, f32, f32, f32)>,
-    sides_a: &[aberred_core::components::collision::BoxSide],
-    sides_b: &[aberred_core::components::collision::BoxSide],
-    signals_a: Option<&Signals>,
-    signals_b: Option<&Signals>,
-    group_a: Option<&str>,
-    group_b: Option<&str>,
-) -> mlua::Result<()> {
+    name: &str,
+    a: CollisionSide,
+    b: CollisionSide,
+) {
     let tables = lua_runtime.get_collision_ctx_pool();
-
-    populate_collision_entity(
-        &tables.entity_a,
-        &tables.pos_a,
-        &tables.vel_a,
-        &tables.rect_a,
-        &tables.signals_a,
-        &tables.signals_a_inner,
-        &tables.occupancy_a,
-        entity_a_id,
-        group_a,
-        speed_sq_a,
-        pos_a,
-        vel_a,
-        rect_a,
-        signals_a,
-    )?;
-
-    populate_collision_entity(
-        &tables.entity_b,
-        &tables.pos_b,
-        &tables.vel_b,
-        &tables.rect_b,
-        &tables.signals_b,
-        &tables.signals_b_inner,
-        &tables.occupancy_b,
-        entity_b_id,
-        group_b,
-        speed_sq_b,
-        pos_b,
-        vel_b,
-        rect_b,
-        signals_b,
-    )?;
-
-    clear_table(&tables.sides_a)?;
-    for (i, side) in sides_a.iter().enumerate() {
-        tables.sides_a.raw_set(i + 1, box_side_to_str(side))?;
-    }
-
-    clear_table(&tables.sides_b)?;
-    for (i, side) in sides_b.iter().enumerate() {
-        tables.sides_b.raw_set(i + 1, box_side_to_str(side))?;
-    }
-
-    match lua_runtime.get_function_cached(callback_name)? {
-        Some(func) => {
-            func.call::<()>(tables.ctx)?;
+    let filled = (|| -> mlua::Result<()> {
+        populate_collision_entity(
+            &tables.entity_a,
+            &tables.pos_a,
+            &tables.vel_a,
+            &tables.rect_a,
+            &tables.signals_a,
+            &tables.signals_a_inner,
+            &tables.occupancy_a,
+            a.id,
+            a.group,
+            a.speed_sq,
+            a.pos,
+            a.vel,
+            a.rect,
+            a.signals,
+        )?;
+        populate_collision_entity(
+            &tables.entity_b,
+            &tables.pos_b,
+            &tables.vel_b,
+            &tables.rect_b,
+            &tables.signals_b,
+            &tables.signals_b_inner,
+            &tables.occupancy_b,
+            b.id,
+            b.group,
+            b.speed_sq,
+            b.pos,
+            b.vel,
+            b.rect,
+            b.signals,
+        )?;
+        for (table, sides) in [(&tables.sides_a, a.sides), (&tables.sides_b, b.sides)] {
+            clear_table(table)?;
+            for (i, side) in sides.iter().enumerate() {
+                table.raw_set(i + 1, box_side_to_str(side))?;
+            }
         }
-        None => {
-            warn!(target: "lua", "Collision callback '{}' not found", callback_name);
-        }
+        Ok(())
+    })();
+    if let Err(e) = filled {
+        error!(target: "lua", "Collision context for '{}' failed: {}", name, e);
+        return;
     }
 
-    Ok(())
+    lua_runtime.call_named(name, "Collision", |f| f.call::<()>(&tables.ctx));
 }
 
 #[cfg(test)]

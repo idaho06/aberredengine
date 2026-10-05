@@ -64,7 +64,7 @@ use aberred_core::systems::scene_dispatch::{
 };
 
 #[cfg(feature = "lua")]
-use aberred_lua::components::luacollision::LuaCollisionRuleIndex;
+use aberred_lua::components::luacollision::{LuaCollisionContacts, LuaCollisionRuleIndex};
 #[cfg(feature = "lua")]
 use aberred_lua::resources::lua_runtime::LuaRuntime;
 #[cfg(feature = "lua")]
@@ -208,6 +208,7 @@ impl EngineBuilder {
             }
             world.insert_non_send(lua_runtime);
             world.insert_resource(LuaCollisionRuleIndex::default());
+            world.insert_resource(LuaCollisionContacts::default());
         }
 
         world.spawn((Observer::new(observe_gamestate_change_event), Persistent));

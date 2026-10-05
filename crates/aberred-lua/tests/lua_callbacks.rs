@@ -21,7 +21,9 @@ use aberred_core::resources::worldsignals::WorldSignals;
 use aberred_core::resources::worldtime::WorldTime;
 use aberred_core::systems::collision_detector::collision_detector;
 use aberred_core::systems::collision_rule_index::rebuild_rule_index;
-use aberred_lua::components::luacollision::{LuaCollisionRule, LuaCollisionRuleIndex};
+use aberred_lua::components::luacollision::{
+    LuaCollisionContacts, LuaCollisionRule, LuaCollisionRuleIndex,
+};
 use aberred_lua::components::luaphase::{LuaPhase, PhaseCallbacks};
 use aberred_lua::components::luatimer::LuaTimer;
 use aberred_lua::resources::lua_runtime::LuaRuntime;
@@ -43,6 +45,7 @@ fn make_lua_callback_world(delta: f32) -> World {
     world.insert_resource(SystemsStore::new());
     world.insert_resource(AnimationStore::default());
     world.insert_resource(LuaCollisionRuleIndex::default());
+    world.insert_resource(LuaCollisionContacts::default());
     world.insert_non_send(LuaRuntime::new().expect("LuaRuntime::new"));
     world
 }

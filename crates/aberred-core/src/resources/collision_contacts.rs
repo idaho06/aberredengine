@@ -72,6 +72,12 @@ impl<T: RuleGroups> RuleContacts<T> {
         ended
     }
 
+    /// Whether no contact touched last tick or this one, so
+    /// [`end_tick`](Self::end_tick) has nothing to report or rotate.
+    pub fn is_empty(&self) -> bool {
+        self.previous.is_empty() && self.current.is_empty()
+    }
+
     /// Forgets every contact without reporting any as ended.
     pub fn clear(&mut self) {
         self.previous.clear();
@@ -155,6 +161,20 @@ mod tests {
 
         assert!(contacts.end_tick().is_empty());
         assert!(contacts.begin(e[0], e[1], e[2]));
+    }
+
+    #[test]
+    fn is_empty_until_no_contact_touched_last_tick_or_this_one() {
+        let e = entities(3);
+        let mut contacts = CollisionContacts::default();
+        assert!(contacts.is_empty());
+
+        contacts.begin(e[0], e[1], e[2]);
+        assert!(!contacts.is_empty(), "touching this tick");
+        contacts.end_tick();
+        assert!(!contacts.is_empty(), "touched last tick");
+        contacts.end_tick();
+        assert!(contacts.is_empty());
     }
 
     #[test]

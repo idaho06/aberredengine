@@ -35,6 +35,7 @@
 use std::sync::Arc;
 
 use aberred_core::components::collision::RuleGroups;
+use aberred_core::resources::collision_contacts::RuleContacts;
 use aberred_core::resources::collision_rule_index::RuleIndex;
 use bevy_ecs::prelude::*;
 
@@ -91,3 +92,7 @@ impl RuleGroups for LuaCollisionRule {
 /// Index of [`LuaCollisionRule`] entities, rebuilt by core's
 /// `rebuild_rule_index::<LuaCollisionRule>` and read by `lua_collision_observer`.
 pub type LuaCollisionRuleIndex = RuleIndex<LuaCollisionRule>;
+
+/// Contacts of [`LuaCollisionRule`] pairs, recorded by
+/// `lua_collision_observer` and ended by `lua_collision_ended_system`.
+pub type LuaCollisionContacts = RuleContacts<LuaCollisionRule>;
