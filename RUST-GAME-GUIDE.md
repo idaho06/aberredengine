@@ -1841,12 +1841,7 @@ commands.spawn(menu).observe(on_menu_select);
 
 A global observer registered with `EngineBuilder::add_observer` sees every menu's selections; filter by `ev.entity` or a marker component.
 
-**Dispatch order:** When an item is confirmed, the engine triggers `MenuSelected`, and then:
-
-1. **Lua callback** (`on_select_callback`, only in games that run Lua) — when set, `MenuActions` is skipped.
-2. **MenuActions** (declarative).
-
-`MenuSelected` observers always run, alongside either. Don't combine `MenuActions` with an observer for the same item, or both act on it.
+**Dispatch order:** When an item is confirmed, the engine triggers `MenuSelected`, and the menu's `MenuActions` run alongside its `MenuSelected` observers. Don't combine `MenuActions` with an observer for the same item, or both act on it.
 
 **Navigation:** Up/down arrows move selection. `action_1` or `action_2` confirms. With `.with_visible_count(n)`, the menu shows at most `n` items at a time with bounded navigation and auto-scrolling.
 

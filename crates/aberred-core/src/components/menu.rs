@@ -59,9 +59,6 @@ pub struct Menu {
     pub origin: Vec2,
     /// Whether to use screen-space positioning (true) or world-space (false).
     pub use_screen_space: bool,
-    /// Optional Lua callback invoked when any item is selected. When set, it
-    /// replaces [`MenuActions`] dispatch.
-    pub on_select_callback: Option<String>,
     /// Maximum number of visible items (None = show all).
     pub visible_count: Option<usize>,
     /// Index of first visible item when scrolling.
@@ -103,7 +100,6 @@ impl Menu {
             selection_change_sound: None,
             origin,
             use_screen_space,
-            on_select_callback: None,
             visible_count: None,
             scroll_offset: 0,
             top_indicator_entity: None,
@@ -127,10 +123,6 @@ impl Menu {
     }
     pub fn with_selection_sound(mut self, sound_key: impl Into<String>) -> Self {
         self.selection_change_sound = Some(sound_key.into());
-        self
-    }
-    pub fn with_on_select_callback(mut self, callback: impl Into<String>) -> Self {
-        self.on_select_callback = Some(callback.into());
         self
     }
     pub fn with_visible_count(mut self, count: usize) -> Self {

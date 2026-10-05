@@ -541,29 +541,24 @@ fn reposition_menu_items(commands: &mut Commands, menu: &Menu) {
 /// - [`MenuAction::QuitGame`] – transitions to quitting state
 /// - [`MenuAction::Noop`] – does nothing
 ///
-/// Menus with a Lua callback name (`on_select_callback`) are skipped: the Lua
-/// layer's observer calls that function instead of the actions. Observers of
-/// [`MenuSelected`] run in addition to either; don't combine [`MenuActions`]
-/// with an observer for the same item.
+/// Observers of [`MenuSelected`] run in addition; don't combine
+/// [`MenuActions`] with an observer for the same item.
 pub fn menu_selection_observer(
     trigger: On<MenuSelected>,
-    menus: Query<(&Menu, Option<&MenuActions>)>,
+    menus: Query<Option<&MenuActions>, With<Menu>>,
     mut world_signals: ResMut<WorldSignals>,
     mut next_game_state: ResMut<NextGameState>,
     systems_store: Res<SystemsStore>,
     mut commands: Commands,
 ) {
     let event = trigger.event();
-    let Ok((menu, menu_actions)) = menus.get(event.entity) else {
+    let Ok(menu_actions) = menus.get(event.entity) else {
         warn!(
             "menu_selection_observer: Menu entity {:?} not found",
             event.entity
         );
         return;
     };
-    if menu.on_select_callback.is_some() {
-        return;
-    }
     // A menu without `MenuActions` is handled by `MenuSelected` observers.
     let Some(menu_actions) = menu_actions else {
         return;
@@ -1039,20 +1034,6 @@ mod tests {
         let ws = world.resource::<WorldSignals>();
         assert_eq!(ws.get_string("observed"), Some("play:0"));
         assert_eq!(ws.get_string(sk::SCENE), Some("level01"));
-    }
-
-    #[test]
-    fn a_menu_with_a_lua_callback_name_skips_menu_actions() {
-        let mut world = selection_world();
-        let menu = world
-            .spawn((
-                three_items().with_on_select_callback("on_select"),
-                actions(),
-            ))
-            .id();
-        select(&mut world, menu, "play");
-        let ws = world.resource::<WorldSignals>();
-        assert!(ws.get_string(sk::SCENE).is_none() && !ws.has_flag("switch_hook_ran"));
     }
 
     #[test]

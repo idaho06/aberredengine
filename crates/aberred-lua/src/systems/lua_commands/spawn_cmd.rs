@@ -7,6 +7,7 @@
 use aberred_core::math::Vec2;
 use bevy_ecs::prelude::*;
 
+use crate::components::lua_on_menu_select::LuaOnMenuSelect;
 use crate::components::luaphase::{LuaPhase, PhaseCallbacks};
 use crate::components::luasetup::LuaSetup;
 use crate::components::luatimer::LuaTimer;
@@ -528,21 +529,28 @@ fn apply_ui_components(
                 );
             }
         }
-        if let Some(callback) = menu_data.on_select_callback {
-            menu_component = menu_component.with_on_select_callback(callback);
-        }
         if let Some(count) = menu_data.visible_count {
             menu_component = menu_component.with_visible_count(count);
         }
-        let mut actions = MenuActions::new();
-        for (item_id, action_data) in menu_data.actions {
-            let action = match action_data {
-                MenuActionData::SetScene { scene } => MenuAction::SetScene(scene),
-                MenuActionData::QuitGame => MenuAction::QuitGame,
-            };
-            actions = actions.with(item_id, action);
+        if let Some(callback) = menu_data.on_select_callback {
+            if !menu_data.actions.is_empty() {
+                warn!(
+                    "Menu has both with_menu_callback('{callback}') and menu actions; \
+                     the callback handles selection and the actions are discarded"
+                );
+            }
+            entity_commands.insert((menu_component, LuaOnMenuSelect::new(callback)));
+        } else {
+            let mut actions = MenuActions::new();
+            for (item_id, action_data) in menu_data.actions {
+                let action = match action_data {
+                    MenuActionData::SetScene { scene } => MenuAction::SetScene(scene),
+                    MenuActionData::QuitGame => MenuAction::QuitGame,
+                };
+                actions = actions.with(item_id, action);
+            }
+            entity_commands.insert((menu_component, actions));
         }
-        entity_commands.insert((menu_component, actions));
     }
     if let Some((path, group, zindex)) = grid_layout {
         use aberred_core::components::gridlayout::GridLayout;
@@ -1306,7 +1314,7 @@ mod tests {
             "engine.spawn():with_menu({ {id='play', label='Play'}, {id='opts', label='Options'}, \
                 {id='quit', label='Quit'} }, 10, 20, 'arcade', 16, 24, true)\
              :with_menu_colors(1, 2, 3, 4, 5, 6, 7, 8):with_menu_cursor('cursor')\
-             :with_menu_selection_sound('blip'):with_menu_callback('on_menu')\
+             :with_menu_selection_sound('blip')\
              :with_menu_visible_count(2)\
              :with_menu_action_set_scene('play', 'level01')\
              :with_menu_action_set_scene('opts', 'options')\
@@ -1331,13 +1339,50 @@ mod tests {
         );
         assert_eq!(menu.cursor_entity, Some(cursor));
         assert_eq!(menu.selection_change_sound.as_deref(), Some("blip"));
-        assert_eq!(menu.on_select_callback.as_deref(), Some("on_menu"));
         assert_eq!(menu.visible_count, Some(2));
 
         let actions = world.get::<MenuActions>(e).unwrap();
         assert!(matches!(actions.get("play"), MenuAction::SetScene(s) if s == "level01"));
         assert!(matches!(actions.get("opts"), MenuAction::SetScene(s) if s == "options"));
         assert!(matches!(actions.get("quit"), MenuAction::QuitGame));
+    }
+
+    #[test]
+    fn lua_menu_callback_becomes_lua_on_menu_select_without_menu_actions() {
+        use aberred_core::components::menu::MenuActions;
+        let mut world = World::new();
+        let mut signals = WorldSignals::default();
+
+        let e = spawn_from_lua(
+            &mut world,
+            &mut signals,
+            "engine.spawn():with_menu({ {id='play', label='Play'} }, 0, 0, 'arcade', 16, 24, true)\
+             :with_menu_callback('on_menu')\
+             :with_menu_action_set_scene('play', 'level01'):build()",
+        );
+
+        assert_eq!(
+            world.get::<LuaOnMenuSelect>(e).map(|c| &*c.callback),
+            Some("on_menu")
+        );
+        assert!(world.get::<MenuActions>(e).is_none());
+    }
+
+    #[test]
+    fn lua_menu_without_callback_keeps_menu_actions() {
+        use aberred_core::components::menu::MenuActions;
+        let mut world = World::new();
+        let mut signals = WorldSignals::default();
+
+        let e = spawn_from_lua(
+            &mut world,
+            &mut signals,
+            "engine.spawn():with_menu({ {id='play', label='Play'} }, 0, 0, 'arcade', 16, 24, true)\
+             :with_menu_action_set_scene('play', 'level01'):build()",
+        );
+
+        assert!(world.get::<LuaOnMenuSelect>(e).is_none());
+        assert!(world.get::<MenuActions>(e).is_some());
     }
 
     #[test]
