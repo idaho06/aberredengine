@@ -46,7 +46,7 @@ pub use aberred_core::components::timer::{Timer, TimerMode};
 pub use aberred_core::components::tween::{Easing, LoopMode, Tween};
 pub use aberred_core::components::zindex::ZIndex;
 
-pub use aberred_core::events::animation::AnimationFinishedEvent;
+pub use aberred_core::events::animation::AnimationFinished;
 pub use aberred_core::events::asset::{AssetLoadFailed, AssetLoaded};
 pub use aberred_core::events::collision::Collided;
 pub use aberred_core::events::gui_interactable::GuiClicked;

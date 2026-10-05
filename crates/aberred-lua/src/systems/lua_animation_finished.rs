@@ -1,6 +1,6 @@
 //! Lua observer for animation-finished events.
 //!
-//! When an [`AnimationFinishedEvent`] fires and the entity has a
+//! When an [`AnimationFinished`] fires and the entity has a
 //! [`LuaOnAnimationEnd`] component, this observer calls the named Lua function
 //! with `(ctx, input)` — the same signature as timer and phase callbacks.
 //!
@@ -18,10 +18,10 @@ use bevy_ecs::prelude::*;
 
 use crate::components::lua_on_animation_end::LuaOnAnimationEnd;
 use crate::systems::lua_commands::{LuaDispatch, dispatch_and_drain};
-use aberred_core::events::animation::AnimationFinishedEvent;
+use aberred_core::events::animation::AnimationFinished;
 
 pub fn lua_animation_finished_observer(
-    trigger: On<AnimationFinishedEvent>,
+    trigger: On<AnimationFinished>,
     on_end_query: Query<&LuaOnAnimationEnd>,
     mut p: LuaDispatch,
 ) {

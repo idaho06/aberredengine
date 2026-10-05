@@ -1,6 +1,6 @@
 //! Animation lifecycle events.
 //!
-//! [`AnimationFinishedEvent`] is triggered once by the [`animation`](crate::systems::animation)
+//! [`AnimationFinished`] is triggered once by the [`animation`](crate::systems::animation)
 //! system on the frame a non-looped animation first reaches its last frame.
 //!
 //! Rust consumers can observe it via `aberredengine::EngineBuilder::add_observer`.
@@ -14,7 +14,7 @@ use bevy_ecs::prelude::*;
 /// The event is **not** re-triggered on subsequent frames even though the entity
 /// stays on the last frame. Looped animations never trigger this event.
 #[derive(Event, Debug, Clone, Copy)]
-pub struct AnimationFinishedEvent {
+pub struct AnimationFinished {
     /// The entity whose animation finished.
     pub entity: Entity,
 }

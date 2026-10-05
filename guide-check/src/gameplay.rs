@@ -213,7 +213,7 @@ mod animation_finished_event {
     use aberredengine::prelude::*;
 
     fn on_anim_done(
-        trigger: On<AnimationFinishedEvent>,
+        trigger: On<AnimationFinished>,
         mut commands: Commands,
     ) {
         // Despawn the entity whose animation just finished

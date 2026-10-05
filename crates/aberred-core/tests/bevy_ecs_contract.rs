@@ -104,7 +104,7 @@ fn messages_cleared_after_second_update() {
 // Observers
 // =============================================================================
 
-// Engine events (`CollisionEvent`, `AnimationFinishedEvent`, ...) are observed
+// Engine events (`CollisionEvent`, `AnimationFinished`, ...) are observed
 // via `add_observer` and fired with `World::trigger`.
 #[test]
 fn observer_receives_event_payload() {

@@ -25,7 +25,7 @@ use crate::components::animation::{Animation, AnimationController, CmpOp, Condit
 use crate::components::mapposition::MapPosition;
 use crate::components::signals::Signals;
 use crate::components::sprite::Sprite;
-use crate::events::animation::AnimationFinishedEvent;
+use crate::events::animation::AnimationFinished;
 use crate::resources::animationstore::AnimationStore;
 use crate::resources::signal_keys as sk;
 use crate::resources::texturedims::TextureDimsStore;
@@ -40,7 +40,7 @@ use crate::resources::worldtime::WorldTime;
 /// - Optionally writes signal flags/scalars for transitions.
 /// - When `vertical_displacement > 0`, wraps frames to the next row when
 ///   the computed x offset exceeds the texture width.
-/// - Triggers [`AnimationFinishedEvent`]
+/// - Triggers [`AnimationFinished`]
 ///   exactly once on the frame a non-looped animation first reaches its last frame.
 pub fn animation(
     mut query: Query<
@@ -84,7 +84,7 @@ pub fn animation(
                         }
                         if !anim_comp.finished {
                             anim_comp.finished = true;
-                            commands.trigger(AnimationFinishedEvent { entity });
+                            commands.trigger(AnimationFinished { entity });
                         }
                     }
                 } else if let Some(signals) = maybe_signals.as_mut() {
@@ -842,11 +842,11 @@ mod tests {
         assert_offset(compute_frame_offset(4, pos, 64.0, 64.0, tw), 0.0, 228.0);
     }
 
-    // --- animation system: AnimationFinishedEvent fires exactly once ---
+    // --- animation system: AnimationFinished fires exactly once ---
 
     #[test]
-    fn animation_finished_event_fires_exactly_once() {
-        use crate::events::animation::AnimationFinishedEvent;
+    fn animation_finished_fires_exactly_once() {
+        use crate::events::animation::AnimationFinished;
         use crate::resources::animationstore::AnimationResource;
         use std::sync::Arc;
 
@@ -879,11 +879,11 @@ mod tests {
         );
         world.insert_resource(anim_store);
 
-        // Observer that counts how many times AnimationFinishedEvent fires.
+        // Observer that counts how many times AnimationFinished fires.
         // world.flush() is required after spawning observers so their hooks register
         // before the schedule runs — same pattern used in engine_app::spawn_observers.
         world.spawn(Observer::new(
-            |_trigger: On<AnimationFinishedEvent>, mut count: ResMut<EventCount>| {
+            |_trigger: On<AnimationFinished>, mut count: ResMut<EventCount>| {
                 count.0 += 1;
             },
         ));
@@ -916,7 +916,7 @@ mod tests {
             .id();
 
         // Sanity-check: world.trigger fires the observer immediately (proves observer is registered).
-        world.trigger(AnimationFinishedEvent {
+        world.trigger(AnimationFinished {
             entity: probe_entity,
         });
         assert_eq!(
@@ -933,14 +933,14 @@ mod tests {
         assert_eq!(
             world.resource::<EventCount>().0,
             1,
-            "AnimationFinishedEvent should fire exactly once on the frame the animation finishes",
+            "AnimationFinished should fire exactly once on the frame the animation finishes",
         );
 
         schedule.run(&mut world);
         assert_eq!(
             world.resource::<EventCount>().0,
             1,
-            "AnimationFinishedEvent must not fire again on subsequent frames at the last frame",
+            "AnimationFinished must not fire again on subsequent frames at the last frame",
         );
     }
 

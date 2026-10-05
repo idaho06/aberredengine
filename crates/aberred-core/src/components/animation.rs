@@ -43,7 +43,7 @@ pub struct Animation {
     /// Time in seconds accumulated in the current frame or animation.
     pub elapsed_time: f32,
     /// Set to `true` once a non-looped animation reaches its last frame.
-    /// Prevents [`AnimationFinishedEvent`](crate::events::animation::AnimationFinishedEvent)
+    /// Prevents [`AnimationFinished`](crate::events::animation::AnimationFinished)
     /// from firing again on subsequent frames. Reset to `false` when the
     /// animation key or frame_index is reset.
     #[serde(default)]

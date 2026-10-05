@@ -1879,12 +1879,12 @@ fn enter(_: On<SceneEntered>, mut commands: Commands) {
 
 **Source:** `aberred-core/src/events/animation.rs`, `aberred-core/src/systems/animation.rs` (fires the event)
 
-`AnimationFinishedEvent` is triggered **once** by the animation system on the frame a non-looped animation first reaches its final frame. Looped animations never trigger it. It is not re-triggered on subsequent frames even though the entity stays on the last frame.
+`AnimationFinished` is triggered **once** by the animation system on the frame a non-looped animation first reaches its final frame. Looped animations never trigger it. It is not re-triggered on subsequent frames even though the entity stays on the last frame.
 
 **Event struct:**
 
 ```rust,ignore
-pub struct AnimationFinishedEvent {
+pub struct AnimationFinished {
     pub entity: Entity,
 }
 ```
@@ -1895,7 +1895,7 @@ pub struct AnimationFinishedEvent {
 use aberredengine::prelude::*;
 
 fn on_anim_done(
-    trigger: On<AnimationFinishedEvent>,
+    trigger: On<AnimationFinished>,
     mut commands: Commands,
 ) {
     // Despawn the entity whose animation just finished
