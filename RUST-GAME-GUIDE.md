@@ -26,7 +26,7 @@ Built-in systems:
 
 - **Rendering** — sprites, text, per-entity shaders, post-process shader chains, camera, letterboxing
 - **Physics** — velocity, friction, max speed, named acceleration forces, freeze/unfreeze
-- **Collision** — AABB detection with group-based rules that trigger a `Collided` event
+- **Collision** — AABB detection with group-based rules that trigger `Collided` every tick, plus `CollisionStarted`/`CollisionEnded` contact events
 - **Audio** — music and sound playback via a background thread bridge
 - **Input** — rebindable actions over keyboard, mouse and gamepad, with `just_pressed`/`just_released` tracking
 - **Menus** — scrollable interactive menus with built-in `MenuActions` and a `MenuSelected` event
@@ -1336,7 +1336,7 @@ When `WorldSignals` has a value for key `"score"`, the text automatically update
 | `MouseControlled` | `MouseControlled { follow_x: true, follow_y: true }` |
 | `Timer` | `Timer::new(duration_secs)` (repeating) or `Timer::once(duration_secs)` — triggers `TimerFired` on its entity; see [Timers](#timers) |
 | `Phase` | `Phase::new("initial_phase")` — set `next` to transition; triggers `PhaseEntered`/`PhaseExited`; see [Phase state machines](#phase-state-machines) |
-| `CollisionRule` | `CollisionRule::new("group_a", "group_b")` — observe `Collided` on it; see [Collision rules](#collision-rules) |
+| `CollisionRule` | `CollisionRule::new("group_a", "group_b")` — observe `Collided` (every tick) or `CollisionStarted`/`CollisionEnded` on it; see [Collision rules](#collision-rules) |
 | `Tween<MapPosition>` | `Tween::position(from: Vec2, to: Vec2, duration)` |
 | `Tween<Rotation>` | `Tween::rotation(from_degrees, to_degrees, duration)` |
 | `Tween<Scale>` | `Tween::scale(from: Vec2, to: Vec2, duration)` |
@@ -1614,13 +1614,14 @@ As with [timers](#timers), observe one entity with `.observe(handler)` or many w
 1. `collision_detector` system iterates all entity pairs with `MapPosition` + `BoxCollider`
 2. Uses AABB overlap via `BoxCollider::as_rectangle()` + `Rect::overlaps()`
 3. On overlap, triggers an `Overlapping { a, b }` (observe it directly for "any overlap" logic)
-4. `collision_rule_observer` receives the event, looks up `Group` names, finds a matching `CollisionRule`, computes collision sides, and triggers `Collided` on the rule entity
+4. `collision_rule_observer` receives the event, looks up `Group` names, finds a matching `CollisionRule`, computes collision sides, and triggers `Collided` on the rule entity (preceded by `CollisionStarted` when the pair just started touching)
+5. After detection, `collision_ended_system` triggers `CollisionEnded` for each pair that stopped touching
 
 **Bidirectional matching:** A rule for `("ball", "brick")` matches regardless of which entity is `ball` vs `brick`. `Collided.a` is always the `group_a` entity and `Collided.b` the `group_b` entity.
 
 **Timing and cost:**
 
-- `Collided` fires **every sim tick** while the two boxes overlap (240 times a second at the default `[simulation] hz`). There are no enter/exit events. To react once, remember the pair yourself (a flag, a `Signals` entry, or despawning one side, as the example below does).
+- `Collided` fires **every sim tick** while the two boxes overlap (240 times a second at the default `[simulation] hz`). To react once per touch, observe the [contact events](#contact-events) instead.
 - Only **one rule** fires per overlapping pair. If several rules cover the same two groups, the one on the lowest `Entity` wins and the others never fire for that pair.
 - `collision_detector` tests **every pair** of entities with `MapPosition` + `BoxCollider` (O(n²)), whether or not any rule names their groups. Keep the number of colliders small; give a `BoxCollider` only to entities that need one.
 
@@ -1662,6 +1663,58 @@ fn ball_brick_collision(
                 BoxSide::Left | BoxSide::Right => rb.velocity.x = -rb.velocity.x,
             }
         }
+    }
+}
+```
+
+#### Contact events
+
+For one-shot reactions (a pickup, damage, a sound), observe a rule's contact events instead of `Collided`:
+
+- `CollisionStarted { rule, a, b, sides_a, sides_b }` — the first tick a pair touches, triggered just before that tick's `Collided`
+- `CollisionEnded { rule, a, b }` — the first tick the pair no longer overlaps (or no longer matches the rule)
+
+Both target the rule entity, like `Collided`. A pair that separates and touches again starts again.
+
+**Caveats:**
+
+- **Ended entities may be gone.** An entity despawned while touching ends its contact on the next tick, with its old id. A despawned rule still ends its contacts, but only global observers see it (see [Persistent entities](#persistent-entities)). Look entities up with `get`/`get_mut` or `try_*` commands.
+- **Scene switches forget contacts** without ending them (see [What happens during a scene switch](#what-happens-during-a-scene-switch)). A `Persistent` pair still touching after a switch gets a fresh `CollisionStarted`.
+
+**Example — a pickup that counts once** (show the `"score"` signal with a [signal binding](#example-3-ui-text-with-signal-binding)):
+
+```rust
+use aberredengine::prelude::*;
+
+fn spawn_coin_rule(mut commands: Commands) {
+    commands
+        .spawn(CollisionRule::new("player", "coin"))
+        .observe(pick_up_coin);
+}
+
+fn pick_up_coin(
+    hit: On<CollisionStarted>,
+    mut commands: Commands,
+    mut signals: ResMut<WorldSignals>,
+    mut audio: MessageWriter<AudioCmd>,
+) {
+    // Fires once per player-coin touch; try_despawn because two players
+    // can touch the same coin on one tick
+    commands.entity(hit.b).try_despawn();
+    let score = signals.get_integer("score").unwrap_or(0);
+    signals.set_integer("score", score + 1);
+    audio.write(AudioCmd::PlayFx { id: "coin".into() });
+}
+```
+
+**Example — leaving a zone:**
+
+```rust
+use aberredengine::prelude::*;
+
+fn leave_mud(ended: On<CollisionEnded>, mut bodies: Query<&mut RigidBody>) {
+    if let Ok(mut rb) = bodies.get_mut(ended.a) {
+        rb.friction = 0.0;
     }
 }
 ```

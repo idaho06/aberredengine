@@ -145,6 +145,42 @@ mod collision_rules {
     }
 }
 
+// Collision rules: contact events
+mod collision_contacts {
+    use aberredengine::prelude::*;
+
+    fn spawn_coin_rule(mut commands: Commands) {
+        commands
+            .spawn(CollisionRule::new("player", "coin"))
+            .observe(pick_up_coin);
+    }
+
+    fn pick_up_coin(
+        hit: On<CollisionStarted>,
+        mut commands: Commands,
+        mut signals: ResMut<WorldSignals>,
+        mut audio: MessageWriter<AudioCmd>,
+    ) {
+        // Fires once per player-coin touch; try_despawn because two players
+        // can touch the same coin on one tick
+        commands.entity(hit.b).try_despawn();
+        let score = signals.get_integer("score").unwrap_or(0);
+        signals.set_integer("score", score + 1);
+        audio.write(AudioCmd::PlayFx { id: "coin".into() });
+    }
+}
+
+// Collision rules: leaving a zone
+mod collision_contacts_ended {
+    use aberredengine::prelude::*;
+
+    fn leave_mud(ended: On<CollisionEnded>, mut bodies: Query<&mut RigidBody>) {
+        if let Ok(mut rb) = bodies.get_mut(ended.a) {
+            rb.friction = 0.0;
+        }
+    }
+}
+
 // Menus
 mod menus {
     use aberredengine::prelude::*; // GLUE
