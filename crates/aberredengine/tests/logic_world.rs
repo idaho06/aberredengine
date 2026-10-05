@@ -942,6 +942,27 @@ fn add_scene_system_runs_only_in_its_scene() {
     assert_eq!(ticks, (0, 3));
 }
 
+/// A scene named by a runtime `String` (e.g. read from a data file) gets
+/// scene systems like a literal one.
+#[test]
+fn add_scene_system_accepts_a_runtime_scene_name() {
+    let ticks = scene_ticks_before_and_after_switching_to_b(|builder| {
+        builder.add_scene_system(String::from("b"), count_scene_ticks)
+    });
+    assert_eq!(ticks, (0, 3));
+}
+
+/// `in_scene` accepts a name borrowed from a runtime `String`; the condition
+/// owns a copy, so it outlives the borrow.
+#[test]
+fn in_scene_accepts_a_runtime_scene_name() {
+    let b = String::from("b");
+    let ticks = scene_ticks_before_and_after_switching_to_b(|builder| {
+        builder.add_system_if(count_scene_ticks, in_scene(&b))
+    });
+    assert_eq!(ticks, (0, 3));
+}
+
 /// `on_scene_enter`/`on_scene_exit` observe one scene's entity: they fire
 /// only for that scene, and keep firing on every later visit.
 #[test]
@@ -950,9 +971,13 @@ fn scene_enter_and_exit_observers_fire_only_for_their_scene() {
         .add_scene("a")
         .add_scene("b")
         .initial_scene("a")
-        .on_scene_enter("b", |ev: On<SceneEntered>, mut log: ResMut<SceneLog>| {
-            log.0.push(format!("enter {}", ev.name));
-        })
+        // A runtime `String` name works like a literal.
+        .on_scene_enter(
+            String::from("b"),
+            |ev: On<SceneEntered>, mut log: ResMut<SceneLog>| {
+                log.0.push(format!("enter {}", ev.name));
+            },
+        )
         .on_scene_exit("b", |ev: On<SceneExited>, mut log: ResMut<SceneLog>| {
             log.0.push(format!("exit {} -> {}", ev.name, ev.next));
         })

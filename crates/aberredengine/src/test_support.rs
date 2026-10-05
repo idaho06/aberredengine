@@ -91,7 +91,7 @@ pub struct TestWorldBuilder {
     extra_observers: Vec<ObserverRegistrar>,
     scenes: Vec<String>,
     initial_scene: Option<String>,
-    loading_scene: Option<&'static str>,
+    loading_scene: Option<String>,
     tracked_groups: Vec<String>,
     #[cfg(feature = "lua")]
     lua_script: Option<PathBuf>,
@@ -164,32 +164,32 @@ impl TestWorldBuilder {
     /// Add a scene-scoped system, mirroring `EngineBuilder::add_scene_system`.
     pub fn add_scene_system<M>(
         mut self,
-        scene: &'static str,
+        scene: impl Into<String>,
         system: impl IntoSystem<(), (), M> + Send + 'static,
     ) -> Self {
-        self.extra_systems.push(scene_system(scene, system));
+        self.extra_systems.push(scene_system(scene.into(), system));
         self
     }
 
     /// Observe one scene's `SceneEntered`, mirroring `EngineBuilder::on_scene_enter`.
     pub fn on_scene_enter<B: Bundle, M>(
         mut self,
-        scene: &'static str,
+        scene: impl Into<String>,
         observer: impl IntoObserverSystem<SceneEntered, B, M>,
     ) -> Self {
         self.extra_observers
-            .push(scene_observer_registrar(scene, observer));
+            .push(scene_observer_registrar(scene.into(), observer));
         self
     }
 
     /// Observe one scene's `SceneExited`, mirroring `EngineBuilder::on_scene_exit`.
     pub fn on_scene_exit<B: Bundle, M>(
         mut self,
-        scene: &'static str,
+        scene: impl Into<String>,
         observer: impl IntoObserverSystem<SceneExited, B, M>,
     ) -> Self {
         self.extra_observers
-            .push(scene_observer_registrar(scene, observer));
+            .push(scene_observer_registrar(scene.into(), observer));
         self
     }
 
@@ -224,8 +224,8 @@ impl TestWorldBuilder {
 
     /// Set the scene shown while `Setup` waits for assets, mirroring
     /// `EngineBuilder::loading_scene`.
-    pub fn loading_scene(mut self, scene: &'static str) -> Self {
-        self.loading_scene = Some(scene);
+    pub fn loading_scene(mut self, scene: impl Into<String>) -> Self {
+        self.loading_scene = Some(scene.into());
         self
     }
 

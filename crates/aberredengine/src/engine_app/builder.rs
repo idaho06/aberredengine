@@ -37,7 +37,7 @@ pub struct EngineBuilder {
     pub(super) scene_render: FxHashMap<String, SceneRender>,
     pub(super) initial_scene: Option<String>,
     /// `.loading_scene()`: the scene active during `Setup`.
-    pub(super) loading_scene: Option<&'static str>,
+    pub(super) loading_scene: Option<String>,
     /// Group names from `.track_group()`, tracked across scene switches.
     pub(super) tracked_groups: Vec<String>,
     pub(super) extra_systems: Vec<UpdateRegistrar>,
@@ -45,7 +45,7 @@ pub struct EngineBuilder {
     /// `(method, scene)` for every scene-scoped call (`add_scene_system`,
     /// `on_scene_enter`, `on_scene_exit`), checked against `scenes` by
     /// `validate_builder`.
-    pub(super) scene_refs: Vec<(&'static str, &'static str)>,
+    pub(super) scene_refs: Vec<(&'static str, String)>,
     #[cfg(feature = "lua")]
     pub(super) lua_script: Option<PathBuf>,
     /// `Some(seed)` when `.deterministic(seed)` was called -- see that
@@ -196,10 +196,10 @@ impl EngineBuilder {
     /// if `scene` was never registered with [`add_scene`](Self::add_scene).
     pub fn add_scene_system<M>(
         mut self,
-        scene: &'static str,
+        scene: impl Into<String>,
         system: impl IntoSystem<(), (), M> + Send + 'static,
     ) -> Self {
-        self.scene_refs.push(("add_scene_system", scene));
+        let scene = self.scene_ref("add_scene_system", scene);
         self.extra_systems.push(scene_system(scene, system));
         self
     }
@@ -222,7 +222,7 @@ impl EngineBuilder {
     /// As [`add_scene_system`](Self::add_scene_system).
     pub fn on_scene_enter<B: Bundle, M>(
         self,
-        scene: &'static str,
+        scene: impl Into<String>,
         observer: impl IntoObserverSystem<SceneEntered, B, M>,
     ) -> Self {
         self.on_scene_event("on_scene_enter", scene, observer)
@@ -238,7 +238,7 @@ impl EngineBuilder {
     /// As [`add_scene_system`](Self::add_scene_system).
     pub fn on_scene_exit<B: Bundle, M>(
         self,
-        scene: &'static str,
+        scene: impl Into<String>,
         observer: impl IntoObserverSystem<SceneExited, B, M>,
     ) -> Self {
         self.on_scene_event("on_scene_exit", scene, observer)
@@ -247,13 +247,21 @@ impl EngineBuilder {
     fn on_scene_event<E: EntityEvent, B: Bundle, M>(
         mut self,
         method: &'static str,
-        scene: &'static str,
+        scene: impl Into<String>,
         observer: impl IntoObserverSystem<E, B, M>,
     ) -> Self {
-        self.scene_refs.push((method, scene));
+        let scene = self.scene_ref(method, scene);
         self.extra_observers
             .push(scene_observer_registrar(scene, observer));
         self
+    }
+
+    /// Records that `method` names `scene`, for the startup check that every
+    /// named scene is registered, and returns the owned name.
+    fn scene_ref(&mut self, method: &'static str, scene: impl Into<String>) -> String {
+        let scene = scene.into();
+        self.scene_refs.push((method, scene.clone()));
+        scene
     }
 
     /// Add systems to the sim schedule with full control over ordering and
@@ -350,12 +358,9 @@ impl EngineBuilder {
     /// # Errors (at `.run()`/`.try_run()`)
     ///
     /// As [`add_scene_system`](Self::add_scene_system).
-    pub fn add_scene_gui(mut self, scene: &'static str, gui: GuiCallback) -> Self {
-        self.scene_refs.push(("add_scene_gui", scene));
-        self.scene_render
-            .entry(scene.to_owned())
-            .or_default()
-            .gui_callback = Some(gui);
+    pub fn add_scene_gui(mut self, scene: impl Into<String>, gui: GuiCallback) -> Self {
+        let scene = self.scene_ref("add_scene_gui", scene);
+        self.scene_render.entry(scene).or_default().gui_callback = Some(gui);
         self
     }
 
@@ -369,10 +374,14 @@ impl EngineBuilder {
     /// # Errors (at `.run()`/`.try_run()`)
     ///
     /// As [`add_scene_system`](Self::add_scene_system).
-    pub fn add_scene_world_draw(mut self, scene: &'static str, draw: WorldDrawCallback) -> Self {
-        self.scene_refs.push(("add_scene_world_draw", scene));
+    pub fn add_scene_world_draw(
+        mut self,
+        scene: impl Into<String>,
+        draw: WorldDrawCallback,
+    ) -> Self {
+        let scene = self.scene_ref("add_scene_world_draw", scene);
         self.scene_render
-            .entry(scene.to_owned())
+            .entry(scene)
             .or_default()
             .world_draw_callback = Some(draw);
         self
@@ -413,8 +422,8 @@ impl EngineBuilder {
     /// if `scene` isn't registered with [`add_scene`](Self::add_scene), and
     /// [`EngineError::LoadingSceneIsInitialScene`](aberred_core::error::EngineError::LoadingSceneIsInitialScene)
     /// if it is the initial scene.
-    pub fn loading_scene(mut self, scene: &'static str) -> Self {
-        self.scene_refs.push(("loading_scene", scene));
+    pub fn loading_scene(mut self, scene: impl Into<String>) -> Self {
+        let scene = self.scene_ref("loading_scene", scene);
         self.loading_scene = Some(scene);
         self
     }

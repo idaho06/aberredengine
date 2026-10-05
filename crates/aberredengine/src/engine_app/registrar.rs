@@ -62,10 +62,10 @@ pub(crate) fn playing_system_if<M, MC>(
 /// `add_scene_system`: runs while `scene` is active, in `Setup` (a loading
 /// scene) as well as `Playing`.
 pub(crate) fn scene_system<M>(
-    scene: &'static str,
+    scene: String,
     system: impl IntoSystem<(), (), M> + Send + 'static,
 ) -> UpdateRegistrar {
-    system_registrar(system, state_runs_scenes.and_then(in_scene(scene)))
+    system_registrar(system, state_runs_scenes.and_then(in_scene(&scene)))
 }
 
 /// Build the [`ObserverRegistrar`] behind `add_observer`: a global observer,
@@ -85,13 +85,13 @@ pub(crate) fn observer_registrar<E: Event, B: Bundle, M>(
 /// Runs after the `SceneManager` and its scene entities exist; an unregistered
 /// `scene` is rejected earlier by `validate_builder`.
 pub(crate) fn scene_observer_registrar<E: EntityEvent, B: Bundle, M>(
-    scene: &'static str,
+    scene: String,
     observer: impl IntoObserverSystem<E, B, M>,
 ) -> ObserverRegistrar {
     Box::new(move |world| {
         let entity = world
             .get_resource::<SceneManager>()
-            .and_then(|scenes| scenes.scene_entity(scene))
+            .and_then(|scenes| scenes.scene_entity(&scene))
             .unwrap_or_else(|| panic!("scene '{scene}' is not registered with .add_scene()"));
         world.entity_mut(entity).observe(observer);
     })

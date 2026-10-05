@@ -72,7 +72,7 @@ pub(crate) struct LogicInit {
     pub(crate) extra_observers: Vec<ObserverRegistrar>,
     pub(crate) scenes: Vec<String>,
     pub(crate) initial_scene: Option<String>,
-    pub(crate) loading_scene: Option<&'static str>,
+    pub(crate) loading_scene: Option<String>,
     /// Scene-persistent group names (`EngineBuilder::track_group`).
     pub(crate) tracked_groups: Vec<String>,
     #[cfg(feature = "lua")]

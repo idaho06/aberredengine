@@ -259,13 +259,15 @@ impl EngineBuilder {
         }
 
         if !init.scenes.is_empty() {
+            let loading_scene = init.loading_scene.take();
+            let has_loading_scene = loading_scene.is_some();
             insert_scene_manager(
                 world,
                 std::mem::take(&mut init.scenes),
                 init.initial_scene.take(),
-                init.loading_scene.map(str::to_owned),
+                loading_scene,
             );
-            if init.loading_scene.is_some() {
+            if has_loading_scene {
                 register_persistent_system(
                     world,
                     &mut systems_store,

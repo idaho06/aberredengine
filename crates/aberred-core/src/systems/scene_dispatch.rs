@@ -263,9 +263,10 @@ pub fn insert_scene_manager(
 /// ```ignore
 /// builder.add_system_if(hud, in_scene("level01"))
 /// ```
-pub fn in_scene(name: &'static str) -> impl FnMut(Option<Res<SceneManager>>) -> bool + Clone {
+pub fn in_scene(name: &str) -> impl FnMut(Option<Res<SceneManager>>) -> bool + Clone + use<> {
+    let name = name.to_owned();
     move |scene_manager| {
-        scene_manager.is_some_and(|scenes| scenes.active_scene.as_deref() == Some(name))
+        scene_manager.is_some_and(|scenes| scenes.active_scene.as_deref() == Some(name.as_str()))
     }
 }
 
@@ -578,8 +579,7 @@ mod tests {
     #[test]
     fn in_scene_holds_only_for_the_active_scene() {
         let (mut world, _) = world_in_menu_switching_to("level");
-        let check =
-            |world: &mut World, name: &'static str| world.run_system_once(in_scene(name)).unwrap();
+        let check = |world: &mut World, name: &str| world.run_system_once(in_scene(name)).unwrap();
         assert!(check(&mut world, "menu"));
         assert!(!check(&mut world, "level"));
 

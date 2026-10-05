@@ -100,7 +100,7 @@ impl EngineBuilder {
                 registered: self.registered_scene_list(),
             });
         }
-        if self.loading_scene == Some(initial_scene.as_str()) {
+        if self.loading_scene.as_deref() == Some(initial_scene.as_str()) {
             return Err(EngineError::LoadingSceneIsInitialScene {
                 name: initial_scene.clone(),
             });
@@ -113,10 +113,10 @@ impl EngineBuilder {
     /// run, or the observer would have no scene entity to attach to.
     fn validate_scene_refs(&self) -> Result<(), EngineError> {
         let registered = |name: &str| self.scenes.iter().any(|scene| scene == name);
-        if let Some(&(method, name)) = self.scene_refs.iter().find(|(_, name)| !registered(name)) {
+        if let Some((method, name)) = self.scene_refs.iter().find(|(_, name)| !registered(name)) {
             return Err(EngineError::SceneNotRegistered {
                 method,
-                name: name.to_owned(),
+                name: name.clone(),
                 registered: self.registered_scene_list(),
             });
         }
