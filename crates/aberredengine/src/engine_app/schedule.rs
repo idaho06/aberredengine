@@ -78,7 +78,33 @@ use aberred_lua::systems::luatimer::update_lua_timers;
 /// Exported so [`configure_schedule`](EngineBuilder::configure_schedule)
 /// closures can position custom systems relative to engine groups, e.g.
 /// `.in_set(SimSet::Movement)` or `.before(SimSet::Collision)`.
+///
+/// The engine may add groups, so a `match` over `SimSet` outside this crate
+/// needs a wildcard arm:
+///
+/// ```compile_fail,E0004
+/// use aberredengine::prelude::*;
+///
+/// fn label(set: SimSet) -> &'static str {
+///     match set {
+///         SimSet::ApplyIntents => "apply intents",
+///         SimSet::Phases => "phases",
+///         SimSet::Spawn => "spawn",
+///         SimSet::AudioPump => "audio pump",
+///         SimSet::ScriptUpdate => "script update",
+///         SimSet::Controllers => "controllers",
+///         SimSet::Movement => "movement",
+///         SimSet::Transforms => "transforms",
+///         SimSet::Collision => "collision",
+///         SimSet::Gui => "gui",
+///         SimSet::PostCollision => "post collision",
+///         SimSet::Drain => "drain",
+///         SimSet::Bookkeeping => "bookkeeping",
+///     }
+/// }
+/// ```
 #[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
+#[non_exhaustive]
 pub enum SimSet {
     /// Drain `SignalIntents` queued by the render thread's `GuiCallback` into
     /// `WorldSignals`, before anything this tick reads them.
