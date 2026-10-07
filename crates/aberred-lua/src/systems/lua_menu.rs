@@ -6,6 +6,7 @@
 //! observer only when a Lua script is set.
 
 use crate::components::lua_on_menu_select::LuaOnMenuSelect;
+use crate::systems::lua_commands::{LuaDispatch, dispatch_custom_and_drain};
 use aberred_core::events::menu::MenuSelected;
 use bevy_ecs::prelude::*;
 
@@ -14,18 +15,18 @@ use bevy_ecs::prelude::*;
 pub fn lua_menu_selection_observer(
     trigger: On<MenuSelected>,
     menus: Query<&LuaOnMenuSelect>,
-    lua_runtime: NonSend<crate::resources::lua_runtime::LuaRuntime>,
+    mut p: LuaDispatch,
 ) {
     let event = trigger.event();
     let Ok(on_select) = menus.get(event.entity) else {
         return;
     };
-    lua_runtime.call_named(&on_select.callback, "Menu", |f| {
-        let lua_ctx = lua_runtime.lua().create_table()?;
-        lua_ctx.set("menu_id", event.entity.to_bits())?;
-        lua_ctx.set("item_id", event.item_id.as_str())?;
-        lua_ctx.set("item_index", event.index)?;
-        f.call::<()>(lua_ctx)
+    dispatch_custom_and_drain(&mut p, &on_select.callback, "Menu", |lua| {
+        let ctx = lua.create_table()?;
+        ctx.set("menu_id", event.entity.to_bits())?;
+        ctx.set("item_id", event.item_id.as_str())?;
+        ctx.set("item_index", event.index)?;
+        Ok(ctx)
     });
 }
 
@@ -33,20 +34,19 @@ pub fn lua_menu_selection_observer(
 mod tests {
     use super::*;
     use crate::resources::lua_runtime::LuaRuntime;
+    use crate::systems::lua_commands::init_dispatch_resources;
     use aberred_core::components::menu::{Menu, MenuAction, MenuActions};
     use aberred_core::math::Vec2;
     use aberred_core::resources::gamestate::NextGameState;
     use aberred_core::resources::signal_keys as sk;
-    use aberred_core::resources::systemsstore::SystemsStore;
     use aberred_core::resources::worldsignals::WorldSignals;
     use aberred_core::systems::menu::menu_selection_observer;
 
     /// Both menu observers, as the engine registers them in a Lua game.
     fn setup_world() -> World {
         let mut world = World::new();
-        world.init_resource::<WorldSignals>();
         world.init_resource::<NextGameState>();
-        world.insert_resource(SystemsStore::default());
+        init_dispatch_resources(&mut world);
         let lua = LuaRuntime::new().expect("LuaRuntime::new");
         lua.lua()
             .load("function on_menu_select(ctx) menu_selected_item = ctx.item_id .. ':' .. ctx.item_index end")

@@ -5,7 +5,7 @@
 //! code observes the same `GuiClicked` event directly.
 
 use crate::components::lua_on_click::LuaOnClick;
-use crate::resources::lua_runtime::LuaRuntime;
+use crate::systems::lua_commands::{LuaDispatch, dispatch_custom_and_drain};
 use aberred_core::events::gui_interactable::GuiClicked;
 use bevy_ecs::prelude::*;
 
@@ -14,26 +14,29 @@ use bevy_ecs::prelude::*;
 pub fn lua_gui_interactable_click_observer(
     trigger: On<GuiClicked>,
     on_clicks: Query<&LuaOnClick>,
-    lua_runtime: NonSend<LuaRuntime>,
+    mut p: LuaDispatch,
 ) {
     let entity = trigger.event().entity;
     let Ok(on_click) = on_clicks.get(entity) else {
         return;
     };
-    lua_runtime.call_named(&on_click.callback, "GUI interactable", |f| {
-        let lua_ctx = lua_runtime.lua().create_table()?;
-        lua_ctx.set("entity_id", entity.to_bits())?;
-        f.call::<()>(lua_ctx)
+    dispatch_custom_and_drain(&mut p, &on_click.callback, "GUI interactable", |lua| {
+        let ctx = lua.create_table()?;
+        ctx.set("entity_id", entity.to_bits())?;
+        Ok(ctx)
     });
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::resources::lua_runtime::LuaRuntime;
+    use crate::systems::lua_commands::init_dispatch_resources;
     use aberred_core::components::guiinteractable::GuiInteractable;
 
     fn setup_world() -> World {
         let mut world = World::new();
+        init_dispatch_resources(&mut world);
         world.insert_non_send(LuaRuntime::new().expect("LuaRuntime::new"));
         world.spawn(Observer::new(lua_gui_interactable_click_observer));
         world.flush();

@@ -9,10 +9,13 @@ use bevy_ecs::system::RunSystemOnce;
 
 use aberred_core::components::boxcollider::BoxCollider;
 use aberred_core::components::group::Group;
+use aberred_core::components::guiinteractable::GuiInteractable;
 use aberred_core::components::mapposition::MapPosition;
 use aberred_core::components::signals::Signals;
 use aberred_core::components::ttl::Ttl;
 use aberred_core::events::collision::Overlapping;
+use aberred_core::events::gui_interactable::GuiClicked;
+use aberred_core::events::menu::MenuSelected;
 use aberred_core::protocol::audio::AudioCmd;
 use aberred_core::resources::animationstore::AnimationStore;
 use aberred_core::resources::input::InputState;
@@ -21,6 +24,8 @@ use aberred_core::resources::worldsignals::WorldSignals;
 use aberred_core::resources::worldtime::WorldTime;
 use aberred_core::systems::collision_detector::collision_detector;
 use aberred_core::systems::collision_rule_index::rebuild_rule_index;
+use aberred_lua::components::lua_on_click::LuaOnClick;
+use aberred_lua::components::lua_on_menu_select::LuaOnMenuSelect;
 use aberred_lua::components::luacollision::{
     LuaCollisionContacts, LuaCollisionRule, LuaCollisionRuleIndex,
 };
@@ -28,6 +33,8 @@ use aberred_lua::components::luaphase::{LuaPhase, PhaseCallbacks};
 use aberred_lua::components::luatimer::LuaTimer;
 use aberred_lua::resources::lua_runtime::LuaRuntime;
 use aberred_lua::systems::lua_collision::lua_collision_observer;
+use aberred_lua::systems::lua_gui_interactable_click::lua_gui_interactable_click_observer;
+use aberred_lua::systems::lua_menu::lua_menu_selection_observer;
 use aberred_lua::systems::luaphase::lua_phase_system;
 use aberred_lua::systems::luatimer::{lua_timer_observer, update_lua_timers};
 
@@ -568,4 +575,91 @@ fn collision_callback_phase_plus_signal_all_processed() {
         signals.has_flag("was_hit"),
         "world signal flag should be set"
     );
+}
+
+fn load_lua(world: &World, src: &str) {
+    world
+        .non_send::<LuaRuntime>()
+        .lua()
+        .load(src)
+        .exec()
+        .expect("failed to load Lua source");
+}
+
+fn lua_global<T: mlua::FromLua>(world: &World, name: &str) -> T {
+    world
+        .non_send::<LuaRuntime>()
+        .lua()
+        .globals()
+        .get(name)
+        .unwrap()
+}
+
+#[test]
+fn click_callback_reads_signals_written_since_the_last_dispatch() {
+    let mut world = make_lua_callback_world(0.0);
+    world.add_observer(lua_gui_interactable_click_observer);
+    load_lua(
+        &world,
+        "function on_click(ctx) seen_score = engine.get_scalar('score') end",
+    );
+    let button = world
+        .spawn((
+            GuiInteractable::new(80.0, 24.0),
+            LuaOnClick::new("on_click"),
+        ))
+        .id();
+    world
+        .resource_mut::<WorldSignals>()
+        .set_scalar("score", 42.0);
+
+    world.trigger(GuiClicked { entity: button });
+    world.flush();
+
+    assert_eq!(lua_global::<Option<f32>>(&world, "seen_score"), Some(42.0));
+}
+
+#[test]
+fn click_callback_queued_commands_apply_in_the_same_dispatch() {
+    let mut world = make_lua_callback_world(0.0);
+    world.add_observer(lua_gui_interactable_click_observer);
+    load_lua(
+        &world,
+        "function on_click(ctx) engine.set_flag('clicked') end",
+    );
+    let button = world
+        .spawn((
+            GuiInteractable::new(80.0, 24.0),
+            LuaOnClick::new("on_click"),
+        ))
+        .id();
+
+    world.trigger(GuiClicked { entity: button });
+    world.flush();
+
+    assert!(world.resource::<WorldSignals>().has_flag("clicked"));
+}
+
+#[test]
+fn menu_callback_reads_signals_and_applies_queued_commands_in_the_same_dispatch() {
+    let mut world = make_lua_callback_world(0.0);
+    world.add_observer(lua_menu_selection_observer);
+    load_lua(
+        &world,
+        "function on_select(ctx) seen_score = engine.get_scalar('score'); engine.set_flag('selected') end",
+    );
+    let menu = world.spawn(LuaOnMenuSelect::new("on_select")).id();
+    world
+        .resource_mut::<WorldSignals>()
+        .set_scalar("score", 7.0);
+
+    world.trigger(MenuSelected {
+        entity: menu,
+        item_id: "play".to_string(),
+        index: 0,
+    });
+    world.flush();
+
+    assert_eq!(lua_global::<Option<f32>>(&world, "seen_score"), Some(7.0));
+    assert!(world.resource::<WorldSignals>().has_flag("selected"));
 }

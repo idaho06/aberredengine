@@ -1,11 +1,11 @@
-//! Shared entity-callback dispatch flow.
+//! Shared callback dispatch flow.
 //!
-//! Bundles the params and steps previously duplicated across
-//! `lua_timer_observer`, `lua_setup_entity_system`,
-//! `lua_animation_finished_observer`, and `lua_tween_finished_observer`: sync
-//! the signal cache, build the input table (if the call shape wants one),
-//! resolve the entity context (optionally including phase state), call the
-//! named Lua function, then drain the commands it queued.
+//! Bundles the params and steps shared by `lua_timer_observer`,
+//! `lua_setup_entity_system`, `lua_animation_finished_observer`,
+//! `lua_tween_finished_observer`, `lua_gui_interactable_click_observer`, and
+//! `lua_menu_selection_observer`: sync the signal cache, build the callback's
+//! arguments (an entity context and optional input table, or a custom context
+//! table), call the named Lua function, then drain the commands it queued.
 //!
 //! `lua_phase_system` (`crate::systems::luaphase`) does NOT use this helper —
 //! it must interleave `apply_callback_transitions` between the phase drain
@@ -16,6 +16,7 @@
 use bevy_ecs::prelude::*;
 use bevy_ecs::system::SystemParam;
 use log::error;
+use mlua::prelude::{Lua, LuaResult, LuaTable};
 
 use crate::components::luaphase::LuaPhase;
 use crate::resources::lua_runtime::{LuaPhaseSnapshot, LuaRuntime, PhaseCmd};
@@ -160,6 +161,23 @@ pub fn dispatch_and_drain(p: &mut LuaDispatch, entity: Entity, callback_name: &s
     }
 }
 
+/// Refresh the signal cache, call the named Lua function with a single
+/// context table built by `build`, then drain the commands it queued (also
+/// after a Lua error, which may have queued some first). For callbacks whose
+/// ctx is not an entity ctx: GUI click and menu selection.
+pub fn dispatch_custom_and_drain(
+    p: &mut LuaDispatch,
+    callback_name: &str,
+    label: &str,
+    build: impl FnOnce(&Lua) -> LuaResult<LuaTable>,
+) {
+    refresh_signal_cache(p);
+    p.lua_runtime.call_named(callback_name, label, |func| {
+        func.call::<()>(build(p.lua_runtime.lua())?)
+    });
+    drain_dispatch_commands(p);
+}
+
 /// Drain the phase queue, then the 6 regular effect queues, in the canonical
 /// order. The one-and-only surviving caller of the flow previously exposed
 /// as `drain_phase_and_effects`.
@@ -176,4 +194,16 @@ pub fn drain_dispatch_commands(p: &mut LuaDispatch) {
         &p.systems_store,
         &p.animation_store,
     );
+}
+
+/// Inserts every resource a [`LuaDispatch`] system param reads, so unit tests
+/// can run a dispatching observer in a bare `World`.
+#[cfg(test)]
+pub(crate) fn init_dispatch_resources(world: &mut World) {
+    world.init_resource::<WorldSignals>();
+    world.init_resource::<Messages<AudioCmd>>();
+    world.init_resource::<InputState>();
+    world.init_resource::<WorldTime>();
+    world.init_resource::<AnimationStore>();
+    world.insert_resource(SystemsStore::default());
 }
