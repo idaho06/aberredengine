@@ -214,7 +214,7 @@ impl LuaRuleDispatch<'_, '_> {
         let Ok((rule, callbacks)) = self.rules.get(rule) else {
             return;
         };
-        let Some(on_exit) = callbacks.exit.as_deref() else {
+        let Some(name) = callbacks.exit.as_deref() else {
             return;
         };
 
@@ -222,7 +222,7 @@ impl LuaRuleDispatch<'_, '_> {
         effects.lua_runtime.sync_signals(&mut effects.world_signals);
         call_lua_collision_callback(
             &effects.lua_runtime,
-            on_exit,
+            name,
             CollisionSide {
                 id: a.to_bits(),
                 group: Some(&rule.group_a),

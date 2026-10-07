@@ -55,7 +55,7 @@ impl CollisionRuleIndex {
     ///
     /// Scans the pair's bucket in `Entity` order, skipping any entity that
     /// stopped being a rule (or despawned) since the last rebuild.
-    pub fn find_match(
+    pub(crate) fn find_match(
         &self,
         rules: &Query<&CollisionRule>,
         a: Entity,

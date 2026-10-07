@@ -3,6 +3,7 @@
 //! These structs hold component data that Lua scripts specify when spawning entities.
 //! They are collected in the `SpawnCmd` struct and processed by Rust systems.
 
+use crate::components::lua_on_collision::LuaOnCollision;
 use aberred_core::components::guibutton::GuiButton;
 use aberred_core::components::guiimage::GuiImage;
 use aberred_core::components::guilabel::GuiLabel;
@@ -180,12 +181,7 @@ pub struct TweenScaleData {
 pub struct LuaCollisionRuleData {
     pub group_a: String,
     pub group_b: String,
-    /// Every-tick callback; `None` when the rule only has enter/exit callbacks.
-    pub callback: Option<String>,
-    /// Callback when the groups start touching.
-    pub on_enter: Option<String>,
-    /// Callback when the groups stop touching.
-    pub on_exit: Option<String>,
+    pub callbacks: LuaOnCollision,
 }
 
 /// Animation component data for spawning.

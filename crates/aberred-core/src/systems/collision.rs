@@ -86,7 +86,7 @@ pub fn compute_sides(rect_a: Option<Rect>, rect_b: Option<Rect>) -> (BoxSides, B
 /// Resolve group names for two entities.
 ///
 /// Returns `None` if either entity lacks a [`Group`] component.
-pub fn resolve_groups<'q>(
+pub(crate) fn resolve_groups<'q>(
     groups: &'q Query<&Group>,
     a: Entity,
     b: Entity,

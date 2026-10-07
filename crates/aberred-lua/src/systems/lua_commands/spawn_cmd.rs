@@ -460,16 +460,12 @@ fn apply_behavior_components(entity_commands: &mut EntityCommands, b: BehaviorCo
             timer.mode,
         ));
     }
-    if let Some(rule_data) = lua_collision_rule {
+    if let Some(rule) = lua_collision_rule {
         use crate::components::lua_on_collision::LuaOnCollision;
         entity_commands.insert(LuaOnCollision::rule(
-            rule_data.group_a,
-            rule_data.group_b,
-            LuaOnCollision {
-                stay: rule_data.callback.map(Into::into),
-                enter: rule_data.on_enter.map(Into::into),
-                exit: rule_data.on_exit.map(Into::into),
-            },
+            rule.group_a,
+            rule.group_b,
+            rule.callbacks,
         ));
     }
     if let Some(callback) = lua_setup {

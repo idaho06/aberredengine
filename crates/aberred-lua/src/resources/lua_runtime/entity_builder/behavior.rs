@@ -1,4 +1,5 @@
 use super::*;
+use crate::components::lua_on_collision::LuaOnCollision;
 use aberred_core::components::timer::TimerMode;
 
 pub(super) fn register<M: LuaUserDataMethods<LuaEntityBuilder>>(
@@ -187,9 +188,10 @@ pub(super) fn register<M: LuaUserDataMethods<LuaEntityBuilder>>(
             this.cmd.lua_collision_rule = Some(LuaCollisionRuleData {
                 group_a,
                 group_b,
-                callback,
-                on_enter: None,
-                on_exit: None,
+                callbacks: LuaOnCollision {
+                    stay: callback.map(Into::into),
+                    ..Default::default()
+                },
             });
             Ok(())
         }
@@ -207,7 +209,7 @@ pub(super) fn register<M: LuaUserDataMethods<LuaEntityBuilder>>(
                     "with_lua_collision_enter() requires with_lua_collision_rule() first",
                 ));
             };
-            rule.on_enter = Some(callback);
+            rule.callbacks.enter = Some(callback.into());
             Ok(())
         }
     );
@@ -224,7 +226,7 @@ pub(super) fn register<M: LuaUserDataMethods<LuaEntityBuilder>>(
                     "with_lua_collision_exit() requires with_lua_collision_rule() first",
                 ));
             };
-            rule.on_exit = Some(callback);
+            rule.callbacks.exit = Some(callback.into());
             Ok(())
         }
     );
@@ -532,7 +534,7 @@ mod tests {
             (
                 rule.group_a.as_str(),
                 rule.group_b.as_str(),
-                rule.callback.as_deref()
+                rule.callbacks.stay.as_deref()
             ),
             ("player", "enemy", Some("on_hit"))
         );
@@ -710,9 +712,9 @@ mod tests {
         .unwrap();
         assert_eq!(
             (
-                rule.callback.as_deref(),
-                rule.on_enter.as_deref(),
-                rule.on_exit.as_deref()
+                rule.callbacks.stay.as_deref(),
+                rule.callbacks.enter.as_deref(),
+                rule.callbacks.exit.as_deref()
             ),
             (None, Some("in"), Some("out"))
         );
