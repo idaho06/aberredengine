@@ -459,8 +459,6 @@ pub fn update(
     }
 }
 
-pub use aberred_core::systems::gamestate::clean_all_entities;
-
 /// Processes scene switching: despawns old entities, calls Lua callbacks,
 /// and processes all queued commands for the new scene.
 #[allow(clippy::too_many_arguments, private_interfaces)]
