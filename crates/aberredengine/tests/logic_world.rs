@@ -1651,6 +1651,7 @@ fn lua_game_clean_all_entities_hook_forgets_lua_contacts() {
 #[test]
 fn lua_timer_callback_sees_this_ticks_animation_state() {
     use aberredengine::core::components::animation::{Animation, AnimationController, Condition};
+    use aberredengine::core::components::timer::TimerMode;
     use aberredengine::core::resources::animationstore::{AnimationResource, AnimationStore};
     use aberredengine::lua::components::lua_on_timer_fired::LuaOnTimerFired;
 
@@ -1671,8 +1672,7 @@ fn lua_timer_callback_sees_this_ticks_animation_state() {
         Signals::default().with_flag("run"),
         Animation::new("idle"),
         AnimationController::new("idle").with_rule(Condition::HasFlag { key: "run".into() }, "run"),
-        Timer::once(DT * 0.5),
-        LuaOnTimerFired::new("on_timer"),
+        LuaOnTimerFired::timer(DT * 0.5, "on_timer", TimerMode::Once),
     ));
 
     tw.tick(1, DT);

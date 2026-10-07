@@ -205,13 +205,6 @@ fn tick_timers(world: &mut World) {
         .expect("update_timers should run");
 }
 
-/// Register the Lua timer observers, then run the update pass once, so
-/// `TimerFired` is both triggered and handled within one call.
-fn tick_lua_timers_with_observer(world: &mut World) {
-    add_lua_timer_observers(world);
-    tick_timers(world);
-}
-
 fn tick_lua_phases(world: &mut World) {
     world
         .run_system_once(lua_phase_system)
@@ -248,7 +241,8 @@ fn timer_callback_spawn_then_clone_same_drain() {
         TimerMode::Repeat,
     ));
 
-    tick_lua_timers_with_observer(&mut world);
+    add_lua_timer_observers(&mut world);
+    tick_timers(&mut world);
 
     let copy_count = world
         .query::<&Group>()
@@ -323,7 +317,8 @@ fn once_timer_lua_callback_can_rearm_through_engine_api() {
         .spawn(LuaOnTimerFired::timer(0.5, "rearm_cb", TimerMode::Once))
         .id();
 
-    tick_lua_timers_with_observer(&mut world);
+    add_lua_timer_observers(&mut world);
+    tick_timers(&mut world);
 
     let timer = world
         .get::<Timer>(entity)
@@ -410,7 +405,8 @@ fn timer_callback_ctx_timer_reports_the_firing_timer() {
         TimerMode::Once,
     ));
 
-    tick_lua_timers_with_observer(&mut world);
+    add_lua_timer_observers(&mut world);
+    tick_timers(&mut world);
 
     let globals = world.non_send::<LuaRuntime>().lua().globals();
     let duration: f32 = globals.get("seen_duration").expect("seen_duration");

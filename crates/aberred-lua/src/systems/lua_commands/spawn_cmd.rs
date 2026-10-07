@@ -710,6 +710,7 @@ mod tests {
     use super::*;
     use crate::resources::lua_runtime::{AnimationConditionData, AnimationRuleData};
     use aberred_core::components::animation::{CmpOp, Condition};
+    use aberred_core::components::timer::Timer;
     use aberred_core::components::tween::{Easing, LoopMode, Tween};
     use aberred_core::resources::uniformvalue::UniformValue;
 
@@ -1255,9 +1256,7 @@ mod tests {
         assert_eq!(phase.phase.current, "idle");
         assert_eq!(phase.phases.len(), 2);
         assert_eq!(phase.phases["idle"].on_enter.as_deref(), Some("idle_in"));
-        let timer = world
-            .get::<aberred_core::components::timer::Timer>(e)
-            .unwrap();
+        let timer = world.get::<Timer>(e).unwrap();
         let on_fired = world.get::<LuaOnTimerFired>(e).unwrap();
         assert_eq!((timer.duration, &*on_fired.callback), (0.5, "tick"));
         // Must be queryable as LuaCollisionRule, not core's CollisionRule.

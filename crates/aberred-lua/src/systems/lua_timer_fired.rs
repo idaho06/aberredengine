@@ -98,7 +98,7 @@ mod tests {
     }
 
     #[test]
-    fn despawning_a_lua_timer_entity_is_clean() {
+    fn despawning_a_lua_timer_entity_does_not_trip_the_remove_observer() {
         let mut world = setup_world();
         let entity = spawn_lua_timer(&mut world);
 
