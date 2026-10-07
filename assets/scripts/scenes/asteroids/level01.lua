@@ -133,16 +133,23 @@ end
 local function on_asteroid_ship_enter(ctx)
     engine.log_info(string.format("Ship %d hit asteroid %d (ship sides: %s)",
         ctx.b.id, ctx.a.id, table.concat(ctx.sides.b, ",")))
+    engine.log_debug(string.format(
+        "on_asteroid_ship_enter: %s %d pos=(%.1f,%.1f) sides=[%s] | %s %d pos=(%.1f,%.1f) vel=(%.1f,%.1f) sides=[%s]",
+        ctx.a.group, ctx.a.id, ctx.a.pos.x, ctx.a.pos.y, table.concat(ctx.sides.a, ","),
+        ctx.b.group, ctx.b.id, ctx.b.pos.x, ctx.b.pos.y, ctx.b.vel.x, ctx.b.vel.y,
+        table.concat(ctx.sides.b, ",")))
     -- In a real game, this is where the ship would lose health, once per hit.
 end
 
 -- The exit ctx carries only ids and groups: either entity may already be gone.
 local function on_asteroid_ship_exit(ctx)
     engine.log_info(string.format("Ship %d cleared asteroid %d", ctx.b.id, ctx.a.id))
+    engine.log_debug(string.format("on_asteroid_ship_exit: %s %d | %s %d",
+        ctx.a.group, ctx.a.id, ctx.b.group, ctx.b.id))
 end
 
 local function on_asteroid_laser_collision(ctx)
-    engine.log_debug("Collision: Laser (ID " .. tostring(ctx.a.id) .. ") with Asteroid (ID " .. tostring(ctx.b.id) .. ")")
+    engine.log_debug("Collision: Asteroid (ID " .. tostring(ctx.a.id) .. ") with Laser (ID " .. tostring(ctx.b.id) .. ")")
     -- entities are ordered by group name, so ctx.a is always asteroid, ctx.b is always laser
     -- Reduce asteroid HP
     local hp = ctx.a.signals.integers.hp or 0

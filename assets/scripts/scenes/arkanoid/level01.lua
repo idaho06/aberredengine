@@ -25,6 +25,8 @@ local function on_player_walls(ctx)
     local player_x = ctx.a.pos.x
     local clamped_x = math.max(72, math.min(600, player_x))
     if clamped_x ~= player_x then
+        engine.log_debug(string.format("on_player_walls: player %d x %.1f clamped to %.1f (wall %d)",
+            ctx.a.id, player_x, clamped_x, ctx.b.id))
         engine.collision_entity_set_position(ctx.a.id, clamped_x, ctx.a.pos.y)
     end
 end
@@ -59,6 +61,9 @@ local function on_ball_walls(ctx)
         end
     end
 
+    engine.log_debug(string.format(
+        "on_ball_walls: ball %d hit wall %d at (%.1f,%.1f) vel (%.1f,%.1f) -> (%.1f,%.1f)",
+        ball_id, ctx.b.id, ball_pos.x, ball_pos.y, ball_vel.x, ball_vel.y, new_vx, new_vy))
     engine.collision_entity_set_velocity(ball_id, new_vx, new_vy)
     engine.collision_entity_set_position(ball_id, new_x, new_y)
 
@@ -86,6 +91,9 @@ local function on_ball_player(ctx)
     local new_vx = speed * math.sin(bounce_angle)
     local new_vy = -speed * math.cos(bounce_angle)
     local new_y = player_pos.y - player_rect.h - (ball_rect.h * 0.5)
+    engine.log_debug(string.format(
+        "on_ball_player: ball %d hit paddle %d at relative %.2f vel (%.1f,%.1f) -> (%.1f,%.1f)",
+        ball_id, player_id, relative_hit_pos, ball_vel.x, ball_vel.y, new_vx, new_vy))
 
     engine.collision_entity_set_velocity(ball_id, new_vx, new_vy)
     engine.collision_entity_set_position(ball_id, ball_pos.x, new_y)
@@ -102,6 +110,7 @@ local function on_ball_player(ctx)
     end
 
     if is_sticky then
+        engine.log_debug(string.format("on_ball_player: sticky paddle, ball %d sticks", ball_id))
         local offset_x = ball_pos.x - player_pos.x
         engine.collision_set_scalar("ball_stick_offset_x", offset_x)
         engine.collision_set_scalar("ball_stick_vx", new_vx)
@@ -150,6 +159,9 @@ local function on_ball_brick(ctx)
         end
     end
 
+    engine.log_debug(string.format(
+        "on_ball_brick: ball %d hit brick %d on brick sides [%s] vel (%.1f,%.1f) -> (%.1f,%.1f)",
+        ball_id, brick_id, table.concat(ctx.sides.b, ","), ball_vel.x, ball_vel.y, new_vx, new_vy))
     engine.collision_entity_set_velocity(ball_id, new_vx, new_vy)
     engine.collision_entity_set_position(ball_id, new_x, new_y)
 
@@ -162,8 +174,10 @@ local function on_ball_brick(ctx)
     end
 
     if hp > 1 then
+        engine.log_debug(string.format("on_ball_brick: brick %d hp %d -> %d", brick_id, hp, hp - 1))
         engine.collision_entity_signal_set_integer(brick_id, "hp", hp - 1)
     else
+        engine.log_debug(string.format("on_ball_brick: brick %d destroyed (+%d points)", brick_id, points))
         if points > 0 then
             local current_score = engine.get_integer("score") or 0
             engine.collision_set_integer("score", current_score + points)
@@ -185,6 +199,7 @@ end
 local function on_ball_oob(ctx)
     local ball_sides = ctx.sides.a
     if ball_sides and #ball_sides == 4 then
+        engine.log_debug(string.format("on_ball_oob: ball %d fully out of bounds, despawning", ctx.a.id))
         engine.collision_entity_despawn(ctx.a.id)
     end
 end

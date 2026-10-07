@@ -524,6 +524,18 @@ local function collision_solid_player(ctx)
         tostring(player_on_ground), tostring(player_touching_ceiling),
         tostring(player_touching_wall_left), tostring(player_touching_wall_right)))
 
+    -- Edge-triggered (unconditional) logs: the detailed log_debug lines above
+    -- are gated by debug_log because this callback runs every touching tick.
+    local player_flags = ctx.b.signals and ctx.b.signals.flags or {}
+    if player_on_ground and (utils.has_flag(player_flags, "falling") or utils.has_flag(player_flags, "jumping")) then
+        engine.log_debug(string.format("collision_solid_player: player %d landed on solid %d at y=%.1f (vel_y %.1f)",
+            ctx.b.id, ctx.a.id, ctx.a.rect.y, ctx.b.vel.y))
+    end
+    if player_touching_ceiling and utils.has_flag(player_flags, "jumping") then
+        engine.log_debug(string.format("collision_solid_player: player %d bumped ceiling of solid %d (vel_y %.1f)",
+            ctx.b.id, ctx.a.id, ctx.b.vel.y))
+    end
+
     if player_touching_ceiling then
         local clamped_vy = math.min(ctx.b.vel.y, 0)
         log_debug(string.format("collision_solid_player: ceiling clamp vel_y %.1f -> %.1f",
