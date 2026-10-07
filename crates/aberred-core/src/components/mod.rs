@@ -42,7 +42,7 @@
 //! - [`zindex`] – rendering order hint for 2D drawing
 //!
 //! Audio-thread components live in `aberred-audio`; Lua-only ones (`LuaPhase`,
-//! `LuaSetup`, `LuaTimer`, ...) in `aberred-lua`.
+//! `LuaSetup`, `LuaOnTimerFired`, ...) in `aberred-lua`.
 
 pub mod animation;
 pub mod boxcollider;

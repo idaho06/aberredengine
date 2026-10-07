@@ -244,14 +244,14 @@ pub enum EntityCmd {
         flip_h: bool,
         flip_v: bool,
     },
-    /// Insert a LuaTimer component
+    /// Insert a Lua timer (`Timer` + `LuaOnTimerFired`)
     InsertLuaTimer {
         entity_id: u64,
         duration: f32,
         callback: String,
         mode: TimerMode,
     },
-    /// Remove a LuaTimer component
+    /// Remove a Lua timer (`Timer` + `LuaOnTimerFired`)
     RemoveLuaTimer { entity_id: u64 },
     /// Insert TweenPosition component
     InsertTweenPosition {

@@ -25,7 +25,7 @@
 //!
 //! - [`crate::systems::timer::update_timers`] – system that updates and triggers timers
 //! - [`crate::events::timer::TimerFired`] – event triggered when a timer expires
-//! - `aberred_lua::components::luatimer::LuaTimer` – Lua equivalent
+//! - `aberred_lua::components::lua_on_timer_fired::LuaOnTimerFired` – names the Lua function a timer calls
 
 use bevy_ecs::prelude::Component;
 

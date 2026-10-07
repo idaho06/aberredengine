@@ -68,8 +68,6 @@ use aberred_lua::systems::lua_mapspawn::process_lua_map_commands;
 use aberred_lua::systems::lua_setup_entity::lua_setup_entity_system;
 #[cfg(feature = "lua")]
 use aberred_lua::systems::luaphase::lua_phase_system;
-#[cfg(feature = "lua")]
-use aberred_lua::systems::luatimer::update_lua_timers;
 
 /// System sets partitioning the logic thread's `sim` schedule pipeline.
 /// [`EngineBuilder`]'s
@@ -477,17 +475,6 @@ impl EngineBuilder {
             );
             sim.add_systems(
                 animation_controller
-                    .after(lua_phase_system)
-                    .in_set(SimSet::PostCollision),
-            );
-            // .after(lua_phase_system): both touch LuaTimer
-            // (lua_phase_system's ctx-building reads it for ctx.timer;
-            // update_lua_timers advances it) with no prior edge --
-            // ambiguity_detection flags it. Pinned so a phase callback's
-            // ctx.timer reflects this tick's pre-advance state, consistent
-            // with ctx.time_in_phase's own semantics.
-            sim.add_systems(
-                update_lua_timers
                     .after(lua_phase_system)
                     .in_set(SimSet::PostCollision),
             );

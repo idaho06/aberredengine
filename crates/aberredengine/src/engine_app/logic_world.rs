@@ -81,8 +81,6 @@ use aberred_lua::systems::lua_menu::lua_menu_selection_observer;
 use aberred_lua::systems::lua_timer_fired::{lua_timer_fired_observer, lua_timer_removed_observer};
 #[cfg(feature = "lua")]
 use aberred_lua::systems::lua_tween_finished::lua_tween_finished_observer;
-#[cfg(feature = "lua")]
-use aberred_lua::systems::luatimer::lua_timer_observer;
 
 /// Helper: register a system into the world, mark it [`Persistent`], and insert
 /// its ID into [`SystemsStore`].
@@ -355,7 +353,6 @@ impl EngineBuilder {
         world.spawn((Observer::new(menu_selection_observer), Persistent));
         #[cfg(feature = "lua")]
         if has_lua {
-            world.spawn((Observer::new(lua_timer_observer), Persistent));
             world.spawn((Observer::new(lua_timer_fired_observer), Persistent));
             world.spawn((Observer::new(lua_timer_removed_observer), Persistent));
             world.spawn((Observer::new(lua_menu_selection_observer), Persistent));

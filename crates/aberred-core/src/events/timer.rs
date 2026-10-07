@@ -8,7 +8,7 @@
 //! # Related
 //!
 //! - [`crate::components::timer::Timer`] – the timer component
-//! - `aberred_lua::events::luatimer::LuaTimerEvent` – Lua equivalent
+//! - `aberred_lua::systems::lua_timer_fired` – calls a Lua function on this event
 
 use bevy_ecs::prelude::*;
 

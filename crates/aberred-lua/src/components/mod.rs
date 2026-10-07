@@ -11,4 +11,3 @@ pub mod lua_on_tween_finished;
 pub mod luacollision;
 pub mod luaphase;
 pub mod luasetup;
-pub mod luatimer;

@@ -39,8 +39,6 @@ use aberred_core::systems::group::update_group_counts_system;
 use aberred_core::systems::gui_hit_test::gui_hit_test_system;
 #[cfg(feature = "lua")]
 use aberred_lua::systems::luaphase::lua_phase_system;
-#[cfg(feature = "lua")]
-use aberred_lua::systems::luatimer::update_lua_timers;
 
 #[test]
 fn test_builder_default() {
@@ -396,10 +394,6 @@ fn test_build_logic_schedules_without_lua_runtime_omits_lua_only_systems() {
         !ids.contains(&IntoSystem::into_system(lua_phase_system).system_type()),
         "lua_phase_system should be absent when has_lua is false"
     );
-    assert!(
-        !ids.contains(&IntoSystem::into_system(update_lua_timers).system_type()),
-        "update_lua_timers should be absent when has_lua is false"
-    );
 }
 
 #[cfg(feature = "lua")]
@@ -457,24 +451,19 @@ fn test_build_logic_schedules_runs_phase_system_first() {
     assert!(phase < sim_index(&ids, collision_detector));
 }
 
-/// With Lua, `lua_phase_system` and `update_lua_timers` run in
-/// `SimSet::PostCollision`: after the collision and GUI sets, before `Drain`
-/// and before `lua_plugin::update`.
+/// With Lua, `lua_phase_system` runs in `SimSet::PostCollision`: after the
+/// collision and GUI sets, before `Drain` and before `lua_plugin::update`.
 #[cfg(feature = "lua")]
 #[test]
-fn test_build_logic_schedules_with_lua_keeps_lua_phase_and_timers_in_post_collision() {
+fn test_build_logic_schedules_with_lua_keeps_lua_phase_in_post_collision() {
     let (ids, _) = logic_schedule_type_ids(true);
     let after = sim_index(&ids, collision_detector).max(sim_index(&ids, gui_hit_test_system));
     let before = sim_index(&ids, animation).min(sim_index(&ids, aberred_lua::lua_plugin::update));
-    for index in [
-        sim_index(&ids, lua_phase_system),
-        sim_index(&ids, update_lua_timers),
-    ] {
-        assert!(
-            after < index && index < before,
-            "must stay in SimSet::PostCollision"
-        );
-    }
+    let index = sim_index(&ids, lua_phase_system);
+    assert!(
+        after < index && index < before,
+        "must stay in SimSet::PostCollision"
+    );
 }
 
 // --- SceneManager builder tests ---

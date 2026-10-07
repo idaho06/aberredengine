@@ -1,6 +1,6 @@
 //! Shared callback dispatch flow.
 //!
-//! Bundles the params and steps shared by `lua_timer_observer`,
+//! Bundles the params and steps shared by `lua_timer_fired_observer`,
 //! `lua_setup_entity_system`, `lua_animation_finished_observer`,
 //! `lua_tween_finished_observer`, `lua_gui_interactable_click_observer`, and
 //! `lua_menu_selection_observer`: sync the signal cache, build the callback's

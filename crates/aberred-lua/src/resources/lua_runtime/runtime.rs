@@ -266,7 +266,7 @@ impl LuaRuntime {
         // Create collision context tables for reuse
         let collision_ctx_tables = Self::create_collision_ctx_tables(&lua)?;
 
-        // Create entity context tables for reuse (LuaPhase/LuaTimer)
+        // Create entity context tables for reuse (phase, timer and other entity callbacks)
         let entity_ctx_tables = Self::create_entity_ctx_tables(&lua)?;
 
         // Create input callback tables for scene/phase/timer callbacks
@@ -371,7 +371,7 @@ impl LuaRuntime {
         self.collision_ctx_tables.clone()
     }
 
-    /// Creates the pooled entity context tables for LuaPhase/LuaTimer callbacks.
+    /// Creates the pooled entity context tables for phase, timer and other entity callbacks.
     fn create_entity_ctx_tables(lua: &Lua) -> LuaResult<EntityCtxTables> {
         // Create all tables (not wired together since fields are optional,
         // except signals: its 4 inner tables are wired into it once here,

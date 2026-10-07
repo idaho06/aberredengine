@@ -1,7 +1,7 @@
 //! Entity context builder for Lua callbacks.
 //!
 //! This module provides a unified way to build Lua context tables containing
-//! entity state information. Used by LuaPhase and LuaTimer systems to pass
+//! entity state information. Used by Lua phase, timer and other entity callbacks to pass
 //! rich entity context to Lua callbacks.
 //!
 //! # Context Structure
@@ -114,7 +114,7 @@ impl<'a> From<&'a crate::components::luaphase::LuaPhase> for LuaPhaseSnapshot<'a
     }
 }
 
-/// Snapshot of LuaTimer data for context building.
+/// Snapshot of a Lua timer (`Timer` + `LuaOnTimerFired`) for context building.
 #[derive(Debug)]
 pub struct LuaTimerSnapshot<'a> {
     pub duration: f32,
@@ -439,7 +439,7 @@ pub fn build_entity_context_pooled<'a>(
         }
     );
 
-    // Timer info from LuaTimer
+    // Timer info from a Lua timer
     set_opt!(
         tables.ctx,
         "timer",

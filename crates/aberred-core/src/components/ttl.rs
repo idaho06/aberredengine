@@ -1,8 +1,8 @@
 //! Time-to-live component for automatic entity despawning.
 //!
 //! The [`Ttl`] component counts down time each frame. When the remaining time
-//! reaches zero, the entity is automatically despawned. Unlike `LuaTimer` (`aberred-lua`),
-//! there is no callback - it's a "fire and forget" mechanism.
+//! reaches zero, the entity is automatically despawned. Unlike a [`Timer`](crate::components::timer::Timer),
+//! there is no event or callback - it's a "fire and forget" mechanism.
 //!
 //! # How It Works
 //!
@@ -28,7 +28,7 @@
 //! # Related
 //!
 //! - [`crate::systems::ttl::ttl_system`] – system that updates and despawns entities
-//! - `aberred_lua::components::luatimer::LuaTimer` – for delayed callbacks instead of despawn
+//! - [`crate::components::timer::Timer`] – for delayed callbacks instead of despawn
 
 use bevy_ecs::prelude::Component;
 

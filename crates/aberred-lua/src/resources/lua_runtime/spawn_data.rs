@@ -61,7 +61,7 @@ pub struct RigidBodyData {
     pub forces: Vec<ForceData>,
 }
 
-/// LuaTimer component data for spawning.
+/// Lua timer (`Timer` + `LuaOnTimerFired`) data for spawning.
 #[derive(Debug, Clone, PartialEq)]
 pub struct LuaTimerSpawn {
     /// Seconds before the timer fires
@@ -428,7 +428,7 @@ pub struct SpawnCmd {
     pub has_signals: bool,
     /// StuckTo component data
     pub stuckto: Option<StuckToData>,
-    /// LuaTimer component data
+    /// Lua timer data
     pub lua_timer: Option<LuaTimerSpawn>,
     /// SignalBinding component data (key, optional format)
     pub signal_binding: Option<(String, Option<String>)>,

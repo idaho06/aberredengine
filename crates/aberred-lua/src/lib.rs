@@ -2,8 +2,8 @@
 //!
 //! This crate hosts the Lua runtime ([`resources::lua_runtime`]), the
 //! command-queue drain/dispatch machinery ([`systems::lua_commands`]),
-//! per-callback observers/systems ([`systems`]), the Lua-only components
-//! ([`components`])/events ([`events`]) those observers react to, the
+//! per-callback observers/systems ([`systems`]), the Lua-only callback
+//! components ([`components`]) those observers read, the
 //! bootstrap glue ([`lua_plugin`]), and the LSP-stub/`.luarc.json` codegen
 //! tools ([`stub_generator`], [`luarc_generator`]).
 //!
@@ -20,7 +20,6 @@
 //! of it: the facade registers them only when the game runs a Lua script.
 
 pub mod components;
-pub mod events;
 pub mod lua_plugin;
 pub mod luarc_generator;
 pub mod resources;
