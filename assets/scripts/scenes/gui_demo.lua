@@ -668,7 +668,7 @@ function M.spawn()
         :with_lua_setup("build_character_window")
         :build()
 
-    -- Enemy attack timer — a standalone entity (no components beyond LuaTimer)
+    -- Enemy attack timer — a standalone entity (no components beyond its Lua timer)
     -- so its id can be stored and the timer removed cleanly on game over.
     -- on_char_enemy_timer_setup registers the id and starts the first tick.
     engine.spawn()

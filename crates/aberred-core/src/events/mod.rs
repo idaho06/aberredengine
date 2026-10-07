@@ -16,8 +16,8 @@
 //! - [`scene`] – scene enter/exit events (`SceneEntered`/`SceneExited`)
 //! - [`switchdebug`] – toggle debug rendering and diagnostics on/off (F11, stays logic-side)
 //!
-//! Lua timer events live in `aberred-lua`; the render thread's F10
-//! `SwitchFullScreenEvent` in `aberred-render`.
+//! Lua timer callbacks observe [`timer::TimerFired`] (`aberred_lua::systems::lua_timer_fired`);
+//! the render thread's F10 `SwitchFullScreenEvent` lives in `aberred-render`.
 //!
 //! See each submodule for concrete event data, semantics, and example usage.
 

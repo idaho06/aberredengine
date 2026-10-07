@@ -121,7 +121,7 @@ crates/aberred-lua/src/systems/lua_commands/
 └── parse.rs             # Animation condition parsing helpers
 ```
 
-`crates/aberred-lua/src/systems/` also holds the Bevy systems/observers that call into `lua_commands/` (`luaphase.rs`, `luatimer.rs`, `lua_setup_entity.rs`, `lua_animation_finished.rs`, `lua_tween_finished.rs`, `lua_collision.rs`, `lua_menu.rs`, `lua_mapspawn.rs`, `lua_gui_interactable_click.rs`) and `lua_plugin.rs` (scene setup/switch, `on_update_<scene>` dispatch) at the crate root.
+`crates/aberred-lua/src/systems/` also holds the Bevy systems/observers that call into `lua_commands/` (`luaphase.rs`, `lua_timer_fired.rs`, `lua_setup_entity.rs`, `lua_animation_finished.rs`, `lua_tween_finished.rs`, `lua_collision.rs`, `lua_menu.rs`, `lua_mapspawn.rs`, `lua_gui_interactable_click.rs`) and `lua_plugin.rs` (scene setup/switch, `on_update_<scene>` dispatch) at the crate root.
 
 ### Key Components
 
@@ -313,7 +313,7 @@ This system deliberately does not go through the shared `LuaDispatch`/`dispatch_
 
 ### Timer System
 
-`update_lua_timers` advances every `LuaTimer` component (a Lua-owned component wrapping a core `Timer` plus the callback name) with the core `Timer`'s firing rules. When `elapsed >= duration`, it fires a `LuaTimerEvent`, then applies the timer's `TimerMode`: a repeating timer (`:with_lua_timer` / `engine.entity_insert_lua_timer`) resets by subtracting `duration` (not zeroing); a one-shot timer (`:with_lua_timer_once` / `engine.entity_insert_lua_timer_once`) removes its `LuaTimer` after the callback, keeping any new timer the callback inserted. `lua_timer_observer` reacts to `LuaTimerEvent` via `LuaDispatch::dispatch_and_drain`, calling the named function as `(ctx, input)`.
+A Lua timer is a core `Timer` plus a `LuaOnTimerFired { callback }` component naming the Lua function (`:with_lua_timer` / `engine.entity_insert_lua_timer` repeat, the `_once` variants fire once). Core `update_timers` (`SimSet::Drain`, after `animation_controller` and before `animation` and `lua_setup_entity_system`) advances it like any Rust timer: when `elapsed >= duration` it triggers `TimerFired`, then a repeating timer resets by subtracting `duration` (not zeroing) and a one-shot removes its `Timer`, keeping any new timer the callback inserted. `lua_timer_fired_observer` reacts to `TimerFired` on entities with a `LuaOnTimerFired` via `LuaDispatch::dispatch_and_drain`, calling the named function as `(ctx, input)`. `lua_timer_removed_observer` removes `LuaOnTimerFired` whenever the entity loses its `Timer`, so a callback never outlives its timer; replacing the `Timer` keeps it. An entity has one `Timer`: a Lua timer replaces a Rust `Timer` on the same entity.
 
 ### Collision System
 
@@ -325,7 +325,7 @@ This system deliberately does not go through the shared `LuaDispatch`/`dispatch_
 
 ### Entity Setup Callback
 
-`lua_setup_entity_system` reacts to every entity that gains a `LuaSetup` component (`Added<LuaSetup>`) and calls its named function once with `(ctx)` only — no `input` argument (`CallShape::CtxOnly`). It calls `LuaDispatch::call_entity_callback` directly rather than `dispatch_and_drain`, since it refreshes the signal cache once and drains commands once across the whole `Added<LuaSetup>` batch for the tick, instead of once per entity. It runs before `animation_controller` in the sim schedule's `SimSet::PostCollision`, so a setup callback can set animation state the same tick the entity is spawned.
+`lua_setup_entity_system` reacts to every entity that gains a `LuaSetup` component (`Added<LuaSetup>`) and calls its named function once with `(ctx)` only — no `input` argument (`CallShape::CtxOnly`). It calls `LuaDispatch::call_entity_callback` directly rather than `dispatch_and_drain`, since it refreshes the signal cache once and drains commands once across the whole `Added<LuaSetup>` batch for the tick, instead of once per entity. It runs in the sim schedule's `SimSet::Drain`, after `update_timers` and before `animation`, so an animation a setup callback sets advances in the same tick.
 
 ### Menu Selection and GUI Interactable Click Dispatch
 
@@ -1046,7 +1046,7 @@ Every callback described in [Scene Lifecycle and Callback Dispatch](#scene-lifec
 | `signals` = `{flags, integers, scalars, strings}` | table | `Signals` |
 | `phase`, `time_in_phase` | string, number | `LuaPhase` (set/cleared together) |
 | `previous_phase` | string | `LuaPhase`, only populated for `phase_on_enter` |
-| `timer` = `{duration, elapsed, callback}` | table | `LuaTimer`, only populated inside a timer callback |
+| `timer` = `{duration, elapsed, callback}` | table | `Timer` + `LuaOnTimerFired` (a Lua timer); nil for an entity without one |
 
 ### Collision Context Table (`ctx`) — Collision Callbacks
 

@@ -143,8 +143,8 @@ pub enum SimSet {
     /// Group counts, Lua phase callbacks, and animation controller
     /// resolution -- all downstream of this tick's collision results.
     PostCollision,
-    /// Lua command-queue draining (map/asset commands, entity setup) and
-    /// scene lifecycle polling.
+    /// Timers (`update_timers`, which also fires Lua timer callbacks), Lua
+    /// entity setup, animation advance and scene lifecycle polling.
     Drain,
     /// Tail-of-tick housekeeping: signal bindings, text sizing, input
     /// binding change notification, (for Lua games) `lua_plugin::update`,

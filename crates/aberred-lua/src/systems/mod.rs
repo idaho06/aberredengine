@@ -5,7 +5,8 @@
 //! runs after core's `spawn_map_observer`, and `lua_menu`'s observer runs
 //! alongside core's `menu_selection_observer`.
 //! `lua_gui_interactable_click`'s observer calls a clicked widget's Lua
-//! callback.
+//! callback, and `lua_timer_fired`'s observer calls the Lua function of a
+//! timer fired by core's `update_timers`.
 
 pub mod lua_animation_finished;
 pub mod lua_collision;

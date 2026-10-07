@@ -1787,7 +1787,7 @@ ctx = {
     -- Only on on_enter callbacks
     previous_phase = "spawning", -- Previous phase (nil on initial enter)
 
-    -- Timer info (from LuaTimer)
+    -- Timer info (from the entity's Lua timer)
     timer = {
         duration = 5.0,
         elapsed = 2.3,
@@ -2437,7 +2437,7 @@ engine.spawn()
 
 #### `:with_lua_timer(duration, callback)`
 
-Add a repeating LuaTimer component that calls a Lua function every `duration` seconds.
+Add a repeating Lua timer that calls a Lua function every `duration` seconds. An entity has one timer: this replaces any timer it already has.
 
 **Parameters:**
 
@@ -2485,7 +2485,7 @@ end
 
 #### `:with_lua_timer_once(duration, callback)`
 
-Add a one-shot LuaTimer: it calls the Lua function once after `duration` seconds, then removes itself. The entity stays. Same parameters and callback signature as `:with_lua_timer()`.
+Add a one-shot Lua timer: it calls the Lua function once after `duration` seconds, then removes itself. The entity stays. Like `:with_lua_timer()`, it replaces any timer the entity already has. Same parameters and callback signature as `:with_lua_timer()`.
 
 ```lua
 engine.spawn()
@@ -2517,7 +2517,7 @@ engine.spawn()
     :build()
 ```
 
-**Note:** Unlike LuaTimer, TTL has no callback - it's a "fire and forget" mechanism for temporary entities like projectiles, particles, or visual effects.
+**Note:** Unlike a Lua timer, TTL has no callback - it's a "fire and forget" mechanism for temporary entities like projectiles, particles, or visual effects.
 
 #### `:with_lua_collision_rule(group_a, group_b, callback)`
 
@@ -3108,7 +3108,7 @@ engine.entity_signal_clear_string(player_id, "state")
 
 ### `engine.entity_insert_lua_timer(entity_id, duration, callback)`
 
-Insert LuaTimer component on entity at runtime.
+Insert a repeating Lua timer on an entity at runtime, replacing any timer it already has.
 
 **Parameters:**
 
@@ -3125,11 +3125,11 @@ function turret_active_enter(ctx, input)
 end
 ```
 
-**Note:** The timer repeats every `duration` seconds until the component is removed or the entity is despawned. For a timer that fires once, use `engine.entity_insert_lua_timer_once()`.
+**Note:** The timer repeats every `duration` seconds until it is removed (`engine.entity_remove_lua_timer()`) or the entity is despawned. For a timer that fires once, use `engine.entity_insert_lua_timer_once()`.
 
 ### `engine.entity_insert_lua_timer_once(entity_id, duration, callback)`
 
-Insert a one-shot LuaTimer: it fires once after `duration` seconds, then removes itself (the entity stays). Same parameters as `engine.entity_insert_lua_timer()`.
+Insert a one-shot Lua timer: it fires once after `duration` seconds, then removes itself (the entity stays). Same parameters as `engine.entity_insert_lua_timer()`, and it also replaces any timer the entity already has.
 
 **Example:**
 
@@ -3153,7 +3153,7 @@ A callback that inserts a new timer on its own entity keeps it, so one-shots can
 
 ### `engine.entity_remove_lua_timer(entity_id)`
 
-Remove LuaTimer component from an entity to stop the timer.
+Remove an entity's Lua timer to stop it.
 
 **Parameters:**
 
@@ -4258,7 +4258,7 @@ end
 
 #### `engine.collision_entity_insert_lua_timer(entity_id, duration, callback)`
 
-Insert a LuaTimer component on an entity during collision handling.
+Insert a repeating Lua timer on an entity during collision handling, replacing any timer it already has.
 
 **Parameters:**
 
@@ -4277,11 +4277,11 @@ end
 
 #### `engine.collision_entity_insert_lua_timer_once(entity_id, duration, callback)`
 
-Insert a one-shot LuaTimer during collision handling; it fires once, then removes itself. Same parameters as `engine.collision_entity_insert_lua_timer()`.
+Insert a one-shot Lua timer during collision handling; it fires once, then removes itself. Same parameters as `engine.collision_entity_insert_lua_timer()`, and it also replaces any timer the entity already has.
 
 #### `engine.collision_entity_remove_lua_timer(entity_id)`
 
-Remove LuaTimer component from an entity during collision handling.
+Remove an entity's Lua timer during collision handling.
 
 **Parameters:**
 
