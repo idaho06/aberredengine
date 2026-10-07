@@ -92,10 +92,10 @@ pub(crate) fn build_entity_context(
         .lua_timers
         .get(entity)
         .ok()
-        .map(|t| LuaTimerSnapshot {
-            duration: t.timer.duration,
-            elapsed: t.timer.elapsed,
-            callback: &t.callback,
+        .map(|(timer, on_fired)| LuaTimerSnapshot {
+            duration: timer.duration,
+            elapsed: timer.elapsed,
+            callback: &on_fired.callback,
         });
 
     // World transform from GlobalTransform2D (hierarchy)

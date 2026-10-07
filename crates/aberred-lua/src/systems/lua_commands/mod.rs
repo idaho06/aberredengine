@@ -46,9 +46,9 @@ use bevy_ecs::hierarchy::ChildOf;
 use bevy_ecs::prelude::*;
 use bevy_ecs::system::SystemParam;
 
+use crate::components::lua_on_timer_fired::LuaOnTimerFired;
 use crate::components::lua_on_tween_finished::LuaOnTweenFinished;
 use crate::components::luaphase::LuaPhase;
-use crate::components::luatimer::LuaTimer;
 use crate::resources::lua_runtime::{
     AudioLuaCmd, CameraCmd, CloneCmd, EntityCmd, LuaRuntime, PhaseCmd, SignalCmd, SpawnCmd,
     TweenConfig,
@@ -68,6 +68,7 @@ use aberred_core::components::screenposition::ScreenPosition;
 use aberred_core::components::signals::Signals;
 use aberred_core::components::sprite::Sprite;
 use aberred_core::components::stuckto::StuckTo;
+use aberred_core::components::timer::Timer;
 use aberred_core::components::tween::{Tween, TweenValue};
 use aberred_core::protocol::audio::AudioCmd;
 use aberred_core::resources::animationstore::AnimationStore;
@@ -241,7 +242,7 @@ pub struct ContextQueries<'w, 's> {
     pub rotations: Query<'w, 's, &'static Rotation>,
     pub scales: Query<'w, 's, &'static Scale>,
     pub box_colliders: Query<'w, 's, &'static BoxCollider>,
-    pub lua_timers: Query<'w, 's, &'static LuaTimer>,
+    pub lua_timers: Query<'w, 's, (&'static Timer, &'static LuaOnTimerFired)>,
     pub global_transforms: Query<'w, 's, &'static GlobalTransform2D>,
     pub child_of: Query<'w, 's, &'static ChildOf>,
 }

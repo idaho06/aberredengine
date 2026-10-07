@@ -1644,6 +1644,42 @@ fn lua_game_clean_all_entities_hook_forgets_lua_contacts() {
     assert!(tw.world.resource::<LuaCollisionContacts>().is_empty());
 }
 
+/// A Lua timer fires in `SimSet::Drain`, after `animation_controller` and
+/// before `animation`: its callback's `ctx.animation` shows the key the
+/// controller picked this tick, not yet advanced by this tick's `dt`.
+#[cfg(feature = "lua")]
+#[test]
+fn lua_timer_callback_sees_this_ticks_animation_state() {
+    use aberredengine::core::components::animation::{Animation, AnimationController, Condition};
+    use aberredengine::core::resources::animationstore::{AnimationResource, AnimationStore};
+    use aberredengine::lua::components::lua_on_timer_fired::LuaOnTimerFired;
+
+    let mut tw = lua_script_world(
+        "timer_order",
+        "function on_timer(ctx)\n\
+           LOG[#LOG + 1] = ctx.animation.key .. ' ' .. tostring(ctx.animation.elapsed > 0)\n\
+         end\n",
+    );
+    // 1 fps: this tick's dt advances `elapsed` without changing frame.
+    tw.world
+        .resource_mut::<AnimationStore>()
+        .animations
+        .insert("run".into(), AnimationResource::new("tex", 16.0, 4, 1.0));
+    tw.world.spawn((
+        MapPosition::new(0.0, 0.0),
+        Sprite::new("tex", 16.0, 16.0),
+        Signals::default().with_flag("run"),
+        Animation::new("idle"),
+        AnimationController::new("idle").with_rule(Condition::HasFlag { key: "run".into() }, "run"),
+        Timer::once(DT * 0.5),
+        LuaOnTimerFired::new("on_timer"),
+    ));
+
+    tw.tick(1, DT);
+
+    assert_eq!(take_lua_log(&mut tw), ["run false"]);
+}
+
 /// A map entity's `lua_setup` names a Lua function, so a Rust-only game (no
 /// `.with_lua()`, whatever the `lua` feature) spawns it without `LuaSetup`.
 #[cfg(feature = "lua")]

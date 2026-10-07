@@ -12,11 +12,13 @@ use aberred_core::components::group::Group;
 use aberred_core::components::guiinteractable::GuiInteractable;
 use aberred_core::components::mapposition::MapPosition;
 use aberred_core::components::signals::Signals;
+use aberred_core::components::timer::{Timer, TimerMode};
 use aberred_core::components::ttl::Ttl;
 use aberred_core::events::animation::AnimationFinished;
 use aberred_core::events::collision::Overlapping;
 use aberred_core::events::gui_interactable::GuiClicked;
 use aberred_core::events::menu::MenuSelected;
+use aberred_core::events::timer::TimerFired;
 use aberred_core::events::tween::TweenFinished;
 use aberred_core::protocol::audio::AudioCmd;
 use aberred_core::resources::animationstore::AnimationStore;
@@ -26,23 +28,24 @@ use aberred_core::resources::worldsignals::WorldSignals;
 use aberred_core::resources::worldtime::WorldTime;
 use aberred_core::systems::collision_detector::collision_detector;
 use aberred_core::systems::collision_rule_index::rebuild_rule_index;
+use aberred_core::systems::timer::update_timers;
 use aberred_lua::components::lua_on_animation_end::LuaOnAnimationEnd;
 use aberred_lua::components::lua_on_click::LuaOnClick;
 use aberred_lua::components::lua_on_menu_select::LuaOnMenuSelect;
+use aberred_lua::components::lua_on_timer_fired::LuaOnTimerFired;
 use aberred_lua::components::lua_on_tween_finished::LuaOnTweenFinished;
 use aberred_lua::components::luacollision::{
     LuaCollisionContacts, LuaCollisionRule, LuaCollisionRuleIndex,
 };
 use aberred_lua::components::luaphase::{LuaPhase, PhaseCallbacks};
-use aberred_lua::components::luatimer::LuaTimer;
 use aberred_lua::resources::lua_runtime::LuaRuntime;
 use aberred_lua::systems::lua_animation_finished::lua_animation_finished_observer;
 use aberred_lua::systems::lua_collision::lua_collision_observer;
 use aberred_lua::systems::lua_gui_interactable_click::lua_gui_interactable_click_observer;
 use aberred_lua::systems::lua_menu::lua_menu_selection_observer;
+use aberred_lua::systems::lua_timer_fired::{lua_timer_fired_observer, lua_timer_removed_observer};
 use aberred_lua::systems::lua_tween_finished::lua_tween_finished_observer;
 use aberred_lua::systems::luaphase::lua_phase_system;
-use aberred_lua::systems::luatimer::{lua_timer_observer, update_lua_timers};
 
 /// World with every resource the Lua dispatch paths read, plus a fresh
 /// `LuaRuntime`.
@@ -189,14 +192,24 @@ fn collision_callback_error_still_drains_queued_commands() {
 // order within one pass (spawn before clone, phase commands before
 // callback-return transitions are applied), and no queue is dropped.
 
-/// Register the lua timer observer, then run the update pass once, so the
-/// LuaTimerEvent is both emitted and handled within one call.
-fn tick_lua_timers_with_observer(world: &mut World) {
-    world.add_observer(lua_timer_observer);
+/// Register the Lua timer observers.
+fn add_lua_timer_observers(world: &mut World) {
+    world.add_observer(lua_timer_fired_observer);
+    world.add_observer(lua_timer_removed_observer);
     world.flush();
+}
+
+fn tick_timers(world: &mut World) {
     world
-        .run_system_once(update_lua_timers)
-        .expect("update_lua_timers should run");
+        .run_system_once(update_timers)
+        .expect("update_timers should run");
+}
+
+/// Register the Lua timer observers, then run the update pass once, so
+/// `TimerFired` is both triggered and handled within one call.
+fn tick_lua_timers_with_observer(world: &mut World) {
+    add_lua_timer_observers(world);
+    tick_timers(world);
 }
 
 fn tick_lua_phases(world: &mut World) {
@@ -229,7 +242,11 @@ fn timer_callback_spawn_then_clone_same_drain() {
             .expect("lua load");
     }
 
-    world.spawn((LuaTimer::new(0.5, "spawn_and_clone_cb"),));
+    world.spawn(LuaOnTimerFired::timer(
+        0.5,
+        "spawn_and_clone_cb",
+        TimerMode::Repeat,
+    ));
 
     tick_lua_timers_with_observer(&mut world);
 
@@ -244,7 +261,8 @@ fn timer_callback_spawn_then_clone_same_drain() {
     );
 }
 
-/// A one-shot Lua timer runs its callback once, then loses its `LuaTimer`.
+/// A one-shot Lua timer runs its callback once, then loses its `Timer` and
+/// its `LuaOnTimerFired`.
 #[test]
 fn once_timer_runs_lua_callback_once_and_removes_timer() {
     let mut world = make_lua_callback_world(1.0);
@@ -262,14 +280,13 @@ fn once_timer_runs_lua_callback_once_and_removes_timer() {
             .exec()
             .expect("lua load");
     }
-    let entity = world.spawn(LuaTimer::once(0.5, "once_cb")).id();
-    world.add_observer(lua_timer_observer);
-    world.flush();
+    let entity = world
+        .spawn(LuaOnTimerFired::timer(0.5, "once_cb", TimerMode::Once))
+        .id();
+    add_lua_timer_observers(&mut world);
 
     for _ in 0..2 {
-        world
-            .run_system_once(update_lua_timers)
-            .expect("update_lua_timers should run");
+        tick_timers(&mut world);
     }
 
     let calls: i64 = world
@@ -279,7 +296,8 @@ fn once_timer_runs_lua_callback_once_and_removes_timer() {
         .get("once_calls")
         .expect("once_calls");
     assert_eq!(calls, 1);
-    assert!(world.get::<LuaTimer>(entity).is_none());
+    assert!(world.get::<Timer>(entity).is_none());
+    assert!(world.get::<LuaOnTimerFired>(entity).is_none());
     assert!(world.get_entity(entity).is_ok(), "the entity survives");
 }
 
@@ -301,15 +319,20 @@ fn once_timer_lua_callback_can_rearm_through_engine_api() {
             .exec()
             .expect("lua load");
     }
-    let entity = world.spawn(LuaTimer::once(0.5, "rearm_cb")).id();
+    let entity = world
+        .spawn(LuaOnTimerFired::timer(0.5, "rearm_cb", TimerMode::Once))
+        .id();
 
     tick_lua_timers_with_observer(&mut world);
 
     let timer = world
-        .get::<LuaTimer>(entity)
+        .get::<Timer>(entity)
         .expect("the re-armed timer must survive the spent timer's removal");
-    assert_eq!(&*timer.callback, "again");
-    assert_eq!(timer.timer.duration, 2.0);
+    assert_eq!(timer.duration, 2.0);
+    let on_fired = world
+        .get::<LuaOnTimerFired>(entity)
+        .expect("the re-armed callback must survive too");
+    assert_eq!(&*on_fired.callback, "again");
 }
 
 /// A zero-duration one-shot re-armed from a Lua callback fires on the next tick.
@@ -333,9 +356,10 @@ fn once_timer_lua_callback_zero_duration_rearm_fires_next_tick() {
             .exec()
             .expect("lua load");
     }
-    let entity = world.spawn(LuaTimer::once(0.5, "zero_cb")).id();
-    world.add_observer(lua_timer_observer);
-    world.flush();
+    let entity = world
+        .spawn(LuaOnTimerFired::timer(0.5, "zero_cb", TimerMode::Once))
+        .id();
+    add_lua_timer_observers(&mut world);
     let zero_calls = |world: &World| -> i64 {
         world
             .non_send::<LuaRuntime>()
@@ -345,24 +369,18 @@ fn once_timer_lua_callback_zero_duration_rearm_fires_next_tick() {
             .expect("zero_calls")
     };
 
-    world
-        .run_system_once(update_lua_timers)
-        .expect("update_lua_timers should run");
+    tick_timers(&mut world);
     assert_eq!(zero_calls(&world), 1);
-    assert!(
-        world.get::<LuaTimer>(entity).is_some(),
-        "re-armed timer kept"
-    );
+    assert!(world.get::<Timer>(entity).is_some(), "re-armed timer kept");
 
-    world
-        .run_system_once(update_lua_timers)
-        .expect("update_lua_timers should run");
+    tick_timers(&mut world);
     assert_eq!(
         zero_calls(&world),
         2,
         "the zero-duration re-arm fires on the next tick"
     );
-    assert!(world.get::<LuaTimer>(entity).is_none());
+    assert!(world.get::<Timer>(entity).is_none());
+    assert!(world.get::<LuaOnTimerFired>(entity).is_none());
 }
 
 /// A timer callback's `ctx.timer` reports the firing timer's duration, elapsed
@@ -386,7 +404,11 @@ fn timer_callback_ctx_timer_reports_the_firing_timer() {
             .expect("lua load");
     }
     // One-shot, so the snapshot shows the un-reset elapsed time (1.0 > 0.5).
-    world.spawn(LuaTimer::once(0.5, "read_ctx_timer"));
+    world.spawn(LuaOnTimerFired::timer(
+        0.5,
+        "read_ctx_timer",
+        TimerMode::Once,
+    ));
 
     tick_lua_timers_with_observer(&mut world);
 
@@ -698,6 +720,21 @@ fn animation_end_callback_gets_ctx_and_input_and_drains_its_commands() {
     let entity = world.spawn(LuaOnAnimationEnd::new("on_done")).id();
 
     world.trigger(AnimationFinished { entity });
+    world.flush();
+
+    assert_entity_callback_ran(&world, entity);
+}
+
+#[test]
+fn timer_callback_gets_ctx_and_input_and_drains_its_commands() {
+    let mut world = make_lua_callback_world(0.0);
+    add_lua_timer_observers(&mut world);
+    load_lua(&world, ENTITY_CALLBACK_SRC);
+    let entity = world
+        .spawn(LuaOnTimerFired::timer(1.0, "on_done", TimerMode::Repeat))
+        .id();
+
+    world.trigger(TimerFired { entity });
     world.flush();
 
     assert_entity_callback_ran(&world, entity);

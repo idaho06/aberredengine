@@ -9,7 +9,7 @@ use aberred_core::math::Vec2;
 use bevy_ecs::hierarchy::ChildOf;
 use bevy_ecs::prelude::*;
 
-use crate::components::luatimer::LuaTimer;
+use crate::components::lua_on_timer_fired::LuaOnTimerFired;
 use aberred_core::components::cameratarget::CameraTarget;
 use aberred_core::components::entityshader::EntityShader;
 use aberred_core::components::globaltransform2d::GlobalTransform2D;
@@ -20,6 +20,7 @@ use aberred_core::components::scale::Scale;
 use aberred_core::components::screenposition::ScreenPosition;
 use aberred_core::components::shadow::Shadow;
 use aberred_core::components::stuckto::StuckTo;
+use aberred_core::components::timer::Timer;
 use aberred_core::components::tint::Tint;
 use aberred_core::components::ttl::Ttl;
 use aberred_core::components::tween::{Tween, TweenValue};
@@ -841,12 +842,12 @@ fn process_lifecycle_cmd(
             mode,
         } => {
             with_entity_cmd(commands, entity_id, |ec| {
-                ec.try_insert(LuaTimer::with_mode(duration, callback, mode));
+                ec.try_insert(LuaOnTimerFired::timer(duration, callback, mode));
             });
         }
         EntityCmd::RemoveLuaTimer { entity_id } => {
             with_entity_cmd(commands, entity_id, |ec| {
-                ec.try_remove::<LuaTimer>();
+                ec.try_remove::<(Timer, LuaOnTimerFired)>();
             });
         }
         EntityCmd::Despawn { entity_id } => {
@@ -1161,10 +1162,33 @@ mod tests {
             },
         );
 
-        let lua_timer = world.get::<LuaTimer>(entity).unwrap();
-        assert_eq!(lua_timer.timer.mode, TimerMode::Once);
-        assert_eq!(lua_timer.timer.duration, 1.5);
-        assert_eq!(&*lua_timer.callback, "boom");
+        let timer = world.get::<Timer>(entity).unwrap();
+        assert_eq!(timer.mode, TimerMode::Once);
+        assert_eq!(timer.duration, 1.5);
+        assert_eq!(
+            &*world.get::<LuaOnTimerFired>(entity).unwrap().callback,
+            "boom"
+        );
+    }
+
+    #[test]
+    fn remove_lua_timer_cmd_removes_the_timer_and_its_callback() {
+        let mut world = World::new();
+        let mut signals = WorldSignals::default();
+        let entity = world
+            .spawn((Timer::new(1.0), LuaOnTimerFired::new("boom")))
+            .id();
+
+        run_entity_cmd(
+            &mut world,
+            &mut signals,
+            EntityCmd::RemoveLuaTimer {
+                entity_id: entity.to_bits(),
+            },
+        );
+
+        assert!(world.get::<Timer>(entity).is_none());
+        assert!(world.get::<LuaOnTimerFired>(entity).is_none());
     }
 
     #[test]

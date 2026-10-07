@@ -14,6 +14,7 @@ pub mod lua_gui_interactable_click;
 pub mod lua_mapspawn;
 pub mod lua_menu;
 pub mod lua_setup_entity;
+pub mod lua_timer_fired;
 pub mod lua_tween_finished;
 pub mod luaphase;
 pub mod luatimer;

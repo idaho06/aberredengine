@@ -512,9 +512,13 @@ impl EngineBuilder {
                     .in_set(SimSet::Bookkeeping),
             );
             // Fires the sim tick after spawn (up to 1/sim_hz latency).
+            // `.after(update_timers)`: both touch `Timer` (the setup ctx reads
+            // it for ctx.timer), so a setup callback sees this tick's advanced
+            // timer and runs after this tick's Lua timer callbacks.
             sim.add_systems(
                 lua_setup_entity_system
                     .run_if(state_is_playing)
+                    .after(update_timers)
                     .in_set(SimSet::Drain),
             );
         } else {
@@ -530,7 +534,10 @@ impl EngineBuilder {
         }
 
         Self::add_animation_system(sim, has_lua);
-        sim.add_systems(update_timers.in_set(SimSet::Drain));
+        // `.before(animation)`: a timer firing this tick sees the animation
+        // frame from before this tick's advance (Rust `TimerFired` observers and
+        // Lua timer callbacks alike).
+        sim.add_systems(update_timers.before(animation).in_set(SimSet::Drain));
         sim.add_systems(update_world_signals_binding_system.in_set(SimSet::Bookkeeping));
         sim.add_systems(detect_window_resize.in_set(SimSet::Bookkeeping));
         sim.add_systems(

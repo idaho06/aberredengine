@@ -9,9 +9,9 @@ use bevy_ecs::prelude::*;
 
 use crate::components::lua_on_click::LuaOnClick;
 use crate::components::lua_on_menu_select::LuaOnMenuSelect;
+use crate::components::lua_on_timer_fired::LuaOnTimerFired;
 use crate::components::luaphase::{LuaPhase, PhaseCallbacks};
 use crate::components::luasetup::LuaSetup;
-use crate::components::luatimer::LuaTimer;
 use aberred_core::components::animation::{Animation, AnimationController};
 use aberred_core::components::boxcollider::BoxCollider;
 use aberred_core::components::cameratarget::CameraTarget;
@@ -454,7 +454,7 @@ fn apply_behavior_components(entity_commands: &mut EntityCommands, b: BehaviorCo
         entity_commands.insert(LuaPhase::new(phase_data.initial, phases));
     }
     if let Some(timer) = lua_timer {
-        entity_commands.insert(LuaTimer::with_mode(
+        entity_commands.insert(LuaOnTimerFired::timer(
             timer.duration,
             timer.callback,
             timer.mode,
@@ -1255,8 +1255,11 @@ mod tests {
         assert_eq!(phase.phase.current, "idle");
         assert_eq!(phase.phases.len(), 2);
         assert_eq!(phase.phases["idle"].on_enter.as_deref(), Some("idle_in"));
-        let timer = world.get::<LuaTimer>(e).unwrap();
-        assert_eq!((timer.timer.duration, &*timer.callback), (0.5, "tick"));
+        let timer = world
+            .get::<aberred_core::components::timer::Timer>(e)
+            .unwrap();
+        let on_fired = world.get::<LuaOnTimerFired>(e).unwrap();
+        assert_eq!((timer.duration, &*on_fired.callback), (0.5, "tick"));
         // Must be queryable as LuaCollisionRule, not core's CollisionRule.
         let rule = world
             .query::<&LuaCollisionRule>()
