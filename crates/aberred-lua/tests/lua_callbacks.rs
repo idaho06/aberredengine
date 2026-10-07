@@ -42,9 +42,7 @@ use aberred_lua::components::lua_on_tween_finished::LuaOnTweenFinished;
 use aberred_lua::components::luaphase::{LuaPhase, PhaseCallbacks};
 use aberred_lua::resources::lua_runtime::LuaRuntime;
 use aberred_lua::systems::lua_animation_finished::lua_animation_finished_observer;
-use aberred_lua::systems::lua_collision::{
-    lua_collision_enter_observer, lua_collision_exit_observer, lua_collision_stay_observer,
-};
+use aberred_lua::systems::lua_collision::lua_collision_rule_added_observer;
 use aberred_lua::systems::lua_gui_interactable_click::lua_gui_interactable_click_observer;
 use aberred_lua::systems::lua_menu::lua_menu_selection_observer;
 use aberred_lua::systems::lua_timer_fired::{lua_timer_fired_observer, lua_timer_removed_observer};
@@ -83,12 +81,11 @@ fn lua_rule(group_a: &str, group_b: &str, callback: &str) -> (CollisionRule, Lua
     )
 }
 
-/// Core's rule observer plus the Lua collision observers on its events.
+/// Core's rule observer plus the hook that attaches the Lua collision
+/// observers to each Lua rule spawned afterwards.
 fn add_lua_collision_observers(world: &mut World) {
     world.add_observer(collision_rule_observer);
-    world.add_observer(lua_collision_enter_observer);
-    world.add_observer(lua_collision_stay_observer);
-    world.add_observer(lua_collision_exit_observer);
+    world.add_observer(lua_collision_rule_added_observer);
 }
 
 /// Core rule-index rebuild, then collision detection.
@@ -134,6 +131,8 @@ fn collision_pipeline_triggers_lua_side_effects() {
             BoxCollider::new(10.0, 10.0),
         ))
         .id();
+    // Register the observers that process Lua callbacks
+    add_lua_collision_observers(&mut world);
     world.spawn((lua_rule("player", "enemy", "on_player_enemy"),));
 
     // Track if collision event was triggered
@@ -144,9 +143,6 @@ fn collision_pipeline_triggers_lua_side_effects() {
     world.add_observer(move |_trigger: On<Overlapping>| {
         *saw_collision_clone.lock().unwrap() = true;
     });
-
-    // Register the observers that process Lua callbacks
-    add_lua_collision_observers(&mut world);
 
     world.flush();
 
@@ -195,9 +191,8 @@ fn collision_callback_error_still_drains_queued_commands() {
         MapPosition::new(5.0, 0.0),
         BoxCollider::new(10.0, 10.0),
     ));
-    world.spawn((lua_rule("player", "enemy", "on_player_enemy_err"),));
-
     add_lua_collision_observers(&mut world);
+    world.spawn((lua_rule("player", "enemy", "on_player_enemy_err"),));
 
     world.flush();
 
@@ -478,9 +473,8 @@ fn collision_callback_spawn_then_clone_same_drain() {
             BoxCollider::new(10.0, 10.0),
         ))
         .id();
-    world.spawn(lua_rule("shooter", "target", "on_coll_spawn_clone"));
-
     add_lua_collision_observers(&mut world);
+    world.spawn(lua_rule("shooter", "target", "on_coll_spawn_clone"));
     world.flush();
 
     tick_collision_detector(&mut world);
@@ -595,9 +589,8 @@ fn collision_callback_phase_plus_signal_all_processed() {
         MapPosition::new(5.0, 0.0),
         BoxCollider::new(10.0, 10.0),
     ));
-    world.spawn(lua_rule("hero", "hazard", "on_multi_effect"));
-
     add_lua_collision_observers(&mut world);
+    world.spawn(lua_rule("hero", "hazard", "on_multi_effect"));
     world.flush();
 
     tick_collision_detector(&mut world);

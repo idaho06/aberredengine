@@ -1485,11 +1485,7 @@ fn lua_collision_rules_join_the_core_rule_index() {
     // The spawn drains in Bookkeeping, after this tick's index rebuild.
     tw.tick(1, DT);
 
-    let rule = tw
-        .world
-        .query_filtered::<Entity, With<CollisionRule>>()
-        .single(&tw.world)
-        .unwrap();
+    let rule = lua_rule_entity(&mut tw);
     let index = tw.world.resource::<CollisionRuleIndex>();
     assert_eq!(index.bucket("b", "a"), Some(&[rule][..]));
 }
@@ -1525,21 +1521,28 @@ fn take_lua_log(tw: &mut TestWorld) -> Vec<String> {
     joined.lines().map(str::to_owned).collect()
 }
 
+/// Runs the Lua chunk `code` in the game's runtime.
+#[cfg(feature = "lua")]
+fn exec_lua(tw: &mut TestWorld, code: &str) {
+    use aberredengine::lua::resources::lua_runtime::LuaRuntime;
+    tw.world
+        .non_send::<LuaRuntime>()
+        .lua()
+        .load(code)
+        .exec()
+        .unwrap();
+}
+
 /// Spawns a Lua rule for groups `a`/`b` through `engine.spawn()`, with the
 /// stay `callback` (if any) and the builder `modifiers` after it, then ticks
 /// once so the spawn is drained before the caller spawns colliders.
 #[cfg(feature = "lua")]
 fn spawn_lua_rule(tw: &mut TestWorld, callback: Option<&str>, modifiers: &str) {
-    use aberredengine::lua::resources::lua_runtime::LuaRuntime;
     let stay = callback.map_or("nil".to_owned(), |name| format!("'{name}'"));
-    tw.world
-        .non_send::<LuaRuntime>()
-        .lua()
-        .load(format!(
-            "engine.spawn():with_lua_collision_rule('a', 'b', {stay}){modifiers}:build()"
-        ))
-        .exec()
-        .unwrap();
+    exec_lua(
+        tw,
+        &format!("engine.spawn():with_lua_collision_rule('a', 'b', {stay}){modifiers}:build()"),
+    );
     tw.tick(1, DT);
 }
 
@@ -1690,6 +1693,105 @@ fn lua_collision_exit_fires_after_a_despawn() {
         take_lua_log(&mut tw),
         [format!("exit {} {} a b", a.to_bits(), b.to_bits())]
     );
+}
+
+/// The single Lua rule entity (`CollisionRule` + `LuaOnCollision`).
+#[cfg(feature = "lua")]
+fn lua_rule_entity(tw: &mut TestWorld) -> Entity {
+    use aberredengine::lua::components::lua_on_collision::LuaOnCollision;
+    tw.world
+        .query_filtered::<Entity, With<LuaOnCollision>>()
+        .single(&tw.world)
+        .unwrap()
+}
+
+/// Lua collision observers watch the Lua rule entities only: a Lua rule has
+/// its enter/stay/exit observers, a Rust rule none.
+#[cfg(feature = "lua")]
+#[test]
+fn lua_collision_observers_watch_only_lua_rules() {
+    use aberredengine::bevy_ecs::observer::ObservedBy;
+
+    let mut tw = lua_script_world("observed_rules", "function on_enter(ctx) end\n");
+    spawn_enter_exit_rule(&mut tw, None);
+    let rust_rule = tw.world.spawn(CollisionRule::new("c", "d")).id();
+    tw.tick(1, DT);
+
+    let lua_rule = lua_rule_entity(&mut tw);
+    let observers = |e| tw.world.get::<ObservedBy>(e).map_or(0, |o| o.get().len());
+    assert_eq!(observers(lua_rule), 3);
+    assert_eq!(observers(rust_rule), 0);
+}
+
+/// Removing and re-inserting a rule's `LuaOnCollision` keeps one set of
+/// callbacks: `on_enter` runs once per contact.
+#[cfg(feature = "lua")]
+#[test]
+fn lua_collision_callbacks_reinserted_still_run_once() {
+    use aberredengine::lua::components::lua_on_collision::LuaOnCollision;
+
+    let mut tw = lua_script_world(
+        "reinsert",
+        "function on_enter(ctx) LOG[#LOG + 1] = 'enter' end\nfunction on_exit(ctx) end\n",
+    );
+    spawn_enter_exit_rule(&mut tw, None);
+    let rule = lua_rule_entity(&mut tw);
+    let callbacks = tw.world.entity_mut(rule).take::<LuaOnCollision>().unwrap();
+    tw.tick(1, DT);
+    tw.world.entity_mut(rule).insert(callbacks);
+    tw.tick(1, DT);
+
+    spawn_box(&mut tw, "a", 0.0, ());
+    spawn_box(&mut tw, "b", 5.0, ());
+    tw.tick(1, DT);
+
+    assert_eq!(take_lua_log(&mut tw), ["enter"]);
+}
+
+/// A rule cloned with `engine.clone()` from a registered Lua rule calls the
+/// same Lua callbacks, also once the original is gone.
+#[cfg(feature = "lua")]
+#[test]
+fn lua_collision_rule_clone_keeps_its_callbacks() {
+    let mut tw = lua_script_world(
+        "clone_rule",
+        "function on_enter(ctx) LOG[#LOG + 1] = 'enter' end\nfunction on_exit(ctx) end\n",
+    );
+    spawn_lua_rule(&mut tw, None, &format!("{ENTER_EXIT}:register_as('rule')"));
+    let original = lua_rule_entity(&mut tw);
+    exec_lua(&mut tw, "engine.clone('rule'):build()");
+    tw.tick(1, DT);
+    tw.world.despawn(original);
+    tw.tick(1, DT);
+
+    spawn_box(&mut tw, "a", 0.0, ());
+    spawn_box(&mut tw, "b", 5.0, ());
+    tw.tick(1, DT);
+
+    assert_eq!(take_lua_log(&mut tw), ["enter"]);
+}
+
+/// A Lua rule despawned while its pair touches never calls `on_exit`.
+#[cfg(feature = "lua")]
+#[test]
+fn lua_collision_despawned_rule_gets_no_exit() {
+    let mut tw = lua_script_world(
+        "despawned_rule",
+        "function on_enter(ctx) LOG[#LOG + 1] = 'enter' end\n\
+         function on_exit(ctx) LOG[#LOG + 1] = 'exit' end\n",
+    );
+    spawn_enter_exit_rule(&mut tw, None);
+    spawn_box(&mut tw, "a", 0.0, ());
+    let b = spawn_box(&mut tw, "b", 5.0, ());
+    tw.tick(1, DT);
+    assert_eq!(take_lua_log(&mut tw), ["enter"]);
+
+    let rule = lua_rule_entity(&mut tw);
+    tw.world.despawn(rule);
+    move_to(&mut tw, b, 100.0);
+    tw.tick(2, DT);
+
+    assert!(take_lua_log(&mut tw).is_empty());
 }
 
 /// A rule with only a stay callback runs it every touching tick, and nothing

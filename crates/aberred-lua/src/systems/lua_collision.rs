@@ -1,12 +1,14 @@
 //! Lua collision observers and callback dispatch.
 //!
 //! A Lua collision rule is a core `CollisionRule` plus a [`LuaOnCollision`].
-//! Core matches it, tracks its contacts and triggers its events; these
-//! observers call the Lua functions the [`LuaOnCollision`] names:
+//! Core matches it, tracks its contacts and triggers its events on the rule
+//! entity; these observers, which [`lua_collision_rule_added_observer`]
+//! attaches to each Lua rule entity (so a Rust rule's events never reach
+//! them), call the Lua functions the [`LuaOnCollision`] names:
 //!
-//! - [`lua_collision_enter_observer`] – on `CollisionStarted`, calls `enter`
-//! - [`lua_collision_stay_observer`] – on `Collided`, calls `stay`
-//! - [`lua_collision_exit_observer`] – on `CollisionEnded`, calls `exit`
+//! - `lua_collision_enter_observer` – on `CollisionStarted`, calls `enter`
+//! - `lua_collision_stay_observer` – on `Collided`, calls `stay`
+//! - `lua_collision_exit_observer` – on `CollisionEnded`, calls `exit`
 //!
 //! Each callback gets a fresh pooled ctx and its `engine.collision_*`
 //! commands are applied right after it. Core triggers `CollisionStarted`
@@ -104,7 +106,7 @@ fn live_side<'a>(
 /// entities that also carry a [`LuaOnCollision`]) and the shared callback
 /// dispatch, whose collision-scoped queues each callback drains.
 #[derive(SystemParam)]
-pub struct LuaRuleDispatch<'w, 's> {
+struct LuaRuleDispatch<'w, 's> {
     rules: Query<'w, 's, (&'static CollisionRule, &'static LuaOnCollision)>,
     dispatch: LuaDispatch<'w, 's>,
 }
@@ -183,31 +185,64 @@ impl LuaRuleDispatch<'_, '_> {
     }
 }
 
-/// Observes core `CollisionStarted` and calls the Lua rule's `enter` callback.
+/// Marks a Lua rule entity whose collision observers are attached. Not
+/// cloned (like bevy's `ObservedBy`), so a cloned rule gets its own observers;
+/// kept when `LuaOnCollision` is removed, so re-inserting it reuses them.
+#[doc(hidden)]
+#[derive(Component)]
+#[component(clone_behavior = Ignore)]
+pub struct LuaCollisionObserved;
+
+/// Attaches the enter/stay/exit observers to each new Lua rule entity, once.
+///
+/// Each attached observer is its own entity with its own copy of the
+/// dispatch system state (three per Lua rule, respawned with the rule); in
+/// exchange, a Rust rule's collision events never run Lua dispatch. Lua rules
+/// spawned before this observer is registered get no callbacks.
+pub fn lua_collision_rule_added_observer(
+    trigger: On<Add, LuaOnCollision>,
+    observed: Query<(), With<LuaCollisionObserved>>,
+    mut commands: Commands,
+) {
+    let rule = trigger.event_target();
+    if observed.contains(rule) {
+        return;
+    }
+    commands
+        .entity(rule)
+        .insert(LuaCollisionObserved)
+        .observe(lua_collision_enter_observer)
+        .observe(lua_collision_stay_observer)
+        .observe(lua_collision_exit_observer);
+}
+
+/// Observes core `CollisionStarted` on a Lua rule entity and calls its
+/// `enter` callback.
 ///
 /// Core triggers `CollisionStarted` just before the pair's first `Collided`,
 /// so `enter` runs before that tick's `stay`.
-pub fn lua_collision_enter_observer(trigger: On<CollisionStarted>, mut dispatch: LuaRuleDispatch) {
+fn lua_collision_enter_observer(trigger: On<CollisionStarted>, mut dispatch: LuaRuleDispatch) {
     let ev = trigger.event();
     dispatch.call_touching((ev.rule, ev.a, ev.b), |callbacks| {
         callbacks.enter.as_deref()
     });
 }
 
-/// Observes core `Collided` and calls the Lua rule's `stay` callback, every
-/// tick the pair touches.
-pub fn lua_collision_stay_observer(trigger: On<Collided>, mut dispatch: LuaRuleDispatch) {
+/// Observes core `Collided` on a Lua rule entity and calls its `stay`
+/// callback, every tick the pair touches.
+fn lua_collision_stay_observer(trigger: On<Collided>, mut dispatch: LuaRuleDispatch) {
     let ev = trigger.event();
     dispatch.call_touching((ev.rule, ev.a, ev.b), |callbacks| callbacks.stay.as_deref());
 }
 
-/// Observes core `CollisionEnded` and calls the Lua rule's `exit` callback.
+/// Observes core `CollisionEnded` on a Lua rule entity and calls its `exit`
+/// callback.
 ///
-/// Either entity may already be despawned, so the ctx carries only `id` and
-/// `group` per side (from the rule's groups); `pos`, `vel`, `rect` and
-/// `signals` are nil and the sides are empty. A rule entity that is gone, or
-/// is not a Lua rule, is skipped.
-pub fn lua_collision_exit_observer(trigger: On<CollisionEnded>, mut dispatch: LuaRuleDispatch) {
+/// Either touching entity may already be despawned, so the ctx carries only
+/// `id` and `group` per side (from the rule's groups); `pos`, `vel`, `rect`
+/// and `signals` are nil and the sides are empty. A despawned rule takes its
+/// observers with it; a rule whose `LuaOnCollision` was removed is skipped.
+fn lua_collision_exit_observer(trigger: On<CollisionEnded>, mut dispatch: LuaRuleDispatch) {
     dispatch.call_exit(*trigger.event());
 }
 
