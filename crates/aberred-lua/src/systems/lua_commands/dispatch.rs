@@ -2,10 +2,12 @@
 //!
 //! Bundles the params and steps shared by `lua_timer_fired_observer`,
 //! `lua_setup_entity_system`, `lua_animation_finished_observer`,
-//! `lua_tween_finished_observer`, `lua_gui_interactable_click_observer`, and
-//! `lua_menu_selection_observer`: sync the signal cache, build the callback's
-//! arguments (an entity context and optional input table, or a custom context
-//! table), call the named Lua function, then drain the commands it queued.
+//! `lua_tween_finished_observer`, `lua_gui_interactable_click_observer`,
+//! `lua_menu_selection_observer`, and the Lua collision observers: sync the
+//! signal cache, build the callback's arguments (an entity context and
+//! optional input table, or a custom context table), call the named Lua
+//! function, then drain the commands it queued (the collision observers drain
+//! the collision-scoped queues).
 //!
 //! `lua_phase_system` (`crate::systems::luaphase`) does NOT use this helper —
 //! it must interleave `apply_callback_transitions` between the phase drain
@@ -157,7 +159,7 @@ pub fn call_entity_callback(
 pub fn dispatch_and_drain(p: &mut LuaDispatch, entity: Entity, callback_name: &str, label: &str) {
     refresh_signal_cache(p);
     if call_entity_callback(p, entity, callback_name, label, CallShape::CtxAndInput) {
-        drain_dispatch_commands(p);
+        drain_dispatch_commands(p, DrainScope::Regular);
     }
 }
 
@@ -175,17 +177,21 @@ pub fn dispatch_custom_and_drain(
     p.lua_runtime.call_named(callback_name, label, |func| {
         func.call::<()>(build(p.lua_runtime.lua())?)
     });
-    drain_dispatch_commands(p);
+    drain_dispatch_commands(p, DrainScope::Regular);
 }
 
-/// Drain the phase queue, then the 6 regular effect queues, in the canonical
-/// order. The one-and-only surviving caller of the flow previously exposed
-/// as `drain_phase_and_effects`.
-pub fn drain_dispatch_commands(p: &mut LuaDispatch) {
-    drain_and_process_phase_commands(&p.lua_runtime, &mut p.phase_buf, &mut p.luaphase_query);
+/// Drain the `scope`'s phase queue, then its 6 effect queues, in the
+/// canonical order.
+pub(crate) fn drain_dispatch_commands(p: &mut LuaDispatch, scope: DrainScope) {
+    drain_and_process_phase_commands(
+        &p.lua_runtime,
+        scope,
+        &mut p.phase_buf,
+        &mut p.luaphase_query,
+    );
     drain_and_process_effect_commands(
         &p.lua_runtime,
-        DrainScope::Regular,
+        scope,
         &mut p.effect_bufs,
         &mut p.commands,
         &mut p.world_signals,

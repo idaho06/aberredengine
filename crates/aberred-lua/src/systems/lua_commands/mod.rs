@@ -27,11 +27,12 @@ mod processors;
 mod spawn_cmd;
 
 pub(crate) use context::build_entity_context;
+pub(crate) use dispatch::drain_dispatch_commands;
 #[cfg(test)]
 pub(crate) use dispatch::init_dispatch_resources;
 pub use dispatch::{
     CallShape, LuaDispatch, call_entity_callback, dispatch_and_drain, dispatch_custom_and_drain,
-    drain_dispatch_commands, refresh_signal_cache,
+    refresh_signal_cache,
 };
 pub use entity_cmd::process_entity_commands;
 pub use processors::{
@@ -95,10 +96,12 @@ pub struct EffectCmdBufs {
 }
 
 /// Selects which set of command queues to drain from the Lua runtime.
+#[derive(Clone, Copy)]
 pub(crate) enum DrainScope {
-    /// Regular queues used by update, switch_scene, timer, and phase systems.
+    /// Regular queues, drained after every non-collision callback.
     Regular,
-    /// Collision-scoped queues used by the collision observer.
+    /// Collision-scoped queues, drained by the Lua collision observers right
+    /// after each callback.
     Collision,
 }
 
@@ -168,13 +171,17 @@ pub(crate) fn drain_and_process_effect_commands(
     }
 }
 
-/// Drains the phase command queue and processes each command.
+/// Drains the `scope`'s phase command queue and processes each command.
 pub(crate) fn drain_and_process_phase_commands(
     lua_runtime: &LuaRuntime,
+    scope: DrainScope,
     buf: &mut Vec<PhaseCmd>,
     query: &mut Query<(Entity, &mut LuaPhase)>,
 ) {
-    lua_runtime.drain_phase_commands_into(buf);
+    match scope {
+        DrainScope::Regular => lua_runtime.drain_phase_commands_into(buf),
+        DrainScope::Collision => lua_runtime.drain_collision_phase_commands_into(buf),
+    }
     for cmd in buf.drain(..) {
         process_phase_command(query, cmd);
     }

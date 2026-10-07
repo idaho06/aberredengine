@@ -11,7 +11,8 @@ use bevy_ecs::prelude::*;
 
 use crate::components::luasetup::LuaSetup;
 use crate::systems::lua_commands::{
-    CallShape, LuaDispatch, call_entity_callback, drain_dispatch_commands, refresh_signal_cache,
+    CallShape, DrainScope, LuaDispatch, call_entity_callback, drain_dispatch_commands,
+    refresh_signal_cache,
 };
 
 pub fn lua_setup_entity_system(
@@ -34,5 +35,5 @@ pub fn lua_setup_entity_system(
         );
     }
 
-    drain_dispatch_commands(&mut p);
+    drain_dispatch_commands(&mut p, DrainScope::Regular);
 }

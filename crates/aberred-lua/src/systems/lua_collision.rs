@@ -46,40 +46,19 @@ use bevy_ecs::prelude::*;
 use bevy_ecs::system::SystemParam;
 
 use crate::components::lua_on_collision::LuaOnCollision;
-use crate::components::luaphase::LuaPhase;
 use crate::resources::lua_runtime::{
-    CtxOccupancy, LuaRuntime, OccMask, PhaseCmd, SignalsCtxTables, clear_table,
-    populate_entity_signals, set_opt,
+    CtxOccupancy, LuaRuntime, OccMask, SignalsCtxTables, clear_table, populate_entity_signals,
+    set_opt,
 };
 use crate::systems::lua_commands::{
-    DrainScope, EffectCmdBufs, EntityCmdQueries, drain_and_process_effect_commands,
-    process_phase_command,
+    DrainScope, EntityCmdQueries, LuaDispatch, drain_dispatch_commands, refresh_signal_cache,
 };
-use aberred_core::components::boxcollider::BoxCollider;
 use aberred_core::components::collision::{BoxSide, CollisionRule};
 use aberred_core::components::signals::Signals;
 use aberred_core::events::collision::{Collided, CollisionEnded, CollisionStarted};
 use aberred_core::math::Rect;
-use aberred_core::protocol::audio::AudioCmd;
-use aberred_core::resources::animationstore::AnimationStore;
-use aberred_core::resources::systemsstore::SystemsStore;
-use aberred_core::resources::worldsignals::WorldSignals;
 use aberred_core::systems::collision::{compute_sides, resolve_collider_rect, resolve_world_pos};
 use log::error;
-
-/// What a Lua collision callback reads (its ctx) and what its
-/// `engine.collision_*` commands write.
-#[derive(SystemParam)]
-struct LuaCollisionEffects<'w, 's> {
-    commands: Commands<'w, 's>,
-    luaphase_query: Query<'w, 's, (Entity, &'static mut LuaPhase)>,
-    entity_cmds: EntityCmdQueries<'w, 's>,
-    world_signals: ResMut<'w, WorldSignals>,
-    audio_cmds: MessageWriter<'w, AudioCmd>,
-    lua_runtime: NonSend<'w, LuaRuntime>,
-    systems_store: Res<'w, SystemsStore>,
-    animation_store: Res<'w, AnimationStore>,
-}
 
 /// One side of a pooled collision context. `Default` leaves everything but
 /// `id` and `group` nil (the exit callback's ctx).
@@ -95,74 +74,39 @@ struct CollisionSide<'a> {
     signals: Option<&'a Signals>,
 }
 
-impl LuaCollisionEffects<'_, '_> {
-    /// The full ctx side of a live entity, touching the other side on `sides`.
-    fn live_side<'a>(
-        &'a self,
-        entity: Entity,
-        group: &'a str,
-        rect: Option<Rect>,
-        sides: &'a [BoxSide],
-    ) -> CollisionSide<'a> {
-        let pos = resolve_world_pos(
-            &self.entity_cmds.positions.as_readonly(),
-            &self.entity_cmds.global_transforms,
-            entity,
-        );
-        let velocity = self
-            .entity_cmds
-            .rigid_bodies
-            .get(entity)
-            .ok()
-            .map(|rb| rb.velocity);
-        CollisionSide {
-            id: entity.to_bits(),
-            group: Some(group),
-            pos: pos.map(|v| (v.x, v.y)),
-            vel: velocity.map(|v| (v.x, v.y)),
-            speed_sq: velocity.map_or(0.0, |v| v.length_squared()),
-            rect: rect.map(|r| (r.x, r.y, r.width, r.height)),
-            sides,
-            signals: self.entity_cmds.signals.get(entity).ok(),
-        }
-    }
-
-    /// Applies the `engine.collision_*` commands a callback just queued.
-    fn drain_collision_commands(
-        &mut self,
-        phase_buf: &mut Vec<PhaseCmd>,
-        effect_bufs: &mut EffectCmdBufs,
-    ) {
-        self.lua_runtime
-            .drain_collision_phase_commands_into(phase_buf);
-        for cmd in phase_buf.drain(..) {
-            process_phase_command(&mut self.luaphase_query, cmd);
-        }
-
-        drain_and_process_effect_commands(
-            &self.lua_runtime,
-            DrainScope::Collision,
-            effect_bufs,
-            &mut self.commands,
-            &mut self.world_signals,
-            &mut self.entity_cmds,
-            &mut self.audio_cmds,
-            &self.systems_store,
-            &self.animation_store,
-        );
+/// The full ctx side of a live entity, touching the other side on `sides`.
+fn live_side<'a>(
+    queries: &'a EntityCmdQueries,
+    entity: Entity,
+    group: &'a str,
+    rect: Option<Rect>,
+    sides: &'a [BoxSide],
+) -> CollisionSide<'a> {
+    let pos = resolve_world_pos(
+        &queries.positions.as_readonly(),
+        &queries.global_transforms,
+        entity,
+    );
+    let velocity = queries.rigid_bodies.get(entity).ok().map(|rb| rb.velocity);
+    CollisionSide {
+        id: entity.to_bits(),
+        group: Some(group),
+        pos: pos.map(|v| (v.x, v.y)),
+        vel: velocity.map(|v| (v.x, v.y)),
+        speed_sq: velocity.map_or(0.0, |v| v.length_squared()),
+        rect: rect.map(|r| (r.x, r.y, r.width, r.height)),
+        sides,
+        signals: queries.signals.get(entity).ok(),
     }
 }
 
 /// What the Lua collision observers read and write: the Lua rules (core rule
-/// entities that also carry a [`LuaOnCollision`]), their colliders, the
-/// callback effects and this observer's command buffers.
+/// entities that also carry a [`LuaOnCollision`]) and the shared callback
+/// dispatch, whose collision-scoped queues each callback drains.
 #[derive(SystemParam)]
 pub struct LuaRuleDispatch<'w, 's> {
     rules: Query<'w, 's, (&'static CollisionRule, &'static LuaOnCollision)>,
-    box_colliders: Query<'w, 's, &'static BoxCollider>,
-    effects: LuaCollisionEffects<'w, 's>,
-    phase_buf: Local<'s, Vec<PhaseCmd>>,
-    effect_bufs: Local<'s, EffectCmdBufs>,
+    dispatch: LuaDispatch<'w, 's>,
 }
 
 impl LuaRuleDispatch<'_, '_> {
@@ -184,27 +128,28 @@ impl LuaRuleDispatch<'_, '_> {
             return;
         };
 
-        let effects = &mut self.effects;
-        effects.lua_runtime.sync_signals(&mut effects.world_signals);
+        let p = &mut self.dispatch;
+        refresh_signal_cache(p);
         {
+            let queries = &p.cmd_queries;
             let rect_of = |entity| {
                 resolve_collider_rect(
-                    &effects.entity_cmds.positions.as_readonly(),
-                    &effects.entity_cmds.global_transforms,
-                    &self.box_colliders,
+                    &queries.positions.as_readonly(),
+                    &queries.global_transforms,
+                    &p.ctx_queries.box_colliders,
                     entity,
                 )
             };
             let (rect_a, rect_b) = (rect_of(a), rect_of(b));
             let (sides_a, sides_b) = compute_sides(rect_a, rect_b);
             call_lua_collision_callback(
-                &effects.lua_runtime,
+                &p.lua_runtime,
                 name,
-                effects.live_side(a, &rule.group_a, rect_a, &sides_a),
-                effects.live_side(b, &rule.group_b, rect_b, &sides_b),
+                live_side(queries, a, &rule.group_a, rect_a, &sides_a),
+                live_side(queries, b, &rule.group_b, rect_b, &sides_b),
             );
         }
-        effects.drain_collision_commands(&mut self.phase_buf, &mut self.effect_bufs);
+        drain_dispatch_commands(p, DrainScope::Collision);
     }
 
     /// Calls the `exit` callback of the Lua rule `rule` (if it is one and has
@@ -218,10 +163,10 @@ impl LuaRuleDispatch<'_, '_> {
             return;
         };
 
-        let effects = &mut self.effects;
-        effects.lua_runtime.sync_signals(&mut effects.world_signals);
+        let p = &mut self.dispatch;
+        refresh_signal_cache(p);
         call_lua_collision_callback(
-            &effects.lua_runtime,
+            &p.lua_runtime,
             name,
             CollisionSide {
                 id: a.to_bits(),
@@ -234,7 +179,7 @@ impl LuaRuleDispatch<'_, '_> {
                 ..Default::default()
             },
         );
-        effects.drain_collision_commands(&mut self.phase_buf, &mut self.effect_bufs);
+        drain_dispatch_commands(p, DrainScope::Collision);
     }
 }
 

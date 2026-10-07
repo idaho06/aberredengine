@@ -222,7 +222,12 @@ fn drain_common_commands(
         process_animation_command(&mut scene_state.anim_store, cmd);
     }
 
-    drain_and_process_phase_commands(lua_runtime, &mut bufs.phase, &mut entities.luaphase);
+    drain_and_process_phase_commands(
+        lua_runtime,
+        DrainScope::Regular,
+        &mut bufs.phase,
+        &mut entities.luaphase,
+    );
 
     drain_and_process_effect_commands(
         lua_runtime,
