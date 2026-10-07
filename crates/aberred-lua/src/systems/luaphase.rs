@@ -321,7 +321,7 @@ pub fn lua_phase_system(
     }
 
     // Update signal cache so Lua can read current values
-    lua_runtime.update_signal_cache(world_signals.snapshot());
+    lua_runtime.sync_signals(&mut world_signals);
 
     let input_table = match lua_runtime.resolve_input_table(&input, time.frame_count) {
         Ok(table) => table,

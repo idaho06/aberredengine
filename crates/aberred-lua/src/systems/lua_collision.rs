@@ -146,18 +146,6 @@ impl LuaCollisionEffects<'_, '_> {
         }
     }
 
-    /// Refreshes the cached world-signal snapshot only when something has
-    /// changed since the last refresh. lua_plugin::update primes the cache
-    /// every frame; within a collision-heavy frame the common case (no
-    /// signal writes between collisions) skips the snapshot entirely,
-    /// avoiding a full per-collision re-clone of the dirtied domains.
-    fn refresh_signal_cache(&mut self) {
-        if self.world_signals.is_dirty() {
-            self.lua_runtime
-                .update_signal_cache(self.world_signals.snapshot());
-        }
-    }
-
     /// Applies the `engine.collision_*` commands a callback just queued.
     fn drain_collision_commands(
         &mut self,
@@ -221,7 +209,7 @@ pub fn lua_collision_observer(
     let (group_a, group_b) = if ent_a == a { (ga, gb) } else { (gb, ga) };
 
     for name in callbacks.into_iter().flatten() {
-        effects.refresh_signal_cache();
+        effects.lua_runtime.sync_signals(&mut effects.world_signals);
         {
             let rect_of = |entity| {
                 resolve_collider_rect(
@@ -268,7 +256,7 @@ pub fn lua_collision_ended_system(
             continue;
         };
 
-        effects.refresh_signal_cache();
+        effects.lua_runtime.sync_signals(&mut effects.world_signals);
         call_lua_collision_callback(
             &effects.lua_runtime,
             on_exit,

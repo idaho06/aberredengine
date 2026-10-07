@@ -66,8 +66,7 @@ pub enum CallShape {
 /// invocation (not per entity — see `lua_setup_entity_system`, which loops
 /// many entities per invocation but only wants this done once, up front).
 pub fn refresh_signal_cache(p: &mut LuaDispatch) {
-    p.lua_runtime
-        .update_signal_cache(p.world_signals.snapshot());
+    p.lua_runtime.sync_signals(&mut p.world_signals);
 }
 
 /// Build the entity context (and input table, if `call_shape` wants one) and

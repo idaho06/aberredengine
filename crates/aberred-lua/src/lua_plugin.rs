@@ -402,7 +402,7 @@ pub fn update(
     refresh_cached_callback_name(&mut cached_callback, scene_str);
 
     // Update signal cache for Lua to read current values
-    lua_runtime.update_signal_cache(scene_state.world_signals.snapshot());
+    lua_runtime.sync_signals(&mut scene_state.world_signals);
     lua_runtime.update_gameconfig_cache(&scene_state.config);
     lua_runtime.update_camera_cache(&camera, &screen, scene_state.config.pixel_snap_camera);
     if bindings.take_dirty() {
@@ -519,7 +519,7 @@ pub fn switch_scene(
 
     // Refresh the Lua signal cache so on_switch_scene sees the post-clear state
     // (cleared entity registry and group counts), not the previous scene's snapshot.
-    lua_runtime.update_signal_cache(scene_state.world_signals.snapshot());
+    lua_runtime.sync_signals(&mut scene_state.world_signals);
 
     let scene = scene_state
         .world_signals

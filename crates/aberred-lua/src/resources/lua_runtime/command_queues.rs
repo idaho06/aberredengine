@@ -6,7 +6,7 @@
 use super::commands::*;
 use super::runtime::{LuaAppData, LuaRuntime};
 use super::spawn_data::*;
-use aberred_core::resources::worldsignals::SignalSnapshot;
+use aberred_core::resources::worldsignals::{SignalSnapshot, WorldSignals};
 use rustc_hash::FxHashSet;
 use std::cell::RefCell;
 use std::sync::Arc;
@@ -88,6 +88,15 @@ impl LuaRuntime {
         }
     }
 
+    /// Publishes the current `WorldSignals` to the Lua signal cache.
+    ///
+    /// Always syncs: `snapshot()` is O(1) when nothing changed, and gating on
+    /// `is_dirty()` would miss writes whose dirty flags another snapshot consumer
+    /// (the render snapshot build) already cleared.
+    pub fn sync_signals(&self, signals: &mut WorldSignals) {
+        self.update_signal_cache(signals.snapshot());
+    }
+
     /// Updates the cached tracked groups that Lua can read.
     pub fn update_tracked_groups_cache(&self, groups: &FxHashSet<String>) {
         if let Some(data) = self.lua.app_data_ref::<LuaAppData>() {
@@ -158,5 +167,35 @@ impl LuaRuntime {
             snapshot.background_b = config.background_color.b;
             snapshot.pixel_snap_camera = config.pixel_snap_camera;
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn lua_sees_flag(runtime: &LuaRuntime, key: &str) -> bool {
+        runtime
+            .lua()
+            .load(format!("return engine.has_flag('{key}')"))
+            .eval()
+            .expect("engine.has_flag")
+    }
+
+    #[test]
+    fn sync_signals_publishes_writes_even_when_another_snapshot_cleared_the_dirty_flags() {
+        let runtime = LuaRuntime::new().expect("LuaRuntime::new");
+        let mut signals = WorldSignals::default();
+        runtime.sync_signals(&mut signals);
+        assert!(!lua_sees_flag(&runtime, "boss_dead"));
+
+        // A write after the last sync, then another consumer (the PRESENT snapshot
+        // build) takes a snapshot and clears the dirty flags.
+        signals.set_flag("boss_dead");
+        let _ = signals.snapshot();
+        assert!(!signals.is_dirty());
+
+        runtime.sync_signals(&mut signals);
+        assert!(lua_sees_flag(&runtime, "boss_dead"));
     }
 }
