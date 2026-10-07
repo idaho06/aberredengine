@@ -1634,11 +1634,11 @@ fn lua_collision_enter_and_exit_apply_collision_commands() {
     assert!(tw.world.resource::<WorldSignals>().has_flag("exited"));
 }
 
-/// A Lua game's `clean_all_entities` hook forgets the Lua contacts too: a
-/// persistent pair that separates afterwards gets no `on_exit`.
+/// A Lua game gets core's `clean_all_entities` hook, which forgets collision
+/// contacts: a persistent pair that separates afterwards gets no `on_exit`.
 #[cfg(feature = "lua")]
 #[test]
-fn lua_game_clean_all_entities_hook_forgets_lua_contacts() {
+fn lua_game_clean_all_entities_hook_forgets_contacts() {
     use aberredengine::core::components::persistent::Persistent;
     use aberredengine::core::resources::systemsstore::{self as hook_keys, SystemsStore};
 

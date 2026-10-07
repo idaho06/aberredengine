@@ -42,10 +42,9 @@ use crate::math::Rect;
 
 /// A rule component matched by a pair of group names.
 ///
-/// Implemented by [`CollisionRule`] and by `aberred-lua`'s
-/// `LuaCollisionRule`, so both share
-/// [`RuleIndex`](crate::resources::collision_rule_index::RuleIndex) and its
-/// matching.
+/// Implemented by [`CollisionRule`], which
+/// [`RuleIndex`](crate::resources::collision_rule_index::RuleIndex) buckets
+/// and matches.
 pub trait RuleGroups: Component {
     /// The rule's `(group_a, group_b)`.
     fn groups(&self) -> (&str, &str);

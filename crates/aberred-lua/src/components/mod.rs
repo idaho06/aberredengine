@@ -9,6 +9,5 @@ pub mod lua_on_collision;
 pub mod lua_on_menu_select;
 pub mod lua_on_timer_fired;
 pub mod lua_on_tween_finished;
-pub mod luacollision;
 pub mod luaphase;
 pub mod luasetup;

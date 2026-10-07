@@ -13,7 +13,6 @@
 //! - [`GameSceneState`] – world signals, post-process, config, camera follow, stores
 //! - [`EntityProcessing`] – entity command queries + LuaPhase query
 
-use crate::components::luacollision::LuaCollisionContacts;
 use crate::components::luaphase::LuaPhase;
 use crate::resources::lua_runtime::{
     AnimationCmd, AssetCmd, CameraFollowCmd, GameConfigCmd, GroupCmd, InputCmd, LuaRuntime,
@@ -462,17 +461,6 @@ pub fn update(
 
 pub use aberred_core::systems::gamestate::clean_all_entities;
 
-/// The `clean_all_entities` hook of a Lua game: core's cleanup, plus
-/// forgetting the Lua collision contacts without calling `on_exit`.
-pub fn lua_clean_all_entities(
-    commands: Commands,
-    scene_cleanup: SceneCleanup,
-    contacts: ResMut<CollisionContacts>,
-    mut lua_contacts: ResMut<LuaCollisionContacts>,
-) {
-    clean_all_entities(commands, scene_cleanup, contacts);
-    lua_contacts.clear();
-}
 /// Processes scene switching: despawns old entities, calls Lua callbacks,
 /// and processes all queued commands for the new scene.
 #[allow(clippy::too_many_arguments, private_interfaces)]
@@ -488,7 +476,6 @@ pub fn switch_scene(
     gui_theme_store: Res<GuiThemeStore>,
     mut gui_theme_warn_cache: ResMut<GuiThemeWarnCache>,
     mut contacts: ResMut<CollisionContacts>,
-    mut lua_contacts: ResMut<LuaCollisionContacts>,
 ) {
     let lua_runtime = &scripting.lua_runtime;
     debug!("switch_scene: System called!");
@@ -505,7 +492,6 @@ pub fn switch_scene(
     scene_cleanup.despawn_all(&mut commands);
     // The old scene's pairs are despawned: forget them without ending them.
     contacts.clear();
-    lua_contacts.clear();
 
     // Clear entity registrations for despawned (non-persistent) entities
     let persistent_set = scene_cleanup.persistent_set();
@@ -598,7 +584,6 @@ mod tests {
         world.insert_resource(InputBindings::default());
         world.insert_resource(TrackedGroups::default());
         world.insert_resource(CollisionContacts::default());
-        world.insert_resource(LuaCollisionContacts::default());
         world.insert_resource(Messages::<AudioCmd>::default());
         world.insert_resource(GuiThemeStore::default());
         world.insert_resource(GuiThemeWarnCache::default());
@@ -764,41 +749,19 @@ mod tests {
         );
     }
 
-    /// Seeds one contact that touched last tick in both contact sets.
-    fn seed_contacts(world: &mut World) {
-        let [rule, a, b] = [(); 3].map(|_| world.spawn_empty().id());
-        let mut contacts = world.resource_mut::<CollisionContacts>();
-        contacts.begin(rule, a, b);
-        contacts.end_tick();
-        let mut lua_contacts = world.resource_mut::<LuaCollisionContacts>();
-        lua_contacts.begin(rule, a, b);
-        lua_contacts.end_tick();
-    }
-
     /// The old scene's pairs are despawned, so their contacts are forgotten
     /// without ending.
     #[test]
     fn switch_scene_forgets_collision_contacts() {
         let mut world = new_drain_test_world();
-        seed_contacts(&mut world);
+        let [rule, a, b] = [(); 3].map(|_| world.spawn_empty().id());
+        let mut contacts = world.resource_mut::<CollisionContacts>();
+        contacts.begin(rule, a, b);
+        contacts.end_tick();
 
         world.run_system_once(switch_scene).unwrap();
 
         assert!(world.resource::<CollisionContacts>().is_empty());
-        assert!(world.resource::<LuaCollisionContacts>().is_empty());
-    }
-
-    /// Like `switch_scene`, the Lua game's cleanup hook forgets both contact
-    /// sets without ending them.
-    #[test]
-    fn lua_clean_all_entities_forgets_both_contact_sets() {
-        let mut world = new_drain_test_world();
-        seed_contacts(&mut world);
-
-        world.run_system_once(lua_clean_all_entities).unwrap();
-
-        assert!(world.resource::<CollisionContacts>().is_empty());
-        assert!(world.resource::<LuaCollisionContacts>().is_empty());
     }
 
     #[test]

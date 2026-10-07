@@ -64,8 +64,6 @@ use aberred_core::systems::scene_dispatch::{
 };
 
 #[cfg(feature = "lua")]
-use aberred_lua::components::luacollision::{LuaCollisionContacts, LuaCollisionRuleIndex};
-#[cfg(feature = "lua")]
 use aberred_lua::resources::lua_runtime::LuaRuntime;
 #[cfg(feature = "lua")]
 use aberred_lua::systems::lua_animation_finished::lua_animation_finished_observer;
@@ -209,8 +207,6 @@ impl EngineBuilder {
                 );
             }
             world.insert_non_send(lua_runtime);
-            world.insert_resource(LuaCollisionRuleIndex::default());
-            world.insert_resource(LuaCollisionContacts::default());
         }
 
         world.spawn((Observer::new(observe_gamestate_change_event), Persistent));
@@ -236,12 +232,6 @@ impl EngineBuilder {
                 &mut systems_store,
                 hook_keys::SETUP,
                 lua_plugin::setup,
-            );
-            register_persistent_system(
-                world,
-                &mut systems_store,
-                hook_keys::CLEAN_ALL_ENTITIES,
-                lua_plugin::lua_clean_all_entities,
             );
             register_persistent_system(
                 world,
@@ -293,18 +283,12 @@ impl EngineBuilder {
         }
 
         register_persistent_system(world, &mut systems_store, hook_keys::QUIT_GAME, quit_game);
-        // A Lua game registered its own cleanup (it also forgets Lua contacts).
-        if !systems_store
-            .map
-            .contains_key(hook_keys::CLEAN_ALL_ENTITIES)
-        {
-            register_persistent_system(
-                world,
-                &mut systems_store,
-                hook_keys::CLEAN_ALL_ENTITIES,
-                clean_all_entities,
-            );
-        }
+        register_persistent_system(
+            world,
+            &mut systems_store,
+            hook_keys::CLEAN_ALL_ENTITIES,
+            clean_all_entities,
+        );
 
         let menu_despawn_system_id = world.register_system(menu_despawn);
         world

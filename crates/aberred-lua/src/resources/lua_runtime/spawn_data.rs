@@ -174,7 +174,8 @@ pub struct TweenScaleData {
     pub config: TweenConfig,
 }
 
-/// LuaCollisionRule component data for spawning.
+/// Lua collision rule data for spawning: a `CollisionRule` plus a
+/// `LuaOnCollision` naming its callbacks.
 #[derive(Debug, Clone)]
 pub struct LuaCollisionRuleData {
     pub group_a: String,
@@ -446,7 +447,7 @@ pub struct SpawnCmd {
     pub menu: Option<MenuData>,
     /// Register spawned entity in WorldSignals with this key
     pub register_as: Option<String>,
-    /// LuaCollisionRule component data
+    /// Lua collision rule data
     pub lua_collision_rule: Option<LuaCollisionRuleData>,
     /// Animation component data
     pub animation: Option<AnimationData>,
