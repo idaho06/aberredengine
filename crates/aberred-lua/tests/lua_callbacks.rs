@@ -676,6 +676,20 @@ const ENTITY_CALLBACK_SRC: &str = "function on_done(ctx, input)
     engine.set_flag('done')
 end";
 
+/// The `(ctx, input)` callback of [`ENTITY_CALLBACK_SRC`] saw `entity`'s ctx and
+/// an input table, and its queued flag was applied.
+fn assert_entity_callback_ran(world: &World, entity: Entity) {
+    assert_eq!(
+        lua_global::<Option<u64>>(world, "got_id"),
+        Some(entity.to_bits())
+    );
+    assert_eq!(
+        lua_global::<Option<String>>(world, "got_input").as_deref(),
+        Some("table")
+    );
+    assert!(world.resource::<WorldSignals>().has_flag("done"));
+}
+
 #[test]
 fn animation_end_callback_gets_ctx_and_input_and_drains_its_commands() {
     let mut world = make_lua_callback_world(0.0);
@@ -686,15 +700,7 @@ fn animation_end_callback_gets_ctx_and_input_and_drains_its_commands() {
     world.trigger(AnimationFinished { entity });
     world.flush();
 
-    assert_eq!(
-        lua_global::<Option<u64>>(&world, "got_id"),
-        Some(entity.to_bits())
-    );
-    assert_eq!(
-        lua_global::<Option<String>>(&world, "got_input").as_deref(),
-        Some("table")
-    );
-    assert!(world.resource::<WorldSignals>().has_flag("done"));
+    assert_entity_callback_ran(&world, entity);
 }
 
 #[test]
@@ -709,13 +715,5 @@ fn tween_finished_callback_gets_ctx_and_input_and_drains_its_commands() {
     world.trigger(TweenFinished::<MapPosition>::new(entity));
     world.flush();
 
-    assert_eq!(
-        lua_global::<Option<u64>>(&world, "got_id"),
-        Some(entity.to_bits())
-    );
-    assert_eq!(
-        lua_global::<Option<String>>(&world, "got_input").as_deref(),
-        Some("table")
-    );
-    assert!(world.resource::<WorldSignals>().has_flag("done"));
+    assert_entity_callback_ran(&world, entity);
 }
