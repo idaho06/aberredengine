@@ -461,14 +461,16 @@ fn apply_behavior_components(entity_commands: &mut EntityCommands, b: BehaviorCo
         ));
     }
     if let Some(rule_data) = lua_collision_rule {
-        use crate::components::luacollision::LuaCollisionRule;
-        entity_commands.insert(LuaCollisionRule {
-            group_a: rule_data.group_a,
-            group_b: rule_data.group_b,
-            callback: rule_data.callback.map(Into::into),
-            on_enter: rule_data.on_enter.map(Into::into),
-            on_exit: rule_data.on_exit.map(Into::into),
-        });
+        use crate::components::lua_on_collision::LuaOnCollision;
+        entity_commands.insert(LuaOnCollision::rule(
+            rule_data.group_a,
+            rule_data.group_b,
+            LuaOnCollision {
+                stay: rule_data.callback.map(Into::into),
+                enter: rule_data.on_enter.map(Into::into),
+                exit: rule_data.on_exit.map(Into::into),
+            },
+        ));
     }
     if let Some(callback) = lua_setup {
         entity_commands.insert(LuaSetup::new(callback));
@@ -1240,7 +1242,8 @@ mod tests {
     #[test]
     fn lua_spawn_applies_behavior_components() {
         use crate::components::lua_on_animation_end::LuaOnAnimationEnd;
-        use crate::components::luacollision::LuaCollisionRule;
+        use crate::components::lua_on_collision::LuaOnCollision;
+        use aberred_core::components::collision::CollisionRule;
         let mut world = World::new();
         let mut signals = WorldSignals::default();
         let e = spawn_from_lua(
@@ -1259,19 +1262,14 @@ mod tests {
         let timer = world.get::<Timer>(e).unwrap();
         let on_fired = world.get::<LuaOnTimerFired>(e).unwrap();
         assert_eq!((timer.duration, &*on_fired.callback), (0.5, "tick"));
-        // Must be queryable as LuaCollisionRule, not core's CollisionRule.
-        let rule = world
-            .query::<&LuaCollisionRule>()
-            .get(&world, e)
-            .expect("inserted as LuaCollisionRule");
+        // A core CollisionRule (indexed by core) plus the Lua callbacks.
+        let rule = world.get::<CollisionRule>(e).unwrap();
         assert_eq!(
-            (
-                rule.group_a.as_str(),
-                rule.group_b.as_str(),
-                rule.callback.as_deref()
-            ),
-            ("player", "enemy", Some("on_hit"))
+            (rule.group_a.as_str(), rule.group_b.as_str()),
+            ("player", "enemy")
         );
+        let callbacks = world.get::<LuaOnCollision>(e).unwrap();
+        assert_eq!(callbacks.stay.as_deref(), Some("on_hit"));
         assert_eq!(&*world.get::<LuaSetup>(e).unwrap().callback, "setup_fn");
         assert_eq!(
             &*world.get::<LuaOnAnimationEnd>(e).unwrap().callback,
@@ -1281,7 +1279,7 @@ mod tests {
 
     #[test]
     fn lua_spawn_puts_enter_and_exit_callbacks_on_the_collision_rule() {
-        use crate::components::luacollision::LuaCollisionRule;
+        use crate::components::lua_on_collision::LuaOnCollision;
         let mut world = World::new();
         let mut signals = WorldSignals::default();
         let e = spawn_from_lua(
@@ -1291,12 +1289,12 @@ mod tests {
              :with_lua_collision_enter('in'):with_lua_collision_exit('out'):build()",
         );
 
-        let rule = world.get::<LuaCollisionRule>(e).unwrap();
+        let callbacks = world.get::<LuaOnCollision>(e).unwrap();
         assert_eq!(
             (
-                rule.callback.as_deref(),
-                rule.on_enter.as_deref(),
-                rule.on_exit.as_deref()
+                callbacks.stay.as_deref(),
+                callbacks.enter.as_deref(),
+                callbacks.exit.as_deref()
             ),
             (None, Some("in"), Some("out"))
         );

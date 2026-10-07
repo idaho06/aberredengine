@@ -8,6 +8,7 @@ use bevy_ecs::prelude::*;
 use bevy_ecs::system::RunSystemOnce;
 
 use aberred_core::components::boxcollider::BoxCollider;
+use aberred_core::components::collision::CollisionRule;
 use aberred_core::components::group::Group;
 use aberred_core::components::guiinteractable::GuiInteractable;
 use aberred_core::components::mapposition::MapPosition;
@@ -22,25 +23,28 @@ use aberred_core::events::timer::TimerFired;
 use aberred_core::events::tween::TweenFinished;
 use aberred_core::protocol::audio::AudioCmd;
 use aberred_core::resources::animationstore::AnimationStore;
+use aberred_core::resources::collision_contacts::CollisionContacts;
+use aberred_core::resources::collision_rule_index::CollisionRuleIndex;
 use aberred_core::resources::input::InputState;
 use aberred_core::resources::systemsstore::SystemsStore;
 use aberred_core::resources::worldsignals::WorldSignals;
 use aberred_core::resources::worldtime::WorldTime;
 use aberred_core::systems::collision_detector::collision_detector;
+use aberred_core::systems::collision_rule::collision_rule_observer;
 use aberred_core::systems::collision_rule_index::rebuild_rule_index;
 use aberred_core::systems::timer::update_timers;
 use aberred_lua::components::lua_on_animation_end::LuaOnAnimationEnd;
 use aberred_lua::components::lua_on_click::LuaOnClick;
+use aberred_lua::components::lua_on_collision::LuaOnCollision;
 use aberred_lua::components::lua_on_menu_select::LuaOnMenuSelect;
 use aberred_lua::components::lua_on_timer_fired::LuaOnTimerFired;
 use aberred_lua::components::lua_on_tween_finished::LuaOnTweenFinished;
-use aberred_lua::components::luacollision::{
-    LuaCollisionContacts, LuaCollisionRule, LuaCollisionRuleIndex,
-};
 use aberred_lua::components::luaphase::{LuaPhase, PhaseCallbacks};
 use aberred_lua::resources::lua_runtime::LuaRuntime;
 use aberred_lua::systems::lua_animation_finished::lua_animation_finished_observer;
-use aberred_lua::systems::lua_collision::lua_collision_observer;
+use aberred_lua::systems::lua_collision::{
+    lua_collision_enter_observer, lua_collision_exit_observer, lua_collision_stay_observer,
+};
 use aberred_lua::systems::lua_gui_interactable_click::lua_gui_interactable_click_observer;
 use aberred_lua::systems::lua_menu::lua_menu_selection_observer;
 use aberred_lua::systems::lua_timer_fired::{lua_timer_fired_observer, lua_timer_removed_observer};
@@ -60,16 +64,37 @@ fn make_lua_callback_world(delta: f32) -> World {
     world.init_resource::<Messages<AudioCmd>>();
     world.insert_resource(SystemsStore::new());
     world.insert_resource(AnimationStore::default());
-    world.insert_resource(LuaCollisionRuleIndex::default());
-    world.insert_resource(LuaCollisionContacts::default());
+    world.insert_resource(CollisionRuleIndex::default());
+    world.insert_resource(CollisionContacts::default());
     world.insert_non_send(LuaRuntime::new().expect("LuaRuntime::new"));
     world
 }
 
-/// Lua rule-index rebuild, then collision detection.
+/// A Lua collision rule calling the Lua function `callback` every touching
+/// tick.
+fn lua_rule(group_a: &str, group_b: &str, callback: &str) -> (CollisionRule, LuaOnCollision) {
+    LuaOnCollision::rule(
+        group_a,
+        group_b,
+        LuaOnCollision {
+            stay: Some(callback.into()),
+            ..Default::default()
+        },
+    )
+}
+
+/// Core's rule observer plus the Lua collision observers on its events.
+fn add_lua_collision_observers(world: &mut World) {
+    world.add_observer(collision_rule_observer);
+    world.add_observer(lua_collision_enter_observer);
+    world.add_observer(lua_collision_stay_observer);
+    world.add_observer(lua_collision_exit_observer);
+}
+
+/// Core rule-index rebuild, then collision detection.
 fn tick_collision_detector(world: &mut World) {
     let mut schedule = Schedule::default();
-    schedule.add_systems(rebuild_rule_index::<LuaCollisionRule>.before(collision_detector));
+    schedule.add_systems(rebuild_rule_index::<CollisionRule>.before(collision_detector));
     schedule.add_systems(collision_detector);
     schedule.run(world);
 }
@@ -109,7 +134,7 @@ fn collision_pipeline_triggers_lua_side_effects() {
             BoxCollider::new(10.0, 10.0),
         ))
         .id();
-    world.spawn((LuaCollisionRule::new("player", "enemy", "on_player_enemy"),));
+    world.spawn((lua_rule("player", "enemy", "on_player_enemy"),));
 
     // Track if collision event was triggered
     let saw_collision = std::sync::Arc::new(std::sync::Mutex::new(false));
@@ -120,8 +145,8 @@ fn collision_pipeline_triggers_lua_side_effects() {
         *saw_collision_clone.lock().unwrap() = true;
     });
 
-    // Register the actual collision_observer that processes Lua callbacks
-    world.add_observer(lua_collision_observer);
+    // Register the observers that process Lua callbacks
+    add_lua_collision_observers(&mut world);
 
     world.flush();
 
@@ -170,13 +195,9 @@ fn collision_callback_error_still_drains_queued_commands() {
         MapPosition::new(5.0, 0.0),
         BoxCollider::new(10.0, 10.0),
     ));
-    world.spawn((LuaCollisionRule::new(
-        "player",
-        "enemy",
-        "on_player_enemy_err",
-    ),));
+    world.spawn((lua_rule("player", "enemy", "on_player_enemy_err"),));
 
-    world.add_observer(lua_collision_observer);
+    add_lua_collision_observers(&mut world);
 
     world.flush();
 
@@ -457,13 +478,9 @@ fn collision_callback_spawn_then_clone_same_drain() {
             BoxCollider::new(10.0, 10.0),
         ))
         .id();
-    world.spawn(LuaCollisionRule::new(
-        "shooter",
-        "target",
-        "on_coll_spawn_clone",
-    ));
+    world.spawn(lua_rule("shooter", "target", "on_coll_spawn_clone"));
 
-    world.add_observer(lua_collision_observer);
+    add_lua_collision_observers(&mut world);
     world.flush();
 
     tick_collision_detector(&mut world);
@@ -578,9 +595,9 @@ fn collision_callback_phase_plus_signal_all_processed() {
         MapPosition::new(5.0, 0.0),
         BoxCollider::new(10.0, 10.0),
     ));
-    world.spawn(LuaCollisionRule::new("hero", "hazard", "on_multi_effect"));
+    world.spawn(lua_rule("hero", "hazard", "on_multi_effect"));
 
-    world.add_observer(lua_collision_observer);
+    add_lua_collision_observers(&mut world);
     world.flush();
 
     tick_collision_detector(&mut world);

@@ -1,21 +1,21 @@
-//! Lua collision observer and callback dispatch.
+//! Lua collision observers and callback dispatch.
 //!
-//! This module provides the Lua-specific collision handling:
+//! A Lua collision rule is a core `CollisionRule` plus a [`LuaOnCollision`].
+//! Core matches it, tracks its contacts and triggers its events; these
+//! observers call the Lua functions the [`LuaOnCollision`] names:
 //!
-//! - [`lua_collision_observer`] – receives [`Overlapping`] events
-//!   and dispatches to [`LuaCollisionRule`] enter and every-tick callbacks
-//! - [`lua_collision_ended_system`] – dispatches exit callbacks
+//! - [`lua_collision_enter_observer`] – on `CollisionStarted`, calls `enter`
+//! - [`lua_collision_stay_observer`] – on `Collided`, calls `stay`
+//! - [`lua_collision_exit_observer`] – on `CollisionEnded`, calls `exit`
 //!
-//! # Collision Flow
+//! Each callback gets a fresh pooled ctx and its `engine.collision_*`
+//! commands are applied right after it. Core triggers `CollisionStarted`
+//! just before the pair's first `Collided`, so `enter` runs before that
+//! tick's `stay`; `CollisionEnded` comes from `collision_ended_system`, after
+//! detection.
 //!
-//! 1. [`collision_detector`](aberred_core::systems::collision_detector::collision_detector) detects overlaps
-//!    and emits `Overlapping` events
-//! 2. `lua_collision_observer` looks up matching Lua collision rules by
-//!    [`Group`] names and records each contact in [`LuaCollisionContacts`]
-//! 3. For each match, calls `on_enter` (new contacts only) and then the
-//!    every-tick callback with one pooled context table
-//! 4. After detection, `lua_collision_ended_system` calls `on_exit` for each
-//!    contact that did not touch this tick
+//! [`lua_collision_observer`] and [`lua_collision_ended_system`] serve
+//! [`LuaCollisionRule`] components, which no Lua builder spawns.
 //!
 //! # Lua Collision Callbacks
 //!
@@ -41,13 +41,14 @@
 //! # Related
 //!
 //! - [`aberred_core::systems::collision_detector`] – pure Rust collision detection
-//! - [`crate::components::luacollision::LuaCollisionRule`] – defines Lua collision handlers
+//! - [`crate::components::lua_on_collision::LuaOnCollision`] – names a rule's Lua callbacks
+//! - [`aberred_core::systems::collision_rule::collision_rule_observer`] – matches rules, triggers the events
 //! - [`aberred_core::components::boxcollider::BoxCollider`] – axis-aligned collider
-//! - [`aberred_core::events::collision::Overlapping`] – emitted for each overlapping pair
 
 use bevy_ecs::prelude::*;
 use bevy_ecs::system::SystemParam;
 
+use crate::components::lua_on_collision::LuaOnCollision;
 use crate::components::luacollision::{
     LuaCollisionContacts, LuaCollisionRule, LuaCollisionRuleIndex,
 };
@@ -61,10 +62,10 @@ use crate::systems::lua_commands::{
     process_phase_command,
 };
 use aberred_core::components::boxcollider::BoxCollider;
-use aberred_core::components::collision::BoxSide;
+use aberred_core::components::collision::{BoxSide, CollisionRule};
 use aberred_core::components::group::Group;
 use aberred_core::components::signals::Signals;
-use aberred_core::events::collision::Overlapping;
+use aberred_core::events::collision::{Collided, CollisionEnded, CollisionStarted, Overlapping};
 use aberred_core::math::Rect;
 use aberred_core::protocol::audio::AudioCmd;
 use aberred_core::resources::animationstore::AnimationStore;
@@ -273,6 +274,119 @@ pub fn lua_collision_ended_system(
         );
         effects.drain_collision_commands(&mut phase_buf, &mut effect_bufs);
     }
+}
+
+/// What the Lua collision observers read and write: the Lua rules (core rule
+/// entities that also carry a [`LuaOnCollision`]), their colliders, the
+/// callback effects and this observer's command buffers.
+#[derive(SystemParam)]
+pub struct LuaRuleDispatch<'w, 's> {
+    rules: Query<'w, 's, (&'static CollisionRule, &'static LuaOnCollision)>,
+    box_colliders: Query<'w, 's, &'static BoxCollider>,
+    effects: LuaCollisionEffects<'w, 's>,
+    phase_buf: Local<'s, Vec<PhaseCmd>>,
+    effect_bufs: Local<'s, EffectCmdBufs>,
+}
+
+impl LuaRuleDispatch<'_, '_> {
+    /// Calls `pick`'s callback of the Lua rule `rule` (if it is one and has
+    /// that callback) with the full ctx of the touching pair `a`/`b`, then
+    /// applies the `engine.collision_*` commands it queued.
+    ///
+    /// Rects and sides are resolved here rather than taken from the event, so
+    /// a stay callback sees what the same tick's enter callback moved.
+    fn call_touching(
+        &mut self,
+        (rule, a, b): (Entity, Entity, Entity),
+        pick: fn(&LuaOnCollision) -> Option<&str>,
+    ) {
+        let Ok((rule, callbacks)) = self.rules.get(rule) else {
+            return;
+        };
+        let Some(name) = pick(callbacks) else {
+            return;
+        };
+
+        let effects = &mut self.effects;
+        effects.lua_runtime.sync_signals(&mut effects.world_signals);
+        {
+            let rect_of = |entity| {
+                resolve_collider_rect(
+                    &effects.entity_cmds.positions.as_readonly(),
+                    &effects.entity_cmds.global_transforms,
+                    &self.box_colliders,
+                    entity,
+                )
+            };
+            let (rect_a, rect_b) = (rect_of(a), rect_of(b));
+            let (sides_a, sides_b) = compute_sides(rect_a, rect_b);
+            call_lua_collision_callback(
+                &effects.lua_runtime,
+                name,
+                effects.live_side(a, &rule.group_a, rect_a, &sides_a),
+                effects.live_side(b, &rule.group_b, rect_b, &sides_b),
+            );
+        }
+        effects.drain_collision_commands(&mut self.phase_buf, &mut self.effect_bufs);
+    }
+
+    /// Calls the `exit` callback of the Lua rule `rule` (if it is one and has
+    /// one) for the pair `a`/`b`, with only each side's `id` and `group`, then
+    /// applies the `engine.collision_*` commands it queued.
+    fn call_exit(&mut self, CollisionEnded { rule, a, b }: CollisionEnded) {
+        let Ok((rule, callbacks)) = self.rules.get(rule) else {
+            return;
+        };
+        let Some(on_exit) = callbacks.exit.as_deref() else {
+            return;
+        };
+
+        let effects = &mut self.effects;
+        effects.lua_runtime.sync_signals(&mut effects.world_signals);
+        call_lua_collision_callback(
+            &effects.lua_runtime,
+            on_exit,
+            CollisionSide {
+                id: a.to_bits(),
+                group: Some(&rule.group_a),
+                ..Default::default()
+            },
+            CollisionSide {
+                id: b.to_bits(),
+                group: Some(&rule.group_b),
+                ..Default::default()
+            },
+        );
+        effects.drain_collision_commands(&mut self.phase_buf, &mut self.effect_bufs);
+    }
+}
+
+/// Observes core `CollisionStarted` and calls the Lua rule's `enter` callback.
+///
+/// Core triggers `CollisionStarted` just before the pair's first `Collided`,
+/// so `enter` runs before that tick's `stay`.
+pub fn lua_collision_enter_observer(trigger: On<CollisionStarted>, mut dispatch: LuaRuleDispatch) {
+    let ev = trigger.event();
+    dispatch.call_touching((ev.rule, ev.a, ev.b), |callbacks| {
+        callbacks.enter.as_deref()
+    });
+}
+
+/// Observes core `Collided` and calls the Lua rule's `stay` callback, every
+/// tick the pair touches.
+pub fn lua_collision_stay_observer(trigger: On<Collided>, mut dispatch: LuaRuleDispatch) {
+    let ev = trigger.event();
+    dispatch.call_touching((ev.rule, ev.a, ev.b), |callbacks| callbacks.stay.as_deref());
+}
+
+/// Observes core `CollisionEnded` and calls the Lua rule's `exit` callback.
+///
+/// Either entity may already be despawned, so the ctx carries only `id` and
+/// `group` per side (from the rule's groups); `pos`, `vel`, `rect` and
+/// `signals` are nil and the sides are empty. A rule entity that is gone, or
+/// is not a Lua rule, is skipped.
+pub fn lua_collision_exit_observer(trigger: On<CollisionEnded>, mut dispatch: LuaRuleDispatch) {
+    dispatch.call_exit(*trigger.event());
 }
 
 /// Convert BoxSide to string representation.

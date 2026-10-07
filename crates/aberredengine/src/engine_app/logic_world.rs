@@ -70,7 +70,10 @@ use aberred_lua::resources::lua_runtime::LuaRuntime;
 #[cfg(feature = "lua")]
 use aberred_lua::systems::lua_animation_finished::lua_animation_finished_observer;
 #[cfg(feature = "lua")]
-use aberred_lua::systems::lua_collision::lua_collision_observer;
+use aberred_lua::systems::lua_collision::{
+    lua_collision_enter_observer, lua_collision_exit_observer, lua_collision_observer,
+    lua_collision_stay_observer,
+};
 #[cfg(feature = "lua")]
 use aberred_lua::systems::lua_gui_interactable_click::lua_gui_interactable_click_observer;
 #[cfg(feature = "lua")]
@@ -344,6 +347,9 @@ impl EngineBuilder {
         #[cfg(feature = "lua")]
         if has_lua {
             world.spawn((Observer::new(lua_collision_observer), Persistent));
+            world.spawn((Observer::new(lua_collision_enter_observer), Persistent));
+            world.spawn((Observer::new(lua_collision_stay_observer), Persistent));
+            world.spawn((Observer::new(lua_collision_exit_observer), Persistent));
         }
         world.spawn((Observer::new(collision_rule_observer), Persistent));
         world.spawn((Observer::new(switch_debug_observer), Persistent));
