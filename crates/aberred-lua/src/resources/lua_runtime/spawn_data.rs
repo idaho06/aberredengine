@@ -9,6 +9,7 @@ use aberred_core::components::guilabel::GuiLabel;
 use aberred_core::components::guiprogressbar::GuiProgressBar;
 use aberred_core::components::guiwindow::GuiWindow;
 use aberred_core::components::timer::TimerMode;
+use aberred_core::components::tween::{Easing, LoopMode};
 use aberred_core::resources::uniformvalue::UniformValue;
 
 /// Sprite component data for spawning.
@@ -91,8 +92,8 @@ pub struct StuckToData {
 #[derive(Debug, Clone)]
 pub struct TweenConfig {
     pub duration: f32,
-    pub easing: String,
-    pub loop_mode: String,
+    pub easing: Easing,
+    pub loop_mode: LoopMode,
     pub backwards: bool,
     /// Name of the Lua function to call when the tween finishes. Empty
     /// string means no callback.
@@ -103,8 +104,8 @@ impl TweenConfig {
     pub fn new(duration: f32) -> Self {
         Self {
             duration,
-            easing: "linear".to_string(),
-            loop_mode: "once".to_string(),
+            easing: Easing::Linear,
+            loop_mode: LoopMode::Once,
             backwards: false,
             callback: String::new(),
         }
@@ -113,10 +114,9 @@ impl TweenConfig {
 
 /// Validates a Lua easing name, so a typo raises a Lua error instead of silently
 /// becoming `linear` when the tween is built.
-pub(crate) fn checked_easing(name: String) -> mlua::Result<String> {
-    use aberred_core::components::tween::Easing;
+pub(crate) fn checked_easing(name: String) -> mlua::Result<Easing> {
     match Easing::from_name(&name) {
-        Some(_) => Ok(name),
+        Some(easing) => Ok(easing),
         None => Err(mlua::Error::runtime(format!(
             "Unknown easing '{name}' (expected one of: {})",
             Easing::NAMES.join(", ")
@@ -126,10 +126,9 @@ pub(crate) fn checked_easing(name: String) -> mlua::Result<String> {
 
 /// Validates a Lua loop-mode name, so a typo raises a Lua error instead of silently
 /// becoming `once` when the tween is built.
-pub(crate) fn checked_loop_mode(name: String) -> mlua::Result<String> {
-    use aberred_core::components::tween::LoopMode;
+pub(crate) fn checked_loop_mode(name: String) -> mlua::Result<LoopMode> {
     match LoopMode::from_name(&name) {
-        Some(_) => Ok(name),
+        Some(mode) => Ok(mode),
         None => Err(mlua::Error::runtime(format!(
             "Unknown loop mode '{name}' (expected one of: {})",
             LoopMode::NAMES.join(", ")

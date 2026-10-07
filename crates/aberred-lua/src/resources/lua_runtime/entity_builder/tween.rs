@@ -375,6 +375,8 @@ pub(super) fn register<M: LuaUserDataMethods<LuaEntityBuilder>>(
 mod tests {
     use super::super::test_helpers::{assert_runtime_error, built_spawn_cmd};
     use super::*;
+    use aberred_core::components::tween::{Easing, LoopMode};
+    use std::mem::discriminant;
 
     const KINDS: [&str; 4] = ["position", "screen_position", "rotation", "scale"];
 
@@ -438,8 +440,8 @@ mod tests {
             (&s.config, 3.5),
         ] {
             assert_eq!(config.duration, duration);
-            assert_eq!(config.easing, "linear");
-            assert_eq!(config.loop_mode, "once");
+            assert!(matches!(config.easing, Easing::Linear));
+            assert!(matches!(config.loop_mode, LoopMode::Once));
             assert!(!config.backwards);
             assert!(config.callback.is_empty());
         }
@@ -480,9 +482,14 @@ mod tests {
         for (kind, config) in configs {
             let (easing, loop_mode) = values(kind);
             assert_eq!(
-                (config.easing.as_str(), config.loop_mode.as_str()),
-                (easing, loop_mode),
-                "{kind}"
+                discriminant(&config.easing),
+                discriminant(&Easing::from_name(easing).unwrap()),
+                "{kind} easing"
+            );
+            assert_eq!(
+                discriminant(&config.loop_mode),
+                discriminant(&LoopMode::from_name(loop_mode).unwrap()),
+                "{kind} loop mode"
             );
             assert_eq!(config.callback, format!("{kind}_done"));
             assert_eq!(config.backwards, kind == "rotation", "{kind} backwards");

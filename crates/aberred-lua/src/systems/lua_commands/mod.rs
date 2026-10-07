@@ -66,7 +66,7 @@ use aberred_core::components::screenposition::ScreenPosition;
 use aberred_core::components::signals::Signals;
 use aberred_core::components::sprite::Sprite;
 use aberred_core::components::stuckto::StuckTo;
-use aberred_core::components::tween::{Easing, LoopMode, Tween, TweenValue};
+use aberred_core::components::tween::{Tween, TweenValue};
 use aberred_core::protocol::audio::AudioCmd;
 use aberred_core::resources::animationstore::AnimationStore;
 use aberred_core::resources::systemsstore::SystemsStore;
@@ -179,11 +179,9 @@ pub(crate) fn drain_and_process_phase_commands(
 
 /// Build a configured `Tween<T>` from component values and shared config.
 pub(crate) fn build_tween<T: TweenValue>(from: T, to: T, config: &TweenConfig) -> Tween<T> {
-    let easing = config.easing.parse::<Easing>().unwrap();
-    let loop_mode = config.loop_mode.parse::<LoopMode>().unwrap();
     let mut tween = Tween::new(from, to, config.duration)
-        .with_easing(easing)
-        .with_loop_mode(loop_mode);
+        .with_easing(config.easing)
+        .with_loop_mode(config.loop_mode);
     if config.backwards {
         tween = tween.with_backwards();
     }
