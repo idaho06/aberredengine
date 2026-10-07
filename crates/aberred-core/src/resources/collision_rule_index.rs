@@ -4,23 +4,19 @@
 //! colliding pair's groups instead of every rule entity, keyed by an
 //! unordered pair normalized so `(a, b)` and `(b, a)` share a bucket.
 //!
-//! [`RuleIndex<T>`] is generic over the rule component ([`RuleGroups`]), so
-//! `aberred-lua` indexes its own rule component with the same type and the
-//! same rebuild system,
-//! [`rebuild_rule_index`](crate::systems::collision_rule_index::rebuild_rule_index).
-//! The index is rebuilt from scratch whenever a rule changes (rules are few
+//! [`CollisionRuleIndex`] is rebuilt by
+//! [`rebuild_rule_index`](crate::systems::collision_rule_index::rebuild_rule_index)
+//! from scratch whenever a rule changes (rules are few
 //! and changes are rare -- spawn/despawn on scene switch -- so a full rebuild
 //! is simpler than incremental maintenance). Each bucket is sorted by
 //! `Entity` so "first match wins" is deterministic instead of
 //! query-iteration order.
 
-use std::marker::PhantomData;
-
 use bevy_ecs::prelude::{Entity, Query, Resource};
 use rustc_hash::FxHashMap;
 use smallvec::SmallVec;
 
-use crate::components::collision::{CollisionRule, RuleGroups, match_groups};
+use crate::components::collision::{CollisionRule, match_groups};
 
 /// Normalizes an unordered group-name pair so `(a, b)` and `(b, a)` produce
 /// the same key. Borrows rather than allocates, so a per-`Overlapping`
@@ -29,31 +25,18 @@ pub(crate) fn normalize_pair<'a>(a: &'a str, b: &'a str) -> (&'a str, &'a str) {
     if a <= b { (a, b) } else { (b, a) }
 }
 
-/// `T` rule entities by unordered group pair.
+/// [`CollisionRule`] entities by unordered group pair, read by
+/// [`collision_rule_observer`](crate::systems::collision_rule::collision_rule_observer).
 ///
 /// Nested (lesser group -> greater group -> rules) rather than keyed by a
 /// `(String, String)` tuple: std's `HashMap` can't look a tuple of `String`s
 /// up by a tuple of `&str`s, but each level alone looks up by `&str`.
-#[derive(Resource)]
-pub struct RuleIndex<T: RuleGroups> {
+#[derive(Resource, Default)]
+pub struct CollisionRuleIndex {
     buckets: FxHashMap<String, FxHashMap<String, SmallVec<[Entity; 2]>>>,
-    rule: PhantomData<fn() -> T>,
 }
 
-/// Index of [`CollisionRule`] entities, read by
-/// [`collision_rule_observer`](crate::systems::collision_rule::collision_rule_observer).
-pub type CollisionRuleIndex = RuleIndex<CollisionRule>;
-
-impl<T: RuleGroups> Default for RuleIndex<T> {
-    fn default() -> Self {
-        Self {
-            buckets: FxHashMap::default(),
-            rule: PhantomData,
-        }
-    }
-}
-
-impl<T: RuleGroups> RuleIndex<T> {
+impl CollisionRuleIndex {
     /// Whether no rule is indexed.
     pub fn is_empty(&self) -> bool {
         self.buckets.is_empty()
@@ -67,34 +50,32 @@ impl<T: RuleGroups> RuleIndex<T> {
     }
 
     /// The first rule covering the colliding pair `(a, b)` in groups
-    /// `(ga, gb)`, as `(rule_entity, rule, ent_a, ent_b)` with `ent_a`/`ent_b`
+    /// `(ga, gb)`, as `(rule_entity, ent_a, ent_b)` with `ent_a`/`ent_b`
     /// ordered to match the rule's `group_a`/`group_b`.
     ///
     /// Scans the pair's bucket in `Entity` order, skipping any entity that
     /// stopped being a rule (or despawned) since the last rebuild.
-    pub fn find_match<'q>(
+    pub fn find_match(
         &self,
-        rules: &'q Query<&T>,
+        rules: &Query<&CollisionRule>,
         a: Entity,
         b: Entity,
         ga: &str,
         gb: &str,
-    ) -> Option<(Entity, &'q T, Entity, Entity)> {
+    ) -> Option<(Entity, Entity, Entity)> {
         self.bucket(ga, gb)?.iter().find_map(|&rule_entity| {
             let rule = rules.get(rule_entity).ok()?;
-            let (rule_a, rule_b) = rule.groups();
-            let (ent_a, ent_b) = match_groups(rule_a, rule_b, a, b, ga, gb)?;
-            Some((rule_entity, rule, ent_a, ent_b))
+            let (ent_a, ent_b) = match_groups(&rule.group_a, &rule.group_b, a, b, ga, gb)?;
+            Some((rule_entity, ent_a, ent_b))
         })
     }
 
     /// Clears and refills from `rules`, sorting each resulting sub-bucket by
     /// `Entity` so "first match wins" is deterministic.
-    pub(crate) fn rebuild<'a>(&mut self, rules: impl Iterator<Item = (Entity, &'a T)>) {
+    pub(crate) fn rebuild<'a>(&mut self, rules: impl Iterator<Item = (Entity, &'a CollisionRule)>) {
         self.buckets.clear();
         for (entity, rule) in rules {
-            let (group_a, group_b) = rule.groups();
-            let (lo, hi) = normalize_pair(group_a, group_b);
+            let (lo, hi) = normalize_pair(&rule.group_a, &rule.group_b);
             self.buckets
                 .entry(lo.to_owned())
                 .or_default()

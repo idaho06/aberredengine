@@ -1,7 +1,7 @@
-//! Rebuilds a [`RuleIndex<T>`] whenever `T` rule entities are added,
-//! changed, or removed.
+//! Rebuilds the [`CollisionRuleIndex`] whenever [`CollisionRule`] entities
+//! are added, changed, or removed.
 //!
-//! `rebuild_rule_index::<CollisionRule>` always runs in `SimSet::Collision`,
+//! `rebuild_rule_index` always runs in `SimSet::Collision`,
 //! `.before(collision_detector)`, so the index reflects this tick's rules
 //! (including ones spawned this same tick via `SimSet::Spawn`) before any
 //! `Overlapping` fires.
@@ -11,23 +11,23 @@
 //! complexity. Steady-state cost is one or two empty change-detection
 //! queries.
 //!
-//! `Changed<T>` alone (no `Added<T>`) is enough to catch newly-added rules:
-//! bevy's `ComponentTicks::new` sets both `added` and `changed` to the
-//! insertion tick, so `Changed<T>` already matches a component on the tick
+//! `Changed<CollisionRule>` alone (no `Added`) is enough to catch newly-added
+//! rules: bevy's `ComponentTicks::new` sets both `added` and `changed` to the
+//! insertion tick, so `Changed` already matches a component on the tick
 //! it was added.
 
 use bevy_ecs::prelude::*;
 
-use crate::components::collision::RuleGroups;
-use crate::resources::collision_rule_index::RuleIndex;
+use crate::components::collision::CollisionRule;
+use crate::resources::collision_rule_index::CollisionRuleIndex;
 
-/// Rebuilds [`RuleIndex<T>`] from every `T` entity when one changed or was
-/// removed since the last run.
-pub fn rebuild_rule_index<T: RuleGroups>(
-    mut index: ResMut<RuleIndex<T>>,
-    changed: Query<(), Changed<T>>,
-    mut removed: RemovedComponents<T>,
-    rules: Query<(Entity, &T)>,
+/// Rebuilds [`CollisionRuleIndex`] from every [`CollisionRule`] entity when
+/// one changed or was removed since the last run.
+pub fn rebuild_rule_index(
+    mut index: ResMut<CollisionRuleIndex>,
+    changed: Query<(), Changed<CollisionRule>>,
+    mut removed: RemovedComponents<CollisionRule>,
+    rules: Query<(Entity, &CollisionRule)>,
 ) {
     // Drain the removal reader on every run, dirty or not, or its cursor
     // falls behind and replays removals next tick. Read it first: `||`
@@ -41,8 +41,6 @@ pub fn rebuild_rule_index<T: RuleGroups>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::components::collision::CollisionRule;
-    use crate::resources::collision_rule_index::CollisionRuleIndex;
 
     fn build_world_with_rules() -> World {
         let mut world = World::new();
@@ -52,7 +50,7 @@ mod tests {
 
     fn run_rebuild(world: &mut World) {
         let mut schedule = Schedule::default();
-        schedule.add_systems(rebuild_rule_index::<CollisionRule>);
+        schedule.add_systems(rebuild_rule_index);
         schedule.run(world);
     }
 

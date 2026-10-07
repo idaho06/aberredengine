@@ -28,10 +28,9 @@
 use bevy_ecs::prelude::*;
 
 use crate::components::collision::CollisionRule;
-use crate::components::collision::RuleGroups;
 use crate::components::group::Group;
 use crate::events::collision::{Collided, CollisionEnded, CollisionStarted, Overlapping};
-use crate::resources::collision_contacts::{CollisionContacts, RuleContacts};
+use crate::resources::collision_contacts::CollisionContacts;
 use crate::resources::collision_rule_index::CollisionRuleIndex;
 use crate::systems::collision::{ColliderRects, compute_sides, resolve_groups};
 
@@ -65,7 +64,7 @@ pub fn collision_rule_observer(
         return;
     };
 
-    let Some((rule, _, ent_a, ent_b)) = index.find_match(&rules, a, b, ga, gb) else {
+    let Some((rule, ent_a, ent_b)) = index.find_match(&rules, a, b, ga, gb) else {
         return;
     };
 
@@ -89,9 +88,9 @@ pub fn collision_rule_observer(
     });
 }
 
-/// Run condition: some `T`-ruled contact touched last tick or this one, so
-/// an ended system has something to report or rotate.
-pub fn has_rule_contacts<T: RuleGroups>(contacts: Res<RuleContacts<T>>) -> bool {
+/// Run condition: some ruled contact touched last tick or this one, so
+/// [`collision_ended_system`] has something to report or rotate.
+pub fn has_rule_contacts(contacts: Res<CollisionContacts>) -> bool {
     !contacts.is_empty()
 }
 

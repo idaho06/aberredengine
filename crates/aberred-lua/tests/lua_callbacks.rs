@@ -94,7 +94,7 @@ fn add_lua_collision_observers(world: &mut World) {
 /// Core rule-index rebuild, then collision detection.
 fn tick_collision_detector(world: &mut World) {
     let mut schedule = Schedule::default();
-    schedule.add_systems(rebuild_rule_index::<CollisionRule>.before(collision_detector));
+    schedule.add_systems(rebuild_rule_index.before(collision_detector));
     schedule.add_systems(collision_detector);
     schedule.run(world);
 }

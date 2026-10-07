@@ -1,7 +1,7 @@
 //! Integration tests for `CollisionRule` dispatch.
 //!
 //! Runs the collision pipeline end to end in an ECS world:
-//! `rebuild_rule_index::<CollisionRule>` -> `collision_detector` ->
+//! `rebuild_rule_index` -> `collision_detector` ->
 //! `collision_rule_observer`, then checks which `Collided` events reached
 //! observers and with which fields (group matching, entity ordering, contact
 //! sides, and lowest-entity-wins when several rules cover the same pair).
@@ -38,7 +38,7 @@ fn make_world() -> World {
 
 fn tick(world: &mut World) {
     let mut schedule = Schedule::default();
-    schedule.add_systems(rebuild_rule_index::<CollisionRule>.before(collision_detector));
+    schedule.add_systems(rebuild_rule_index.before(collision_detector));
     schedule.add_systems(collision_detector);
     schedule.run(world);
 }

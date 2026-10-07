@@ -1,19 +1,12 @@
 //! Ruled collision pairs touching across ticks.
 //!
-//! [`RuleContacts<T>`] remembers which `(rule, a, b)` contacts matched a `T`
-//! rule last tick, so a collision observer can tell a contact that just
-//! started from one that stays, and the end of the tick can report the
-//! contacts that stopped. It is generic over the rule component
-//! ([`RuleGroups`]) like
-//! [`RuleIndex<T>`](crate::resources::collision_rule_index::RuleIndex), so
-//! each rule kind keeps its own contacts.
-
-use std::marker::PhantomData;
+//! [`CollisionContacts`] remembers which `(rule, a, b)` contacts matched a
+//! [`CollisionRule`](crate::components::collision::CollisionRule) last tick,
+//! so a collision observer can tell a contact that just started from one
+//! that stays, and the end of the tick can report the contacts that stopped.
 
 use bevy_ecs::prelude::{Entity, Resource};
 use rustc_hash::FxHashSet;
-
-use crate::components::collision::{CollisionRule, RuleGroups};
 
 /// One ruled contact: the matched rule entity and the two touching entities,
 /// with `a`/`b` in the rule's `group_a`/`group_b` order.
@@ -31,28 +24,14 @@ pub struct Contact {
     pub b: Entity,
 }
 
-/// The `T`-ruled contacts of the previous tick and of the current one.
-#[derive(Resource)]
-pub struct RuleContacts<T: RuleGroups> {
+/// The ruled contacts of the previous tick and of the current one.
+#[derive(Resource, Default)]
+pub struct CollisionContacts {
     previous: FxHashSet<Contact>,
     current: FxHashSet<Contact>,
-    rule: PhantomData<fn() -> T>,
 }
 
-/// Contacts of [`CollisionRule`] pairs.
-pub type CollisionContacts = RuleContacts<CollisionRule>;
-
-impl<T: RuleGroups> Default for RuleContacts<T> {
-    fn default() -> Self {
-        Self {
-            previous: FxHashSet::default(),
-            current: FxHashSet::default(),
-            rule: PhantomData,
-        }
-    }
-}
-
-impl<T: RuleGroups> RuleContacts<T> {
+impl CollisionContacts {
     /// Records that `rule` matched the touching pair `a`/`b` this tick.
     /// Called by the engine's rule observers; a game calling it fakes a
     /// contact.

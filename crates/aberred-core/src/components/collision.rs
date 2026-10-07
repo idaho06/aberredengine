@@ -31,7 +31,7 @@
 //!
 //! - [`crate::systems::collision_detector`] – collision detection system
 //! - [`crate::systems::collision_rule`] – triggers `Collided` for matched rules
-//! - `aberred_lua::systems::lua_collision` – Lua collision observer
+//! - `aberred_lua::systems::lua_collision` – Lua callbacks on core collision events
 //! - [`crate::events::collision::Overlapping`] – raw overlap event
 //! - [`super::group::Group`] – group tag used for rule matching
 
@@ -39,16 +39,6 @@ use bevy_ecs::prelude::*;
 use smallvec::SmallVec;
 
 use crate::math::Rect;
-
-/// A rule component matched by a pair of group names.
-///
-/// Implemented by [`CollisionRule`], which
-/// [`RuleIndex`](crate::resources::collision_rule_index::RuleIndex) buckets
-/// and matches.
-pub trait RuleGroups: Component {
-    /// The rule's `(group_a, group_b)`.
-    fn groups(&self) -> (&str, &str);
-}
 
 /// Matches collisions between two entity groups.
 ///
@@ -74,18 +64,12 @@ impl CollisionRule {
     }
 }
 
-impl RuleGroups for CollisionRule {
-    fn groups(&self) -> (&str, &str) {
-        (&self.group_a, &self.group_b)
-    }
-}
-
 /// Check if a collision rule's groups match the given group names and return
 /// entities ordered to match `rule_a` and `rule_b`.
 ///
 /// This is the core matching logic used by
-/// [`RuleIndex::find_match`](crate::resources::collision_rule_index::RuleIndex::find_match).
-pub fn match_groups(
+/// [`CollisionRuleIndex::find_match`](crate::resources::collision_rule_index::CollisionRuleIndex::find_match).
+pub(crate) fn match_groups(
     rule_a: &str,
     rule_b: &str,
     ent_a: Entity,

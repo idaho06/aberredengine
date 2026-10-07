@@ -3,7 +3,6 @@ use bevy_ecs::schedule::SingleThreadedExecutor;
 
 use super::builder::EngineBuilder;
 use super::registrar::UpdateRegistrar;
-use aberred_core::components::collision::CollisionRule;
 use aberred_core::components::mapposition::MapPosition;
 use aberred_core::components::rotation::Rotation;
 use aberred_core::components::scale::Scale;
@@ -390,7 +389,7 @@ impl EngineBuilder {
                 .in_set(SimSet::Transforms),
         );
         sim.add_systems(
-            rebuild_rule_index::<CollisionRule>
+            rebuild_rule_index
                 .before(collision_detector)
                 .in_set(SimSet::Collision),
         );
@@ -398,7 +397,7 @@ impl EngineBuilder {
         // .before(stuck_to_entity_system): CollisionEnded observers may move entities.
         sim.add_systems(
             collision_ended_system
-                .run_if(has_rule_contacts::<CollisionRule>)
+                .run_if(has_rule_contacts)
                 .after(collision_detector)
                 .before(stuck_to_entity_system)
                 .in_set(SimSet::Collision),

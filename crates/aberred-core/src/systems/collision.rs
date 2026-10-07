@@ -1,8 +1,6 @@
-//! Shared collision helpers used by both the core and Lua collision rule observers.
-//!
-//! This module contains system-level utility functions that de-duplicate logic
-//! common to `lua_collision` (`aberred-lua`) and
-//! [`collision_rule`](crate::systems::collision_rule).
+//! Shared collision helpers used by core's
+//! [`collision_rule`](crate::systems::collision_rule) observer and by the Lua
+//! collision observers (`lua_collision` in `aberred-lua`).
 //!
 //! All functions are pure Rust with no Lua dependency.
 //!

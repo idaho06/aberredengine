@@ -654,7 +654,7 @@ fn golden_replay_rust_scene_matches_checked_in_trail() {
     // instead of a silent regression.
     //
     // This value is sensitive to the sim schedule's exact system sequence:
-    // `rebuild_rule_index::<CollisionRule>` runs in `SimSet::Collision`
+    // `rebuild_rule_index` runs in `SimSet::Collision`
     // (`.before(collision_detector)`), so registering or reordering any
     // system in the deterministic single-threaded executor's per-tick
     // sequence changes this hash, even for a scenario (like this one) that
