@@ -14,9 +14,6 @@
 //! tick's `stay`; `CollisionEnded` comes from `collision_ended_system`, after
 //! detection.
 //!
-//! [`lua_collision_observer`] and [`lua_collision_ended_system`] serve
-//! [`LuaCollisionRule`] components, which no Lua builder spawns.
-//!
 //! # Lua Collision Callbacks
 //!
 //! Lua collision rules are defined via `engine.spawn():with_lua_collision_rule()`,
@@ -49,9 +46,6 @@ use bevy_ecs::prelude::*;
 use bevy_ecs::system::SystemParam;
 
 use crate::components::lua_on_collision::LuaOnCollision;
-use crate::components::luacollision::{
-    LuaCollisionContacts, LuaCollisionRule, LuaCollisionRuleIndex,
-};
 use crate::components::luaphase::LuaPhase;
 use crate::resources::lua_runtime::{
     CtxOccupancy, LuaRuntime, OccMask, PhaseCmd, SignalsCtxTables, clear_table,
@@ -63,42 +57,28 @@ use crate::systems::lua_commands::{
 };
 use aberred_core::components::boxcollider::BoxCollider;
 use aberred_core::components::collision::{BoxSide, CollisionRule};
-use aberred_core::components::group::Group;
 use aberred_core::components::signals::Signals;
-use aberred_core::events::collision::{Collided, CollisionEnded, CollisionStarted, Overlapping};
+use aberred_core::events::collision::{Collided, CollisionEnded, CollisionStarted};
 use aberred_core::math::Rect;
 use aberred_core::protocol::audio::AudioCmd;
 use aberred_core::resources::animationstore::AnimationStore;
 use aberred_core::resources::systemsstore::SystemsStore;
 use aberred_core::resources::worldsignals::WorldSignals;
-use aberred_core::systems::collision::{
-    compute_sides, resolve_collider_rect, resolve_groups, resolve_world_pos,
-};
-use log::{debug, error};
-
-/// What the Lua collision observer and `lua_collision_ended_system` read to
-/// find a rule and its contacts.
-#[derive(SystemParam)]
-pub struct LuaCollisionLookup<'w, 's> {
-    pub groups: Query<'w, 's, &'static Group>,
-    pub lua_rules: Query<'w, 's, &'static LuaCollisionRule>,
-    pub index: Res<'w, LuaCollisionRuleIndex>,
-    pub box_colliders: Query<'w, 's, &'static BoxCollider>,
-    pub contacts: ResMut<'w, LuaCollisionContacts>,
-}
+use aberred_core::systems::collision::{compute_sides, resolve_collider_rect, resolve_world_pos};
+use log::error;
 
 /// What a Lua collision callback reads (its ctx) and what its
 /// `engine.collision_*` commands write.
 #[derive(SystemParam)]
-pub struct LuaCollisionEffects<'w, 's> {
-    pub commands: Commands<'w, 's>,
-    pub luaphase_query: Query<'w, 's, (Entity, &'static mut LuaPhase)>,
-    pub entity_cmds: EntityCmdQueries<'w, 's>,
-    pub world_signals: ResMut<'w, WorldSignals>,
-    pub audio_cmds: MessageWriter<'w, AudioCmd>,
-    pub lua_runtime: NonSend<'w, LuaRuntime>,
-    pub systems_store: Res<'w, SystemsStore>,
-    pub animation_store: Res<'w, AnimationStore>,
+struct LuaCollisionEffects<'w, 's> {
+    commands: Commands<'w, 's>,
+    luaphase_query: Query<'w, 's, (Entity, &'static mut LuaPhase)>,
+    entity_cmds: EntityCmdQueries<'w, 's>,
+    world_signals: ResMut<'w, WorldSignals>,
+    audio_cmds: MessageWriter<'w, AudioCmd>,
+    lua_runtime: NonSend<'w, LuaRuntime>,
+    systems_store: Res<'w, SystemsStore>,
+    animation_store: Res<'w, AnimationStore>,
 }
 
 /// One side of a pooled collision context. `Default` leaves everything but
@@ -170,109 +150,6 @@ impl LuaCollisionEffects<'_, '_> {
             &self.systems_store,
             &self.animation_store,
         );
-    }
-}
-
-/// Observes `Overlapping`, invokes the matching Lua rule's `on_enter` (new
-/// contacts only) and then its every-tick callback, each with a fresh ctx and
-/// with its `engine.collision_*` commands applied right after it.
-///
-/// Contacts are recorded only for rules with an `on_enter` or `on_exit`.
-pub fn lua_collision_observer(
-    trigger: On<Overlapping>,
-    mut lookup: LuaCollisionLookup,
-    mut effects: LuaCollisionEffects,
-    mut phase_buf: Local<Vec<PhaseCmd>>,
-    mut effect_bufs: Local<EffectCmdBufs>,
-) {
-    if lookup.index.is_empty() {
-        return;
-    }
-
-    let Overlapping { a, b } = *trigger.event();
-
-    let Some((ga, gb)) = resolve_groups(&lookup.groups, a, b) else {
-        return;
-    };
-
-    let Some((rule_entity, lua_rule, ent_a, ent_b)) =
-        lookup.index.find_match(&lookup.lua_rules, a, b, ga, gb)
-    else {
-        return;
-    };
-
-    let started = (lua_rule.on_enter.is_some() || lua_rule.on_exit.is_some())
-        && lookup.contacts.begin(rule_entity, ent_a, ent_b);
-    let callbacks = [
-        lua_rule.on_enter.as_deref().filter(|_| started),
-        lua_rule.callback.as_deref(),
-    ];
-    let (group_a, group_b) = if ent_a == a { (ga, gb) } else { (gb, ga) };
-
-    for name in callbacks.into_iter().flatten() {
-        effects.lua_runtime.sync_signals(&mut effects.world_signals);
-        {
-            let rect_of = |entity| {
-                resolve_collider_rect(
-                    &effects.entity_cmds.positions.as_readonly(),
-                    &effects.entity_cmds.global_transforms,
-                    &lookup.box_colliders,
-                    entity,
-                )
-            };
-            let (rect_a, rect_b) = (rect_of(ent_a), rect_of(ent_b));
-            let (sides_a, sides_b) = compute_sides(rect_a, rect_b);
-            call_lua_collision_callback(
-                &effects.lua_runtime,
-                name,
-                effects.live_side(ent_a, group_a, rect_a, &sides_a),
-                effects.live_side(ent_b, group_b, rect_b, &sides_b),
-            );
-        }
-        effects.drain_collision_commands(&mut phase_buf, &mut effect_bufs);
-    }
-}
-
-/// Calls the `on_exit` callback of each [`LuaCollisionRule`] contact that
-/// touched last tick but not this one, in `(rule, a, b)` order.
-///
-/// Runs after `collision_detector`, once this tick's `lua_collision_observer`
-/// calls have recorded the contacts that still touch. Either entity may
-/// already be despawned, so the ctx carries only `id` and `group` per side
-/// (from the rule's groups); `pos`, `vel`, `rect` and `signals` are nil and
-/// the sides are empty. A contact whose rule entity lost its
-/// `LuaCollisionRule` is skipped.
-pub fn lua_collision_ended_system(
-    mut lookup: LuaCollisionLookup,
-    mut effects: LuaCollisionEffects,
-    mut phase_buf: Local<Vec<PhaseCmd>>,
-    mut effect_bufs: Local<EffectCmdBufs>,
-) {
-    for contact in lookup.contacts.end_tick() {
-        let Ok(rule) = lookup.lua_rules.get(contact.rule) else {
-            debug!(target: "lua", "Collision exit skipped: rule {:?} is gone", contact.rule);
-            continue;
-        };
-        let Some(on_exit) = rule.on_exit.as_deref() else {
-            continue;
-        };
-
-        effects.lua_runtime.sync_signals(&mut effects.world_signals);
-        call_lua_collision_callback(
-            &effects.lua_runtime,
-            on_exit,
-            CollisionSide {
-                id: contact.a.to_bits(),
-                group: Some(&rule.group_a),
-                ..Default::default()
-            },
-            CollisionSide {
-                id: contact.b.to_bits(),
-                group: Some(&rule.group_b),
-                ..Default::default()
-            },
-        );
-        effects.drain_collision_commands(&mut phase_buf, &mut effect_bufs);
     }
 }
 
