@@ -134,6 +134,10 @@ impl LuaRuleDispatch<'_, '_> {
         refresh_signal_cache(p);
         {
             let queries = &p.cmd_queries;
+            // Early return if either entity was despawned by a prior callback
+            if queries.positions.get(a).is_err() || queries.positions.get(b).is_err() {
+                return;
+            }
             let rect_of = |entity| {
                 resolve_collider_rect(
                     &queries.positions.as_readonly(),

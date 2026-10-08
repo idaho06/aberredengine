@@ -611,6 +611,101 @@ fn collision_callback_phase_plus_signal_all_processed() {
     );
 }
 
+/// A collision enter callback despawning one entity prevents the stay callback
+/// from running on it, avoiding nil access errors in Lua.
+///
+/// If an enter callback despawning entity A or B, and a Collided event for the
+/// same pair was already queued, the stay callback should not run because
+/// live_side would return nil for the despawned entity's components, causing
+/// Lua errors when accessing ctx.a.pos.x or ctx.b.pos.x.
+#[test]
+fn collision_enter_despawn_prevents_stay_callback() {
+    let mut world = make_lua_callback_world(0.0);
+
+    {
+        let rt = world.non_send::<LuaRuntime>();
+        rt.lua()
+            .load(
+                r#"
+                enter_calls = 0
+                stay_calls = 0
+                function on_enter(ctx)
+                    enter_calls = enter_calls + 1
+                    -- Despawn entity b when a and b enter collision
+                    engine.collision_entity_despawn(ctx.b.id)
+                end
+                function on_stay(ctx)
+                    stay_calls = stay_calls + 1
+                    -- This would error if pos is nil: ctx.b.pos.x
+                end
+            "#,
+            )
+            .exec()
+            .expect("lua load");
+    }
+
+    let a = world
+        .spawn((
+            Group::new("hero"),
+            MapPosition::new(0.0, 0.0),
+            BoxCollider::new(10.0, 10.0),
+        ))
+        .id();
+    let b = world
+        .spawn((
+            Group::new("enemy"),
+            MapPosition::new(5.0, 0.0),
+            BoxCollider::new(10.0, 10.0),
+        ))
+        .id();
+
+    // Create a rule with both enter and stay callbacks
+    let rule = LuaOnCollision::rule(
+        "hero",
+        "enemy",
+        LuaOnCollision {
+            enter: Some("on_enter".into()),
+            stay: Some("on_stay".into()),
+            ..Default::default()
+        },
+    );
+    add_lua_collision_observers(&mut world);
+    world.spawn(rule);
+    world.flush();
+
+    tick_collision_detector(&mut world);
+
+    // Enter callback should have been called once
+    let enter_calls: i64 = world
+        .non_send::<LuaRuntime>()
+        .lua()
+        .globals()
+        .get("enter_calls")
+        .expect("enter_calls");
+    assert_eq!(
+        enter_calls, 1,
+        "enter callback should have been called once"
+    );
+
+    // Stay callback should NOT have been called because entity b was despawned
+    let stay_calls: i64 = world
+        .non_send::<LuaRuntime>()
+        .lua()
+        .globals()
+        .get("stay_calls")
+        .expect("stay_calls");
+    assert_eq!(
+        stay_calls, 0,
+        "stay callback should NOT run when entity was despawned by enter"
+    );
+
+    // Verify entity b was despawned
+    assert!(
+        world.get_entity(b).is_err(),
+        "entity b should have been despawned"
+    );
+}
+
 fn load_lua(world: &World, src: &str) {
     world
         .non_send::<LuaRuntime>()
