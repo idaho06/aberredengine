@@ -183,6 +183,7 @@ pub enum SignalCmd {
     SetInteger { key: String, value: i32 },
     SetString { key: String, value: String },
     SetFlag { key: String },
+    ChangeScene { scene: String },
     ClearFlag { key: String },
     ToggleFlag { key: String },
     ClearScalar { key: String },

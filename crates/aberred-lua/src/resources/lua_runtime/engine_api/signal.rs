@@ -214,14 +214,11 @@ impl LuaRuntime {
                 let data = lua
                     .app_data_ref::<LuaAppData>()
                     .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?;
-                let mut cmds = data.signal_commands.borrow_mut();
-                cmds.push(SignalCmd::SetString {
-                    key: sk::SCENE.into(),
-                    value: scene_name,
-                });
-                cmds.push(SignalCmd::SetFlag {
-                    key: sk::SWITCH_SCENE.into(),
-                });
+                // Deferred switch: the scene string must stay put until
+                // `switch_scene` applies the target (see request_scene_switch).
+                data.signal_commands
+                    .borrow_mut()
+                    .push(SignalCmd::ChangeScene { scene: scene_name });
                 Ok(())
             })?,
         )?;
@@ -229,7 +226,7 @@ impl LuaRuntime {
             &self.lua,
             &meta_fns,
             "change_scene",
-            "Switch to a new scene by name (sets scene string + switch_scene flag)",
+            "Switch to a new scene by name (applied by the next switch_scene)",
             "base",
             &[("scene_name", "string")],
             None,

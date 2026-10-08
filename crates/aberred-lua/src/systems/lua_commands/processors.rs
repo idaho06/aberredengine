@@ -99,6 +99,11 @@ pub fn process_signal_command(world_signals: &mut WorldSignals, cmd: SignalCmd) 
         SignalCmd::SetString { key, value } => {
             world_signals.set_string(key, value);
         }
+        SignalCmd::ChangeScene { scene } => {
+            // Deferred switch: this drain can run mid-tick; `switch_scene`
+            // applies the recorded target to the `scene` string.
+            world_signals.request_scene_switch(scene);
+        }
         SignalCmd::ClearScalar { key } => {
             world_signals.remove_scalar(&key);
         }
@@ -1126,6 +1131,27 @@ mod tests {
             "invalid entity bits are ignored"
         );
         assert!(ws.get_entity("gone_e").is_none());
+    }
+
+    /// `engine.change_scene` must not write the `scene` string here: observer
+    /// drains run mid-tick, and `switch_scene` (not this processor) applies
+    /// the recorded target.
+    #[test]
+    fn signal_cmd_change_scene_defers_the_scene_string() {
+        use aberred_core::resources::signal_keys as sk;
+        let mut ws = WorldSignals::default();
+        ws.set_string(sk::SCENE, "menu");
+
+        process_signal_command(
+            &mut ws,
+            SignalCmd::ChangeScene {
+                scene: "level2".into(),
+            },
+        );
+
+        assert_eq!(ws.get_string(sk::SCENE), Some("menu"));
+        assert!(ws.has_flag(sk::SWITCH_SCENE));
+        assert_eq!(ws.take_pending_scene().as_deref(), Some("level2"));
     }
 
     #[test]

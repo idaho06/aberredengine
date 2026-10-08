@@ -506,6 +506,14 @@ pub fn switch_scene(
     scene_state.world_signals.clear_group_counts();
     lua_runtime.update_tracked_groups_cache(&tracked_groups.groups);
 
+    // Apply a pending engine.change_scene target before the scene string is
+    // read: the write is deferred so a mid-tick observer drain cannot flip
+    // the scene before this tick's on_update_<scene> runs. Direct writers
+    // (enter_play, MenuAction::SetScene) have no pending target — no-op.
+    if let Some(pending) = scene_state.world_signals.take_pending_scene() {
+        scene_state.world_signals.set_string(sk::SCENE, pending);
+    }
+
     // Refresh the Lua signal cache so on_switch_scene sees the post-clear state
     // (cleared entity registry and group counts), not the previous scene's snapshot.
     lua_runtime.sync_signals(&mut scene_state.world_signals);
@@ -970,6 +978,142 @@ mod tests {
             !world.resource::<WorldSignals>().has_flag(sk::SWITCH_SCENE),
             "SWITCH_SCENE should be cleared by update() the same tick it was set"
         );
+    }
+
+    /// The bug this guards against: a menu/GUI-click observer fires from
+    /// `apply_tick_input`, before the sim tick, and drains its queued
+    /// commands as soon as the callback returns. When `change_scene` still
+    /// wrote the `scene` string right there, `update` picked the new scene's
+    /// callback the same tick — skipping `on_update_menu`, running
+    /// `on_update_level2` against the old scene's live entities before
+    /// `on_switch_scene`, with the confirm key still "just pressed".
+    #[test]
+    fn change_scene_from_a_mid_tick_observer_defers_the_scene_until_switch_scene() {
+        let mut world = new_update_test_world();
+        world
+            .resource_mut::<WorldSignals>()
+            .set_string(sk::SCENE, "menu");
+
+        let switch_scene_id = world.register_system(switch_scene);
+        world
+            .resource_mut::<SystemsStore>()
+            .insert(hook_keys::SWITCH_SCENE, switch_scene_id);
+
+        {
+            let lua_runtime = world.get_non_send::<LuaRuntime>().unwrap();
+            lua_runtime
+                .lua()
+                .load(
+                    "function on_update_menu(input, dt)\n\
+                         _G.order = (_G.order or '') .. 'update_menu '\n\
+                     end\n\
+                     function on_update_level2(input, dt)\n\
+                         _G.order = (_G.order or '') .. 'update_level2 '\n\
+                     end",
+                )
+                .exec()
+                .expect("define on_update_menu/on_update_level2");
+        }
+
+        // The observer half of the repro: queue change_scene, then drain the
+        // way `dispatch_custom_and_drain` does when the callback returns.
+        {
+            let lua_runtime = world.get_non_send::<LuaRuntime>().unwrap();
+            lua_runtime
+                .lua()
+                .load("engine.change_scene('level2')")
+                .exec()
+                .expect("queue change_scene");
+        }
+        run_drain_common_commands(&mut world);
+
+        // The drain recorded the request without touching the scene string:
+        // the old behavior flipped it to 'level2' right here.
+        assert_eq!(
+            world.resource::<WorldSignals>().get_string(sk::SCENE),
+            Some("menu"),
+            "the observer drain must not apply the change_scene target"
+        );
+        assert!(world.resource::<WorldSignals>().has_flag(sk::SWITCH_SCENE));
+
+        // This tick still runs the old scene's update; the switch lands at
+        // the end of it. Repro's expected log: ['update_menu', 'switch level2'].
+        world.run_system_once(update).unwrap();
+
+        let order: String = {
+            let lua_runtime = world.get_non_send::<LuaRuntime>().unwrap();
+            lua_runtime.lua().globals().get("order").unwrap()
+        };
+        assert_eq!(
+            order, "update_menu ",
+            "only the old scene's update may run on the tick that requested the switch"
+        );
+
+        assert_eq!(
+            world.resource::<WorldSignals>().get_string(sk::SCENE),
+            Some("level2"),
+            "switch_scene applies the pending target"
+        );
+        assert!(
+            !world.resource::<WorldSignals>().has_flag(sk::SWITCH_SCENE),
+            "SWITCH_SCENE should be cleared by update() the same tick it was set"
+        );
+        assert_eq!(
+            world.resource_mut::<WorldSignals>().take_pending_scene(),
+            None,
+            "the pending target must be consumed, not left to re-apply"
+        );
+
+        // The new scene's update starts the tick after the switch.
+        world.run_system_once(update).unwrap();
+        let order: String = {
+            let lua_runtime = world.get_non_send::<LuaRuntime>().unwrap();
+            lua_runtime.lua().globals().get("order").unwrap()
+        };
+        assert_eq!(order, "update_menu update_level2 ");
+    }
+
+    /// `switch_scene` also applies a pending target when it is invoked
+    /// directly (enter_play's initial switch, or a game calling the hook
+    /// itself), and `on_switch_scene` observes the applied name.
+    #[test]
+    fn switch_scene_applies_a_pending_change_scene_target() {
+        let mut world = new_drain_test_world();
+        world
+            .resource_mut::<WorldSignals>()
+            .set_string(sk::SCENE, "menu");
+        world
+            .resource_mut::<WorldSignals>()
+            .request_scene_switch("level2");
+
+        {
+            let lua_runtime = world.get_non_send::<LuaRuntime>().unwrap();
+            lua_runtime
+                .lua()
+                .load(
+                    "function on_switch_scene(scene)\n\
+                         _G.switched_to = scene\n\
+                     end",
+                )
+                .exec()
+                .expect("define on_switch_scene");
+        }
+
+        world.run_system_once(switch_scene).unwrap();
+
+        assert_eq!(
+            world.resource::<WorldSignals>().get_string(sk::SCENE),
+            Some("level2")
+        );
+        assert_eq!(
+            world.resource_mut::<WorldSignals>().take_pending_scene(),
+            None,
+            "the pending target must be consumed, not left to re-apply"
+        );
+
+        let lua_runtime = world.get_non_send::<LuaRuntime>().unwrap();
+        let switched_to: String = lua_runtime.lua().globals().get("switched_to").unwrap();
+        assert_eq!(switched_to, "level2");
     }
 
     #[test]

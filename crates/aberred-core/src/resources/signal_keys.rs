@@ -3,8 +3,10 @@
 //! Use these constants everywhere a signal key is written or read to get
 //! compile-time-checked references and a single rename point.
 
-/// Flag: set by `engine.change_scene(name)` to request a scene transition.
-/// The target scene name is stored under [`SCENE`].
+/// Flag: set to request a scene transition. `WorldSignals::request_scene`
+/// (Rust menus) writes the target to [`SCENE`] immediately;
+/// `engine.change_scene` (Lua) records it as the pending scene, which the
+/// `switch_scene` system applies to [`SCENE`] when it consumes this flag.
 pub const SWITCH_SCENE: &str = "switch_scene";
 
 /// Flag: set by `engine.quit()` to request a clean engine shutdown.

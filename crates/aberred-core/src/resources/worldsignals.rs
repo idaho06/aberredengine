@@ -161,6 +161,10 @@ pub struct WorldSignals {
     /// Group counts maintained in parallel with the `"group_count:"` integer entries.
     group_counts: FxHashMap<String, u32>,
 
+    /// Target of a deferred scene switch (see [`WorldSignals::request_scene_switch`]).
+    /// Applied to [`sk::SCENE`] by the `switch_scene` system, not immediately.
+    pending_scene: Option<String>,
+
     /// Per-domain cached Arcs for the snapshot.
     scalars_arc: Arc<FxHashMap<String, f32>>,
     integers_arc: Arc<FxHashMap<String, i32>>,
@@ -190,6 +194,7 @@ impl Default for WorldSignals {
             flags: FxHashSet::default(),
             entities: FxHashMap::default(),
             group_counts: FxHashMap::default(),
+            pending_scene: None,
 
             scalars_arc: Arc::new(FxHashMap::default()),
             integers_arc: Arc::new(FxHashMap::default()),
@@ -404,6 +409,24 @@ impl WorldSignals {
     pub fn request_scene(&mut self, name: impl Into<String>) {
         self.set_string(sk::SCENE, name);
         self.set_flag(sk::SWITCH_SCENE);
+    }
+    /// Request a switch to the scene `name`, deferred: records the target as
+    /// the pending scene and sets the [`sk::SWITCH_SCENE`] flag, but leaves
+    /// [`sk::SCENE`] untouched until the `switch_scene` system applies it.
+    ///
+    /// Mid-tick observers (Lua menu/GUI-click/timer/phase callbacks) can call
+    /// this without flipping the scene string before the current tick's
+    /// `on_update_<scene>` runs: until the switch applies the target, every
+    /// reader still sees the old scene.
+    pub fn request_scene_switch(&mut self, name: impl Into<String>) {
+        self.pending_scene = Some(name.into());
+        self.set_flag(sk::SWITCH_SCENE);
+    }
+    /// Take the recorded [`request_scene_switch`](Self::request_scene_switch)
+    /// target, if any. The caller (the `switch_scene` system) applies it to
+    /// [`sk::SCENE`]; reading twice returns `None` the second time.
+    pub fn take_pending_scene(&mut self) -> Option<String> {
+        self.pending_scene.take()
     }
     /// Request that the game quit: sets the [`sk::QUIT_GAME`] flag, which the
     /// engine turns into a `Quitting` state transition on the next poll.
@@ -745,6 +768,21 @@ mod tests {
         ws.request_scene("lvl");
         assert_eq!(ws.get_string(sk::SCENE), Some("lvl"));
         assert!(ws.has_flag(sk::SWITCH_SCENE));
+    }
+
+    /// The deferred form leaves the scene string alone until the switch
+    /// system applies the recorded target.
+    #[test]
+    fn request_scene_switch_defers_the_target_until_taken() {
+        let mut ws = WorldSignals::default();
+        ws.set_string(sk::SCENE, "menu");
+        ws.request_scene_switch("level2");
+        assert_eq!(ws.get_string(sk::SCENE), Some("menu"));
+        assert!(ws.has_flag(sk::SWITCH_SCENE));
+
+        assert_eq!(ws.take_pending_scene().as_deref(), Some("level2"));
+        // Second read is empty: the target is consumed exactly once.
+        assert_eq!(ws.take_pending_scene(), None);
     }
 
     #[test]
