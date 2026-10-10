@@ -114,7 +114,7 @@ local function spawn_heart_particles_templates()
         :build()
 end
 
--- ─── Phase callbacks (local) ─────────────────────────────────────────────────
+-- ─── Phase handlers (local) ──────────────────────────────────────────────────
 
 local function scene_fade_in_on_enter(ctx, input)
     fade_strength = 1.0
@@ -191,18 +191,47 @@ local function on_update_birthday_intro(input, dt)
     end
 end
 
+-- ─── Phase dispatchers ──────────────────────────────────────────────────────
+-- One enter, update and exit callback for the controller, each forwarding to
+-- the handler of the current phase (exit: the phase being left). A phase
+-- without a handler does nothing.
+
+local scene_enter = {
+    fade_in  = scene_fade_in_on_enter,
+    hold     = scene_hold_on_enter,
+    fade_out = scene_fade_out_on_enter,
+}
+local function scene_phase_enter(ctx, input)
+    local f = scene_enter[ctx.phase]
+    if f then return f(ctx, input) end
+end
+
+local scene_update = {
+    fade_in  = scene_fade_in_on_update,
+    hold     = scene_hold_on_update,
+    fade_out = scene_fade_out_on_update,
+}
+local function scene_phase_update(ctx, input, dt)
+    local f = scene_update[ctx.phase]
+    if f then return f(ctx, input, dt) end
+end
+
+local scene_exit = {
+    hold     = scene_hold_on_exit,
+    fade_out = scene_fade_out_on_exit,
+}
+local function scene_phase_exit(ctx)
+    local f = scene_exit[ctx.previous_phase]
+    if f then f(ctx) end
+end
+
 -- ─── Callback registry ──────────────────────────────────────────────────────
 
 M._callbacks = {
     on_update_birthday_intro = on_update_birthday_intro,
-    scene_fade_in_on_enter   = scene_fade_in_on_enter,
-    scene_fade_in_on_update  = scene_fade_in_on_update,
-    scene_hold_on_enter      = scene_hold_on_enter,
-    scene_hold_on_update     = scene_hold_on_update,
-    scene_hold_on_exit       = scene_hold_on_exit,
-    scene_fade_out_on_enter  = scene_fade_out_on_enter,
-    scene_fade_out_on_update = scene_fade_out_on_update,
-    scene_fade_out_on_exit   = scene_fade_out_on_exit,
+    scene_phase_enter        = scene_phase_enter,
+    scene_phase_update       = scene_phase_update,
+    scene_phase_exit         = scene_phase_exit,
 }
 
 -- ─── Spawn ──────────────────────────────────────────────────────────────────
@@ -279,25 +308,10 @@ function M.spawn()
     engine.spawn()
         :with_signals()
         :with_group("intro_controller")
-        :with_phase({
-            initial = "fade_in",
-            phases = {
-                fade_in = {
-                    on_enter = "scene_fade_in_on_enter",
-                    on_update = "scene_fade_in_on_update"
-                },
-                hold = {
-                    on_enter = "scene_hold_on_enter",
-                    on_update = "scene_hold_on_update",
-                    on_exit = "scene_hold_on_exit"
-                },
-                fade_out = {
-                    on_enter = "scene_fade_out_on_enter",
-                    on_update = "scene_fade_out_on_update",
-                    on_exit = "scene_fade_out_on_exit"
-                }
-            }
-        })
+        :with_phase("fade_in")
+        :with_lua_phase_entered("scene_phase_enter")
+        :with_lua_phase_update("scene_phase_update")
+        :with_lua_phase_exited("scene_phase_exit")
         :register_as("intro_controller")
         :build()
 

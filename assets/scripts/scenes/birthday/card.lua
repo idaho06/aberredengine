@@ -29,7 +29,7 @@ local function spawn_gems_particles_templates()
     return template_names_list
 end
 
--- ─── Phase callbacks (local) ─────────────────────────────────────────────────
+-- ─── Phase handlers (local) ──────────────────────────────────────────────────
 
 local function card_fade_in_on_enter(ctx, input)
     fade_strength = 1.0
@@ -100,18 +100,47 @@ local function on_update_birthday_card(input, dt)
     end
 end
 
+-- ─── Phase dispatchers ──────────────────────────────────────────────────────
+-- One enter, update and exit callback for the controller, each forwarding to
+-- the handler of the current phase (exit: the phase being left). A phase
+-- without a handler does nothing.
+
+local card_enter = {
+    fade_in  = card_fade_in_on_enter,
+    hold     = card_hold_on_enter,
+    fade_out = card_fade_out_on_enter,
+}
+local function card_phase_enter(ctx, input)
+    local f = card_enter[ctx.phase]
+    if f then return f(ctx, input) end
+end
+
+local card_update = {
+    fade_in  = card_fade_in_on_update,
+    hold     = card_hold_on_update,
+    fade_out = card_fade_out_on_update,
+}
+local function card_phase_update(ctx, input, dt)
+    local f = card_update[ctx.phase]
+    if f then return f(ctx, input, dt) end
+end
+
+local card_exit = {
+    hold     = card_hold_on_exit,
+    fade_out = card_fade_out_on_exit,
+}
+local function card_phase_exit(ctx)
+    local f = card_exit[ctx.previous_phase]
+    if f then f(ctx) end
+end
+
 -- ─── Callback registry ──────────────────────────────────────────────────────
 
 M._callbacks = {
-    on_update_birthday_card  = on_update_birthday_card,
-    card_fade_in_on_enter    = card_fade_in_on_enter,
-    card_fade_in_on_update   = card_fade_in_on_update,
-    card_hold_on_enter       = card_hold_on_enter,
-    card_hold_on_update      = card_hold_on_update,
-    card_hold_on_exit        = card_hold_on_exit,
-    card_fade_out_on_enter   = card_fade_out_on_enter,
-    card_fade_out_on_update  = card_fade_out_on_update,
-    card_fade_out_on_exit    = card_fade_out_on_exit,
+    on_update_birthday_card = on_update_birthday_card,
+    card_phase_enter        = card_phase_enter,
+    card_phase_update       = card_phase_update,
+    card_phase_exit         = card_phase_exit,
 }
 
 -- ─── Spawn ──────────────────────────────────────────────────────────────────
@@ -197,25 +226,10 @@ function M.spawn()
     engine.spawn()
         :with_signals()
         :with_group("card_controller")
-        :with_phase({
-            initial = "fade_in",
-            phases = {
-                fade_in = {
-                    on_enter = "card_fade_in_on_enter",
-                    on_update = "card_fade_in_on_update"
-                },
-                hold = {
-                    on_enter = "card_hold_on_enter",
-                    on_update = "card_hold_on_update",
-                    on_exit = "card_hold_on_exit"
-                },
-                fade_out = {
-                    on_enter = "card_fade_out_on_enter",
-                    on_update = "card_fade_out_on_update",
-                    on_exit = "card_fade_out_on_exit"
-                }
-            }
-        })
+        :with_phase("fade_in")
+        :with_lua_phase_entered("card_phase_enter")
+        :with_lua_phase_update("card_phase_update")
+        :with_lua_phase_exited("card_phase_exit")
         :register_as("card_controller")
         :build()
 
