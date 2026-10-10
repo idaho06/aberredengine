@@ -77,7 +77,7 @@ crates/aberred-lua/src/resources/lua_runtime/
 │   ├── gui.rs            # with_gui_window/button/label/image/progress_bar/offset/theme_key and their per-state offset variants
 │   ├── menu.rs           # with_menu and its with_menu_* configuration methods
 │   ├── tween.rs          # with_tween_position/rotation/scale/screen_position and their *_easing/*_loop/*_backwards/*_on_finished variants
-│   └── behavior.rs       # with_phase, with_lua_timer, with_lua_timer_once, with_lua_collision_rule, with_lua_collision_enter, with_lua_collision_exit, with_lua_setup, with_on_animation_end, with_signal*, with_group, with_persistent, with_grid_layout, with_tilemap, with_particle_emitter, with_mouse_controlled, with_text
+│   └── behavior.rs       # with_phase, with_lua_phase_entered, with_lua_phase_exited, with_lua_phase_update, with_lua_timer, with_lua_timer_once, with_lua_collision_rule, with_lua_collision_enter, with_lua_collision_exit, with_lua_setup, with_on_animation_end, with_signal*, with_group, with_persistent, with_grid_layout, with_tilemap, with_particle_emitter, with_mouse_controlled, with_text
 ├── engine_api/          # engine.* API registration, split by category
 │   ├── mod.rs          # Re-exports, module declarations
 │   ├── macros.rs       # register_cmd!, register_getter!, define_cmd_twins! (+ its define_*_cmd_twins!/define_entity_cmds! specializations), push_fn_meta()
@@ -121,7 +121,7 @@ crates/aberred-lua/src/systems/lua_commands/
 └── parse.rs             # Animation condition parsing helpers
 ```
 
-`crates/aberred-lua/src/systems/` also holds the Bevy systems/observers that call into `lua_commands/` (`luaphase.rs`, `lua_timer_fired.rs`, `lua_setup_entity.rs`, `lua_animation_finished.rs`, `lua_tween_finished.rs`, `lua_collision.rs`, `lua_menu.rs`, `lua_mapspawn.rs`, `lua_gui_interactable_click.rs`) and `lua_plugin.rs` (scene setup/switch, `on_update_<scene>` dispatch) at the crate root.
+`crates/aberred-lua/src/systems/` also holds the Bevy systems/observers that call into `lua_commands/` (`lua_phase.rs`, `lua_timer_fired.rs`, `lua_setup_entity.rs`, `lua_animation_finished.rs`, `lua_tween_finished.rs`, `lua_collision.rs`, `lua_menu.rs`, `lua_mapspawn.rs`, `lua_gui_interactable_click.rs`) and `lua_plugin.rs` (scene setup/switch, `on_update_<scene>` dispatch) at the crate root.
 
 ### Key Components
 
@@ -240,7 +240,7 @@ A handful of functions with irregular shapes (`change_scene`, `quit`, `set_targe
 
 ### Step 3: Rust Drains Commands
 
-Every Lua callback except phase callbacks (timer, `on_animation_end`, `on_tween_finished`, setup, menu selection, GUI click, collision) goes through the shared `LuaDispatch` flow in `systems/lua_commands/dispatch.rs`: `refresh_signal_cache` syncs the signal cache from `WorldSignals`, `call_entity_callback` builds the entity context (and input table, if the call shape wants one) and invokes the named Lua function, then `drain_dispatch_commands` drains and processes its queued commands from the regular queues, or from the collision-scoped ones (`DrainScope::Collision`) for collision callbacks, which build their own pooled collision ctx. Menu selection and GUI click callbacks take a small custom context table instead of an entity context: `dispatch_custom_and_drain` refreshes the signal cache, calls the function with that table, and drains. `lua_phase_system` (`systems/luaphase.rs`) does not use `LuaDispatch` — phase transitions must interleave `apply_callback_transitions` between the phase drain and the effect drain, and it builds one input table for many entities per invocation, so it calls `drain_and_process_phase_commands`/`drain_and_process_effect_commands` directly instead.
+Every Lua callback except the phase update callback (timer, `on_animation_end`, `on_tween_finished`, setup, menu selection, GUI click, collision, phase enter/exit) goes through the shared `LuaDispatch` flow in `systems/lua_commands/dispatch.rs`: `refresh_signal_cache` syncs the signal cache from `WorldSignals`, `call_entity_callback` builds the entity context (and input table, if the call shape wants one) and invokes the named Lua function, then `drain_dispatch_commands` drains and processes its queued commands from the regular queues, or from the collision-scoped ones (`DrainScope::Collision`) for collision callbacks, which build their own pooled collision ctx. Menu selection and GUI click callbacks take a small custom context table instead of an entity context: `dispatch_custom_and_drain` refreshes the signal cache, calls the function with that table, and drains. `lua_phase_update_system` (`systems/lua_phase.rs`) takes a `LuaDispatch` too but does not call through a `CallShape`: it builds one input table for every phase entity per run and passes `dt`, so it builds each ctx with `build_ctx_or_log`, calls the Lua function itself, and drains once per run.
 
 The actual draining happens in `drain_and_process_effect_commands()` (`systems/lua_commands/mod.rs`), which drains the 6 non-phase effect queues in canonical order — `signal → entity → spawn → clone → audio → camera` — from either the regular or collision-scoped queue set (`DrainScope::Regular`/`DrainScope::Collision`), into a caller-owned `EffectCmdBufs` (a `Local<EffectCmdBufs>` on the calling system, so its `Vec`s retain heap capacity across frames):
 
@@ -300,16 +300,13 @@ The previous section covers how Lua calls *into* Rust. This section covers the o
 
 ### Phase System
 
-`lua_phase_system` runs once per sim tick over every `LuaPhase` entity (a Lua-owned component wrapping the core `Phase`, plus `PhaseCallbacks` holding named Lua function strings; the swap and the first-run flag are core `Phase`'s). Per entity, in phase-lifecycle order:
+A Lua phase entity is a core `Phase` plus up to three components naming Lua functions: `LuaOnPhaseEntered`, `LuaOnPhaseExited` and `LuaOnPhaseUpdate` (`components/lua_on_phase.rs`; `:with_phase(initial)` + `:with_lua_phase_entered/exited/update(cb)`, or `engine.entity_insert_phase` + `engine.entity_insert_lua_phase_*` at runtime). Core `phase_system` (`SimSet::Phases`, every game state) owns the state machine: it applies `Phase.next`, resets `time_in_phase`, triggers `PhaseExited` then `PhaseEntered`, and advances `time_in_phase`, exactly as for a Rust phase entity. The Lua layer only reacts (`systems/lua_phase.rs`):
 
-1. On the entity's first run, call the initial phase's `phase_on_enter` — `(ctx, input)`; `ctx.previous_phase` is nil.
-2. If a transition to a new phase is pending, swap `current`/`previous` and reset `time_in_phase` to 0, then call the *old* phase's `phase_on_exit` — `(ctx)` only, no `input`; its ctx already reports the new phase — and the *new* phase's `phase_on_enter`.
-3. Call `phase_on_update` — `(ctx, input, dt)`.
-4. `time_in_phase` accumulates by `dt` regardless of whether a callback ran.
+- `lua_phase_entered_observer` (on `PhaseEntered`) calls the entity's `LuaOnPhaseEntered` callback as `(ctx, input)`, with `ctx.previous_phase` the event's `previous` (nil on the initial enter). The ctx reads the post-swap `Phase`, so `ctx.phase` is the phase entered except when a transition was already pending at the initial enter; the return-value no-op check compares against the event's `name`.
+- `lua_phase_exited_observer` (on `PhaseExited`) calls `LuaOnPhaseExited` as `(ctx)`. The swap has already happened, so `ctx.phase` is the new phase and `ctx.previous_phase` the phase left.
+- `lua_phase_update_system` (`SimSet::PostCollision`, `run_if(state_is_playing)`, after `update_group_counts_system`, before `animation_controller`) calls every `LuaOnPhaseUpdate` callback as `(ctx, input, dt)`.
 
-`phase_on_enter`/`phase_on_update` may return a phase-name string to request a transition (a same-name or `nil` return is a no-op); `engine.phase_transition()` is the other way to request one, queued and drained separately. Return-value transitions are applied *after* the phase-command drain, so they take precedence within the same tick over an `engine.phase_transition()` call made in the same callback.
-
-This system deliberately does not go through the shared `LuaDispatch`/`dispatch_and_drain` helper that timer/animation/tween callbacks use: `apply_callback_transitions` (the return-value transition step) must run strictly between the phase-command drain and the effect-command drain, and the system batches one input table across every phase entity per invocation rather than resolving it per entity — so it calls `drain_and_process_phase_commands`/`drain_and_process_effect_commands` directly instead.
+One callback per kind serves every phase of the entity, so scripts branch on `ctx.phase` (the shipped demos use a small handler table per kind). An enter or update callback may return a phase-name string to request a transition; a same-name or `nil` return is a no-op. `engine.phase_transition()` is the other way to request one (it works on any entity with a core `Phase`, Rust-spawned or not), queued and drained separately. Returned names are written to `Phase.next` *after* the callback's queued commands drain, so they win over an `engine.phase_transition()` made in the same callback. Every request applies at the start of the next tick, when `phase_system` runs.
 
 ### Timer System
 
@@ -490,6 +487,7 @@ All are registered in `engine_api/render.rs` and queue into `gui_theme_commands`
 - `entity_freeze`, `entity_unfreeze`
 - `entity_set_animation`, `entity_restart_animation`, `entity_set_sprite_flip`
 - `entity_insert_lua_timer`, `entity_insert_lua_timer_once`, `entity_remove_lua_timer`
+- `entity_insert_phase`, `entity_insert_lua_phase_entered`, `entity_insert_lua_phase_exited`, `entity_insert_lua_phase_update`
 - `entity_insert_ttl`
 - `entity_insert_tween_position`, `entity_remove_tween_position`
 - `entity_insert_tween_rotation`, `entity_remove_tween_rotation`
@@ -643,6 +641,9 @@ with_tween_screen_position_on_finished
 
 ```text
 with_phase
+with_lua_phase_entered
+with_lua_phase_exited
+with_lua_phase_update
 with_lua_timer
 with_lua_collision_rule
 with_lua_collision_enter
@@ -680,20 +681,10 @@ engine.spawn()
     :with_sprite("vaus", 48, 12, 24, 6)
     :with_velocity(0, 0)
     :with_collider(48, 12, 24, 6)
-    :with_phase({
-        initial = "idle",
-        phases = {
-            idle = {
-                on_enter = "player_idle_on_enter",
-                on_update = "player_idle_on_update"
-            },
-            running = {
-                on_enter = "player_running_on_enter",
-                on_update = "player_running_on_update",
-                on_exit = "player_running_on_exit"
-            }
-        }
-    })
+    :with_phase("idle")
+    :with_lua_phase_entered("player_phase_enter")
+    :with_lua_phase_update("player_phase_update")
+    :with_lua_phase_exited("player_phase_exit")
     :register_as("player")
     :build()
 ```
@@ -767,14 +758,13 @@ builder_method!(
 For builder methods that accept complex table arguments, a `schema` field on the param points to a type name in `engine.__meta.types`. Schema mappings are configured in `stub_meta.rs::register_builder_meta()`:
 
 ```lua
--- Example: with_phase's "table" param has schema = "PhaseDefinition"
-local p = engine.__meta.classes.EntityBuilder.methods.with_phase.params[1]
-assert(p.schema == "PhaseDefinition")
-assert(engine.__meta.types.PhaseDefinition)  -- full type definition
+-- Example: with_particle_emitter's "table" param has schema = "ParticleEmitterConfig"
+local p = engine.__meta.classes.EntityBuilder.methods.with_particle_emitter.params[1]
+assert(p.schema == "ParticleEmitterConfig")
+assert(engine.__meta.types.ParticleEmitterConfig)  -- full type definition
 ```
 
 Current schema mappings:
-- `with_phase` → `"PhaseDefinition"`
 - `with_particle_emitter` → `"ParticleEmitterConfig"`
 - `with_animation_rule` → `"AnimationRuleCondition"`
 - `with_menu` → `"MenuItem[]"`
@@ -1044,8 +1034,8 @@ Every callback described in [Scene Lifecycle and Callback Dispatch](#scene-lifec
 | `sprite` = `{tex_key, flip_h, flip_v}` | table | `Sprite` |
 | `animation` = `{key, frame_index, elapsed}` | table | `Animation` |
 | `signals` = `{flags, integers, scalars, strings}` | table | `Signals` |
-| `phase`, `time_in_phase` | string, number | `LuaPhase` (set/cleared together) |
-| `previous_phase` | string | `LuaPhase`, only populated for `phase_on_enter` |
+| `phase`, `time_in_phase` | string, number | core `Phase` (set/cleared together); absent in the setup ctx |
+| `previous_phase` | string | phase callbacks only: on enter the phase left (nil on the initial enter), on exit the phase being left |
 | `timer` = `{duration, elapsed, callback}` | table | `Timer` + `LuaOnTimerFired` (a Lua timer); nil for an entity without one |
 
 ### Collision Context Table (`ctx`) — Collision Callbacks
@@ -1105,7 +1095,7 @@ engine.__meta.types["EntityContext"] = {
 }
 ```
 
-Current types: `Vec2`, `Rect`, `CameraState`, `CameraViewRect`, `SpriteInfo`, `AnimationInfo`, `TimerInfo`, `SignalSet`, `EntityContext`, `CollisionEntity`, `CollisionSides`, `CollisionContext`, `DigitalButtonState`, `DigitalInputs`, `AnalogInputs`, `InputSnapshot`, `PhaseCallbacks`, `PhaseDefinition`, `ParticleEmitterConfig`, `MenuItem`, `AnimationRuleCondition`.
+Current types: `Vec2`, `Rect`, `CameraState`, `CameraViewRect`, `SpriteInfo`, `AnimationInfo`, `TimerInfo`, `SignalSet`, `EntityContext`, `CollisionEntity`, `CollisionSides`, `CollisionContext`, `DigitalButtonState`, `DigitalInputs`, `AnalogInputs`, `InputSnapshot`, `ParticleEmitterConfig`, `MenuItem`, `AnimationRuleCondition`.
 
 ### `__meta.enums` — String Literal Value Sets
 
@@ -1127,7 +1117,7 @@ Each entry documents a global Lua function the engine calls, including parameter
 
 ```lua
 engine.__meta.callbacks["phase_on_enter"] = {
-    description = "Called when entering a phase",
+    description = "Phase enter callback (:with_lua_phase_entered): called on every phase entered; branch on ctx.phase",
     params  = { { name = "ctx", type = "EntityContext" },
                 { name = "input", type = "InputSnapshot" } },
     returns = { type = "string?" },

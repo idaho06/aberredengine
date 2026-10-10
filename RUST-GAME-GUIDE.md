@@ -1640,6 +1640,8 @@ As with [timers](#timers), observe one entity with `.observe(handler)` or many w
 
 **Transitions:** `phase_system` runs at the start of every sim tick, in `SimSet::Phases`, before `.add_system()` systems and in every game state. It applies a `next` set at any point in the previous tick: it sets `previous` to the old phase, `current` to the new one, resets `time_in_phase` to 0, and triggers `PhaseExited` then `PhaseEntered`. A transition requested in tick N therefore applies in tick N+1, and chained transitions (a `PhaseEntered` observer setting `next`) advance one per sim tick. Setting `next` to the current phase re-enters it: both events fire with the same name and `time_in_phase` resets. Phase names are never validated: `phase.next = Some("jumpin".into())` switches to a phase no system handles, and the entity silently does nothing.
 
+Lua phase callbacks (`:with_lua_phase_entered/exited/update`) run on this same `Phase`: the enter and exit callbacks are observers of `PhaseEntered`/`PhaseExited`, and Lua's `engine.phase_transition` sets `next`. A Lua script can therefore drive or react to a phase entity a Rust system spawned, and the other way round.
+
 **Phase fields:**
 
 | Field | Type | Description |

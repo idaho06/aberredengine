@@ -708,7 +708,7 @@ impl LuaRuntime {
             },
             CbDef {
                 name: "phase_on_enter",
-                description: "Called when entering a phase",
+                description: "Phase enter callback (:with_lua_phase_entered): called on every phase entered; branch on ctx.phase",
                 params: &[("ctx", "EntityContext"), ("input", "InputSnapshot")],
                 returns: Some("string?"),
                 context: Some("play"),
@@ -716,7 +716,7 @@ impl LuaRuntime {
             },
             CbDef {
                 name: "phase_on_update",
-                description: "Called each frame during a phase",
+                description: "Phase update callback (:with_lua_phase_update): called every sim tick while Playing; branch on ctx.phase",
                 params: &[
                     ("ctx", "EntityContext"),
                     ("input", "InputSnapshot"),
@@ -728,7 +728,7 @@ impl LuaRuntime {
             },
             CbDef {
                 name: "phase_on_exit",
-                description: "Called when exiting a phase",
+                description: "Phase exit callback (:with_lua_phase_exited): called on every phase left; ctx.previous_phase is the phase left",
                 params: &[("ctx", "EntityContext")],
                 returns: None,
                 context: Some("play"),

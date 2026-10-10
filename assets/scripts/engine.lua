@@ -236,7 +236,7 @@ function on_switch_scene(scene) end
 --- param: dt number
 -- function on_update_<scene>(input, dt) end
 
----Called when entering a phase
+---Phase enter callback (:with_lua_phase_entered): called on every phase entered; branch on ctx.phase
 ---NOTE: Return phase name to trigger transition
 ---Context: play
 ---@param ctx EntityContext
@@ -244,7 +244,7 @@ function on_switch_scene(scene) end
 ---@return string|nil
 function phase_on_enter(ctx, input) end
 
----Called each frame during a phase
+---Phase update callback (:with_lua_phase_update): called every sim tick while Playing; branch on ctx.phase
 ---NOTE: Return phase name to trigger transition
 ---Context: play
 ---@param ctx EntityContext
@@ -253,7 +253,7 @@ function phase_on_enter(ctx, input) end
 ---@return string|nil
 function phase_on_update(ctx, input, dt) end
 
----Called when exiting a phase
+---Phase exit callback (:with_lua_phase_exited): called on every phase left; ctx.previous_phase is the phase left
 ---Context: play
 ---@param ctx EntityContext
 function phase_on_exit(ctx) end

@@ -176,7 +176,7 @@ local function on_ball_brick(ctx)
     engine.collision_entity_despawn(ctx.b.id)
 end
 
--- Phase callback
+-- Phase update callback (:with_lua_phase_update)
 local function scene_playing_update(ctx, input, dt)
     -- Game logic here
 end
@@ -184,7 +184,7 @@ end
 -- ─── Callback registry ──────────────────────────────────────────────────
 -- Every function the engine calls by name MUST appear here.
 -- The KEY must exactly match the string passed to the engine
--- (e.g. in :with_phase(), :with_lua_collision_rule(), :with_lua_timer()).
+-- (e.g. in :with_lua_phase_update(), :with_lua_collision_rule(), :with_lua_timer()).
 
 M._callbacks = {
     on_update_example_level01 = on_update_example_level01,
@@ -217,7 +217,7 @@ return M
 1. **Every engine callback must be in `M._callbacks`.** This includes:
    - Scene update (`on_update_<scene_name>`)
    - Collision callbacks (names in `:with_lua_collision_rule()`)
-   - Phase callbacks (names in `:with_phase()` — `on_enter`, `on_update`, `on_exit`)
+   - Phase callbacks (names in `:with_lua_phase_entered()` / `:with_lua_phase_exited()` / `:with_lua_phase_update()` or `engine.entity_insert_lua_phase_*()`)
    - Timer callbacks (names in `:with_lua_timer()` / `:with_lua_timer_once()`)
    - Menu callbacks (names in `:with_menu_callback()`)
    - LuaSetup callbacks (names in `:with_lua_setup()` or map file `"lua_setup"` field)
@@ -329,6 +329,7 @@ Collision callbacks process commands from their own dedicated queues, which are 
 - `engine.collision_entity_insert_lua_timer()` instead of `engine.entity_insert_lua_timer()`
 - `engine.collision_entity_insert_lua_timer_once()` instead of `engine.entity_insert_lua_timer_once()`
 - `engine.collision_entity_remove_lua_timer()` instead of `engine.entity_remove_lua_timer()`
+- `engine.collision_entity_insert_phase()` / `engine.collision_entity_insert_lua_phase_*()` instead of `engine.entity_insert_phase()` / `engine.entity_insert_lua_phase_*()`
 - `engine.collision_entity_insert_ttl()` instead of `engine.entity_insert_ttl()`
 - `engine.collision_entity_insert_stuckto()` instead of `engine.entity_insert_stuckto()`
 - `engine.collision_release_stuckto()` instead of `engine.release_stuckto()`
@@ -595,14 +596,14 @@ end
 | Callback Type | Receives Input | Signature |
 |---------------|----------------|-----------|
 | Scene update | ✓ | `on_update_scenename(input, dt)` |
-| Phase on_enter | ✓ | `callback(ctx, input)` |
-| Phase on_update | ✓ | `callback(ctx, input, dt)` |
-| Phase on_exit | ✗ | `callback(ctx)` |
+| Phase entered | ✓ | `callback(ctx, input)` |
+| Phase update | ✓ | `callback(ctx, input, dt)` |
+| Phase exited | ✗ | `callback(ctx)` |
 | Timer | ✓ | `callback(ctx, input)` |
 | OnAnimationEnd | ✓ | `callback(ctx, input)` |
 | Collision | ✗ | `callback(ctx)` |
 
-**Note:** Phase and timer callbacks now receive an `EntityContext` (`ctx`) object instead of just `entity_id`. The context contains all entity component data. See [Phase Component](#phase-component) for details. Phase `on_exit` callbacks do not receive input because they are meant for housekeeping tasks only. Collision callbacks do not receive input as they are triggered by physics events, not player actions
+**Note:** Phase and timer callbacks receive an `EntityContext` (`ctx`) object with all entity component data. See [Phase Component](#phase-component) for details. Phase exit callbacks do not receive input because they are meant for housekeeping tasks only. Collision callbacks do not receive input as they are triggered by physics events, not player actions
 
 ### Input Rebinding
 
@@ -1715,28 +1716,86 @@ end
 
 ### Phase Component
 
-Phases provide state machine behavior for entities.
+Phases provide state machine behavior for entities. A phase entity carries the engine's core `Phase`
+component (the same one Rust games use), so `engine.phase_transition` works on any phase entity,
+whether a Lua script or Rust code spawned it.
 
-#### `:with_phase(table)`
+#### `:with_phase(initial)`
 
-Add LuaPhase component with state machine definition.
+Add a `Phase` state machine starting in phase `initial` (a string). Phase names are not declared up
+front: any string is a valid phase.
+
+#### `:with_lua_phase_entered(callback)` / `:with_lua_phase_exited(callback)` / `:with_lua_phase_update(callback)`
+
+Attach one Lua callback per kind. Each callback runs for **every** phase of the entity, so it
+branches on `ctx.phase` (on exit: `ctx.previous_phase`). Omit a kind no phase needs.
+
+| Builder | Signature | Runs |
+|---------|-----------|------|
+| `:with_lua_phase_entered(cb)` | `cb(ctx, input) -> phase?` | once per phase entered, including the initial phase |
+| `:with_lua_phase_exited(cb)` | `cb(ctx)` | once per phase left |
+| `:with_lua_phase_update(cb)` | `cb(ctx, input, dt) -> phase?` | every sim tick while Playing |
 
 ```lua
-:with_phase({
-    initial = "idle",  -- Starting phase
-    phases = {
-        idle = {
-            on_enter = "player_idle_enter",    -- Called when entering
-            on_update = "player_idle_update",  -- Called each frame
-            on_exit = "player_idle_exit"       -- Called when exiting
-        },
-        running = {
-            on_enter = "player_running_enter",
-            on_update = "player_running_update"
-        }
-    }
-})
+-- Per-phase handlers (plain local functions)
+local function player_idle_enter(ctx, input) ... end
+local function player_idle_update(ctx, input, dt) ... end
+local function player_running_update(ctx, input, dt) ... end
+local function player_running_exit(ctx) ... end
+
+-- One dispatcher per kind. A phase without a handler does nothing.
+local player_enter = { idle = player_idle_enter }
+local function player_phase_enter(ctx, input)
+    local f = player_enter[ctx.phase]
+    if f then return f(ctx, input) end
+end
+
+local player_update = { idle = player_idle_update, running = player_running_update }
+local function player_phase_update(ctx, input, dt)
+    local f = player_update[ctx.phase]
+    if f then return f(ctx, input, dt) end
+end
+
+local player_exit = { running = player_running_exit }
+local function player_phase_exit(ctx)
+    local f = player_exit[ctx.previous_phase]  -- exit: the phase being left
+    if f then f(ctx) end
+end
+
+M._callbacks = {
+    player_phase_enter  = player_phase_enter,
+    player_phase_update = player_phase_update,
+    player_phase_exit   = player_phase_exit,
+}
+
+engine.spawn()
+    :with_phase("idle")
+    :with_lua_phase_entered("player_phase_enter")
+    :with_lua_phase_update("player_phase_update")
+    :with_lua_phase_exited("player_phase_exit")
+    :build()
 ```
+
+An entity with a single phase can point a builder straight at its handler, without a dispatcher.
+
+**Runtime insertion:** `engine.entity_insert_phase(entity_id, initial)` adds a `Phase` to a live
+entity (or replaces it, restarting in `initial`), and
+`engine.entity_insert_lua_phase_entered/exited/update(entity_id, callback)` attach the callbacks.
+Each has a `collision_` twin for collision callbacks. They work from a `:with_lua_setup()` callback,
+which makes map-spawned entities phase-driven.
+
+**Timing:**
+
+- The enter and exit callbacks run at the start of a sim tick, in every game state, from the same
+  `PhaseEntered`/`PhaseExited` events Rust observers see. A newly spawned entity's initial enter fires
+  at the start of the first tick after it spawns. A clone fires its own initial enter.
+- The update callback runs once per sim tick while Playing, after collision.
+- A transition requested during a tick (a returned name, `engine.phase_transition`, a collision
+  callback) applies at the start of the next tick, so chained transitions advance one per tick.
+- Enter and exit callbacks see the entity's phase after that tick's swap. Normally `ctx.phase` in
+  an enter callback is the phase entered; the exception is a transition already requested before
+  the initial enter fires (for example `entity_insert_phase` and `phase_transition` in the same
+  tick), where both enter callbacks see the newer phase.
 
 **EntityContext Structure:**
 
@@ -1780,12 +1839,12 @@ ctx = {
         strings = { state = "idle" }
     },
 
-    -- Phase info (from LuaPhase)
+    -- Phase info (from the entity's Phase)
     phase = "idle",          -- Current phase name
     time_in_phase = 1.5,     -- Seconds in current phase
 
-    -- Only on on_enter callbacks
-    previous_phase = "spawning", -- Previous phase (nil on initial enter)
+    -- Only in phase enter/exit callbacks
+    previous_phase = "spawning", -- Enter: the phase left (nil on initial enter). Exit: the phase being left
 
     -- Timer info (from the entity's Lua timer)
     timer = {
@@ -1811,34 +1870,29 @@ ctx = {
 > script-side write desyncs that mask and can leak a stale value into a later, unrelated entity's
 > `ctx`. Treat every field of `ctx` as read-only, and only for the duration of the current call.
 
-**Phase Callback Signatures:**
+**Phase Handler Signatures:**
 
 ```lua
--- Called when entering a phase
+-- Enter handler (reached through the entered dispatcher)
 -- Returns: nil or phase_name (string) to transition to another phase
-function player_idle_enter(ctx, input)
-    -- ctx: EntityContext table with all component data
+local function player_idle_enter(ctx, input)
+    -- ctx.phase: "idle" (the phase just entered)
     -- ctx.previous_phase: string or nil (the phase we came from)
-    -- input: input state table
-
     engine.log_info("Player " .. ctx.id .. " entered idle from " .. (ctx.previous_phase or "initial"))
     return nil  -- Stay in current phase
 end
 
--- Called each frame while in phase
+-- Update handler, called every sim tick while in the phase
 -- Returns: nil or phase_name (string) to transition to another phase
-function player_idle_update(ctx, input, dt)
-    -- ctx: EntityContext table
+local function player_idle_update(ctx, input, dt)
     -- ctx.time_in_phase: seconds in current phase
-    -- input: input state table
-    -- dt: delta time in seconds
+    -- dt: fixed delta time in seconds
 
     -- Option 1: Use return value to transition (preferred for same entity)
     if ctx.time_in_phase >= 2.0 then
         return "running"
     end
 
-    -- Access input directly
     if input.digital.action_1.just_pressed then
         return "jumping"
     end
@@ -1846,17 +1900,12 @@ function player_idle_update(ctx, input, dt)
     return nil  -- Stay in current phase
 end
 
--- Called when exiting a phase
--- Does NOT support return value (transition already decided)
--- IMPORTANT: on_exit fires AFTER the phase has already swapped — ctx.phase
--- here is the NEW phase, not the one being exited. The callback itself is
--- still looked up by the OLD phase's name (the phase this function is
--- attached to), only ctx.phase's value has already moved on.
-function player_idle_exit(ctx)
-    -- ctx: EntityContext table (no input parameter)
-    -- ctx.phase is already "running" (or whatever phase was transitioned to),
-    -- NOT "idle" — this callback runs because "idle" is exiting, but by the
-    -- time it runs the entity's phase has already changed.
+-- Exit handler: does NOT support return value (transition already decided)
+-- IMPORTANT: exit fires AFTER the phase has already swapped. ctx.phase is
+-- the NEW phase; ctx.previous_phase is the phase being left, which is what
+-- the exit dispatcher looks up.
+local function player_idle_exit(ctx)
+    -- ctx.previous_phase == "idle", ctx.phase == "running" (for example)
     engine.log_info("Player " .. ctx.id .. " exiting idle phase")
 end
 ```
@@ -1865,7 +1914,7 @@ end
 
 There are two ways to trigger phase transitions:
 
-1. **Return value (preferred for same entity):** Return a phase name string from `on_enter` or `on_update` callbacks.
+1. **Return value (preferred for same entity):** Return a phase name string from an enter or update callback.
 
    ```lua
    function my_update(ctx, input, dt)
@@ -1893,12 +1942,13 @@ There are two ways to trigger phase transitions:
 
 **Important notes:**
 
-- Return values take precedence over `engine.phase_transition(ctx.id, ...)` for the same entity
-- Returning the current phase name is ignored (no transition)
-- Transitions happen on the next frame (not immediately)
-- `on_exit` does NOT support return values (transition already decided)
-- `on_exit` fires **after** the phase swap — `ctx.phase` inside `on_exit` already reads as the new
-  phase, not the one being exited (the callback itself is still resolved by the old phase's name)
+- Return values take precedence over `engine.phase_transition(ctx.id, ...)` made in the same callback
+- Returning the current phase name is ignored (no transition); `engine.phase_transition` to the
+  current phase re-enters it (exit and enter both fire, `time_in_phase` resets)
+- Transitions apply at the start of the next sim tick (not immediately)
+- Exit callbacks do NOT support return values (transition already decided)
+- Exit fires **after** the phase swap: `ctx.phase` already reads as the new phase, and
+  `ctx.previous_phase` is the phase being left
 
 ---
 
@@ -2557,19 +2607,16 @@ engine.spawn()
     :with_position(200, 300)
     :with_group("enemy")
     :with_sprite("enemy_idle", 32, 32, 16, 16)
-    :with_phase({
-        initial = "patrol",
-        phases = {
-            patrol = { on_update = "enemy_patrol_update" },
-            alert  = { on_enter = "enemy_alert_enter", on_update = "enemy_alert_update" },
-        }
-    })
+    :with_phase("patrol")
+    :with_lua_phase_update("enemy_phase_update")
     :with_lua_setup("enemy_setup")
     :build()
 
 local function enemy_setup(ctx)
     engine.entity_insert_lua_timer(ctx.id, 3.0, "enemy_shoot")
 end
+-- enemy_phase_update is a phase update dispatcher (see Phase Component);
+-- enemy_setup, enemy_shoot and enemy_phase_update all go in M._callbacks.
 ```
 
 **Example — map file:**
@@ -3154,6 +3201,26 @@ end
 
 A callback that inserts a new timer on its own entity keeps it, so one-shots can chain. A zero-duration one-shot fires on the next tick.
 
+### `engine.entity_insert_phase(entity_id, initial)`
+
+Insert a `Phase` starting in `initial` on a live entity. An existing `Phase` is replaced and the
+state machine restarts: the initial enter fires at the start of the next sim tick. Pair it with the
+callback inserts below, e.g. from a `:with_lua_setup()` callback for map-spawned entities.
+
+### `engine.entity_insert_lua_phase_entered(entity_id, callback)` / `engine.entity_insert_lua_phase_exited(entity_id, callback)` / `engine.entity_insert_lua_phase_update(entity_id, callback)`
+
+Attach the entity's phase enter / exit / update callback (runtime counterparts of
+`:with_lua_phase_entered/exited/update`), replacing any callback of the same kind. See
+[Phase Component](#phase-component) for signatures and timing.
+
+```lua
+local function turret_setup(ctx)
+    engine.entity_insert_phase(ctx.id, "idle")
+    engine.entity_insert_lua_phase_entered(ctx.id, "turret_phase_enter")
+    engine.entity_insert_lua_phase_update(ctx.id, "turret_phase_update")
+end
+```
+
 ### `engine.entity_remove_lua_timer(entity_id)`
 
 Remove an entity's Lua timer to stop it.
@@ -3677,7 +3744,9 @@ engine.entity_set_gui_progress_max(hp_bar_id, 200)  -- Double the max HP
 
 ### `engine.phase_transition(entity_id, phase)`
 
-Request phase transition for entity with LuaPhase component.
+Request a phase transition for an entity with a `Phase` (spawned from Lua or Rust). Sets the
+phase's `next`; the switch applies at the start of the next sim tick. Requesting the current phase
+re-enters it. No-op for an entity without a `Phase`.
 
 ```lua
 engine.phase_transition(player_id, "hit")
@@ -3898,7 +3967,7 @@ Request a phase transition for an entity during collision handling. Useful for t
 
 **Parameters:**
 
-- `entity_id` - Entity with LuaPhase component
+- `entity_id` - Entity with a `Phase`
 - `phase` - Target phase name
 
 ```lua
@@ -4281,6 +4350,11 @@ end
 #### `engine.collision_entity_insert_lua_timer_once(entity_id, duration, callback)`
 
 Insert a one-shot Lua timer during collision handling; it fires once, then removes itself. Same parameters as `engine.collision_entity_insert_lua_timer()`, and it also replaces any timer the entity already has.
+
+#### `engine.collision_entity_insert_phase(entity_id, initial)` / `engine.collision_entity_insert_lua_phase_entered/exited/update(entity_id, callback)`
+
+Collision-scoped twins of `engine.entity_insert_phase()` and
+`engine.entity_insert_lua_phase_*()`, applied right after the collision callback.
 
 #### `engine.collision_entity_remove_lua_timer(entity_id)`
 
@@ -5133,26 +5207,13 @@ engine.spawn()
     :with_mouse_controlled(true, false)
     :with_zindex(10)
     :with_signals()
-    :with_phase({
-        initial = "sticky",
-        phases = {
-            sticky = {
-                on_enter = "player_sticky_enter",
-                on_update = "player_sticky_update"
-            },
-            glowing = {
-                on_enter = "player_glowing_enter"
-            },
-            hit = {
-                on_enter = "player_hit_enter",
-                on_update = "player_hit_update"
-            }
-        }
-    })
+    :with_phase("sticky")
+    :with_lua_phase_entered("player_phase_enter")
+    :with_lua_phase_update("player_phase_update")
     :register_as("player")
     :build()
 
--- Phase callbacks (using EntityContext)
+-- Phase handlers (using EntityContext)
 function player_sticky_enter(ctx, input)
     engine.entity_signal_set_flag(ctx.id, "sticky")
     engine.entity_set_animation(ctx.id, "vaus_glowing")
@@ -5178,6 +5239,31 @@ function player_hit_update(ctx, input, dt)
         engine.phase_transition(ctx.id, "glowing")
     end
 end
+
+-- Phase dispatchers: each forwards to the current phase's handler
+local player_enter = {
+    sticky  = player_sticky_enter,
+    glowing = player_glowing_enter,
+    hit     = player_hit_enter,
+}
+local function player_phase_enter(ctx, input)
+    local f = player_enter[ctx.phase]
+    if f then return f(ctx, input) end
+end
+
+local player_update = {
+    sticky = player_sticky_update,
+    hit    = player_hit_update,
+}
+local function player_phase_update(ctx, input, dt)
+    local f = player_update[ctx.phase]
+    if f then return f(ctx, input, dt) end
+end
+
+M._callbacks = {
+    player_phase_enter  = player_phase_enter,
+    player_phase_update = player_phase_update,
+}
 ```
 
 ---
@@ -6181,22 +6267,22 @@ end
 
 8. **Scene scripts are lazy-loaded** - Only loaded when `on_switch_scene()` requires them.
 
-9. **Use `:with_lua_setup()` for map-driven entity initialisation** - Attach timers and collision rules inside a setup callback instead of branching on entity group in `on_update`. Phases must be attached at spawn time via `:with_phase()` in the spawn builder — they cannot be added at runtime. The callback fires once per entity (including clones), keeping scene update logic clean.
+9. **Use `:with_lua_setup()` for map-driven entity initialisation** - Attach timers, phases and collision rules inside a setup callback instead of branching on entity group in `on_update`. The callback fires once per entity (including clones), keeping scene update logic clean.
 
    ```lua
    -- In the map JSON: { "group": "turret", "lua_setup": "turret_setup" }
-   -- Phases go in the spawn builder; timers and runtime init go in the setup callback:
-   engine.spawn()
-       :with_group("turret")
-       :with_phase({ initial = "idle", phases = { ... } })
-       :with_lua_setup("turret_setup")
-       :build()
-
    local function turret_setup(ctx)
-       -- One-shot per-entity init (e.g. timers, signals)
+       -- One-shot per-entity init (e.g. timers, phases, signals)
        engine.entity_insert_lua_timer(ctx.id, 5.0, "turret_shoot")
+       engine.entity_insert_phase(ctx.id, "idle")
+       engine.entity_insert_lua_phase_update(ctx.id, "turret_phase_update")
    end
-   M._callbacks = { turret_setup = turret_setup }
+   -- turret_phase_update: a phase update dispatcher (see Phase Component)
+   M._callbacks = {
+       turret_setup = turret_setup,
+       turret_shoot = turret_shoot,
+       turret_phase_update = turret_phase_update,
+   }
    ```
 
 ---

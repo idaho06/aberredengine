@@ -15,7 +15,8 @@
 //! function my_entity_setup(ctx)
 //!     -- ctx is the standard entity context (id, pos, group, signals, ...)
 //!     -- Use engine.entity_* and engine.spawn() to configure the entity.
-//!     engine.entity_add_lua_phase(ctx.id, ...)
+//!     engine.entity_insert_phase(ctx.id, "idle")
+//!     engine.entity_insert_lua_phase_update(ctx.id, "my_entity_phase_update")
 //! end
 //! ```
 //!

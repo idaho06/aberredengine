@@ -35,9 +35,9 @@
 -- RULES FOR SCENE AUTHORS:
 --   - Every function the engine will call by name MUST appear in M._callbacks.
 --     This includes: scene update (on_update_<scene_name>), collision callbacks,
---     phase callbacks (on_enter/on_update/on_exit), and timer callbacks.
+--     phase callbacks (:with_lua_phase_entered/exited/update), and timer callbacks.
 --   - The KEY in M._callbacks must exactly match the string you pass to the
---     engine (e.g. in :with_lua_collision_rule() or :with_phase()).
+--     engine (e.g. in :with_lua_collision_rule() or :with_lua_phase_update()).
 --   - Define all callbacks as LOCAL functions — never use plain `function name()`.
 --   - Module-level local variables (counters, state) are fine and stay private.
 -- ============================================================================
