@@ -9,9 +9,9 @@ use bevy_ecs::prelude::*;
 use log::{error, warn};
 use mlua::prelude::LuaValue;
 
-use crate::components::lua_on_phase::LuaOnPhaseEntered;
-use crate::systems::lua_commands::{LuaDispatch, dispatch_and_drain_returning};
-use aberred_core::events::phase::PhaseEntered;
+use crate::components::lua_on_phase::{LuaOnPhaseEntered, LuaOnPhaseExited};
+use crate::systems::lua_commands::{CallShape, LuaDispatch, dispatch_and_drain_returning};
+use aberred_core::events::phase::{PhaseEntered, PhaseExited};
 
 /// Reacts to `PhaseEntered` by calling the entity's [`LuaOnPhaseEntered`]
 /// callback with `(ctx, input)`; `ctx.previous_phase` is the event's
@@ -32,6 +32,7 @@ pub fn lua_phase_entered_observer(
         ev.entity,
         &on_entered.callback,
         "PhaseEntered",
+        CallShape::CtxAndInput,
         ev.previous.as_deref(),
     ) else {
         return;
@@ -41,6 +42,29 @@ pub fn lua_phase_entered_observer(
     {
         phase.next = Some(next);
     }
+}
+
+/// Reacts to `PhaseExited` by calling the entity's [`LuaOnPhaseExited`]
+/// callback with `(ctx)`. `ctx.phase` is already the new phase and
+/// `ctx.previous_phase` is the exited one. The return value is ignored.
+pub fn lua_phase_exited_observer(
+    trigger: On<PhaseExited>,
+    callbacks: Query<&LuaOnPhaseExited>,
+    mut p: LuaDispatch,
+) {
+    let ev = trigger.event();
+    let Ok(on_exited) = callbacks.get(ev.entity) else {
+        return;
+    };
+    // Exit callbacks have no return sugar.
+    let _ = dispatch_and_drain_returning(
+        &mut p,
+        ev.entity,
+        &on_exited.callback,
+        "PhaseExited",
+        CallShape::CtxWithPhase,
+        Some(&ev.name),
+    );
 }
 
 /// A phase callback's return value as a requested phase: a string naming a
@@ -79,6 +103,7 @@ mod tests {
         init_dispatch_resources(&mut world);
         world.insert_non_send(LuaRuntime::new().expect("LuaRuntime::new"));
         world.spawn(Observer::new(lua_phase_entered_observer));
+        world.spawn(Observer::new(lua_phase_exited_observer));
         world.flush();
         world
             .non_send::<LuaRuntime>()
@@ -183,5 +208,43 @@ mod tests {
         enter(&mut world, entity, "run", Some("idle"));
 
         assert_eq!(global::<String>(&world, "prev"), "idle");
+    }
+
+    fn exit(world: &mut World, entity: Entity, name: &str, next: &str) {
+        world.trigger(PhaseExited {
+            entity,
+            name: name.into(),
+            next: next.into(),
+        });
+        world.flush();
+    }
+
+    #[test]
+    fn exit_ctx_has_new_phase_and_exited_name() {
+        let mut world = setup_world(
+            "function on_exit(...) local ctx = ...; argc = select('#', ...); phase = ctx.phase; prev = ctx.previous_phase end",
+        );
+        // phase_system swaps before triggering, so `current` is already the new phase.
+        let entity = world
+            .spawn((Phase::new("run"), LuaOnPhaseExited::new("on_exit")))
+            .id();
+
+        exit(&mut world, entity, "idle", "run");
+
+        assert_eq!(global::<i64>(&world, "argc"), 1, "called with (ctx) only");
+        assert_eq!(global::<String>(&world, "phase"), "run");
+        assert_eq!(global::<String>(&world, "prev"), "idle");
+    }
+
+    #[test]
+    fn exit_return_value_is_ignored() {
+        let mut world = setup_world("function on_exit(ctx) return \"jump\" end");
+        let entity = world
+            .spawn((Phase::new("run"), LuaOnPhaseExited::new("on_exit")))
+            .id();
+
+        exit(&mut world, entity, "idle", "run");
+
+        assert_eq!(next(&world, entity), None);
     }
 }
