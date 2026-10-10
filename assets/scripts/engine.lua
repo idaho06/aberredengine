@@ -529,6 +529,21 @@ function engine.collision_entity_despawn(entity_id) end
 ---@param entity_id integer
 function engine.collision_entity_freeze(entity_id) end
 
+---Call a Lua function `fn(ctx, input)` each time the entity's core Phase enters a phase
+---@param entity_id integer
+---@param callback string
+function engine.collision_entity_insert_lua_phase_entered(entity_id, callback) end
+
+---Call a Lua function `fn(ctx)` each time the entity's core Phase exits a phase
+---@param entity_id integer
+---@param callback string
+function engine.collision_entity_insert_lua_phase_exited(entity_id, callback) end
+
+---Call a Lua function `fn(ctx, input, dt)` once per sim tick while playing, for the entity's core Phase
+---@param entity_id integer
+---@param callback string
+function engine.collision_entity_insert_lua_phase_update(entity_id, callback) end
+
 ---Insert a repeating Lua timer on an entity
 ---@param entity_id integer
 ---@param duration number
@@ -540,6 +555,11 @@ function engine.collision_entity_insert_lua_timer(entity_id, duration, callback)
 ---@param duration number
 ---@param callback string
 function engine.collision_entity_insert_lua_timer_once(entity_id, duration, callback) end
+
+---Insert a core Phase starting in `initial` (replacing one, which re-enters its initial phase)
+---@param entity_id integer
+---@param initial string
+function engine.collision_entity_insert_phase(entity_id, initial) end
 
 ---Attach entity to a target entity
 ---@param entity_id integer
@@ -886,6 +906,21 @@ function engine.entity_despawn(entity_id) end
 ---@param entity_id integer
 function engine.entity_freeze(entity_id) end
 
+---Call a Lua function `fn(ctx, input)` each time the entity's core Phase enters a phase
+---@param entity_id integer
+---@param callback string
+function engine.entity_insert_lua_phase_entered(entity_id, callback) end
+
+---Call a Lua function `fn(ctx)` each time the entity's core Phase exits a phase
+---@param entity_id integer
+---@param callback string
+function engine.entity_insert_lua_phase_exited(entity_id, callback) end
+
+---Call a Lua function `fn(ctx, input, dt)` once per sim tick while playing, for the entity's core Phase
+---@param entity_id integer
+---@param callback string
+function engine.entity_insert_lua_phase_update(entity_id, callback) end
+
 ---Insert a repeating Lua timer on an entity
 ---@param entity_id integer
 ---@param duration number
@@ -897,6 +932,11 @@ function engine.entity_insert_lua_timer(entity_id, duration, callback) end
 ---@param duration number
 ---@param callback string
 function engine.entity_insert_lua_timer_once(entity_id, duration, callback) end
+
+---Insert a core Phase starting in `initial` (replacing one, which re-enters its initial phase)
+---@param entity_id integer
+---@param initial string
+function engine.entity_insert_phase(entity_id, initial) end
 
 ---Attach entity to a target entity
 ---@param entity_id integer

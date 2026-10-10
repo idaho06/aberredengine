@@ -9,12 +9,14 @@ use aberred_core::math::Vec2;
 use bevy_ecs::hierarchy::ChildOf;
 use bevy_ecs::prelude::*;
 
+use crate::components::lua_on_phase::{LuaOnPhaseEntered, LuaOnPhaseExited, LuaOnPhaseUpdate};
 use crate::components::lua_on_timer_fired::LuaOnTimerFired;
 use aberred_core::components::cameratarget::CameraTarget;
 use aberred_core::components::entityshader::EntityShader;
 use aberred_core::components::globaltransform2d::GlobalTransform2D;
 use aberred_core::components::guiinteractable::GuiWidgetState;
 use aberred_core::components::mapposition::MapPosition;
+use aberred_core::components::phase::Phase;
 use aberred_core::components::rotation::Rotation;
 use aberred_core::components::scale::Scale;
 use aberred_core::components::screenposition::ScreenPosition;
@@ -25,7 +27,7 @@ use aberred_core::components::tint::Tint;
 use aberred_core::components::ttl::Ttl;
 use aberred_core::components::tween::{Tween, TweenValue};
 
-use crate::resources::lua_runtime::{EntityCmd, TweenConfig, UniformValue};
+use crate::resources::lua_runtime::{EntityCmd, LuaPhaseCallbackKind, TweenConfig, UniformValue};
 use aberred_core::resources::animationstore::AnimationStore;
 use aberred_core::resources::systemsstore as hook_keys;
 use aberred_core::resources::systemsstore::SystemsStore;
@@ -157,6 +159,8 @@ pub fn process_entity_commands(
 
             cmd @ (EntityCmd::InsertLuaTimer { .. }
             | EntityCmd::RemoveLuaTimer { .. }
+            | EntityCmd::InsertPhase { .. }
+            | EntityCmd::InsertLuaPhaseCallback { .. }
             | EntityCmd::Despawn { .. }
             | EntityCmd::MenuDespawn { .. }
             | EntityCmd::InsertTtl { .. }) => {
@@ -850,6 +854,28 @@ fn process_lifecycle_cmd(
                 ec.try_remove::<(Timer, LuaOnTimerFired)>();
             });
         }
+        EntityCmd::InsertPhase { entity_id, initial } => {
+            with_entity_cmd(commands, entity_id, |ec| {
+                ec.try_insert(Phase::new(initial));
+            });
+        }
+        EntityCmd::InsertLuaPhaseCallback {
+            entity_id,
+            kind,
+            callback,
+        } => {
+            with_entity_cmd(commands, entity_id, |ec| match kind {
+                LuaPhaseCallbackKind::Entered => {
+                    ec.try_insert(LuaOnPhaseEntered::new(callback));
+                }
+                LuaPhaseCallbackKind::Exited => {
+                    ec.try_insert(LuaOnPhaseExited::new(callback));
+                }
+                LuaPhaseCallbackKind::Update => {
+                    ec.try_insert(LuaOnPhaseUpdate::new(callback));
+                }
+            });
+        }
         EntityCmd::Despawn { entity_id } => {
             if let Some(entity) = resolve_entity(entity_id) {
                 // Immediate removal, so a later command in this same drained batch
@@ -1115,6 +1141,15 @@ mod tests {
                 mode: TimerMode::Repeat,
             },
             EntityCmd::RemoveLuaTimer { entity_id: id },
+            EntityCmd::InsertPhase {
+                entity_id: id,
+                initial: "idle".into(),
+            },
+            EntityCmd::InsertLuaPhaseCallback {
+                entity_id: id,
+                kind: LuaPhaseCallbackKind::Entered,
+                callback: "cb".into(),
+            },
             EntityCmd::InsertTtl {
                 entity_id: id,
                 seconds: 1.0,
@@ -1168,6 +1203,47 @@ mod tests {
         assert_eq!(
             &*world.get::<LuaOnTimerFired>(entity).unwrap().callback,
             "boom"
+        );
+    }
+
+    #[test]
+    fn insert_phase_and_lua_phase_callbacks_on_a_live_entity() {
+        let mut world = World::new();
+        let mut signals = WorldSignals::default();
+        let entity = world.spawn_empty().id();
+        let id = entity.to_bits();
+        let callback = |kind, callback: &str| EntityCmd::InsertLuaPhaseCallback {
+            entity_id: id,
+            kind,
+            callback: callback.into(),
+        };
+
+        run_entity_cmds(
+            &mut world,
+            &mut signals,
+            vec![
+                EntityCmd::InsertPhase {
+                    entity_id: id,
+                    initial: "idle".into(),
+                },
+                callback(LuaPhaseCallbackKind::Entered, "on_in"),
+                callback(LuaPhaseCallbackKind::Exited, "on_out"),
+                callback(LuaPhaseCallbackKind::Update, "on_tick"),
+            ],
+        );
+
+        assert_eq!(world.get::<Phase>(entity).unwrap().current, "idle");
+        assert_eq!(
+            &*world.get::<LuaOnPhaseEntered>(entity).unwrap().callback,
+            "on_in"
+        );
+        assert_eq!(
+            &*world.get::<LuaOnPhaseExited>(entity).unwrap().callback,
+            "on_out"
+        );
+        assert_eq!(
+            &*world.get::<LuaOnPhaseUpdate>(entity).unwrap().callback,
+            "on_tick"
         );
     }
 

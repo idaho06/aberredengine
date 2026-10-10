@@ -200,6 +200,18 @@ pub enum PhaseCmd {
     TransitionTo { entity_id: u64, phase: String },
 }
 
+/// Which Lua phase callback component an [`EntityCmd::InsertLuaPhaseCallback`]
+/// inserts.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LuaPhaseCallbackKind {
+    /// `LuaOnPhaseEntered`
+    Entered,
+    /// `LuaOnPhaseExited`
+    Exited,
+    /// `LuaOnPhaseUpdate`
+    Update,
+}
+
 /// Commands for manipulating entity components from Lua.
 #[derive(Debug, Clone)]
 pub enum EntityCmd {
@@ -254,6 +266,14 @@ pub enum EntityCmd {
     },
     /// Remove a Lua timer (`Timer` + `LuaOnTimerFired`)
     RemoveLuaTimer { entity_id: u64 },
+    /// Insert a core `Phase` starting in `initial`
+    InsertPhase { entity_id: u64, initial: String },
+    /// Insert a Lua phase callback component of `kind`
+    InsertLuaPhaseCallback {
+        entity_id: u64,
+        kind: LuaPhaseCallbackKind,
+        callback: String,
+    },
     /// Insert TweenPosition component
     InsertTweenPosition {
         entity_id: u64,
