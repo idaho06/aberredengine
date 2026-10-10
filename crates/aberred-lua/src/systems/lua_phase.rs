@@ -14,7 +14,7 @@ use crate::components::lua_on_phase::{LuaOnPhaseEntered, LuaOnPhaseExited, LuaOn
 use crate::resources::lua_runtime::LuaPhaseSnapshot;
 use crate::systems::lua_commands::{
     CallShape, DrainScope, LuaDispatch, build_ctx_or_log, dispatch_and_drain_returning,
-    drain_dispatch_commands, refresh_signal_cache,
+    drain_dispatch_commands, refresh_signal_cache, request_phase,
 };
 use aberred_core::components::phase::Phase;
 use aberred_core::events::phase::{PhaseEntered, PhaseExited};
@@ -43,10 +43,8 @@ pub fn lua_phase_entered_observer(
     ) else {
         return;
     };
-    if let Some(next) = phase_from_return(result, &ev.name, &on_entered.callback)
-        && let Ok(mut phase) = p.phase_query.get_mut(ev.entity)
-    {
-        phase.next = Some(next);
+    if let Some(next) = phase_from_return(result, &ev.name, &on_entered.callback) {
+        request_phase(&mut p.phase_query, ev.entity, next);
     }
 }
 
@@ -126,9 +124,7 @@ pub fn lua_phase_update_system(
 
     drain_dispatch_commands(&mut p, DrainScope::Regular);
     for (entity, next) in returns.drain(..) {
-        if let Ok(mut phase) = p.phase_query.get_mut(entity) {
-            phase.next = Some(next);
-        }
+        request_phase(&mut p.phase_query, entity, next);
     }
 }
 

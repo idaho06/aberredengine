@@ -170,13 +170,28 @@ pub fn process_phase_command(
     match cmd {
         PhaseCmd::TransitionTo { entity_id, phase } => {
             if let Some(entity) = super::entity_cmd::resolve_entity(entity_id) {
-                if let Ok(mut core_phase) = phase_query.get_mut(entity) {
-                    core_phase.next = Some(phase);
-                } else {
+                if let Some(phase) = request_phase(phase_query, entity, phase) {
                     queue_phase_transition(luaphase_query, entity, phase);
                 }
             }
         }
+    }
+}
+
+/// Request `next` on `entity`'s core `Phase` (sets `Phase.next`; core
+/// `phase_system` applies it on its next run). Hands `next` back when the
+/// entity has no core `Phase`.
+pub(crate) fn request_phase(
+    phase_query: &mut Query<&mut Phase>,
+    entity: Entity,
+    next: String,
+) -> Option<String> {
+    match phase_query.get_mut(entity) {
+        Ok(mut phase) => {
+            phase.next = Some(next);
+            None
+        }
+        Err(_) => Some(next),
     }
 }
 

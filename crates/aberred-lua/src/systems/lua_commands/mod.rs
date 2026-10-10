@@ -35,6 +35,7 @@ pub use dispatch::{
 };
 pub(crate) use dispatch::{build_ctx_or_log, drain_dispatch_commands};
 pub use entity_cmd::process_entity_commands;
+pub(crate) use processors::request_phase;
 pub use processors::{
     asset_cmd_to_audio_cmd, asset_cmd_to_render_asset_cmd, process_animation_command,
     process_audio_command, process_camera_command, process_camera_follow_command,
