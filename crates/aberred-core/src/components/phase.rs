@@ -30,7 +30,8 @@
 //!
 //! - [`crate::systems::phase::phase_system`] – applies transitions and triggers the events
 //! - [`crate::events::phase`] – `PhaseEntered` / `PhaseExited`
-//! - `aberred_lua::components::luaphase::LuaPhase` – Lua equivalent
+//! - `aberred_lua::components::lua_on_phase` – Lua callbacks on a `Phase`
+//!   (observers of the same events, plus a per-tick update runner)
 
 use bevy_ecs::prelude::Component;
 

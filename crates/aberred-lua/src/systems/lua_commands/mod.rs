@@ -50,7 +50,6 @@ use bevy_ecs::system::SystemParam;
 
 use crate::components::lua_on_timer_fired::LuaOnTimerFired;
 use crate::components::lua_on_tween_finished::LuaOnTweenFinished;
-use crate::components::luaphase::LuaPhase;
 use crate::resources::lua_runtime::{
     AudioLuaCmd, CameraCmd, CloneCmd, EntityCmd, LuaRuntime, PhaseCmd, SignalCmd, SpawnCmd,
     TweenConfig,
@@ -111,9 +110,9 @@ pub(crate) enum DrainScope {
 ///
 /// Canonical order: `signal → entity → spawn → clone → audio → camera`
 ///
-/// Phase is intentionally excluded so callers can preserve their required
-/// phase boundary (e.g. `apply_callback_transitions` in `lua_phase_system`)
-/// before invoking this helper.
+/// Phase is drained separately ([`drain_and_process_phase_commands`]), first,
+/// so a callback's returned phase name, applied after both drains, wins over
+/// an `engine.phase_transition` it queued.
 ///
 /// `bufs` must be a caller-owned [`EffectCmdBufs`] (typically `Local<EffectCmdBufs>`).
 /// The Vecs retain capacity across frames to avoid repeated allocation.
@@ -179,14 +178,13 @@ pub(crate) fn drain_and_process_phase_commands(
     scope: DrainScope,
     buf: &mut Vec<PhaseCmd>,
     phase_query: &mut Query<&mut Phase>,
-    luaphase_query: &mut Query<(Entity, &mut LuaPhase)>,
 ) {
     match scope {
         DrainScope::Regular => lua_runtime.drain_phase_commands_into(buf),
         DrainScope::Collision => lua_runtime.drain_collision_phase_commands_into(buf),
     }
     for cmd in buf.drain(..) {
-        process_phase_command(phase_query, luaphase_query, cmd);
+        process_phase_command(phase_query, cmd);
     }
 }
 

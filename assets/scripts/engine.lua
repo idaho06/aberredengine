@@ -125,17 +125,6 @@ engine = {}
 ---@field digital DigitalInputs
 ---@field analog AnalogInputs
 
----Callbacks for a single phase
----@class PhaseCallbacks
----@field on_enter string|nil Function name called on phase enter
----@field on_update string|nil Function name called each frame
----@field on_exit string|nil Function name called on phase exit
-
----Phase state machine definition
----@class PhaseDefinition
----@field initial string Initial phase name
----@field phases table<string, PhaseCallbacks> Map of phase name to callbacks
-
 ---Particle emitter configuration table
 ---@class ParticleEmitterConfig
 ---@field templates string[] Entity template keys to emit
@@ -1962,7 +1951,7 @@ function EntityBuilder:with_particle_emitter(table) end
 ---@return EntityBuilder
 function EntityBuilder:with_persistent() end
 
----Add a phase state machine. A string is the initial phase of a core `Phase`, driven by `:with_lua_phase_entered/exited/update` callbacks. A table is the legacy per-phase callback form.
+---Add a core `Phase` state machine starting in `initial`, driven by `:with_lua_phase_entered/exited/update` callbacks.
 ---
 ---Example:
 ---```lua
@@ -1972,26 +1961,9 @@ function EntityBuilder:with_persistent() end
 ---    :with_lua_phase_update("player_phase_update")
 ---    :build()
 ---```
----
----Legacy table form:
----```lua
----engine.spawn()
----    :with_phase({
----        initial = "idle",
----        phases = {
----            idle = {
----                on_enter = "on_idle_enter",
----                on_update = "on_idle_update",
----                on_exit = "on_idle_exit"
----            },
----            moving = { on_enter = "on_moving_enter" }
----        }
----    })
----    :build()
----```
----@param phase string|PhaseDefinition
+---@param initial string
 ---@return EntityBuilder
-function EntityBuilder:with_phase(phase) end
+function EntityBuilder:with_phase(initial) end
 
 ---Set world position
 ---@param x number
@@ -2571,7 +2543,7 @@ function CollisionEntityBuilder:with_particle_emitter(table) end
 ---@return CollisionEntityBuilder
 function CollisionEntityBuilder:with_persistent() end
 
----Add a phase state machine. A string is the initial phase of a core `Phase`, driven by `:with_lua_phase_entered/exited/update` callbacks. A table is the legacy per-phase callback form.
+---Add a core `Phase` state machine starting in `initial`, driven by `:with_lua_phase_entered/exited/update` callbacks.
 ---
 ---Example:
 ---```lua
@@ -2581,26 +2553,9 @@ function CollisionEntityBuilder:with_persistent() end
 ---    :with_lua_phase_update("player_phase_update")
 ---    :build()
 ---```
----
----Legacy table form:
----```lua
----engine.spawn()
----    :with_phase({
----        initial = "idle",
----        phases = {
----            idle = {
----                on_enter = "on_idle_enter",
----                on_update = "on_idle_update",
----                on_exit = "on_idle_exit"
----            },
----            moving = { on_enter = "on_moving_enter" }
----        }
----    })
----    :build()
----```
----@param phase string|PhaseDefinition
+---@param initial string
 ---@return CollisionEntityBuilder
-function CollisionEntityBuilder:with_phase(phase) end
+function CollisionEntityBuilder:with_phase(initial) end
 
 ---Set world position
 ---@param x number

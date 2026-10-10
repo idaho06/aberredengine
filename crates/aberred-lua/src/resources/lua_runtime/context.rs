@@ -98,8 +98,7 @@ pub struct AnimationSnapshot<'a> {
     pub elapsed: f32,
 }
 
-/// Snapshot of a phase (core `Phase`, or the one a `LuaPhase` wraps) for
-/// context building.
+/// Snapshot of a core `Phase` for context building.
 #[derive(Debug)]
 pub struct LuaPhaseSnapshot<'a> {
     pub current: &'a str,
@@ -112,12 +111,6 @@ impl<'a> From<&'a aberred_core::components::phase::Phase> for LuaPhaseSnapshot<'
             current: phase.current.as_str(),
             time_in_phase: phase.time_in_phase,
         }
-    }
-}
-
-impl<'a> From<&'a crate::components::luaphase::LuaPhase> for LuaPhaseSnapshot<'a> {
-    fn from(phase: &'a crate::components::luaphase::LuaPhase) -> Self {
-        Self::from(&phase.phase)
     }
 }
 
@@ -432,7 +425,7 @@ pub fn build_entity_context_pooled<'a>(
         }
     );
 
-    // Phase info from core `Phase` or `LuaPhase` (sets two ctx keys)
+    // Phase info from core `Phase` (sets two ctx keys)
     set_opt!(
         tables.ctx,
         ["phase", "time_in_phase"],

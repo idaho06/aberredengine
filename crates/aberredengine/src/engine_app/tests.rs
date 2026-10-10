@@ -39,8 +39,6 @@ use aberred_core::systems::group::update_group_counts_system;
 use aberred_core::systems::gui_hit_test::gui_hit_test_system;
 #[cfg(feature = "lua")]
 use aberred_lua::systems::lua_phase::lua_phase_update_system;
-#[cfg(feature = "lua")]
-use aberred_lua::systems::luaphase::lua_phase_system;
 
 #[test]
 fn test_builder_default() {
@@ -393,17 +391,13 @@ fn test_builder_with_lua() {
 fn test_build_logic_schedules_without_lua_runtime_omits_lua_only_systems() {
     let (ids, _) = logic_schedule_type_ids(false);
     assert!(
-        !ids.contains(&IntoSystem::into_system(lua_phase_system).system_type()),
-        "lua_phase_system should be absent when has_lua is false"
-    );
-    assert!(
         !ids.contains(&IntoSystem::into_system(lua_phase_update_system).system_type()),
         "lua_phase_update_system should be absent when has_lua is false"
     );
 }
 
-/// With Lua, `lua_phase_update_system` sits in `lua_phase_system`'s slot:
-/// after `update_group_counts_system`, before `animation_controller`.
+/// With Lua, `lua_phase_update_system` runs after `update_group_counts_system`
+/// and before `animation_controller`.
 #[cfg(feature = "lua")]
 #[test]
 fn test_build_logic_schedules_with_lua_orders_lua_phase_update_in_post_collision() {
@@ -415,12 +409,8 @@ fn test_build_logic_schedules_with_lua_orders_lua_phase_update_in_post_collision
 
 #[cfg(feature = "lua")]
 #[test]
-fn test_build_logic_schedules_with_lua_orders_group_counts_before_lua_phase() {
-    let (sim, present) = logic_schedule_type_ids(true);
-    assert!(
-        sim_index(&sim, update_group_counts_system) < sim_index(&sim, lua_phase_system),
-        "update_group_counts_system should run before lua_phase_system"
-    );
+fn test_build_logic_schedules_with_lua_keeps_lua_update_out_of_present() {
+    let (_, present) = logic_schedule_type_ids(true);
     // lua_plugin::update runs on the sim schedule; `present` holds only the
     // snapshot build/send.
     let lua_update = IntoSystem::into_system(aberred_lua::lua_plugin::update).system_type();
@@ -468,24 +458,19 @@ fn test_build_logic_schedules_runs_phase_system_first() {
     assert!(phase < sim_index(&ids, collision_detector));
 }
 
-/// With Lua, `lua_phase_system` and `lua_phase_update_system` run in
-/// `SimSet::PostCollision`: after the collision and GUI sets, before `Drain`
-/// and before `lua_plugin::update`.
+/// With Lua, `lua_phase_update_system` runs in `SimSet::PostCollision`: after
+/// the collision and GUI sets, before `Drain` and before `lua_plugin::update`.
 #[cfg(feature = "lua")]
 #[test]
 fn test_build_logic_schedules_with_lua_keeps_lua_phase_in_post_collision() {
     let (ids, _) = logic_schedule_type_ids(true);
     let after = sim_index(&ids, collision_detector).max(sim_index(&ids, gui_hit_test_system));
     let before = sim_index(&ids, animation).min(sim_index(&ids, aberred_lua::lua_plugin::update));
-    for index in [
-        sim_index(&ids, lua_phase_system),
-        sim_index(&ids, lua_phase_update_system),
-    ] {
-        assert!(
-            after < index && index < before,
-            "must stay in SimSet::PostCollision"
-        );
-    }
+    let index = sim_index(&ids, lua_phase_update_system);
+    assert!(
+        after < index && index < before,
+        "must stay in SimSet::PostCollision"
+    );
 }
 
 // --- SceneManager builder tests ---

@@ -319,8 +319,11 @@ fn meta_types_table_is_populated() {
         local required = {"EntityContext", "CollisionContext", "InputSnapshot", "Vec2",
                           "Rect", "SpriteInfo", "AnimationInfo", "TimerInfo", "SignalSet",
                           "CollisionEntity", "CollisionSides", "DigitalButtonState",
-                          "DigitalInputs", "PhaseDefinition", "PhaseCallbacks",
-                          "ParticleEmitterConfig", "MenuItem", "AnimationRuleCondition"}
+                          "DigitalInputs", "ParticleEmitterConfig", "MenuItem",
+                          "AnimationRuleCondition"}
+        -- The phase table form has no schema types: :with_phase takes a string
+        assert(types.PhaseDefinition == nil, "PhaseDefinition should not exist")
+        assert(types.PhaseCallbacks == nil, "PhaseCallbacks should not exist")
         for _, name in ipairs(required) do
             assert(types[name], "missing type: " .. name)
             assert(types[name].description, "missing description for type " .. name)
@@ -561,7 +564,8 @@ fn meta_functions_complete() {
 fn meta_builder_methods_have_schema_refs() {
     let rt = LuaRuntime::new().unwrap();
     let lua = rt.lua();
-    lua.load(r#"
+    lua.load(
+        r#"
         local types = engine.__meta.types
         local classes = engine.__meta.classes
         local builder = classes.EntityBuilder.methods
@@ -577,9 +581,9 @@ fn meta_builder_methods_have_schema_refs() {
         end
 
         -- Check schema references
-        local p1 = find_param("with_phase", "phase")
-        assert(p1.schema == "string|PhaseDefinition",
-            "with_phase.phase should have schema string|PhaseDefinition, got " .. tostring(p1.schema))
+        local p1 = find_param("with_phase", "initial")
+        assert(p1.schema == nil,
+            "with_phase.initial is a plain string, got schema " .. tostring(p1.schema))
 
         local p2 = find_param("with_particle_emitter", "table")
         assert(p2.schema == "ParticleEmitterConfig",
@@ -594,11 +598,14 @@ fn meta_builder_methods_have_schema_refs() {
             "with_menu.items should have schema MenuItem[]")
 
         -- Verify referenced schemas exist in types (strip [] suffix)
-        local schemas = {"PhaseDefinition", "ParticleEmitterConfig", "AnimationRuleCondition", "MenuItem"}
+        local schemas = {"ParticleEmitterConfig", "AnimationRuleCondition", "MenuItem"}
         for _, s in ipairs(schemas) do
             assert(types[s], "schema type " .. s .. " not found in __meta.types")
         end
-    "#).exec().unwrap();
+    "#,
+    )
+    .exec()
+    .unwrap();
 }
 
 // Hierarchy API metadata: parent commands, `with_parent`, and the

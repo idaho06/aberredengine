@@ -41,8 +41,8 @@
 //! - [`tween`] – animated interpolation of position, rotation, and scale
 //! - [`zindex`] – rendering order hint for 2D drawing
 //!
-//! Audio-thread components live in `aberred-audio`; Lua-only ones (`LuaPhase`,
-//! `LuaSetup`, `LuaOnTimerFired`, ...) in `aberred-lua`.
+//! Audio-thread components live in `aberred-audio`; Lua-only ones (`LuaSetup`,
+//! `LuaOnTimerFired`, `LuaOnPhaseEntered`, ...) in `aberred-lua`.
 
 pub mod animation;
 pub mod boxcollider;

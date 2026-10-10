@@ -9,22 +9,17 @@
 //! table), call the named Lua function, then drain the commands it queued (the
 //! collision observers drain the collision-scoped queues).
 //!
-//! `lua_phase_system` (`crate::systems::luaphase`) does NOT use this helper —
-//! it must interleave `apply_callback_transitions` between the phase drain
-//! and the effect drain and builds its input table once for many entities,
-//! so it keeps its own `drain_and_process_phase_commands` /
-//! `drain_and_process_effect_commands` calls. `lua_phase_update_system`
-//! (`crate::systems::lua_phase`) batches like `lua_setup_entity_system` (one
-//! signal refresh, one drain per run) but passes one shared input table and
-//! `dt`, so it builds ctx with [`build_ctx_or_log`] and calls Lua itself
-//! instead of going through a [`CallShape`].
+//! `lua_phase_update_system` (`crate::systems::lua_phase`) batches like
+//! `lua_setup_entity_system` (one signal refresh, one drain per run) but
+//! passes one shared input table and `dt`, so it builds ctx with
+//! [`build_ctx_or_log`] and calls Lua itself instead of going through a
+//! [`CallShape`].
 
 use bevy_ecs::prelude::*;
 use bevy_ecs::system::SystemParam;
 use log::error;
 use mlua::prelude::{Lua, LuaResult, LuaTable, LuaValue};
 
-use crate::components::luaphase::LuaPhase;
 use crate::resources::lua_runtime::{LuaPhaseSnapshot, LuaRuntime, PhaseCmd};
 use aberred_core::components::phase::Phase;
 use aberred_core::protocol::audio::AudioCmd;
@@ -49,7 +44,6 @@ pub struct LuaDispatch<'w, 's> {
     pub ctx_queries: ContextQueries<'w, 's>,
     pub cmd_queries: EntityCmdQueries<'w, 's>,
     pub phase_query: Query<'w, 's, &'static mut Phase>,
-    pub luaphase_query: Query<'w, 's, (Entity, &'static mut LuaPhase)>,
     pub world_signals: ResMut<'w, WorldSignals>,
     pub lua_runtime: NonSend<'w, LuaRuntime>,
     pub audio_cmd_writer: MessageWriter<'w, AudioCmd>,
@@ -64,8 +58,7 @@ pub struct LuaDispatch<'w, 's> {
 /// passed ([`CallShape::wants_input`]) are independent choices.
 #[derive(Clone, Copy)]
 pub enum CallShape {
-    /// Resolve the phase snapshot (core `Phase`, else `LuaPhase`), build the
-    /// input table, call `(ctx, input)`
+    /// Resolve the phase snapshot, build the input table, call `(ctx, input)`
     /// — timer/anim/tween/phase-enter path.
     CtxAndInput,
     /// Resolve the phase snapshot, no input table; call `(ctx)` — phase-exit path.
@@ -142,16 +135,7 @@ fn call_entity_callback_value(
     };
 
     let lua_phase_snapshot = if call_shape.wants_phase() {
-        p.phase_query
-            .get(entity)
-            .ok()
-            .map(LuaPhaseSnapshot::from)
-            .or_else(|| {
-                p.luaphase_query
-                    .get(entity)
-                    .ok()
-                    .map(|(_, phase)| LuaPhaseSnapshot::from(phase))
-            })
+        p.phase_query.get(entity).ok().map(LuaPhaseSnapshot::from)
     } else {
         None
     };
@@ -257,13 +241,7 @@ pub fn dispatch_custom_and_drain(
 /// Drain the `scope`'s phase queue, then its 6 effect queues, in the
 /// canonical order.
 pub(crate) fn drain_dispatch_commands(p: &mut LuaDispatch, scope: DrainScope) {
-    drain_and_process_phase_commands(
-        &p.lua_runtime,
-        scope,
-        &mut p.phase_buf,
-        &mut p.phase_query,
-        &mut p.luaphase_query,
-    );
+    drain_and_process_phase_commands(&p.lua_runtime, scope, &mut p.phase_buf, &mut p.phase_query);
     drain_and_process_effect_commands(
         &p.lua_runtime,
         scope,

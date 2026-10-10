@@ -18,4 +18,3 @@ pub mod lua_phase;
 pub mod lua_setup_entity;
 pub mod lua_timer_fired;
 pub mod lua_tween_finished;
-pub mod luaphase;

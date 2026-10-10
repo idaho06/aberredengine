@@ -10,12 +10,10 @@ use aberred_core::resources::camera2d::Camera2D;
 use bevy_ecs::prelude::*;
 use log::{debug, warn};
 
-use crate::components::luaphase::LuaPhase;
 use crate::resources::lua_runtime::{
     AnimationCmd, AssetCmd, AudioLuaCmd, CameraCmd, CameraFollowCmd, GameConfigCmd, GroupCmd,
     InputCmd, PhaseCmd, RenderCmd, SignalCmd,
 };
-use crate::systems::luaphase::queue_phase_transition;
 use aberred_core::components::phase::Phase;
 use aberred_core::components::shadow::Shadow;
 use aberred_core::math::{Color, Rect};
@@ -160,38 +158,23 @@ pub fn process_camera_command(commands: &mut Commands, cmd: CameraCmd) {
     }
 }
 
-/// Process a single phase command from Lua: set the entity's core `Phase.next`,
-/// or, for an entity without one, its `LuaPhase`'s.
-pub fn process_phase_command(
-    phase_query: &mut Query<&mut Phase>,
-    luaphase_query: &mut Query<(Entity, &mut LuaPhase)>,
-    cmd: PhaseCmd,
-) {
+/// Process a single phase command from Lua: set the entity's core `Phase.next`.
+pub fn process_phase_command(phase_query: &mut Query<&mut Phase>, cmd: PhaseCmd) {
     match cmd {
         PhaseCmd::TransitionTo { entity_id, phase } => {
             if let Some(entity) = super::entity_cmd::resolve_entity(entity_id) {
-                if let Some(phase) = request_phase(phase_query, entity, phase) {
-                    queue_phase_transition(luaphase_query, entity, phase);
-                }
+                request_phase(phase_query, entity, phase);
             }
         }
     }
 }
 
 /// Request `next` on `entity`'s core `Phase` (sets `Phase.next`; core
-/// `phase_system` applies it on its next run). Hands `next` back when the
-/// entity has no core `Phase`.
-pub(crate) fn request_phase(
-    phase_query: &mut Query<&mut Phase>,
-    entity: Entity,
-    next: String,
-) -> Option<String> {
-    match phase_query.get_mut(entity) {
-        Ok(mut phase) => {
-            phase.next = Some(next);
-            None
-        }
-        Err(_) => Some(next),
+/// `phase_system` applies it on its next run). No-op when the entity has no
+/// core `Phase`.
+pub(crate) fn request_phase(phase_query: &mut Query<&mut Phase>, entity: Entity, next: String) {
+    if let Ok(mut phase) = phase_query.get_mut(entity) {
+        phase.next = Some(next);
     }
 }
 

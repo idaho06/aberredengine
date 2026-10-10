@@ -47,7 +47,6 @@ impl LuaRuntime {
         let builder_methods = collect_builder_meta();
 
         let schema_refs: &[(&str, &str, &str)] = &[
-            ("with_phase", "phase", "string|PhaseDefinition"),
             ("with_particle_emitter", "table", "ParticleEmitterConfig"),
             (
                 "with_animation_rule",
@@ -437,43 +436,6 @@ impl LuaRuntime {
                 &[
                     ("digital", "DigitalInputs", false, None),
                     ("analog", "AnalogInputs", false, None),
-                ],
-            ),
-            (
-                "PhaseCallbacks",
-                "Callbacks for a single phase",
-                &[
-                    (
-                        "on_enter",
-                        "string",
-                        true,
-                        Some("Function name called on phase enter"),
-                    ),
-                    (
-                        "on_update",
-                        "string",
-                        true,
-                        Some("Function name called each frame"),
-                    ),
-                    (
-                        "on_exit",
-                        "string",
-                        true,
-                        Some("Function name called on phase exit"),
-                    ),
-                ],
-            ),
-            (
-                "PhaseDefinition",
-                "Phase state machine definition",
-                &[
-                    ("initial", "string", false, Some("Initial phase name")),
-                    (
-                        "phases",
-                        "{[string]: PhaseCallbacks}",
-                        false,
-                        Some("Map of phase name to callbacks"),
-                    ),
                 ],
             ),
             (

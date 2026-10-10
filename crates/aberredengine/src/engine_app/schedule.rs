@@ -63,8 +63,6 @@ use aberred_lua::systems::lua_mapspawn::process_lua_map_commands;
 use aberred_lua::systems::lua_phase::lua_phase_update_system;
 #[cfg(feature = "lua")]
 use aberred_lua::systems::lua_setup_entity::lua_setup_entity_system;
-#[cfg(feature = "lua")]
-use aberred_lua::systems::luaphase::lua_phase_system;
 
 /// System sets partitioning the logic thread's `sim` schedule pipeline.
 /// [`EngineBuilder`]'s
@@ -155,7 +153,7 @@ pub enum SimSet {
 impl EngineBuilder {
     /// Registers the systems a game without Lua needs in place of the Lua
     /// plugin's: the `PostCollision` pair (`update_group_counts_system` +
-    /// `animation_controller`, with no `lua_phase_system` edges) and
+    /// `animation_controller`, with no `lua_phase_update_system` edges) and
     /// `quit_flag_poll`. Called from both the `has_lua` else-arm and the
     /// `#[cfg(not(feature = "lua"))]` block in `build_logic_schedules`.
     fn add_non_lua_systems(sim: &mut Schedule) {
@@ -449,14 +447,11 @@ impl EngineBuilder {
         if has_lua {
             sim.add_systems(
                 update_group_counts_system
-                    .before(lua_phase_system)
+                    .before(lua_phase_update_system)
                     .in_set(SimSet::PostCollision),
             );
-            // `LuaPhase` entities first, then core-`Phase` ones: both run Lua
-            // and drain its queues, so their order is fixed.
             sim.add_systems(
-                (lua_phase_system, lua_phase_update_system)
-                    .chain()
+                lua_phase_update_system
                     .run_if(state_is_playing)
                     .in_set(SimSet::PostCollision),
             );

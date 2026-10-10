@@ -1,7 +1,7 @@
 //! Integration tests for Lua callback side effects.
 //!
-//! Runs a Lua callback through its real dispatch path (collision observer,
-//! timer observer, phase system) in an ECS world and checks that the commands
+//! Runs a Lua callback through its real dispatch path (collision, timer,
+//! click, menu, animation and tween observers) in an ECS world and checks that the commands
 //! the callback queued are drained and applied.
 
 use bevy_ecs::prelude::*;
@@ -40,7 +40,6 @@ use aberred_lua::components::lua_on_collision::LuaOnCollision;
 use aberred_lua::components::lua_on_menu_select::LuaOnMenuSelect;
 use aberred_lua::components::lua_on_timer_fired::LuaOnTimerFired;
 use aberred_lua::components::lua_on_tween_finished::LuaOnTweenFinished;
-use aberred_lua::components::luaphase::{LuaPhase, PhaseCallbacks};
 use aberred_lua::resources::lua_runtime::LuaRuntime;
 use aberred_lua::systems::lua_animation_finished::lua_animation_finished_observer;
 use aberred_lua::systems::lua_collision::lua_collision_rule_added_observer;
@@ -48,7 +47,6 @@ use aberred_lua::systems::lua_gui_interactable_click::lua_gui_interactable_click
 use aberred_lua::systems::lua_menu::lua_menu_selection_observer;
 use aberred_lua::systems::lua_timer_fired::{lua_timer_fired_observer, lua_timer_removed_observer};
 use aberred_lua::systems::lua_tween_finished::lua_tween_finished_observer;
-use aberred_lua::systems::luaphase::lua_phase_system;
 
 /// World with every resource the Lua dispatch paths read, plus a fresh
 /// `LuaRuntime`.
@@ -206,8 +204,7 @@ fn collision_callback_error_still_drains_queued_commands() {
 }
 
 // Command-drain ordering: a callback's queued commands are drained in a fixed
-// order within one pass (spawn before clone, phase commands before
-// callback-return transitions are applied), and no queue is dropped.
+// order within one pass (spawn before clone), and no queue is dropped.
 
 /// Register the Lua timer observers.
 fn add_lua_timer_observers(world: &mut World) {
@@ -220,12 +217,6 @@ fn tick_timers(world: &mut World) {
     world
         .run_system_once(update_timers)
         .expect("update_timers should run");
-}
-
-fn tick_lua_phases(world: &mut World) {
-    world
-        .run_system_once(lua_phase_system)
-        .expect("lua_phase_system should run");
 }
 
 /// Regular path: spawn before clone (timer callback)
@@ -491,131 +482,10 @@ fn collision_callback_spawn_then_clone_same_drain() {
     );
 }
 
-/// Lua phase: return-value transition takes precedence over
-/// engine.phase_transition() called in the same on_update.
-///
-/// If the on_update callback BOTH calls `engine.phase_transition(id, "via_cmd")`
-/// AND returns `"return_winner"`, the return value must win because
-/// apply_callback_transitions runs after the phase drain.
-#[test]
-fn lua_phase_return_value_beats_phase_transition_cmd() {
-    let mut world = make_lua_callback_world(0.016);
-
-    {
-        let rt = world.non_send::<LuaRuntime>();
-        rt.lua()
-            .load(
-                r#"
-                function idle_update(ctx, input, dt)
-                    engine.phase_transition(ctx.id, "via_cmd")
-                    return "return_winner"
-                end
-            "#,
-            )
-            .exec()
-            .expect("lua load");
-    }
-
-    let mut phases = rustc_hash::FxHashMap::default();
-    phases.insert(
-        "idle".into(),
-        PhaseCallbacks {
-            on_enter: None,
-            on_update: Some("idle_update".into()),
-            on_exit: None,
-        },
-    );
-    phases.insert("via_cmd".into(), PhaseCallbacks::default());
-    phases.insert("return_winner".into(), PhaseCallbacks::default());
-
-    let entity = world.spawn((LuaPhase::new("idle", phases),)).id();
-
-    // First tick: idle_update runs, queues both a PhaseCmd and a return transition.
-    tick_lua_phases(&mut world);
-
-    // The winning transition is stored in `next` after the first tick.
-    let phase = world.get::<LuaPhase>(entity).unwrap();
-    assert_eq!(
-        phase.phase.next.as_deref(),
-        Some("return_winner"),
-        "return value should override the phase_transition() cmd"
-    );
-
-    // Second tick: the pending transition is applied.
-    tick_lua_phases(&mut world);
-
-    let phase = world.get::<LuaPhase>(entity).unwrap();
-    assert_eq!(phase.phase.current, "return_winner");
-}
-
-/// Collision path: the phase drain does not suppress other queues.
-///
-/// A collision callback queues a phase transition and a world-signal mutation.
-/// Both must be observed after the observer runs.
-/// Guards against any queue being silently dropped by the drain order.
+/// Collision path: a collision callback's core-`Phase` transition and its
+/// world-signal write are both applied by the same drain.
 #[test]
 fn collision_callback_phase_plus_signal_all_processed() {
-    let mut world = make_lua_callback_world(0.0);
-
-    {
-        let rt = world.non_send::<LuaRuntime>();
-        rt.lua()
-            .load(
-                r#"
-                function on_multi_effect(ctx)
-                    engine.collision_phase_transition(ctx.a.id, "hit")
-                    engine.collision_set_flag("was_hit")
-                end
-            "#,
-            )
-            .exec()
-            .expect("lua load");
-    }
-
-    let mut phases: rustc_hash::FxHashMap<String, PhaseCallbacks> =
-        rustc_hash::FxHashMap::default();
-    phases.insert("idle".into(), PhaseCallbacks::default());
-    phases.insert("hit".into(), PhaseCallbacks::default());
-
-    let a = world
-        .spawn((
-            Group::new("hero"),
-            MapPosition::new(0.0, 0.0),
-            BoxCollider::new(10.0, 10.0),
-            LuaPhase::new("idle", phases),
-        ))
-        .id();
-    world.spawn((
-        Group::new("hazard"),
-        MapPosition::new(5.0, 0.0),
-        BoxCollider::new(10.0, 10.0),
-    ));
-    add_lua_collision_observers(&mut world);
-    world.spawn(lua_rule("hero", "hazard", "on_multi_effect"));
-    world.flush();
-
-    tick_collision_detector(&mut world);
-
-    // Phase transition queued
-    let phase = world.get::<LuaPhase>(a).unwrap();
-    assert_eq!(
-        phase.phase.next.as_deref(),
-        Some("hit"),
-        "phase transition should be queued"
-    );
-
-    // World signal mutation applied
-    let signals = world.resource::<WorldSignals>();
-    assert!(
-        signals.has_flag("was_hit"),
-        "world signal flag should be set"
-    );
-}
-
-/// Collision path on core `Phase`: a collision callback's phase transition
-/// and its world-signal write are both applied by the same drain.
-#[test]
-fn collision_callback_core_phase_plus_signal_all_processed() {
     let mut world = make_lua_callback_world(0.0);
     load_lua(
         &world,

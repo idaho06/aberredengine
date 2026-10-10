@@ -99,32 +99,10 @@ pub(super) fn register<M: LuaUserDataMethods<LuaEntityBuilder>>(
         methods,
         meta,
         "with_phase",
-        "Add a phase state machine. A string is the initial phase of a core `Phase`, driven by `:with_lua_phase_entered/exited/update` callbacks. A table is the legacy per-phase callback form.\n\nExample:\n```lua\nengine.spawn()\n    :with_phase(\"idle\")\n    :with_lua_phase_entered(\"player_phase_entered\")\n    :with_lua_phase_update(\"player_phase_update\")\n    :build()\n```\n\nLegacy table form:\n```lua\nengine.spawn()\n    :with_phase({\n        initial = \"idle\",\n        phases = {\n            idle = {\n                on_enter = \"on_idle_enter\",\n                on_update = \"on_idle_update\",\n                on_exit = \"on_idle_exit\"\n            },\n            moving = { on_enter = \"on_moving_enter\" }\n        }\n    })\n    :build()\n```",
-        [("phase", "string|table")],
-        |_, this: &mut LuaEntityBuilder, phase: mlua::Either<String, LuaTable>| {
-            let table = match phase {
-                mlua::Either::Left(initial) => {
-                    this.cmd.phase = Some(initial);
-                    this.cmd.phase_data = None;
-                    return Ok(());
-                }
-                mlua::Either::Right(table) => table,
-            };
-            this.cmd.phase = None;
-            let initial: String = table.get("initial")?;
-            let mut phases = rustc_hash::FxHashMap::default();
-            if let Ok(phases_table) = table.get::<LuaTable>("phases") {
-                for pair in phases_table.pairs::<String, LuaTable>() {
-                    let (phase_name, callbacks_table) = pair?;
-                    let callbacks = PhaseCallbackData {
-                        on_enter: callbacks_table.get("on_enter").ok(),
-                        on_update: callbacks_table.get("on_update").ok(),
-                        on_exit: callbacks_table.get("on_exit").ok(),
-                    };
-                    phases.insert(phase_name, callbacks);
-                }
-            }
-            this.cmd.phase_data = Some(PhaseData { initial, phases });
+        "Add a core `Phase` state machine starting in `initial`, driven by `:with_lua_phase_entered/exited/update` callbacks.\n\nExample:\n```lua\nengine.spawn()\n    :with_phase(\"idle\")\n    :with_lua_phase_entered(\"player_phase_entered\")\n    :with_lua_phase_update(\"player_phase_update\")\n    :build()\n```",
+        [("initial", "string")],
+        |_, this: &mut LuaEntityBuilder, initial: String| {
+            this.cmd.phase = Some(initial);
             Ok(())
         }
     );
@@ -522,22 +500,16 @@ mod tests {
     fn with_phase_string_sets_core_phase() {
         let cmd = built(":with_phase('idle')");
         assert_eq!(cmd.phase.as_deref(), Some("idle"));
-        assert!(cmd.phase_data.is_none());
     }
 
     #[test]
-    fn with_phase_last_form_wins() {
-        let cmd = built(":with_phase('idle'):with_phase({ initial = 'run' })");
-        assert!(cmd.phase.is_none());
-        assert_eq!(cmd.phase_data.unwrap().initial, "run");
-        let cmd = built(":with_phase({ initial = 'run' }):with_phase('idle')");
-        assert_eq!(cmd.phase.as_deref(), Some("idle"));
-        assert!(cmd.phase_data.is_none());
-    }
-
-    #[test]
-    fn with_phase_rejects_other_types() {
-        assert_runtime_error("engine.spawn():with_phase(true)", "in method 'with_phase'");
+    fn with_phase_rejects_non_string() {
+        for arg in ["{ initial = 'idle' }", "true"] {
+            assert_runtime_error(
+                &format!("engine.spawn():with_phase({arg})"),
+                "in method 'with_phase'",
+            );
+        }
     }
 
     #[test]
@@ -549,39 +521,6 @@ mod tests {
         assert_eq!(callbacks.entered.as_deref(), Some("on_in"));
         assert_eq!(callbacks.exited.as_deref(), Some("on_out"));
         assert_eq!(callbacks.update.as_deref(), Some("on_tick"));
-    }
-
-    #[test]
-    fn with_phase_reads_initial_and_optional_callbacks() {
-        let phase = built(
-            ":with_phase({ initial = 'idle', phases = { \
-                idle = { on_enter = 'idle_enter', on_update = 'idle_update', on_exit = 'idle_exit' }, \
-                moving = { on_enter = 'moving_enter' } } })",
-        )
-        .phase_data
-        .unwrap();
-        assert_eq!(phase.initial, "idle");
-        assert_eq!(phase.phases.len(), 2);
-        let idle = &phase.phases["idle"];
-        assert_eq!(idle.on_enter.as_deref(), Some("idle_enter"));
-        assert_eq!(idle.on_update.as_deref(), Some("idle_update"));
-        assert_eq!(idle.on_exit.as_deref(), Some("idle_exit"));
-        let moving = &phase.phases["moving"];
-        assert_eq!(moving.on_enter.as_deref(), Some("moving_enter"));
-        assert!(moving.on_update.is_none() && moving.on_exit.is_none());
-    }
-
-    #[test]
-    fn with_phase_requires_initial_and_tolerates_missing_phases() {
-        assert_runtime_error(
-            "engine.spawn():with_phase({ phases = {} })",
-            "in method 'with_phase'",
-        );
-        let phase = built(":with_phase({ initial = 'idle' })")
-            .phase_data
-            .unwrap();
-        assert_eq!(phase.initial, "idle");
-        assert!(phase.phases.is_empty());
     }
 
     #[test]

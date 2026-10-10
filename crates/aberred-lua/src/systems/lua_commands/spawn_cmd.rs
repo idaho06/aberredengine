@@ -11,7 +11,6 @@ use crate::components::lua_on_click::LuaOnClick;
 use crate::components::lua_on_menu_select::LuaOnMenuSelect;
 use crate::components::lua_on_phase::{LuaOnPhaseEntered, LuaOnPhaseExited, LuaOnPhaseUpdate};
 use crate::components::lua_on_timer_fired::LuaOnTimerFired;
-use crate::components::luaphase::{LuaPhase, PhaseCallbacks};
 use crate::components::luasetup::LuaSetup;
 use aberred_core::components::animation::{Animation, AnimationController};
 use aberred_core::components::boxcollider::BoxCollider;
@@ -41,7 +40,7 @@ use aberred_core::math::Color;
 use crate::resources::lua_runtime::{
     AnimationControllerData, AnimationData, CloneCmd, ColliderData, EntityShaderData,
     LuaCollisionRuleData, LuaPhaseCallbacksSpawn, LuaTimerSpawn, MenuActionData, MenuData,
-    ParticleEmitterData, PhaseData, RigidBodyData, SpawnCmd, SpriteData, StuckToData, TextData,
+    ParticleEmitterData, RigidBodyData, SpawnCmd, SpriteData, StuckToData, TextData,
     TweenPositionData, TweenRotationData, TweenScaleData, TweenScreenPositionData,
 };
 use aberred_core::resources::worldsignals::WorldSignals;
@@ -155,7 +154,6 @@ pub(super) fn apply_components(
     apply_behavior_components(
         entity_commands,
         BehaviorComponents {
-            phase_data: cmd.phase_data,
             phase: cmd.phase,
             lua_phase_callbacks: cmd.lua_phase_callbacks,
             lua_timer: cmd.lua_timer,
@@ -425,7 +423,6 @@ fn apply_signal_components(
 }
 
 struct BehaviorComponents {
-    phase_data: Option<PhaseData>,
     phase: Option<String>,
     lua_phase_callbacks: LuaPhaseCallbacksSpawn,
     lua_timer: Option<LuaTimerSpawn>,
@@ -436,7 +433,6 @@ struct BehaviorComponents {
 
 fn apply_behavior_components(entity_commands: &mut EntityCommands, b: BehaviorComponents) {
     let BehaviorComponents {
-        phase_data,
         phase,
         lua_phase_callbacks,
         lua_timer,
@@ -444,23 +440,6 @@ fn apply_behavior_components(entity_commands: &mut EntityCommands, b: BehaviorCo
         lua_setup,
         lua_on_animation_end,
     } = b;
-    if let Some(phase_data) = phase_data {
-        let phases = phase_data
-            .phases
-            .into_iter()
-            .map(|(name, data)| {
-                (
-                    name,
-                    PhaseCallbacks {
-                        on_enter: data.on_enter,
-                        on_update: data.on_update,
-                        on_exit: data.on_exit,
-                    },
-                )
-            })
-            .collect();
-        entity_commands.insert(LuaPhase::new(phase_data.initial, phases));
-    }
     if let Some(initial) = phase {
         entity_commands.insert(Phase::new(initial));
     }
@@ -1357,7 +1336,6 @@ mod tests {
         );
 
         assert_eq!(world.get::<Phase>(e).unwrap().current, "idle");
-        assert!(world.get::<LuaPhase>(e).is_none());
         assert_eq!(
             &*world.get::<LuaOnPhaseEntered>(e).unwrap().callback,
             "on_in"
@@ -1383,15 +1361,10 @@ mod tests {
             &mut world,
             &mut signals,
             "engine.spawn()\
-             :with_phase({ initial = 'idle', phases = { idle = { on_enter = 'idle_in' }, run = {} } })\
              :with_lua_timer(0.5, 'tick'):with_lua_collision_rule('player', 'enemy', 'on_hit')\
              :with_lua_setup('setup_fn'):with_on_animation_end('anim_done'):build()",
         );
 
-        let phase = world.get::<LuaPhase>(e).unwrap();
-        assert_eq!(phase.phase.current, "idle");
-        assert_eq!(phase.phases.len(), 2);
-        assert_eq!(phase.phases["idle"].on_enter.as_deref(), Some("idle_in"));
         let timer = world.get::<Timer>(e).unwrap();
         let on_fired = world.get::<LuaOnTimerFired>(e).unwrap();
         assert_eq!((timer.duration, &*on_fired.callback), (0.5, "tick"));

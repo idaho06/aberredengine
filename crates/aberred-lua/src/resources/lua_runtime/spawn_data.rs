@@ -246,23 +246,6 @@ pub struct AnimationControllerData {
     pub rules: Vec<AnimationRuleData>,
 }
 
-/// Phase definition data from Lua
-#[derive(Debug, Clone, Default)]
-pub struct PhaseData {
-    /// Initial phase name
-    pub initial: String,
-    /// Map of phase name -> callbacks
-    pub phases: rustc_hash::FxHashMap<String, PhaseCallbackData>,
-}
-
-/// Callback function names for a single phase
-#[derive(Debug, Clone, Default)]
-pub struct PhaseCallbackData {
-    pub on_enter: Option<String>,
-    pub on_update: Option<String>,
-    pub on_exit: Option<String>,
-}
-
 /// Data for dynamic text component
 #[derive(Debug, Clone)]
 pub struct TextData {
@@ -428,8 +411,6 @@ pub struct SpawnCmd {
     pub signal_flags: Vec<String>,
     /// Entity signals - strings
     pub signal_strings: Vec<(String, String)>,
-    /// Phase data (initial phase + phase definitions)
-    pub phase_data: Option<PhaseData>,
     /// Initial phase of a core `Phase`
     pub phase: Option<String>,
     /// Lua callbacks for the core `Phase`

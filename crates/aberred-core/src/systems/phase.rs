@@ -23,7 +23,7 @@
 //!
 //! - [`crate::components::phase::Phase`] – the phase component
 //! - [`crate::events::phase`] – the triggered events
-//! - `aberred_lua::systems::luaphase` – Lua equivalent
+//! - `aberred_lua::systems::lua_phase` – Lua callbacks on these events
 
 use std::sync::Arc;
 

@@ -36,7 +36,7 @@
 //!
 //! The audio thread's systems live in `aberred-audio`, the render thread's in
 //! `aberred-render`, and the Lua-callback systems (`lua_collision`,
-//! `luaphase`, `lua_commands`, ...) in `aberred-lua`.
+//! `lua_phase`, `lua_commands`, ...) in `aberred-lua`.
 
 pub mod animation;
 pub mod asset_gate;

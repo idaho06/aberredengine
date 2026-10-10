@@ -302,8 +302,6 @@ fn extract_types(meta: &LuaTable) -> Result<Vec<TypeMeta>, LuaError> {
         "DigitalButtonState",
         "DigitalInputs",
         "InputSnapshot",
-        "PhaseCallbacks",
-        "PhaseDefinition",
         "ParticleEmitterConfig",
         "MenuItem",
         "AnimationRuleCondition",
