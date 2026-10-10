@@ -238,18 +238,9 @@ local function scene_get_started_enter(ctx, input)
         :with_stuckto(player_id, true, false)
         :with_stuckto_offset(0, 0)
         :with_stuckto_stored_velocity(300, -300)
-        :with_phase({
-            initial = "stuck_to_player",
-            phases = {
-                stuck_to_player = {
-                    on_enter = "ball_stuck_enter",
-                    on_update = "ball_stuck_update"
-                },
-                moving = {
-                    on_enter = "ball_moving_enter"
-                }
-            }
-        })
+        :with_phase("stuck_to_player")
+        :with_lua_phase_entered("ball_phase_enter")
+        :with_lua_phase_update("ball_phase_update")
         :build()
 
     engine.log_debug("Ball spawned with StuckTo!")
@@ -412,6 +403,69 @@ local function scene_level_cleared_update(ctx, input, dt)
     end
 end
 
+-- ==================== PHASE DISPATCHERS ====================
+-- One enter and one update callback per entity, each forwarding to the
+-- handler of the current phase. A phase without a handler does nothing.
+
+local ball_enter = {
+    stuck_to_player = ball_stuck_enter,
+    moving          = ball_moving_enter,
+}
+local function ball_phase_enter(ctx, input)
+    local f = ball_enter[ctx.phase]
+    if f then return f(ctx, input) end
+end
+
+local ball_update = {
+    stuck_to_player = ball_stuck_update,
+}
+local function ball_phase_update(ctx, input, dt)
+    local f = ball_update[ctx.phase]
+    if f then return f(ctx, input, dt) end
+end
+
+local player_enter = {
+    sticky  = player_sticky_enter,
+    glowing = player_glowing_enter,
+    hit     = player_hit_enter,
+}
+local function player_phase_enter(ctx, input)
+    local f = player_enter[ctx.phase]
+    if f then return f(ctx, input) end
+end
+
+local player_update = {
+    sticky = player_sticky_update,
+    hit    = player_hit_update,
+}
+local function player_phase_update(ctx, input, dt)
+    local f = player_update[ctx.phase]
+    if f then return f(ctx, input, dt) end
+end
+
+local scene_enter = {
+    get_started   = scene_get_started_enter,
+    game_over     = scene_game_over_enter,
+    level_cleared = scene_level_cleared_enter,
+}
+local function scene_phase_enter(ctx, input)
+    local f = scene_enter[ctx.phase]
+    if f then return f(ctx, input) end
+end
+
+local scene_update = {
+    init          = scene_init_update,
+    get_started   = scene_get_started_update,
+    playing       = scene_playing_update,
+    lose_life     = scene_lose_life_update,
+    game_over     = scene_game_over_update,
+    level_cleared = scene_level_cleared_update,
+}
+local function scene_phase_update(ctx, input, dt)
+    local f = scene_update[ctx.phase]
+    if f then return f(ctx, input, dt) end
+end
+
 -- ==================== SCENE UPDATE ====================
 
 --- Called each frame when arkanoid_level01 scene is active.
@@ -436,26 +490,13 @@ M._callbacks = {
     on_ball_player              = on_ball_player,
     on_ball_brick               = on_ball_brick,
     on_ball_oob                 = on_ball_oob,
-    -- Scene state phase callbacks
-    scene_init_update           = scene_init_update,
-    scene_get_started_enter     = scene_get_started_enter,
-    scene_get_started_update    = scene_get_started_update,
-    scene_playing_update        = scene_playing_update,
-    scene_lose_life_update      = scene_lose_life_update,
-    scene_game_over_enter       = scene_game_over_enter,
-    scene_game_over_update      = scene_game_over_update,
-    scene_level_cleared_enter   = scene_level_cleared_enter,
-    scene_level_cleared_update  = scene_level_cleared_update,
-    -- Ball phase callbacks
-    ball_stuck_enter            = ball_stuck_enter,
-    ball_stuck_update           = ball_stuck_update,
-    ball_moving_enter           = ball_moving_enter,
-    -- Player phase callbacks
-    player_sticky_enter         = player_sticky_enter,
-    player_sticky_update        = player_sticky_update,
-    player_glowing_enter        = player_glowing_enter,
-    player_hit_enter            = player_hit_enter,
-    player_hit_update           = player_hit_update,
+    -- Phase dispatchers
+    ball_phase_enter            = ball_phase_enter,
+    ball_phase_update           = ball_phase_update,
+    player_phase_enter          = player_phase_enter,
+    player_phase_update         = player_phase_update,
+    scene_phase_enter           = scene_phase_enter,
+    scene_phase_update          = scene_phase_update,
 }
 
 -- ==================== ENTITY SPAWNING ====================
@@ -552,22 +593,9 @@ local function spawn_player()
         :with_collider(96, 24, 48, 24)
         :with_mouse_controlled(true, false)
         :with_signals()
-        :with_phase({
-            initial = "sticky",
-            phases = {
-                sticky = {
-                    on_enter = "player_sticky_enter",
-                    on_update = "player_sticky_update"
-                },
-                glowing = {
-                    on_enter = "player_glowing_enter"
-                },
-                hit = {
-                    on_enter = "player_hit_enter",
-                    on_update = "player_hit_update"
-                }
-            }
-        })
+        :with_phase("sticky")
+        :with_lua_phase_entered("player_phase_enter")
+        :with_lua_phase_update("player_phase_update")
         :register_as("player")
         :build()
 
@@ -653,32 +681,9 @@ function M.spawn()
     -- Scene phase state machine
     engine.spawn()
         :with_group("scene_phases")
-        :with_phase({
-            initial = "init",
-            phases = {
-                init = {
-                    on_update = "scene_init_update"
-                },
-                get_started = {
-                    on_enter = "scene_get_started_enter",
-                    on_update = "scene_get_started_update"
-                },
-                playing = {
-                    on_update = "scene_playing_update"
-                },
-                lose_life = {
-                    on_update = "scene_lose_life_update"
-                },
-                game_over = {
-                    on_enter = "scene_game_over_enter",
-                    on_update = "scene_game_over_update"
-                },
-                level_cleared = {
-                    on_enter = "scene_level_cleared_enter",
-                    on_update = "scene_level_cleared_update"
-                }
-            }
-        })
+        :with_phase("init")
+        :with_lua_phase_entered("scene_phase_enter")
+        :with_lua_phase_update("scene_phase_update")
         :build()
 
     engine.log_debug("Arkanoid level01 scene entities queued!")
