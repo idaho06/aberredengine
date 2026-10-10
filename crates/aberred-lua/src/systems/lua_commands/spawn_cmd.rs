@@ -9,6 +9,7 @@ use bevy_ecs::prelude::*;
 
 use crate::components::lua_on_click::LuaOnClick;
 use crate::components::lua_on_menu_select::LuaOnMenuSelect;
+use crate::components::lua_on_phase::{LuaOnPhaseEntered, LuaOnPhaseExited, LuaOnPhaseUpdate};
 use crate::components::lua_on_timer_fired::LuaOnTimerFired;
 use crate::components::luaphase::{LuaPhase, PhaseCallbacks};
 use crate::components::luasetup::LuaSetup;
@@ -21,6 +22,7 @@ use aberred_core::components::group::Group;
 use aberred_core::components::guioffset::GuiOffset;
 use aberred_core::components::mapposition::MapPosition;
 use aberred_core::components::persistent::Persistent;
+use aberred_core::components::phase::Phase;
 use aberred_core::components::rigidbody::RigidBody;
 use aberred_core::components::rotation::Rotation;
 use aberred_core::components::scale::Scale;
@@ -38,9 +40,9 @@ use aberred_core::math::Color;
 
 use crate::resources::lua_runtime::{
     AnimationControllerData, AnimationData, CloneCmd, ColliderData, EntityShaderData,
-    LuaCollisionRuleData, LuaTimerSpawn, MenuActionData, MenuData, ParticleEmitterData, PhaseData,
-    RigidBodyData, SpawnCmd, SpriteData, StuckToData, TextData, TweenPositionData,
-    TweenRotationData, TweenScaleData, TweenScreenPositionData,
+    LuaCollisionRuleData, LuaPhaseCallbacksSpawn, LuaTimerSpawn, MenuActionData, MenuData,
+    ParticleEmitterData, PhaseData, RigidBodyData, SpawnCmd, SpriteData, StuckToData, TextData,
+    TweenPositionData, TweenRotationData, TweenScaleData, TweenScreenPositionData,
 };
 use aberred_core::resources::worldsignals::WorldSignals;
 use aberred_core::systems::propagate_transforms::ComputeInitialGlobalTransform;
@@ -154,6 +156,8 @@ pub(super) fn apply_components(
         entity_commands,
         BehaviorComponents {
             phase_data: cmd.phase_data,
+            phase: cmd.phase,
+            lua_phase_callbacks: cmd.lua_phase_callbacks,
             lua_timer: cmd.lua_timer,
             lua_collision_rule: cmd.lua_collision_rule,
             lua_setup: cmd.lua_setup,
@@ -422,6 +426,8 @@ fn apply_signal_components(
 
 struct BehaviorComponents {
     phase_data: Option<PhaseData>,
+    phase: Option<String>,
+    lua_phase_callbacks: LuaPhaseCallbacksSpawn,
     lua_timer: Option<LuaTimerSpawn>,
     lua_collision_rule: Option<LuaCollisionRuleData>,
     lua_setup: Option<String>,
@@ -431,6 +437,8 @@ struct BehaviorComponents {
 fn apply_behavior_components(entity_commands: &mut EntityCommands, b: BehaviorComponents) {
     let BehaviorComponents {
         phase_data,
+        phase,
+        lua_phase_callbacks,
         lua_timer,
         lua_collision_rule,
         lua_setup,
@@ -452,6 +460,18 @@ fn apply_behavior_components(entity_commands: &mut EntityCommands, b: BehaviorCo
             })
             .collect();
         entity_commands.insert(LuaPhase::new(phase_data.initial, phases));
+    }
+    if let Some(initial) = phase {
+        entity_commands.insert(Phase::new(initial));
+    }
+    if let Some(callback) = lua_phase_callbacks.entered {
+        entity_commands.insert(LuaOnPhaseEntered::new(callback));
+    }
+    if let Some(callback) = lua_phase_callbacks.exited {
+        entity_commands.insert(LuaOnPhaseExited::new(callback));
+    }
+    if let Some(callback) = lua_phase_callbacks.update {
+        entity_commands.insert(LuaOnPhaseUpdate::new(callback));
     }
     if let Some(timer) = lua_timer {
         entity_commands.insert(LuaOnTimerFired::timer(
@@ -1233,6 +1253,38 @@ mod tests {
         let binding = world.get::<SignalBinding>(e).unwrap();
         assert_eq!(binding.signal_key, "score");
         assert_eq!(binding.format.as_deref(), Some("Score: {}"));
+    }
+
+    #[test]
+    fn lua_spawn_applies_core_phase_and_lua_phase_callbacks() {
+        use crate::components::lua_on_phase::{
+            LuaOnPhaseEntered, LuaOnPhaseExited, LuaOnPhaseUpdate,
+        };
+        use aberred_core::components::phase::Phase;
+        let mut world = World::new();
+        let mut signals = WorldSignals::default();
+        let e = spawn_from_lua(
+            &mut world,
+            &mut signals,
+            "engine.spawn():with_phase('idle')\
+             :with_lua_phase_entered('on_in'):with_lua_phase_exited('on_out')\
+             :with_lua_phase_update('on_tick'):build()",
+        );
+
+        assert_eq!(world.get::<Phase>(e).unwrap().current, "idle");
+        assert!(world.get::<LuaPhase>(e).is_none());
+        assert_eq!(
+            &*world.get::<LuaOnPhaseEntered>(e).unwrap().callback,
+            "on_in"
+        );
+        assert_eq!(
+            &*world.get::<LuaOnPhaseExited>(e).unwrap().callback,
+            "on_out"
+        );
+        assert_eq!(
+            &*world.get::<LuaOnPhaseUpdate>(e).unwrap().callback,
+            "on_tick"
+        );
     }
 
     #[test]

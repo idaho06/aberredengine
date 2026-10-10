@@ -1801,6 +1801,21 @@ function EntityBuilder:with_lua_collision_exit(callback) end
 ---@return EntityBuilder
 function EntityBuilder:with_lua_collision_rule(group_a, group_b, callback) end
 
+---Call a Lua function `fn(ctx, input)` each time the core `Phase` enters a phase (branch on `ctx.phase`; `ctx.previous_phase` is the phase left). A returned phase name requests that phase.
+---@param callback string
+---@return EntityBuilder
+function EntityBuilder:with_lua_phase_entered(callback) end
+
+---Call a Lua function `fn(ctx)` each time the core `Phase` exits a phase (`ctx.phase` is the new phase, `ctx.previous_phase` the exited one)
+---@param callback string
+---@return EntityBuilder
+function EntityBuilder:with_lua_phase_exited(callback) end
+
+---Call a Lua function `fn(ctx, input, dt)` once per sim tick while playing, for the core `Phase`. A returned phase name requests that phase.
+---@param callback string
+---@return EntityBuilder
+function EntityBuilder:with_lua_phase_update(callback) end
+
 ---Attach a one-shot Lua setup callback. The named function is called once (Added<LuaSetup>) with the entity context. Fires the frame after spawn; child entities added inside the callback appear the following frame.
 ---@param callback string
 ---@return EntityBuilder
@@ -1907,7 +1922,7 @@ function EntityBuilder:with_particle_emitter(table) end
 ---@return EntityBuilder
 function EntityBuilder:with_persistent() end
 
----Add phase state machine
+---Add a phase state machine. A string is the initial phase of a core `Phase`, driven by `:with_lua_phase_entered/exited/update` callbacks. A table is the legacy per-phase callback form.
 ---
 ---Example:
 ---```lua
@@ -1925,9 +1940,9 @@ function EntityBuilder:with_persistent() end
 ---    })
 ---    :build()
 ---```
----@param table PhaseDefinition
+---@param phase string|PhaseDefinition
 ---@return EntityBuilder
-function EntityBuilder:with_phase(table) end
+function EntityBuilder:with_phase(phase) end
 
 ---Set world position
 ---@param x number
@@ -2386,6 +2401,21 @@ function CollisionEntityBuilder:with_lua_collision_exit(callback) end
 ---@return CollisionEntityBuilder
 function CollisionEntityBuilder:with_lua_collision_rule(group_a, group_b, callback) end
 
+---Call a Lua function `fn(ctx, input)` each time the core `Phase` enters a phase (branch on `ctx.phase`; `ctx.previous_phase` is the phase left). A returned phase name requests that phase.
+---@param callback string
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_lua_phase_entered(callback) end
+
+---Call a Lua function `fn(ctx)` each time the core `Phase` exits a phase (`ctx.phase` is the new phase, `ctx.previous_phase` the exited one)
+---@param callback string
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_lua_phase_exited(callback) end
+
+---Call a Lua function `fn(ctx, input, dt)` once per sim tick while playing, for the core `Phase`. A returned phase name requests that phase.
+---@param callback string
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_lua_phase_update(callback) end
+
 ---Attach a one-shot Lua setup callback. The named function is called once (Added<LuaSetup>) with the entity context. Fires the frame after spawn; child entities added inside the callback appear the following frame.
 ---@param callback string
 ---@return CollisionEntityBuilder
@@ -2492,7 +2522,7 @@ function CollisionEntityBuilder:with_particle_emitter(table) end
 ---@return CollisionEntityBuilder
 function CollisionEntityBuilder:with_persistent() end
 
----Add phase state machine
+---Add a phase state machine. A string is the initial phase of a core `Phase`, driven by `:with_lua_phase_entered/exited/update` callbacks. A table is the legacy per-phase callback form.
 ---
 ---Example:
 ---```lua
@@ -2510,9 +2540,9 @@ function CollisionEntityBuilder:with_persistent() end
 ---    })
 ---    :build()
 ---```
----@param table PhaseDefinition
+---@param phase string|PhaseDefinition
 ---@return CollisionEntityBuilder
-function CollisionEntityBuilder:with_phase(table) end
+function CollisionEntityBuilder:with_phase(phase) end
 
 ---Set world position
 ---@param x number

@@ -62,6 +62,15 @@ pub struct RigidBodyData {
     pub forces: Vec<ForceData>,
 }
 
+/// Lua phase callback names (`LuaOnPhaseEntered` / `LuaOnPhaseExited` /
+/// `LuaOnPhaseUpdate`) for spawning.
+#[derive(Debug, Clone, Default)]
+pub struct LuaPhaseCallbacksSpawn {
+    pub entered: Option<String>,
+    pub exited: Option<String>,
+    pub update: Option<String>,
+}
+
 /// Lua timer (`Timer` + `LuaOnTimerFired`) data for spawning.
 #[derive(Debug, Clone, PartialEq)]
 pub struct LuaTimerSpawn {
@@ -421,6 +430,10 @@ pub struct SpawnCmd {
     pub signal_strings: Vec<(String, String)>,
     /// Phase data (initial phase + phase definitions)
     pub phase_data: Option<PhaseData>,
+    /// Initial phase of a core `Phase`
+    pub phase: Option<String>,
+    /// Lua callbacks for the core `Phase`
+    pub lua_phase_callbacks: LuaPhaseCallbacksSpawn,
     /// Has Signals component (even if empty)
     pub has_signals: bool,
     /// StuckTo component data

@@ -577,9 +577,9 @@ fn meta_builder_methods_have_schema_refs() {
         end
 
         -- Check schema references
-        local p1 = find_param("with_phase", "table")
-        assert(p1.schema == "PhaseDefinition",
-            "with_phase.table should have schema PhaseDefinition, got " .. tostring(p1.schema))
+        local p1 = find_param("with_phase", "phase")
+        assert(p1.schema == "string|PhaseDefinition",
+            "with_phase.phase should have schema string|PhaseDefinition, got " .. tostring(p1.schema))
 
         local p2 = find_param("with_particle_emitter", "table")
         assert(p2.schema == "ParticleEmitterConfig",

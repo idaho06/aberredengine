@@ -47,7 +47,7 @@ impl LuaRuntime {
         let builder_methods = collect_builder_meta();
 
         let schema_refs: &[(&str, &str, &str)] = &[
-            ("with_phase", "table", "PhaseDefinition"),
+            ("with_phase", "phase", "string|PhaseDefinition"),
             ("with_particle_emitter", "table", "ParticleEmitterConfig"),
             (
                 "with_animation_rule",

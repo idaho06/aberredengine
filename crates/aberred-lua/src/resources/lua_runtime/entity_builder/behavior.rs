@@ -99,9 +99,18 @@ pub(super) fn register<M: LuaUserDataMethods<LuaEntityBuilder>>(
         methods,
         meta,
         "with_phase",
-        "Add phase state machine\n\nExample:\n```lua\nengine.spawn()\n    :with_phase({\n        initial = \"idle\",\n        phases = {\n            idle = {\n                on_enter = \"on_idle_enter\",\n                on_update = \"on_idle_update\",\n                on_exit = \"on_idle_exit\"\n            },\n            moving = { on_enter = \"on_moving_enter\" }\n        }\n    })\n    :build()\n```",
-        [("table", "table")],
-        |_, this: &mut LuaEntityBuilder, table: LuaTable| {
+        "Add a phase state machine. A string is the initial phase of a core `Phase`, driven by `:with_lua_phase_entered/exited/update` callbacks. A table is the legacy per-phase callback form.\n\nExample:\n```lua\nengine.spawn()\n    :with_phase({\n        initial = \"idle\",\n        phases = {\n            idle = {\n                on_enter = \"on_idle_enter\",\n                on_update = \"on_idle_update\",\n                on_exit = \"on_idle_exit\"\n            },\n            moving = { on_enter = \"on_moving_enter\" }\n        }\n    })\n    :build()\n```",
+        [("phase", "string|table")],
+        |_, this: &mut LuaEntityBuilder, phase: mlua::Either<String, LuaTable>| {
+            let table = match phase {
+                mlua::Either::Left(initial) => {
+                    this.cmd.phase = Some(initial);
+                    this.cmd.phase_data = None;
+                    return Ok(());
+                }
+                mlua::Either::Right(table) => table,
+            };
+            this.cmd.phase = None;
             let initial: String = table.get("initial")?;
             let mut phases = rustc_hash::FxHashMap::default();
             if let Ok(phases_table) = table.get::<LuaTable>("phases") {
@@ -116,6 +125,42 @@ pub(super) fn register<M: LuaUserDataMethods<LuaEntityBuilder>>(
                 }
             }
             this.cmd.phase_data = Some(PhaseData { initial, phases });
+            Ok(())
+        }
+    );
+
+    builder_method!(
+        methods,
+        meta,
+        "with_lua_phase_entered",
+        "Call a Lua function `fn(ctx, input)` each time the core `Phase` enters a phase (branch on `ctx.phase`; `ctx.previous_phase` is the phase left). A returned phase name requests that phase.",
+        [("callback", "string")],
+        |_, this: &mut LuaEntityBuilder, callback: String| {
+            this.cmd.lua_phase_callbacks.entered = Some(callback);
+            Ok(())
+        }
+    );
+
+    builder_method!(
+        methods,
+        meta,
+        "with_lua_phase_exited",
+        "Call a Lua function `fn(ctx)` each time the core `Phase` exits a phase (`ctx.phase` is the new phase, `ctx.previous_phase` the exited one)",
+        [("callback", "string")],
+        |_, this: &mut LuaEntityBuilder, callback: String| {
+            this.cmd.lua_phase_callbacks.exited = Some(callback);
+            Ok(())
+        }
+    );
+
+    builder_method!(
+        methods,
+        meta,
+        "with_lua_phase_update",
+        "Call a Lua function `fn(ctx, input, dt)` once per sim tick while playing, for the core `Phase`. A returned phase name requests that phase.",
+        [("callback", "string")],
+        |_, this: &mut LuaEntityBuilder, callback: String| {
+            this.cmd.lua_phase_callbacks.update = Some(callback);
             Ok(())
         }
     );
@@ -471,6 +516,39 @@ mod tests {
             cmd.signal_binding,
             Some(("score".to_string(), Some("Score: {}".to_string())))
         );
+    }
+
+    #[test]
+    fn with_phase_string_sets_core_phase() {
+        let cmd = built(":with_phase('idle')");
+        assert_eq!(cmd.phase.as_deref(), Some("idle"));
+        assert!(cmd.phase_data.is_none());
+    }
+
+    #[test]
+    fn with_phase_last_form_wins() {
+        let cmd = built(":with_phase('idle'):with_phase({ initial = 'run' })");
+        assert!(cmd.phase.is_none());
+        assert_eq!(cmd.phase_data.unwrap().initial, "run");
+        let cmd = built(":with_phase({ initial = 'run' }):with_phase('idle')");
+        assert_eq!(cmd.phase.as_deref(), Some("idle"));
+        assert!(cmd.phase_data.is_none());
+    }
+
+    #[test]
+    fn with_phase_rejects_other_types() {
+        assert_runtime_error("engine.spawn():with_phase(true)", "in method 'with_phase'");
+    }
+
+    #[test]
+    fn with_lua_phase_callbacks_set_their_fields() {
+        let cmd = built(
+            ":with_lua_phase_entered('on_in'):with_lua_phase_exited('on_out'):with_lua_phase_update('on_tick')",
+        );
+        let callbacks = cmd.lua_phase_callbacks;
+        assert_eq!(callbacks.entered.as_deref(), Some("on_in"));
+        assert_eq!(callbacks.exited.as_deref(), Some("on_out"));
+        assert_eq!(callbacks.update.as_deref(), Some("on_tick"));
     }
 
     #[test]
