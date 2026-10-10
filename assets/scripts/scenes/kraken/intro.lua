@@ -34,14 +34,8 @@ local function on_create_tentacles_enter(ctx, input)
             :with_position(x, y)
             :with_scale(0.80, 0.80)
             :with_signal_integer("depth", 10)
-            :with_phase({
-                initial = "spawn_tentacle",
-                phases = {
-                    spawn_tentacle = {
-                        on_enter = "on_enter_spawn_tentacle",
-                    }
-                }
-            })
+            :with_phase("spawn_tentacle")
+            :with_lua_phase_entered("on_enter_spawn_tentacle")
             :build()
     end
 end
@@ -65,14 +59,8 @@ local function on_enter_spawn_tentacle(ctx, input)
             :with_position(0, -distance)
             :with_scale(0.80, 0.80)
             :with_signal_integer("depth", depth - 1)
-            :with_phase({
-                initial = "spawn_tentacle",
-                phases = {
-                    spawn_tentacle = {
-                        on_enter = "on_enter_spawn_tentacle",
-                    }
-                }
-            })
+            :with_phase("spawn_tentacle")
+            :with_lua_phase_entered("on_enter_spawn_tentacle")
             :with_tween_rotation(16, -16, 5)
             :with_tween_rotation_easing("quad_in_out")
             :with_tween_rotation_loop("ping_pong")
@@ -114,17 +102,8 @@ function M.spawn()
         :with_sprite("kraken-mouth", 256, 256, 128, 128)
         :with_zindex(0)
         :with_position(0, 0)
-        :with_phase({
-            initial = "create_tentacles",
-            phases = {
-                create_tentacles = {
-                    on_enter = "on_create_tentacles_enter",
-                    -- on_update = "on_create_tentacles_update",
-                    -- on_exit = "on_create_tentacles_exit"
-                },
-                --moving = { on_enter = "on_moving_enter" }
-            }
-        })
+        :with_phase("create_tentacles")
+        :with_lua_phase_entered("on_create_tentacles_enter")
         :with_scale(0.5, 0.5)
         :with_rotation(0)
         :with_tween_rotation(-16, 16, 5)
