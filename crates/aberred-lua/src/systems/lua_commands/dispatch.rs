@@ -22,6 +22,7 @@ use mlua::prelude::{Lua, LuaResult, LuaTable};
 
 use crate::components::luaphase::LuaPhase;
 use crate::resources::lua_runtime::{LuaPhaseSnapshot, LuaRuntime, PhaseCmd};
+use aberred_core::components::phase::Phase;
 use aberred_core::protocol::audio::AudioCmd;
 use aberred_core::resources::animationstore::AnimationStore;
 use aberred_core::resources::input::InputState;
@@ -43,6 +44,7 @@ pub struct LuaDispatch<'w, 's> {
     pub time: Res<'w, WorldTime>,
     pub ctx_queries: ContextQueries<'w, 's>,
     pub cmd_queries: EntityCmdQueries<'w, 's>,
+    pub phase_query: Query<'w, 's, &'static Phase>,
     pub luaphase_query: Query<'w, 's, (Entity, &'static mut LuaPhase)>,
     pub world_signals: ResMut<'w, WorldSignals>,
     pub lua_runtime: NonSend<'w, LuaRuntime>,
@@ -58,7 +60,8 @@ pub struct LuaDispatch<'w, 's> {
 /// them independently, so this is one axis, not two.
 #[derive(Clone, Copy)]
 pub enum CallShape {
-    /// Resolve `LuaPhaseSnapshot`, build the input table, call `(ctx, input)`
+    /// Resolve the phase snapshot (core `Phase`, else `LuaPhase`), build the
+    /// input table, call `(ctx, input)`
     /// — timer/anim/tween path.
     CtxAndInput,
     /// Skip the phase snapshot, no input table; call `(ctx)` — `lua_setup` path.
@@ -108,10 +111,16 @@ pub fn call_entity_callback(
 
     let lua_phase_snapshot = match call_shape {
         CallShape::CtxAndInput => p
-            .luaphase_query
+            .phase_query
             .get(entity)
             .ok()
-            .map(|(_, phase)| LuaPhaseSnapshot::from(phase)),
+            .map(LuaPhaseSnapshot::from)
+            .or_else(|| {
+                p.luaphase_query
+                    .get(entity)
+                    .ok()
+                    .map(|(_, phase)| LuaPhaseSnapshot::from(phase))
+            }),
         CallShape::CtxOnly => None,
     };
 

@@ -41,6 +41,7 @@ mod tests {
     use super::*;
     use crate::resources::lua_runtime::LuaRuntime;
     use crate::systems::lua_commands::init_dispatch_resources;
+    use aberred_core::components::phase::Phase;
     use aberred_core::components::timer::TimerMode;
 
     fn setup_world() -> World {
@@ -106,6 +107,32 @@ mod tests {
         world.flush();
 
         assert!(world.get_entity(entity).is_err());
+    }
+
+    #[test]
+    fn timer_ctx_reads_core_phase() {
+        let mut world = setup_world();
+        world
+            .non_send::<LuaRuntime>()
+            .lua()
+            .load("function on_phase_fire(ctx) seen_phase = ctx.phase; seen_time = ctx.time_in_phase end")
+            .exec()
+            .expect("lua load");
+        let entity = world
+            .spawn((
+                LuaOnTimerFired::timer(1.0, "on_phase_fire", TimerMode::Repeat),
+                Phase::new("idle"),
+            ))
+            .id();
+
+        world.trigger(TimerFired { entity });
+        world.flush();
+
+        let globals = world.non_send::<LuaRuntime>().lua().globals();
+        let phase: Option<String> = globals.get("seen_phase").expect("seen_phase");
+        let time: Option<f32> = globals.get("seen_time").expect("seen_time");
+        assert_eq!(phase.as_deref(), Some("idle"));
+        assert_eq!(time, Some(0.0));
     }
 
     #[test]
