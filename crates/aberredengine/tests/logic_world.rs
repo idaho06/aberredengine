@@ -1490,36 +1490,112 @@ fn lua_collision_rules_join_the_core_rule_index() {
     assert_eq!(index.bucket("b", "a"), Some(&[rule][..]));
 }
 
-/// A core-`Phase` entity's Lua enter/update/exit callbacks run through the
-/// real sim schedule: enter on the first tick, an update return applied on
-/// the next tick as exit then enter.
+/// A Lua script spawns a core-`Phase` entity with the builders: the spawn
+/// drains at the end of its tick, the initial enter fires at the start of the
+/// next, and an update return applies on the tick after (exit, then enter).
 #[cfg(feature = "lua")]
 #[test]
-fn lua_phase_callbacks_run_on_core_phase() {
-    use aberredengine::lua::components::lua_on_phase::{
-        LuaOnPhaseEntered, LuaOnPhaseExited, LuaOnPhaseUpdate,
-    };
-
+fn lua_spawned_core_phase_entity_runs_its_lifecycle() {
     let mut tw = lua_script_world(
-        "phase_callbacks",
+        "phase_builders",
         r#"
 function on_enter(ctx) table.insert(LOG, "enter:" .. ctx.phase .. ":" .. tostring(ctx.previous_phase)) end
 function on_exit(ctx) table.insert(LOG, "exit:" .. ctx.previous_phase .. "->" .. ctx.phase) end
-function on_update(ctx) if ctx.phase == "idle" then return "run" end end
+function on_update(ctx, input, dt)
+    table.insert(LOG, "update:" .. ctx.phase)
+    if ctx.phase == "idle" then return "run" end
+end
 "#,
     );
-    tw.world.spawn((
-        Phase::new("idle"),
-        LuaOnPhaseEntered::new("on_enter"),
-        LuaOnPhaseExited::new("on_exit"),
-        LuaOnPhaseUpdate::new("on_update"),
-    ));
+    exec_lua(
+        &mut tw,
+        "engine.spawn():with_phase('idle'):with_lua_phase_entered('on_enter')\
+         :with_lua_phase_exited('on_exit'):with_lua_phase_update('on_update'):build()",
+    );
 
     tw.tick(1, DT);
-    assert_eq!(take_lua_log(&mut tw), ["enter:idle:nil"]);
+    assert!(
+        take_lua_log(&mut tw).is_empty(),
+        "spawned at the end of the tick"
+    );
 
     tw.tick(1, DT);
-    assert_eq!(take_lua_log(&mut tw), ["exit:idle->run", "enter:run:idle"]);
+    assert_eq!(take_lua_log(&mut tw), ["enter:idle:nil", "update:idle"]);
+
+    tw.tick(1, DT);
+    assert_eq!(
+        take_lua_log(&mut tw),
+        ["exit:idle->run", "enter:run:idle", "update:run"]
+    );
+}
+
+/// `engine.collision_phase_transition` from a collision callback sets
+/// `Phase.next`; core `phase_system` applies it at the start of the next tick.
+#[cfg(feature = "lua")]
+#[test]
+fn lua_collision_phase_transition_applies_next_tick() {
+    use aberredengine::lua::components::lua_on_phase::LuaOnPhaseEntered;
+
+    let mut tw = lua_script_world(
+        "collision_phase",
+        r#"
+function on_enter(ctx) table.insert(LOG, "enter:" .. ctx.phase) end
+function on_hit(ctx)
+    if not hit then
+        hit = true
+        engine.collision_phase_transition(ctx.a.id, "hurt")
+        table.insert(LOG, "hit")
+    end
+end
+"#,
+    );
+    spawn_lua_rule(&mut tw, Some("on_hit"), "");
+    let a = spawn_box(
+        &mut tw,
+        "a",
+        0.0,
+        (Phase::new("idle"), LuaOnPhaseEntered::new("on_enter")),
+    );
+    spawn_box(&mut tw, "b", 5.0, ());
+
+    tw.tick(1, DT);
+    assert_eq!(take_lua_log(&mut tw), ["enter:idle", "hit"]);
+    let phase = tw.world.get::<Phase>(a).unwrap();
+    assert_eq!(phase.current, "idle");
+    assert_eq!(phase.next.as_deref(), Some("hurt"));
+
+    tw.tick(1, DT);
+    assert_eq!(take_lua_log(&mut tw), ["enter:hurt"]);
+    assert_eq!(tw.world.get::<Phase>(a).unwrap().current, "hurt");
+}
+
+/// Lua's `engine.phase_transition` drives a Rust-spawned `Phase` entity, whose
+/// Rust observers see the transition.
+#[cfg(feature = "lua")]
+#[test]
+fn lua_phase_transition_drives_a_rust_phase_entity() {
+    let mut tw = lua_script_world("rust_phase", "-- empty game script\n");
+    tw.world.init_resource::<PhaseLog>();
+    tw.world.add_observer(log_phase_entered);
+    tw.world.add_observer(log_phase_exited);
+    let entity = tw.world.spawn(Phase::new("idle")).id();
+    tw.tick(1, DT);
+    assert_eq!(take_phase_log(&mut tw), ["entered:idle"]);
+
+    exec_lua(
+        &mut tw,
+        &format!("engine.phase_transition({}, 'run')", entity.to_bits()),
+    );
+    // The queued command drains in Bookkeeping, after this tick's phase_system.
+    tw.tick(1, DT);
+    assert!(take_phase_log(&mut tw).is_empty());
+    assert_eq!(
+        tw.world.get::<Phase>(entity).unwrap().next.as_deref(),
+        Some("run")
+    );
+
+    tw.tick(1, DT);
+    assert_eq!(take_phase_log(&mut tw), ["exited:idle", "entered:run"]);
 }
 
 /// Lua game running `script_body`, after `LOG = {}` (a global table its
