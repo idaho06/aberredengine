@@ -44,6 +44,7 @@ use crate::systems::lua_commands::{
     ContextQueries, DrainScope, EffectCmdBufs, EntityCmdQueries, build_entity_context,
     drain_and_process_effect_commands, drain_and_process_phase_commands,
 };
+use aberred_core::components::phase::Phase;
 use aberred_core::protocol::audio::AudioCmd;
 use aberred_core::resources::animationstore::AnimationStore;
 use aberred_core::resources::input::InputState;
@@ -295,6 +296,7 @@ impl LuaPhaseRunner<'_, '_, '_> {
 pub fn lua_phase_system(
     mut commands: Commands,
     mut query: Query<(Entity, &mut LuaPhase)>,
+    mut core_phases: Query<&mut Phase>,
     // Bundled read-only queries for context building
     ctx_queries: ContextQueries,
     // Bundled mutable queries for command processing
@@ -349,6 +351,7 @@ pub fn lua_phase_system(
         &lua_runtime,
         DrainScope::Regular,
         &mut phase_buf,
+        &mut core_phases,
         &mut query,
     );
 

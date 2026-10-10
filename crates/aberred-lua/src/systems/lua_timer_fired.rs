@@ -136,6 +136,30 @@ mod tests {
     }
 
     #[test]
+    fn phase_transition_from_a_timer_targets_core_phase() {
+        let mut world = setup_world();
+        world
+            .non_send::<LuaRuntime>()
+            .lua()
+            .load("function on_phase_fire(ctx) engine.phase_transition(ctx.id, \"run\") end")
+            .exec()
+            .expect("lua load");
+        let entity = world
+            .spawn((
+                LuaOnTimerFired::timer(1.0, "on_phase_fire", TimerMode::Repeat),
+                Phase::new("idle"),
+            ))
+            .id();
+
+        world.trigger(TimerFired { entity });
+        world.flush();
+
+        let phase = world.get::<Phase>(entity).expect("Phase");
+        assert_eq!(phase.next.as_deref(), Some("run"));
+        assert_eq!(phase.current, "idle", "applied by phase_system, not here");
+    }
+
+    #[test]
     fn replacing_the_timer_keeps_its_lua_callback() {
         let mut world = setup_world();
         let entity = spawn_lua_timer(&mut world);

@@ -44,7 +44,7 @@ pub struct LuaDispatch<'w, 's> {
     pub time: Res<'w, WorldTime>,
     pub ctx_queries: ContextQueries<'w, 's>,
     pub cmd_queries: EntityCmdQueries<'w, 's>,
-    pub phase_query: Query<'w, 's, &'static Phase>,
+    pub phase_query: Query<'w, 's, &'static mut Phase>,
     pub luaphase_query: Query<'w, 's, (Entity, &'static mut LuaPhase)>,
     pub world_signals: ResMut<'w, WorldSignals>,
     pub lua_runtime: NonSend<'w, LuaRuntime>,
@@ -196,6 +196,7 @@ pub(crate) fn drain_dispatch_commands(p: &mut LuaDispatch, scope: DrainScope) {
         &p.lua_runtime,
         scope,
         &mut p.phase_buf,
+        &mut p.phase_query,
         &mut p.luaphase_query,
     );
     drain_and_process_effect_commands(

@@ -62,6 +62,7 @@ use aberred_core::components::globaltransform2d::GlobalTransform2D;
 use aberred_core::components::guiinteractable::GuiInteractable;
 use aberred_core::components::guiprogressbar::GuiProgressBar;
 use aberred_core::components::mapposition::MapPosition;
+use aberred_core::components::phase::Phase;
 use aberred_core::components::rigidbody::RigidBody;
 use aberred_core::components::rotation::Rotation;
 use aberred_core::components::scale::Scale;
@@ -176,14 +177,15 @@ pub(crate) fn drain_and_process_phase_commands(
     lua_runtime: &LuaRuntime,
     scope: DrainScope,
     buf: &mut Vec<PhaseCmd>,
-    query: &mut Query<(Entity, &mut LuaPhase)>,
+    phase_query: &mut Query<&mut Phase>,
+    luaphase_query: &mut Query<(Entity, &mut LuaPhase)>,
 ) {
     match scope {
         DrainScope::Regular => lua_runtime.drain_phase_commands_into(buf),
         DrainScope::Collision => lua_runtime.drain_collision_phase_commands_into(buf),
     }
     for cmd in buf.drain(..) {
-        process_phase_command(query, cmd);
+        process_phase_command(phase_query, luaphase_query, cmd);
     }
 }
 

@@ -19,6 +19,7 @@ use crate::resources::lua_runtime::{
     PhaseCmd, RenderCmd,
 };
 use aberred_core::components::persistent::SceneCleanup;
+use aberred_core::components::phase::Phase;
 use aberred_core::protocol::audio::AudioCmd;
 use aberred_core::protocol::render_assets::RenderAssetCmd;
 use aberred_core::resources::animationstore::AnimationStore;
@@ -74,6 +75,7 @@ pub struct GameSceneState<'w> {
 #[derive(SystemParam)]
 pub struct EntityProcessing<'w, 's> {
     pub cmd_queries: EntityCmdQueries<'w, 's>,
+    pub phases: Query<'w, 's, &'static mut Phase>,
     pub luaphase: Query<'w, 's, (Entity, &'static mut LuaPhase)>,
 }
 
@@ -226,6 +228,7 @@ fn drain_common_commands(
         lua_runtime,
         DrainScope::Regular,
         &mut bufs.phase,
+        &mut entities.phases,
         &mut entities.luaphase,
     );
 

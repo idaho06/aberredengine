@@ -16,6 +16,7 @@ use crate::resources::lua_runtime::{
     InputCmd, PhaseCmd, RenderCmd, SignalCmd,
 };
 use crate::systems::luaphase::queue_phase_transition;
+use aberred_core::components::phase::Phase;
 use aberred_core::components::shadow::Shadow;
 use aberred_core::math::{Color, Rect};
 use aberred_core::protocol::audio::AudioCmd;
@@ -159,12 +160,21 @@ pub fn process_camera_command(commands: &mut Commands, cmd: CameraCmd) {
     }
 }
 
-/// Process a single phase command from Lua and apply it to the appropriate entity.
-pub fn process_phase_command(phase_query: &mut Query<(Entity, &mut LuaPhase)>, cmd: PhaseCmd) {
+/// Process a single phase command from Lua: set the entity's core `Phase.next`,
+/// or, for an entity without one, its `LuaPhase`'s.
+pub fn process_phase_command(
+    phase_query: &mut Query<&mut Phase>,
+    luaphase_query: &mut Query<(Entity, &mut LuaPhase)>,
+    cmd: PhaseCmd,
+) {
     match cmd {
         PhaseCmd::TransitionTo { entity_id, phase } => {
             if let Some(entity) = super::entity_cmd::resolve_entity(entity_id) {
-                queue_phase_transition(phase_query, entity, phase);
+                if let Ok(mut core_phase) = phase_query.get_mut(entity) {
+                    core_phase.next = Some(phase);
+                } else {
+                    queue_phase_transition(luaphase_query, entity, phase);
+                }
             }
         }
     }
