@@ -671,11 +671,26 @@ impl bevy_ecs::system::EntityCommand for ResetAnimationCommand {
     }
 }
 
+/// Restart a cloned core [`Phase`] in its current phase, so the clone fires
+/// its own initial `PhaseEntered` (`previous: None`) on the next `phase_system` run.
+struct ResetPhaseCommand;
+
+impl bevy_ecs::system::EntityCommand for ResetPhaseCommand {
+    type Out = ();
+
+    fn apply(self, mut entity: bevy_ecs::world::EntityWorldMut<'_>) {
+        if let Some(mut phase) = entity.get_mut::<Phase>() {
+            *phase = Phase::new(std::mem::take(&mut phase.current));
+        }
+    }
+}
+
 /// Process a clone command from Lua and create a cloned entity.
 ///
 /// Clones an existing entity (looked up by [`WorldSignals`] key) and applies
 /// component overrides from the [`CloneCmd`]. Animation is always reset to frame 0
-/// unless an animation override is explicitly provided.
+/// unless an animation override is explicitly provided. A core [`Phase`] restarts
+/// in its current phase (or the override's), firing its initial enter.
 pub fn process_clone_command(
     commands: &mut Commands,
     cmd: CloneCmd,
@@ -719,6 +734,8 @@ pub fn process_clone_command(
     if !has_animation_override {
         entity_commands.queue(ResetAnimationCommand);
     }
+    // 6. Restart the cloned phase so the clone fires its own initial enter
+    entity_commands.queue(ResetPhaseCommand);
 }
 
 #[cfg(test)]
@@ -730,7 +747,11 @@ mod tests {
     use aberred_core::components::animation::{CmpOp, Condition};
     use aberred_core::components::timer::Timer;
     use aberred_core::components::tween::{Easing, LoopMode, Tween};
+    use aberred_core::events::phase::PhaseEntered;
     use aberred_core::resources::uniformvalue::UniformValue;
+    use aberred_core::resources::worldtime::WorldTime;
+    use aberred_core::systems::phase::phase_system;
+    use bevy_ecs::system::RunSystemOnce;
 
     #[test]
     fn clone_of_despawned_source_skips_and_cleans_registry() {
@@ -761,6 +782,70 @@ mod tests {
             world_signals.get_entity("tpl").is_none(),
             "stale registry entry should be removed"
         );
+    }
+
+    #[derive(Resource, Default)]
+    struct EnterLog(Vec<(Entity, String, Option<String>)>);
+
+    /// A source already in "run", plus a log of every `PhaseEntered` after
+    /// the source's own enters.
+    fn phase_source(world: &mut World) -> Entity {
+        world.init_resource::<WorldTime>();
+        world.init_resource::<EnterLog>();
+        world.add_observer(|ev: On<PhaseEntered>, mut log: ResMut<EnterLog>| {
+            log.0.push((
+                ev.entity,
+                ev.name.to_string(),
+                ev.previous.as_deref().map(str::to_owned),
+            ));
+        });
+        let mut phase = Phase::new("idle");
+        phase.next = Some("run".into());
+        let source = world.spawn(phase).id();
+        world.run_system_once(phase_system).unwrap();
+        world.resource_mut::<EnterLog>().0.clear();
+        source
+    }
+
+    #[test]
+    fn cloned_phase_entity_fires_its_initial_enter() {
+        let mut world = World::new();
+        let source = phase_source(&mut world);
+        let mut world_signals = WorldSignals::default();
+        world_signals.set_entity("tpl", source);
+
+        let clone = clone_tpl(&mut world, &mut world_signals, SpawnCmd::default());
+        world.run_system_once(phase_system).unwrap();
+
+        let entered = &world.resource::<EnterLog>().0;
+        assert_eq!(
+            entered,
+            &[(clone, "run".to_string(), None)],
+            "only the clone enters"
+        );
+        assert_eq!(world.get::<Phase>(clone).unwrap().current, "run");
+    }
+
+    #[test]
+    fn cloned_phase_override_starts_in_the_override() {
+        let mut world = World::new();
+        let source = phase_source(&mut world);
+        let mut world_signals = WorldSignals::default();
+        world_signals.set_entity("tpl", source);
+
+        let clone = clone_tpl(
+            &mut world,
+            &mut world_signals,
+            SpawnCmd {
+                phase: Some("jump".into()),
+                ..SpawnCmd::default()
+            },
+        );
+        world.run_system_once(phase_system).unwrap();
+
+        let entered = &world.resource::<EnterLog>().0;
+        assert_eq!(entered, &[(clone, "jump".to_string(), None)]);
+        assert_eq!(world.get::<Phase>(clone).unwrap().current, "jump");
     }
 
     #[test]
