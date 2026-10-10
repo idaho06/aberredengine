@@ -2,7 +2,7 @@ use bevy_ecs::prelude::*;
 use mlua::prelude::{LuaResult, LuaTable};
 
 use crate::resources::lua_runtime::{
-    AnimationSnapshot, EntitySnapshot, LuaPhaseSnapshot, LuaRuntime, LuaTimerSnapshot,
+    AnimationSnapshot, EntitySnapshot, LuaRuntime, LuaTimerSnapshot, PhaseSnapshot,
     RigidBodySnapshot, SpriteSnapshot, build_entity_context_pooled,
 };
 
@@ -11,15 +11,15 @@ use super::{ContextQueries, EntityCmdQueries};
 /// Build entity context for Lua callbacks using pooled tables.
 ///
 /// Gathers all component data for the given entity and builds a Lua context table.
-/// The `lua_phase` and `previous_phase` arguments are caller-supplied since phase
-/// context is obtained differently by the phase system (direct borrow) vs the
-/// timer system (ECS query).
+/// The `phase` and `previous_phase` arguments are caller-supplied: each
+/// dispatch site reads the core `Phase` (or skips it) and knows the
+/// `previous_phase` its callback should see.
 pub(crate) fn build_entity_context(
     lua_runtime: &LuaRuntime,
     entity: Entity,
     ctx_queries: &ContextQueries,
     cmd_queries: &EntityCmdQueries,
-    lua_phase: Option<LuaPhaseSnapshot<'_>>,
+    phase: Option<PhaseSnapshot<'_>>,
     previous_phase: Option<&str>,
 ) -> LuaResult<LuaTable> {
     let lua = lua_runtime.lua();
@@ -119,7 +119,7 @@ pub(crate) fn build_entity_context(
         sprite,
         animation,
         signals: signals_ref,
-        lua_phase,
+        phase,
         lua_timer,
         previous_phase,
         world_pos,

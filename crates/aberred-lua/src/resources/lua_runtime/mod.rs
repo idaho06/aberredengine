@@ -48,7 +48,7 @@ mod stub_meta;
 // Re-export all public types for backwards compatibility
 pub use commands::*;
 pub use context::{
-    AnimationSnapshot, EntitySnapshot, LuaPhaseSnapshot, LuaTimerSnapshot, RigidBodySnapshot,
+    AnimationSnapshot, EntitySnapshot, LuaTimerSnapshot, PhaseSnapshot, RigidBodySnapshot,
     SpriteSnapshot, build_entity_context_pooled,
 };
 pub(crate) use context::{OccMask, clear_table, populate_entity_signals, set_opt};

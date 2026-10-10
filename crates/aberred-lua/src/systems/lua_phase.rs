@@ -11,7 +11,7 @@ use log::{error, warn};
 use mlua::prelude::LuaValue;
 
 use crate::components::lua_on_phase::{LuaOnPhaseEntered, LuaOnPhaseExited, LuaOnPhaseUpdate};
-use crate::resources::lua_runtime::LuaPhaseSnapshot;
+use crate::resources::lua_runtime::PhaseSnapshot;
 use crate::systems::lua_commands::{
     CallShape, DrainScope, LuaDispatch, build_ctx_or_log, dispatch_and_drain_returning,
     drain_dispatch_commands, refresh_signal_cache, request_phase,
@@ -106,7 +106,7 @@ pub fn lua_phase_update_system(
             &p,
             entity,
             "PhaseUpdate",
-            Some(LuaPhaseSnapshot::from(phase)),
+            Some(PhaseSnapshot::from(phase)),
             None,
         ) else {
             continue;

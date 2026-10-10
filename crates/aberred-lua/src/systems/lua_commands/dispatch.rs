@@ -20,7 +20,7 @@ use bevy_ecs::system::SystemParam;
 use log::error;
 use mlua::prelude::{Lua, LuaResult, LuaTable, LuaValue};
 
-use crate::resources::lua_runtime::{LuaPhaseSnapshot, LuaRuntime, PhaseCmd};
+use crate::resources::lua_runtime::{LuaRuntime, PhaseCmd, PhaseSnapshot};
 use aberred_core::components::phase::Phase;
 use aberred_core::protocol::audio::AudioCmd;
 use aberred_core::resources::animationstore::AnimationStore;
@@ -134,13 +134,13 @@ fn call_entity_callback_value(
         None
     };
 
-    let lua_phase_snapshot = if call_shape.wants_phase() {
-        p.phase_query.get(entity).ok().map(LuaPhaseSnapshot::from)
+    let phase = if call_shape.wants_phase() {
+        p.phase_query.get(entity).ok().map(PhaseSnapshot::from)
     } else {
         None
     };
 
-    let ctx_table = build_ctx_or_log(p, entity, label, lua_phase_snapshot, previous_phase)?;
+    let ctx_table = build_ctx_or_log(p, entity, label, phase, previous_phase)?;
 
     let result = match input_table {
         Some(input_table) => p.lua_runtime.call_named(callback_name, label, |func| {
@@ -178,7 +178,7 @@ pub(crate) fn build_ctx_or_log(
     p: &LuaDispatch,
     entity: Entity,
     label: &str,
-    lua_phase: Option<LuaPhaseSnapshot<'_>>,
+    phase: Option<PhaseSnapshot<'_>>,
     previous_phase: Option<&str>,
 ) -> Option<LuaTable> {
     match build_entity_context(
@@ -186,7 +186,7 @@ pub(crate) fn build_ctx_or_log(
         entity,
         &p.ctx_queries,
         &p.cmd_queries,
-        lua_phase,
+        phase,
         previous_phase,
     ) {
         Ok(ctx) => Some(ctx),

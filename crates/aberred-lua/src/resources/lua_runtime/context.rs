@@ -100,12 +100,12 @@ pub struct AnimationSnapshot<'a> {
 
 /// Snapshot of a core `Phase` for context building.
 #[derive(Debug)]
-pub struct LuaPhaseSnapshot<'a> {
+pub struct PhaseSnapshot<'a> {
     pub current: &'a str,
     pub time_in_phase: f32,
 }
 
-impl<'a> From<&'a aberred_core::components::phase::Phase> for LuaPhaseSnapshot<'a> {
+impl<'a> From<&'a aberred_core::components::phase::Phase> for PhaseSnapshot<'a> {
     fn from(phase: &'a aberred_core::components::phase::Phase) -> Self {
         Self {
             current: phase.current.as_str(),
@@ -136,7 +136,7 @@ pub struct EntitySnapshot<'a> {
     pub sprite: Option<SpriteSnapshot<'a>>,
     pub animation: Option<AnimationSnapshot<'a>>,
     pub signals: Option<&'a Signals>,
-    pub lua_phase: Option<LuaPhaseSnapshot<'a>>,
+    pub phase: Option<PhaseSnapshot<'a>>,
     pub lua_timer: Option<LuaTimerSnapshot<'a>>,
     pub previous_phase: Option<&'a str>,
     pub world_pos: Option<(f32, f32)>,
@@ -429,7 +429,7 @@ pub fn build_entity_context_pooled<'a>(
     set_opt!(
         tables.ctx,
         ["phase", "time_in_phase"],
-        snapshot.lua_phase.as_ref(),
+        snapshot.phase.as_ref(),
         phase,
         BIT_PHASE,
         mask,
@@ -555,7 +555,7 @@ mod tests {
             sprite: None,
             animation: None,
             signals: Some(signals),
-            lua_phase: None,
+            phase: None,
             lua_timer: None,
             previous_phase: None,
             world_pos: None,
@@ -590,7 +590,7 @@ mod tests {
                 elapsed: 0.0,
             }),
             signals: Some(signals),
-            lua_phase: Some(LuaPhaseSnapshot {
+            phase: Some(PhaseSnapshot {
                 current: "idle",
                 time_in_phase: 1.0,
             }),
@@ -732,7 +732,7 @@ mod tests {
             frame_index: 1,
             elapsed: 0.1,
         };
-        let phase_snap = LuaPhaseSnapshot {
+        let phase_snap = PhaseSnapshot {
             current: phase.as_str(),
             time_in_phase: 2.5,
         };
@@ -754,7 +754,7 @@ mod tests {
             sprite: Some(sprite_snap),
             animation: Some(anim_snap),
             signals: None,
-            lua_phase: Some(phase_snap),
+            phase: Some(phase_snap),
             lua_timer: Some(timer_snap),
             previous_phase: None,
             world_pos: None,
