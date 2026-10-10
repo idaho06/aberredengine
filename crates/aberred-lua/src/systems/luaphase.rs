@@ -44,6 +44,7 @@ use crate::systems::lua_commands::{
     ContextQueries, DrainScope, EffectCmdBufs, EntityCmdQueries, build_entity_context,
     drain_and_process_effect_commands, drain_and_process_phase_commands,
 };
+use crate::systems::lua_phase::phase_from_return;
 use aberred_core::components::phase::Phase;
 use aberred_core::protocol::audio::AudioCmd;
 use aberred_core::resources::animationstore::AnimationStore;
@@ -51,7 +52,7 @@ use aberred_core::resources::input::InputState;
 use aberred_core::resources::systemsstore::SystemsStore;
 use aberred_core::resources::worldsignals::WorldSignals;
 use aberred_core::resources::worldtime::WorldTime;
-use log::{error, warn};
+use log::error;
 
 fn build_phase_context(
     lua_runtime: &LuaRuntime,
@@ -72,31 +73,6 @@ fn build_phase_context(
     )
 }
 
-/// Process the return value from a phase callback.
-/// Returns Some(phase_name) if a valid transition was requested (different from current phase).
-fn process_callback_return(result: LuaValue, current_phase: &str, fn_name: &str) -> Option<String> {
-    match result {
-        LuaValue::String(s) => match s.to_str() {
-            Ok(phase) => {
-                if phase != current_phase {
-                    Some(phase.to_string())
-                } else {
-                    None // Same phase, ignore
-                }
-            }
-            Err(e) => {
-                error!(target: "lua", "Error converting return value in {}(): {}", fn_name, e);
-                None
-            }
-        },
-        LuaValue::Nil => None,
-        _ => {
-            warn!(target: "lua", "Phase callback '{}' returned non-string, non-nil value", fn_name);
-            None
-        }
-    }
-}
-
 /// Call phase enter callback: (ctx, input)
 /// Returns Some(phase_name) if the callback returned a phase transition request.
 fn call_phase_enter(
@@ -109,7 +85,7 @@ fn call_phase_enter(
     let result = lua_runtime.call_named(fn_name, "Phase", |func| {
         func.call::<LuaValue>((ctx_table.clone(), input_table.clone()))
     })?;
-    process_callback_return(result, current_phase, fn_name)
+    phase_from_return(result, current_phase, fn_name)
 }
 
 /// Call phase update callback: (ctx, input, dt)
@@ -125,7 +101,7 @@ fn call_phase_update(
     let result = lua_runtime.call_named(fn_name, "Phase", |func| {
         func.call::<LuaValue>((ctx_table.clone(), input_table.clone(), dt))
     })?;
-    process_callback_return(result, current_phase, fn_name)
+    phase_from_return(result, current_phase, fn_name)
 }
 
 /// Call phase exit callback: (ctx)

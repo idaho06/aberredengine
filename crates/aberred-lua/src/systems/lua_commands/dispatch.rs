@@ -3,11 +3,11 @@
 //! Bundles the params and steps shared by `lua_timer_fired_observer`,
 //! `lua_setup_entity_system`, `lua_animation_finished_observer`,
 //! `lua_tween_finished_observer`, `lua_gui_interactable_click_observer`,
-//! `lua_menu_selection_observer`, and the Lua collision observers: sync the
-//! signal cache, build the callback's arguments (an entity context and
-//! optional input table, or a custom context table), call the named Lua
-//! function, then drain the commands it queued (the collision observers drain
-//! the collision-scoped queues).
+//! `lua_menu_selection_observer`, `lua_phase_entered_observer`, and the Lua
+//! collision observers: sync the signal cache, build the callback's arguments
+//! (an entity context and optional input table, or a custom context table),
+//! call the named Lua function, then drain the commands it queued (the
+//! collision observers drain the collision-scoped queues).
 //!
 //! `lua_phase_system` (`crate::systems::luaphase`) does NOT use this helper —
 //! it must interleave `apply_callback_transitions` between the phase drain
@@ -18,7 +18,7 @@
 use bevy_ecs::prelude::*;
 use bevy_ecs::system::SystemParam;
 use log::error;
-use mlua::prelude::{Lua, LuaResult, LuaTable};
+use mlua::prelude::{Lua, LuaResult, LuaTable, LuaValue};
 
 use crate::components::luaphase::LuaPhase;
 use crate::resources::lua_runtime::{LuaPhaseSnapshot, LuaRuntime, PhaseCmd};
@@ -89,6 +89,21 @@ pub fn call_entity_callback(
     label: &str,
     call_shape: CallShape,
 ) -> bool {
+    call_entity_callback_value(p, entity, callback_name, label, call_shape, None).is_some()
+}
+
+/// [`call_entity_callback`] with a `ctx.previous_phase`, returning the
+/// callback's return value: `None` if input-table or ctx construction failed
+/// (already logged), `Some(Nil)` if the function is missing or errored
+/// (also logged).
+fn call_entity_callback_value(
+    p: &mut LuaDispatch,
+    entity: Entity,
+    callback_name: &str,
+    label: &str,
+    call_shape: CallShape,
+    previous_phase: Option<&str>,
+) -> Option<LuaValue> {
     let input_table = match call_shape {
         CallShape::CtxAndInput => {
             match p
@@ -102,7 +117,7 @@ pub fn call_entity_callback(
                         "{label}: error creating input table for {:?}: {}",
                         entity, e
                     );
-                    return false;
+                    return None;
                 }
             }
         }
@@ -130,7 +145,7 @@ pub fn call_entity_callback(
         &p.ctx_queries,
         &p.cmd_queries,
         lua_phase_snapshot,
-        None,
+        previous_phase,
     ) {
         Ok(ctx) => ctx,
         Err(e) => {
@@ -139,23 +154,20 @@ pub fn call_entity_callback(
                 "{label}: error building context for {:?}: {}",
                 entity, e
             );
-            return false;
+            return None;
         }
     };
 
-    match input_table {
-        Some(input_table) => {
-            p.lua_runtime.call_named(callback_name, label, |func| {
-                func.call::<()>((ctx_table, input_table))
-            });
-        }
-        None => {
-            p.lua_runtime
-                .call_named(callback_name, label, |func| func.call::<()>(ctx_table));
-        }
-    }
+    let result = match input_table {
+        Some(input_table) => p.lua_runtime.call_named(callback_name, label, |func| {
+            func.call::<LuaValue>((ctx_table, input_table))
+        }),
+        None => p.lua_runtime.call_named(callback_name, label, |func| {
+            func.call::<LuaValue>(ctx_table)
+        }),
+    };
 
-    true
+    Some(result.unwrap_or(LuaValue::Nil))
 }
 
 /// Refresh the signal cache, call the named entity callback with
@@ -166,10 +178,31 @@ pub fn call_entity_callback(
 /// `drain_dispatch_commands` directly, since it batches one refresh and one
 /// drain across many entities per invocation instead of one each.
 pub fn dispatch_and_drain(p: &mut LuaDispatch, entity: Entity, callback_name: &str, label: &str) {
+    dispatch_and_drain_returning(p, entity, callback_name, label, None);
+}
+
+/// [`dispatch_and_drain`] that also sets `ctx.previous_phase` (phase
+/// callbacks) and hands the callback's return value back after the drain, so a phase it returns can be applied after (and so beat) any
+/// `engine.phase_transition` the callback queued. `None` if the call did not
+/// happen (ctx or input construction failed).
+pub fn dispatch_and_drain_returning(
+    p: &mut LuaDispatch,
+    entity: Entity,
+    callback_name: &str,
+    label: &str,
+    previous_phase: Option<&str>,
+) -> Option<LuaValue> {
     refresh_signal_cache(p);
-    if call_entity_callback(p, entity, callback_name, label, CallShape::CtxAndInput) {
-        drain_dispatch_commands(p, DrainScope::Regular);
-    }
+    let result = call_entity_callback_value(
+        p,
+        entity,
+        callback_name,
+        label,
+        CallShape::CtxAndInput,
+        previous_phase,
+    )?;
+    drain_dispatch_commands(p, DrainScope::Regular);
+    Some(result)
 }
 
 /// Refresh the signal cache, call the named Lua function with a single

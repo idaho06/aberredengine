@@ -31,8 +31,8 @@ pub(crate) use dispatch::drain_dispatch_commands;
 #[cfg(test)]
 pub(crate) use dispatch::init_dispatch_resources;
 pub use dispatch::{
-    CallShape, LuaDispatch, call_entity_callback, dispatch_and_drain, dispatch_custom_and_drain,
-    refresh_signal_cache,
+    CallShape, LuaDispatch, call_entity_callback, dispatch_and_drain, dispatch_and_drain_returning,
+    dispatch_custom_and_drain, refresh_signal_cache,
 };
 pub use entity_cmd::process_entity_commands;
 pub use processors::{
