@@ -60,6 +60,8 @@ use aberred_render::systems::render_system;
 #[cfg(feature = "lua")]
 use aberred_lua::systems::lua_mapspawn::process_lua_map_commands;
 #[cfg(feature = "lua")]
+use aberred_lua::systems::lua_phase::lua_phase_update_system;
+#[cfg(feature = "lua")]
 use aberred_lua::systems::lua_setup_entity::lua_setup_entity_system;
 #[cfg(feature = "lua")]
 use aberred_lua::systems::luaphase::lua_phase_system;
@@ -450,14 +452,17 @@ impl EngineBuilder {
                     .before(lua_phase_system)
                     .in_set(SimSet::PostCollision),
             );
+            // `LuaPhase` entities first, then core-`Phase` ones: both run Lua
+            // and drain its queues, so their order is fixed.
             sim.add_systems(
-                lua_phase_system
+                (lua_phase_system, lua_phase_update_system)
+                    .chain()
                     .run_if(state_is_playing)
                     .in_set(SimSet::PostCollision),
             );
             sim.add_systems(
                 animation_controller
-                    .after(lua_phase_system)
+                    .after(lua_phase_update_system)
                     .in_set(SimSet::PostCollision),
             );
             // `.after(lua_plugin::update)` on both systems: a queued

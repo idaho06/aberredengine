@@ -1490,6 +1490,38 @@ fn lua_collision_rules_join_the_core_rule_index() {
     assert_eq!(index.bucket("b", "a"), Some(&[rule][..]));
 }
 
+/// A core-`Phase` entity's Lua enter/update/exit callbacks run through the
+/// real sim schedule: enter on the first tick, an update return applied on
+/// the next tick as exit then enter.
+#[cfg(feature = "lua")]
+#[test]
+fn lua_phase_callbacks_run_on_core_phase() {
+    use aberredengine::lua::components::lua_on_phase::{
+        LuaOnPhaseEntered, LuaOnPhaseExited, LuaOnPhaseUpdate,
+    };
+
+    let mut tw = lua_script_world(
+        "phase_callbacks",
+        r#"
+function on_enter(ctx) table.insert(LOG, "enter:" .. ctx.phase .. ":" .. tostring(ctx.previous_phase)) end
+function on_exit(ctx) table.insert(LOG, "exit:" .. ctx.previous_phase .. "->" .. ctx.phase) end
+function on_update(ctx) if ctx.phase == "idle" then return "run" end end
+"#,
+    );
+    tw.world.spawn((
+        Phase::new("idle"),
+        LuaOnPhaseEntered::new("on_enter"),
+        LuaOnPhaseExited::new("on_exit"),
+        LuaOnPhaseUpdate::new("on_update"),
+    ));
+
+    tw.tick(1, DT);
+    assert_eq!(take_lua_log(&mut tw), ["enter:idle:nil"]);
+
+    tw.tick(1, DT);
+    assert_eq!(take_lua_log(&mut tw), ["exit:idle->run", "enter:run:idle"]);
+}
+
 /// Lua game running `script_body`, after `LOG = {}` (a global table its
 /// callbacks can append to; see `take_lua_log`).
 #[cfg(feature = "lua")]

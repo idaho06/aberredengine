@@ -76,6 +76,8 @@ use aberred_lua::systems::lua_mapspawn::lua_map_spawned_observer;
 #[cfg(feature = "lua")]
 use aberred_lua::systems::lua_menu::lua_menu_selection_observer;
 #[cfg(feature = "lua")]
+use aberred_lua::systems::lua_phase::{lua_phase_entered_observer, lua_phase_exited_observer};
+#[cfg(feature = "lua")]
 use aberred_lua::systems::lua_timer_fired::{lua_timer_fired_observer, lua_timer_removed_observer};
 #[cfg(feature = "lua")]
 use aberred_lua::systems::lua_tween_finished::lua_tween_finished_observer;
@@ -339,6 +341,8 @@ impl EngineBuilder {
         if has_lua {
             world.spawn((Observer::new(lua_timer_fired_observer), Persistent));
             world.spawn((Observer::new(lua_timer_removed_observer), Persistent));
+            world.spawn((Observer::new(lua_phase_entered_observer), Persistent));
+            world.spawn((Observer::new(lua_phase_exited_observer), Persistent));
             world.spawn((Observer::new(lua_menu_selection_observer), Persistent));
             world.spawn((
                 Observer::new(lua_gui_interactable_click_observer),
