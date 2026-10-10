@@ -1967,6 +1967,15 @@ function EntityBuilder:with_persistent() end
 ---Example:
 ---```lua
 ---engine.spawn()
+---    :with_phase("idle")
+---    :with_lua_phase_entered("player_phase_entered")
+---    :with_lua_phase_update("player_phase_update")
+---    :build()
+---```
+---
+---Legacy table form:
+---```lua
+---engine.spawn()
 ---    :with_phase({
 ---        initial = "idle",
 ---        phases = {
@@ -2565,6 +2574,15 @@ function CollisionEntityBuilder:with_persistent() end
 ---Add a phase state machine. A string is the initial phase of a core `Phase`, driven by `:with_lua_phase_entered/exited/update` callbacks. A table is the legacy per-phase callback form.
 ---
 ---Example:
+---```lua
+---engine.spawn()
+---    :with_phase("idle")
+---    :with_lua_phase_entered("player_phase_entered")
+---    :with_lua_phase_update("player_phase_update")
+---    :build()
+---```
+---
+---Legacy table form:
 ---```lua
 ---engine.spawn()
 ---    :with_phase({

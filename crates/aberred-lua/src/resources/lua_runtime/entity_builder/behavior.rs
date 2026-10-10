@@ -99,7 +99,7 @@ pub(super) fn register<M: LuaUserDataMethods<LuaEntityBuilder>>(
         methods,
         meta,
         "with_phase",
-        "Add a phase state machine. A string is the initial phase of a core `Phase`, driven by `:with_lua_phase_entered/exited/update` callbacks. A table is the legacy per-phase callback form.\n\nExample:\n```lua\nengine.spawn()\n    :with_phase({\n        initial = \"idle\",\n        phases = {\n            idle = {\n                on_enter = \"on_idle_enter\",\n                on_update = \"on_idle_update\",\n                on_exit = \"on_idle_exit\"\n            },\n            moving = { on_enter = \"on_moving_enter\" }\n        }\n    })\n    :build()\n```",
+        "Add a phase state machine. A string is the initial phase of a core `Phase`, driven by `:with_lua_phase_entered/exited/update` callbacks. A table is the legacy per-phase callback form.\n\nExample:\n```lua\nengine.spawn()\n    :with_phase(\"idle\")\n    :with_lua_phase_entered(\"player_phase_entered\")\n    :with_lua_phase_update(\"player_phase_update\")\n    :build()\n```\n\nLegacy table form:\n```lua\nengine.spawn()\n    :with_phase({\n        initial = \"idle\",\n        phases = {\n            idle = {\n                on_enter = \"on_idle_enter\",\n                on_update = \"on_idle_update\",\n                on_exit = \"on_idle_exit\"\n            },\n            moving = { on_enter = \"on_moving_enter\" }\n        }\n    })\n    :build()\n```",
         [("phase", "string|table")],
         |_, this: &mut LuaEntityBuilder, phase: mlua::Either<String, LuaTable>| {
             let table = match phase {
