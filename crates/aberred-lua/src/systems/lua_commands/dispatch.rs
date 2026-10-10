@@ -13,7 +13,11 @@
 //! it must interleave `apply_callback_transitions` between the phase drain
 //! and the effect drain and builds its input table once for many entities,
 //! so it keeps its own `drain_and_process_phase_commands` /
-//! `drain_and_process_effect_commands` calls.
+//! `drain_and_process_effect_commands` calls. `lua_phase_update_system`
+//! (`crate::systems::lua_phase`) batches like `lua_setup_entity_system` (one
+//! signal refresh, one drain per run) but passes one shared input table and
+//! `dt`, so it builds ctx with [`build_ctx_or_log`] and calls Lua itself
+//! instead of going through a [`CallShape`].
 
 use bevy_ecs::prelude::*;
 use bevy_ecs::system::SystemParam;
@@ -152,24 +156,7 @@ fn call_entity_callback_value(
         None
     };
 
-    let ctx_table = match build_entity_context(
-        &p.lua_runtime,
-        entity,
-        &p.ctx_queries,
-        &p.cmd_queries,
-        lua_phase_snapshot,
-        previous_phase,
-    ) {
-        Ok(ctx) => ctx,
-        Err(e) => {
-            error!(
-                target: "lua",
-                "{label}: error building context for {:?}: {}",
-                entity, e
-            );
-            return None;
-        }
-    };
+    let ctx_table = build_ctx_or_log(p, entity, label, lua_phase_snapshot, previous_phase)?;
 
     let result = match input_table {
         Some(input_table) => p.lua_runtime.call_named(callback_name, label, |func| {
@@ -199,6 +186,35 @@ pub fn dispatch_and_drain(p: &mut LuaDispatch, entity: Entity, callback_name: &s
         CallShape::CtxAndInput,
         None,
     );
+}
+
+/// Build `entity`'s ctx table from the dispatch queries, logging (with
+/// `label`) and returning `None` on failure.
+pub(crate) fn build_ctx_or_log(
+    p: &LuaDispatch,
+    entity: Entity,
+    label: &str,
+    lua_phase: Option<LuaPhaseSnapshot<'_>>,
+    previous_phase: Option<&str>,
+) -> Option<LuaTable> {
+    match build_entity_context(
+        &p.lua_runtime,
+        entity,
+        &p.ctx_queries,
+        &p.cmd_queries,
+        lua_phase,
+        previous_phase,
+    ) {
+        Ok(ctx) => Some(ctx),
+        Err(e) => {
+            error!(
+                target: "lua",
+                "{label}: error building context for {:?}: {}",
+                entity, e
+            );
+            None
+        }
+    }
 }
 
 /// [`dispatch_and_drain`] with a chosen [`CallShape`] and `ctx.previous_phase`

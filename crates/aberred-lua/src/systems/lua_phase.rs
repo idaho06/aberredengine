@@ -3,14 +3,20 @@
 //! Core `phase_system` drives every `Phase`; these observers call the entity's
 //! Lua callbacks (`crate::components::lua_on_phase`) from its `PhaseEntered` /
 //! `PhaseExited` triggers, so they run wherever `phase_system` runs, in every
-//! game state. They are spawned only in games that run a Lua script.
+//! game state. [`lua_phase_update_system`] calls the per-tick update callbacks.
+//! All three are registered only in games that run a Lua script.
 
 use bevy_ecs::prelude::*;
 use log::{error, warn};
 use mlua::prelude::LuaValue;
 
-use crate::components::lua_on_phase::{LuaOnPhaseEntered, LuaOnPhaseExited};
-use crate::systems::lua_commands::{CallShape, LuaDispatch, dispatch_and_drain_returning};
+use crate::components::lua_on_phase::{LuaOnPhaseEntered, LuaOnPhaseExited, LuaOnPhaseUpdate};
+use crate::resources::lua_runtime::LuaPhaseSnapshot;
+use crate::systems::lua_commands::{
+    CallShape, DrainScope, LuaDispatch, build_ctx_or_log, dispatch_and_drain_returning,
+    drain_dispatch_commands, refresh_signal_cache,
+};
+use aberred_core::components::phase::Phase;
 use aberred_core::events::phase::{PhaseEntered, PhaseExited};
 
 /// Reacts to `PhaseEntered` by calling the entity's [`LuaOnPhaseEntered`]
@@ -67,6 +73,65 @@ pub fn lua_phase_exited_observer(
     );
 }
 
+/// Calls each core-`Phase` entity's [`LuaOnPhaseUpdate`] callback with
+/// `(ctx, input, dt)`, once per run. Returned phase names are applied to
+/// `Phase.next` after the queued commands drain (same precedence as
+/// [`lua_phase_entered_observer`]); core `phase_system` applies them on the
+/// next tick.
+pub fn lua_phase_update_system(
+    callbacks: Query<(Entity, &LuaOnPhaseUpdate), With<Phase>>,
+    mut p: LuaDispatch,
+    mut returns: Local<Vec<(Entity, String)>>,
+) {
+    aberred_core::tracy::tracy_span!("lua_phase_update");
+    if callbacks.is_empty() {
+        return;
+    }
+    refresh_signal_cache(&mut p);
+    let input_table = match p
+        .lua_runtime
+        .resolve_input_table(&p.input, p.time.frame_count)
+    {
+        Ok(table) => table,
+        Err(e) => {
+            error!(target: "lua", "PhaseUpdate: error creating input table: {}", e);
+            return;
+        }
+    };
+    let dt = p.time.delta;
+
+    for (entity, on_update) in &callbacks {
+        let Ok(phase) = p.phase_query.get(entity) else {
+            continue;
+        };
+        let Some(ctx_table) = build_ctx_or_log(
+            &p,
+            entity,
+            "PhaseUpdate",
+            Some(LuaPhaseSnapshot::from(phase)),
+            None,
+        ) else {
+            continue;
+        };
+        let result = p
+            .lua_runtime
+            .call_named(&on_update.callback, "PhaseUpdate", |func| {
+                func.call::<LuaValue>((ctx_table, &input_table, dt))
+            })
+            .unwrap_or(LuaValue::Nil);
+        if let Some(next) = phase_from_return(result, &phase.current, &on_update.callback) {
+            returns.push((entity, next));
+        }
+    }
+
+    drain_dispatch_commands(&mut p, DrainScope::Regular);
+    for (entity, next) in returns.drain(..) {
+        if let Ok(mut phase) = p.phase_query.get_mut(entity) {
+            phase.next = Some(next);
+        }
+    }
+}
+
 /// A phase callback's return value as a requested phase: a string naming a
 /// phase other than `current`. `nil` and `current` request nothing; any other
 /// value is warned about and ignored.
@@ -96,7 +161,9 @@ mod tests {
     use super::*;
     use crate::resources::lua_runtime::LuaRuntime;
     use crate::systems::lua_commands::init_dispatch_resources;
-    use aberred_core::components::phase::Phase;
+    use aberred_core::resources::worldtime::WorldTime;
+    use aberred_core::systems::phase::phase_system;
+    use bevy_ecs::system::RunSystemOnce;
 
     fn setup_world(script: &str) -> World {
         let mut world = World::new();
@@ -244,6 +311,64 @@ mod tests {
             .id();
 
         exit(&mut world, entity, "idle", "run");
+
+        assert_eq!(next(&world, entity), None);
+    }
+
+    fn spawn_with_update(world: &mut World, current: &str, callback: &str) -> Entity {
+        world
+            .spawn((Phase::new(current), LuaOnPhaseUpdate::new(callback)))
+            .id()
+    }
+
+    fn run_update(world: &mut World) {
+        world
+            .run_system_once(lua_phase_update_system)
+            .expect("lua_phase_update_system");
+    }
+
+    #[test]
+    fn update_called_each_run_with_dt() {
+        let mut world = setup_world(
+            "calls = 0\nfunction on_update(ctx, input, dt) calls = calls + 1; seen_dt = dt; phase = ctx.phase; has_input = input ~= nil end",
+        );
+        world.resource_mut::<WorldTime>().delta = 0.25;
+        spawn_with_update(&mut world, "idle", "on_update");
+        // Without a core Phase the callback is never called.
+        world.spawn(LuaOnPhaseUpdate::new("on_update"));
+
+        run_update(&mut world);
+        run_update(&mut world);
+
+        assert_eq!(global::<i64>(&world, "calls"), 2);
+        assert_eq!(global::<f32>(&world, "seen_dt"), 0.25);
+        assert_eq!(global::<String>(&world, "phase"), "idle");
+        assert!(global::<bool>(&world, "has_input"));
+    }
+
+    #[test]
+    fn update_return_sets_next_applied_next_tick() {
+        let mut world = setup_world(
+            "function on_update(ctx) engine.phase_transition(ctx.id, \"jump\"); return \"run\" end",
+        );
+        let entity = spawn_with_update(&mut world, "idle", "on_update");
+
+        run_update(&mut world);
+
+        assert_eq!(next(&world, entity).as_deref(), Some("run"));
+        assert_eq!(world.get::<Phase>(entity).unwrap().current, "idle");
+
+        world.run_system_once(phase_system).expect("phase_system");
+
+        assert_eq!(world.get::<Phase>(entity).unwrap().current, "run");
+    }
+
+    #[test]
+    fn update_same_name_return_is_noop() {
+        let mut world = setup_world("function on_update(ctx) return \"idle\" end");
+        let entity = spawn_with_update(&mut world, "idle", "on_update");
+
+        run_update(&mut world);
 
         assert_eq!(next(&world, entity), None);
     }
