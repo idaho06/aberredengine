@@ -85,7 +85,7 @@ local function apply_wall_stop(ctx, flag, snap_x)
     engine.collision_entity_set_velocity(ctx.b.id, 0, ctx.b.vel.y)
 end
 
--- ─── Callbacks (local — injected into _G by main.lua) ───────────────────────
+-- ─── Callbacks and phase handlers (local) ───────────────────────────────────
 
 --- Called once per FIXED (240Hz) substep, before movement/collision -- can
 --- fire up to 8x per render frame, and keeps running through a render stall.
@@ -569,29 +569,58 @@ local function collision_solid_player(ctx)
     end
 end
 
+-- ─── Phase dispatchers ──────────────────────────────────────────────────────
+-- One enter, update and exit callback for the player, each forwarding to the
+-- handler of the current phase (exit: the phase being left). A phase without
+-- a handler does nothing.
+
+local player_enter = {
+    idle    = player_idle_on_enter,
+    running = player_running_on_enter,
+    walking = player_walking_on_enter,
+    attack  = player_attack_on_enter,
+    falling = player_falling_on_enter,
+    jumping = player_jumping_on_enter,
+}
+local function player_phase_enter(ctx, input)
+    local f = player_enter[ctx.phase]
+    if f then return f(ctx, input) end
+end
+
+local player_update = {
+    idle    = player_idle_on_update,
+    running = player_running_on_update,
+    walking = player_walking_on_update,
+    attack  = player_attack_on_update,
+    falling = player_falling_on_update,
+    jumping = player_jumping_on_update,
+}
+local function player_phase_update(ctx, input, dt)
+    local f = player_update[ctx.phase]
+    if f then return f(ctx, input, dt) end
+end
+
+local player_exit = {
+    running = player_running_on_exit,
+    walking = player_walking_on_exit,
+    attack  = player_attack_on_exit,
+    falling = player_falling_on_exit,
+    jumping = player_jumping_on_exit,
+}
+local function player_phase_exit(ctx)
+    local f = player_exit[ctx.previous_phase]
+    if f then f(ctx) end
+end
+
 -- ─── Callback registry ──────────────────────────────────────────────────────
 -- Every function the engine calls by name must appear here.
 -- Keys must exactly match the strings passed to the engine.
 
 M._callbacks = {
     on_update_sidescroller_level01 = on_update_sidescroller_level01,
-    player_running_on_enter = player_running_on_enter,
-    player_running_on_update = player_running_on_update,
-    player_running_on_exit = player_running_on_exit,
-    player_walking_on_enter = player_walking_on_enter,
-    player_walking_on_update = player_walking_on_update,
-    player_walking_on_exit = player_walking_on_exit,
-    player_falling_on_enter = player_falling_on_enter,
-    player_falling_on_update = player_falling_on_update,
-    player_falling_on_exit = player_falling_on_exit,
-    player_jumping_on_enter = player_jumping_on_enter,
-    player_jumping_on_update = player_jumping_on_update,
-    player_jumping_on_exit = player_jumping_on_exit,
-    player_idle_on_enter = player_idle_on_enter,
-    player_idle_on_update = player_idle_on_update,
-    player_attack_on_enter = player_attack_on_enter,
-    player_attack_on_update = player_attack_on_update,
-    player_attack_on_exit = player_attack_on_exit,
+    player_phase_enter = player_phase_enter,
+    player_phase_update = player_phase_update,
+    player_phase_exit = player_phase_exit,
     collision_solid_player = collision_solid_player,
 }
 
@@ -633,41 +662,10 @@ function M.spawn()
         :with_group("player")
     --:with_signal_flag("on_ground")
         :with_signal_flag("facing_right")
-        :with_phase({
-            initial = "idle",
-            phases = {
-                idle = {
-                    on_enter = "player_idle_on_enter",
-                    on_update = "player_idle_on_update"
-                    -- on_exit = "player_idle_on_exit"
-                },
-                running = {
-                    on_enter = "player_running_on_enter",
-                    on_update = "player_running_on_update",
-                    on_exit = "player_running_on_exit"
-                },
-                walking = {
-                    on_enter = "player_walking_on_enter",
-                    on_update = "player_walking_on_update",
-                    on_exit = "player_walking_on_exit"
-                },
-                attack = {
-                    on_enter = "player_attack_on_enter",
-                    on_update = "player_attack_on_update",
-                    on_exit = "player_attack_on_exit"
-                },
-                falling = {
-                    on_enter = "player_falling_on_enter",
-                    on_update = "player_falling_on_update",
-                    on_exit = "player_falling_on_exit"
-                },
-                jumping = {
-                    on_enter = "player_jumping_on_enter",
-                    on_update = "player_jumping_on_update",
-                    on_exit = "player_jumping_on_exit"
-                }
-            }
-        })
+        :with_phase("idle")
+        :with_lua_phase_entered("player_phase_enter")
+        :with_lua_phase_update("player_phase_update")
+        :with_lua_phase_exited("player_phase_exit")
         :with_collider(20, 24, 10, 24)
         :with_collider_offset(0, 0)
         :with_accel("gravity", 0, 180, true)
