@@ -12,6 +12,7 @@ use aberred_core::components::collision::CollisionRule;
 use aberred_core::components::group::Group;
 use aberred_core::components::guiinteractable::GuiInteractable;
 use aberred_core::components::mapposition::MapPosition;
+use aberred_core::components::phase::Phase;
 use aberred_core::components::signals::Signals;
 use aberred_core::components::timer::{Timer, TimerMode};
 use aberred_core::components::ttl::Ttl;
@@ -607,6 +608,50 @@ fn collision_callback_phase_plus_signal_all_processed() {
     let signals = world.resource::<WorldSignals>();
     assert!(
         signals.has_flag("was_hit"),
+        "world signal flag should be set"
+    );
+}
+
+/// Collision path on core `Phase`: a collision callback's phase transition
+/// and its world-signal write are both applied by the same drain.
+#[test]
+fn collision_callback_core_phase_plus_signal_all_processed() {
+    let mut world = make_lua_callback_world(0.0);
+    load_lua(
+        &world,
+        r#"
+        function on_multi_effect(ctx)
+            engine.collision_phase_transition(ctx.a.id, "hit")
+            engine.collision_set_flag("was_hit")
+        end
+    "#,
+    );
+    let a = world
+        .spawn((
+            Group::new("hero"),
+            MapPosition::new(0.0, 0.0),
+            BoxCollider::new(10.0, 10.0),
+            Phase::new("idle"),
+        ))
+        .id();
+    world.spawn((
+        Group::new("hazard"),
+        MapPosition::new(5.0, 0.0),
+        BoxCollider::new(10.0, 10.0),
+    ));
+    add_lua_collision_observers(&mut world);
+    world.spawn(lua_rule("hero", "hazard", "on_multi_effect"));
+    world.flush();
+
+    tick_collision_detector(&mut world);
+
+    assert_eq!(
+        world.get::<Phase>(a).unwrap().next.as_deref(),
+        Some("hit"),
+        "phase transition should be queued on core Phase"
+    );
+    assert!(
+        world.resource::<WorldSignals>().has_flag("was_hit"),
         "world signal flag should be set"
     );
 }
