@@ -23,18 +23,9 @@ local function spawn_big_asteroids()
         --:with_signals()
             :with_signal_integer("hp", 3)
             :with_signal_integer("asteroid_type", 3) -- Big asteroid
-            :with_phase({
-                initial = "drifting",
-                phases = {
-                    drifting = {
-                        on_enter = "asteroid_phase_drifting_enter",  -- Setup vars in signals
-                        on_update = "asteroid_phase_drifting_update" -- Handle movement
-                    },
-                    exploding = {
-                        on_enter = "asteroid_phase_exploding_enter" -- Phase changed on collision
-                    }
-                }
-            })
+            :with_phase("drifting")
+            :with_lua_phase_entered("asteroid_phase_enter")
+            :with_lua_phase_update("asteroid_phase_update")
             :with_shader("blink", {
                 colBlink   = { 1.0, 0.0, 0.0, 1.0 },
                 uCycleTime = 0.6,
@@ -61,18 +52,9 @@ local function spawn_medium_asteroids(x, y)
         --:with_signals()
             :with_signal_integer("hp", 2)
             :with_signal_integer("asteroid_type", 2) -- Medium asteroid
-            :with_phase({
-                initial = "drifting",
-                phases = {
-                    drifting = {
-                        on_enter = "asteroid_phase_drifting_enter",
-                        on_update = "asteroid_phase_drifting_update"
-                    },
-                    exploding = {
-                        on_enter = "asteroid_phase_exploding_enter"
-                    }
-                }
-            })
+            :with_phase("drifting")
+            :with_lua_phase_entered("asteroid_phase_enter")
+            :with_lua_phase_update("asteroid_phase_update")
             :with_shader("blink", {
                 colBlink   = { 1.0, 0.0, 0.0, 1.0 },
                 uCycleTime = 0.6,
@@ -98,18 +80,9 @@ local function spawn_small_asteroids(x, y)
         --:with_signals()
             :with_signal_integer("hp", 1)
             :with_signal_integer("asteroid_type", 1) -- Small asteroid
-            :with_phase({
-                initial = "drifting",
-                phases = {
-                    drifting = {
-                        on_enter = "asteroid_phase_drifting_enter",
-                        on_update = "asteroid_phase_drifting_update"
-                    },
-                    exploding = {
-                        on_enter = "asteroid_phase_exploding_enter"
-                    }
-                }
-            })
+            :with_phase("drifting")
+            :with_lua_phase_entered("asteroid_phase_enter")
+            :with_lua_phase_update("asteroid_phase_update")
             :with_shader("blink", {
                 colBlink   = { 1.0, 0.0, 0.0, 1.0 },
                 uCycleTime = 0.6,
@@ -182,8 +155,8 @@ local function on_asteroid_laser_collision(ctx)
 end
 
 -- ==================== PHASE CALLBACK FUNCTIONS ====================
--- These are named functions called directly by the engine based on
--- the phase definitions in :with_phase()
+-- Per-phase handlers, called by the phase dispatchers below
+-- (registered with :with_lua_phase_entered / :with_lua_phase_update).
 -- Phase callbacks now receive EntityContext (ctx) instead of entity_id
 
 -- =================== ASTEROID PHASE CALLBACKS AND HELPERS ====================
@@ -403,6 +376,68 @@ end
 local function scene_level_cleared_update(ctx, input, dt)
 end
 
+-- ==================== PHASE DISPATCHERS ====================
+-- One enter and one update callback per entity, each forwarding to the
+-- handler of the current phase. A phase without a handler does nothing.
+
+local asteroid_enter = {
+    drifting  = asteroid_phase_drifting_enter,
+    exploding = asteroid_phase_exploding_enter,
+}
+local function asteroid_phase_enter(ctx, input)
+    local f = asteroid_enter[ctx.phase]
+    if f then return f(ctx, input) end
+end
+
+local asteroid_update = {
+    drifting = asteroid_phase_drifting_update,
+}
+local function asteroid_phase_update(ctx, input, dt)
+    local f = asteroid_update[ctx.phase]
+    if f then return f(ctx, input, dt) end
+end
+
+local ship_enter = {
+    idle       = ship_phase_idle_enter,
+    propulsion = ship_phase_propulsion_enter,
+}
+local function ship_phase_enter(ctx, input)
+    local f = ship_enter[ctx.phase]
+    if f then return f(ctx, input) end
+end
+
+local ship_update = {
+    idle       = ship_phase_idle_update,
+    propulsion = ship_phase_propulsion_update,
+}
+local function ship_phase_update(ctx, input, dt)
+    local f = ship_update[ctx.phase]
+    if f then return f(ctx, input, dt) end
+end
+
+local scene_enter = {
+    init          = scene_init_enter,
+    get_started   = scene_get_started_enter,
+    game_over     = scene_game_over_enter,
+    level_cleared = scene_level_cleared_enter,
+}
+local function scene_phase_enter(ctx, input)
+    local f = scene_enter[ctx.phase]
+    if f then return f(ctx, input) end
+end
+
+local scene_update = {
+    get_started   = scene_get_started_update,
+    playing       = scene_playing_update,
+    lose_life     = scene_lose_life_update,
+    game_over     = scene_game_over_update,
+    level_cleared = scene_level_cleared_update,
+}
+local function scene_phase_update(ctx, input, dt)
+    local f = scene_update[ctx.phase]
+    if f then return f(ctx, input, dt) end
+end
+
 -- ==================== SCENE UPDATE ====================
 
 --- Called each frame when asteroids_level01 scene is active.
@@ -420,7 +455,7 @@ end
 -- ─── Callback registry ───────────────────────────────────────────────────────
 -- Every function the engine calls by name must appear here.
 -- The KEY must exactly match the string passed to the engine
--- (e.g. in :with_phase(), :with_lua_collision_rule(), :with_lua_timer()).
+-- (e.g. in :with_lua_phase_entered(), :with_lua_collision_rule(), :with_lua_timer()).
 
 M._callbacks = {
     -- Scene update (engine calls on_update_<scene_name> automatically)
@@ -429,25 +464,13 @@ M._callbacks = {
     on_asteroid_ship_enter          = on_asteroid_ship_enter,
     on_asteroid_ship_exit           = on_asteroid_ship_exit,
     on_asteroid_laser_collision     = on_asteroid_laser_collision,
-    -- Asteroid phase callbacks
-    asteroid_phase_drifting_enter   = asteroid_phase_drifting_enter,
-    asteroid_phase_drifting_update  = asteroid_phase_drifting_update,
-    asteroid_phase_exploding_enter  = asteroid_phase_exploding_enter,
-    -- Ship phase callbacks
-    ship_phase_idle_enter           = ship_phase_idle_enter,
-    ship_phase_idle_update          = ship_phase_idle_update,
-    ship_phase_propulsion_enter     = ship_phase_propulsion_enter,
-    ship_phase_propulsion_update    = ship_phase_propulsion_update,
-    -- Scene state phase callbacks
-    scene_init_enter                = scene_init_enter,
-    scene_get_started_enter         = scene_get_started_enter,
-    scene_get_started_update        = scene_get_started_update,
-    scene_playing_update            = scene_playing_update,
-    scene_lose_life_update          = scene_lose_life_update,
-    scene_game_over_enter           = scene_game_over_enter,
-    scene_game_over_update          = scene_game_over_update,
-    scene_level_cleared_enter       = scene_level_cleared_enter,
-    scene_level_cleared_update      = scene_level_cleared_update,
+    -- Phase dispatchers
+    asteroid_phase_enter            = asteroid_phase_enter,
+    asteroid_phase_update           = asteroid_phase_update,
+    ship_phase_enter                = ship_phase_enter,
+    ship_phase_update               = ship_phase_update,
+    scene_phase_enter               = scene_phase_enter,
+    scene_phase_update              = scene_phase_update,
 }
 
 -- ==================== ENTITY SPAWNING ====================
@@ -467,19 +490,9 @@ local function spawn_ship()
         :with_accel("propulsion", 0.0, -300.0, false)
         :with_camera_target()
         :with_signals()
-        :with_phase({
-            initial = "idle",
-            phases = {
-                idle = {
-                    on_enter = "ship_phase_idle_enter",
-                    on_update = "ship_phase_idle_update"
-                },
-                propulsion = {
-                    on_enter = "ship_phase_propulsion_enter",
-                    on_update = "ship_phase_propulsion_update"
-                }
-            }
-        })
+        :with_phase("idle")
+        :with_lua_phase_entered("ship_phase_enter")
+        :with_lua_phase_update("ship_phase_update")
         :register_as("ship")
         :build()
 
@@ -633,32 +646,9 @@ function M.spawn()
     -- Scene phase entity
     engine.spawn()
         :with_group("scene_phases")
-        :with_phase({
-            initial = "init",
-            phases = {
-                init = {
-                    on_enter = "scene_init_enter"
-                },
-                get_started = {
-                    on_enter = "scene_get_started_enter",
-                    on_update = "scene_get_started_update"
-                },
-                playing = {
-                    on_update = "scene_playing_update"
-                },
-                lose_life = {
-                    on_update = "scene_lose_life_update"
-                },
-                game_over = {
-                    on_enter = "scene_game_over_enter",
-                    on_update = "scene_game_over_update"
-                },
-                level_cleared = {
-                    on_enter = "scene_level_cleared_enter",
-                    on_update = "scene_level_cleared_update"
-                }
-            }
-        })
+        :with_phase("init")
+        :with_lua_phase_entered("scene_phase_enter")
+        :with_lua_phase_update("scene_phase_update")
         :build()
 
     engine.post_process_shader({ "bloom" })
