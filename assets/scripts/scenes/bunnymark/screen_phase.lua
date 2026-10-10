@@ -86,10 +86,8 @@ local function on_update_bunnymark_screen_phase(input, dt)
                 :with_screen_position(mx, my)
                 :with_tint(r, g, b, 255)
                 :with_zindex(0)
-                :with_phase({
-                    initial = "move",
-                    phases  = { move = { on_update = "bunny_screen_phase_on_update" } },
-                })
+                :with_phase("move")
+                :with_lua_phase_update("bunny_screen_phase_on_update")
                 :register_as(key)
                 :build()
             pending[#pending + 1] = { key = key, x = mx, y = my, vx = vx, vy = vy }
