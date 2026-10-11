@@ -1786,17 +1786,23 @@ which makes map-spawned entities phase-driven.
 
 **Timing:**
 
-- The enter and exit callbacks run at the start of a sim tick, in every game state, from the same
-  `PhaseEntered`/`PhaseExited` events Rust observers see. A newly spawned entity's initial enter fires
-  at the start of the first tick after it spawns. A clone fires its own initial enter.
-- The update callback runs once per sim tick while Playing, after collision.
+- A transition happens at the start of a sim tick, where Rust observers of `PhaseEntered`/
+  `PhaseExited` run. The Lua callbacks run later in the same tick, while Playing, after movement and
+  collision, so they see this tick's collision flags and group counts. Each tick, the exit and enter
+  callbacks run first, in the order the transitions happened, then every update callback.
+- A newly spawned entity's initial enter happens in the first tick after it spawns. A clone gets its
+  own initial enter. A phase entered before the game is Playing (during Setup) gets its enter
+  callback in the first Playing tick, once scene callbacks exist.
+- The queued commands of all phase callbacks run once, after the last callback of the tick. An
+  enter callback's `engine.*` changes are not visible to the same tick's update callback.
 - A transition requested during a tick (a returned name, `engine.phase_transition`, a collision
   callback) applies at the start of the next tick, so chained transitions advance one per tick.
+  When an entity's enter and update callbacks both return a name in one tick, the update's wins.
 - In an enter callback, `ctx.phase` is the phase entered. That holds even when a transition was
-  already requested before the initial enter fires (for example `entity_insert_phase` and
+  already requested before the initial enter (for example `entity_insert_phase` and
   `phase_transition` in the same callback): the initial enter sees the initial phase and the next
-  enter sees the new one, both at the start of the same tick. Returning the phase the entity is
-  already in by then requests nothing. In an exit callback, `ctx.phase` is the new phase.
+  enter sees the new one, in the same tick. Returning the phase the entity is already in by then
+  requests nothing. In an exit callback, `ctx.phase` is the new phase.
 
 **EntityContext Structure:**
 
@@ -1943,7 +1949,7 @@ There are two ways to trigger phase transitions:
 
 **Important notes:**
 
-- Return values take precedence over `engine.phase_transition(ctx.id, ...)` made in the same callback
+- Return values take precedence over `engine.phase_transition(ctx.id, ...)` made in the same tick
 - Returning the current phase name is ignored (no transition); `engine.phase_transition` to the
   current phase re-enters it (exit and enter both fire, `time_in_phase` resets)
 - Transitions apply at the start of the next sim tick (not immediately)

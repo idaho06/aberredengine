@@ -4,17 +4,18 @@
 //! Rust phase entity) plus up to one callback per kind, each naming a Lua
 //! function that branches on `ctx.phase`:
 //!
-//! - [`LuaOnPhaseEntered`]: `fn(ctx, input)`, called on `PhaseEntered` by
-//!   [`lua_phase_entered_observer`](crate::systems::lua_phase::lua_phase_entered_observer).
+//! - [`LuaOnPhaseEntered`]: `fn(ctx, input)`, for each `PhaseEntered`.
 //!   `ctx.previous_phase` is the phase left (`nil` for the initial phase).
-//! - [`LuaOnPhaseExited`]: `fn(ctx)`, called on `PhaseExited`. `ctx.phase` is
+//! - [`LuaOnPhaseExited`]: `fn(ctx)`, for each `PhaseExited`. `ctx.phase` is
 //!   already the new phase; `ctx.previous_phase` is the exited one.
-//! - [`LuaOnPhaseUpdate`]: `fn(ctx, input, dt)`, called once per sim tick while
-//!   the game is playing.
+//! - [`LuaOnPhaseUpdate`]: `fn(ctx, input, dt)`, once per sim tick.
+//!
+//! [`lua_phase_update_system`](crate::systems::lua_phase::lua_phase_update_system)
+//! calls all three after the tick's collision, while the game is playing.
 //!
 //! A string returned by an enter or update callback requests that phase (sets
 //! `Phase.next`) and beats an `engine.phase_transition` call made in the same
-//! callback. Returning the current phase name is a no-op.
+//! tick. Returning the current phase name is a no-op.
 //!
 //! # Lua Callback Signature
 //!
