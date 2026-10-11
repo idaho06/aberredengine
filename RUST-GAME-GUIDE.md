@@ -1618,7 +1618,7 @@ fn player_phases(
 
 The engine's `phase_system` applies transitions and triggers two events on the phase's entity:
 
-- `PhaseEntered { entity, name, previous }` fires once for the initial phase (`previous` is `None`) at the start of the first sim tick after the entity spawns, and again after every transition.
+- `PhaseEntered { entity, name, previous }` fires once for the initial phase (`previous` is `None`) at the start of the first sim tick after the entity spawns, and again after every transition. A cloned entity, such as a particle, restarts in the source's current phase with `time_in_phase` at zero, and fires its own initial `PhaseEntered`.
 - `PhaseExited { entity, name, next }` fires for the old phase right before the new phase's `PhaseEntered`.
 
 Their observers run after the swap, so `phase.current` is already the new phase in both events of a transition; read the phase from `ev.name`. One-shot effects such as a sound on entering a phase belong in an observer, not in the per-tick system:
@@ -2073,7 +2073,7 @@ cross-cutting logic such as a UI click sound. A disabled widget never triggers i
 
 **Source:** `aberred-core/src/components/particleemitter.rs`, `aberred-core/src/systems/particleemitter.rs`
 
-A `ParticleEmitter` on an entity with `MapPosition` spawns particles by cloning **template** entities. Each emission picks a random template, clones every component it has, then sets the clone's `MapPosition` (inside the emitter's `shape`, plus `offset`), `Rotation` (the emission angle), `RigidBody` velocity (angle × a speed from `speed_range`; the template's own `RigidBody` friction, max speed and forces carry over), an optional `Ttl`, and `EmittedParticle(emitter)`.
+A `ParticleEmitter` on an entity with `MapPosition` spawns particles by cloning **template** entities. Each emission picks a random template, clones every component it has (a `Phase` restarts in its current phase, see [Phase state machines](#phase-state-machines)), then sets the clone's `MapPosition` (inside the emitter's `shape`, plus `offset`), `Rotation` (the emission angle), `RigidBody` velocity (angle × a speed from `speed_range`; the template's own `RigidBody` friction, max speed and forces carry over), an optional `Ttl`, and `EmittedParticle(emitter)`.
 
 ```rust
 use aberredengine::prelude::*;
