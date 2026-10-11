@@ -1649,7 +1649,7 @@ Lua phase callbacks (`:with_lua_phase_entered/exited/update`) run on this same `
 | `current` | `String` | Current phase label |
 | `previous` | `Option<String>` | Phase before the last transition |
 | `next` | `Option<String>` | Set to request a transition; cleared when applied |
-| `time_in_phase` | `f32` | Seconds since entering the current phase; grows by `dt` every sim tick |
+| `time_in_phase` | `f32` | Seconds since entering the current phase: 0 in the sim tick the phase starts (its `PhaseEntered` observers see 0), then grows by `dt` every sim tick |
 
 ### Collision rules
 

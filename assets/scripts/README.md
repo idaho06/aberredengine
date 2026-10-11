@@ -1848,7 +1848,7 @@ ctx = {
 
     -- Phase info (from the entity's Phase)
     phase = "idle",          -- Current phase name
-    time_in_phase = 1.5,     -- Seconds in current phase
+    time_in_phase = 1.5,     -- Seconds in current phase (0 in the tick it is entered)
 
     -- Only in phase enter/exit callbacks
     previous_phase = "spawning", -- Enter: the phase left (nil on initial enter). Exit: the phase being left
@@ -1892,7 +1892,7 @@ end
 -- Update handler, called every sim tick while in the phase
 -- Returns: nil or phase_name (string) to transition to another phase
 local function player_idle_update(ctx, input, dt)
-    -- ctx.time_in_phase: seconds in current phase
+    -- ctx.time_in_phase: seconds in current phase (0 in the enter callback and the first update)
     -- dt: fixed delta time in seconds
 
     -- Option 1: Use return value to transition (preferred for same entity)
