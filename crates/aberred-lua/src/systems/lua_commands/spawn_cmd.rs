@@ -650,26 +650,13 @@ impl bevy_ecs::system::EntityCommand for ResetAnimationCommand {
     }
 }
 
-/// Restart a cloned core [`Phase`] in its current phase, so the clone fires
-/// its own initial `PhaseEntered` (`previous: None`) on the next `phase_system` run.
-struct ResetPhaseCommand;
-
-impl bevy_ecs::system::EntityCommand for ResetPhaseCommand {
-    type Out = ();
-
-    fn apply(self, mut entity: bevy_ecs::world::EntityWorldMut<'_>) {
-        if let Some(mut phase) = entity.get_mut::<Phase>() {
-            *phase = Phase::new(std::mem::take(&mut phase.current));
-        }
-    }
-}
-
 /// Process a clone command from Lua and create a cloned entity.
 ///
 /// Clones an existing entity (looked up by [`WorldSignals`] key) and applies
 /// component overrides from the [`CloneCmd`]. Animation is always reset to frame 0
 /// unless an animation override is explicitly provided. A core [`Phase`] restarts
-/// in its current phase (or the override's), firing its initial enter.
+/// in its current phase (core's clone behavior), or starts in the override's, and
+/// fires its initial enter.
 pub fn process_clone_command(
     commands: &mut Commands,
     cmd: CloneCmd,
@@ -713,8 +700,6 @@ pub fn process_clone_command(
     if !has_animation_override {
         entity_commands.queue(ResetAnimationCommand);
     }
-    // 6. Restart the cloned phase so the clone fires its own initial enter
-    entity_commands.queue(ResetPhaseCommand);
 }
 
 #[cfg(test)]
