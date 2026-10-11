@@ -1116,7 +1116,7 @@ Current enums: `Easing`, `LoopMode`, `BoxSide`, `ComparisonOp`, `ConditionType`,
 Each entry documents a global Lua function the engine calls, including parameter types, return types, and context. Registered by `register_callbacks_meta()` in `stub_meta.rs`.
 
 ```lua
-engine.__meta.callbacks["phase_on_enter"] = {
+engine.__meta.callbacks["phase_entered"] = {
     description = "Phase enter callback (:with_lua_phase_entered): called on every phase entered; branch on ctx.phase",
     params  = { { name = "ctx", type = "EntityContext" },
                 { name = "input", type = "InputSnapshot" } },
@@ -1126,7 +1126,7 @@ engine.__meta.callbacks["phase_on_enter"] = {
 }
 ```
 
-Current callbacks: `on_setup`, `on_enter_play`, `on_switch_scene`, `on_update_<scene>`, `phase_on_enter`, `phase_on_update`, `phase_on_exit`, `timer_callback`, `collision_callback`, `menu_callback`.
+Current callbacks: `on_setup`, `on_enter_play`, `on_switch_scene`, `on_update_<scene>`, `phase_entered`, `phase_update`, `phase_exited`, `timer_callback`, `collision_callback`, `menu_callback`.
 
 ### Drift Protection
 

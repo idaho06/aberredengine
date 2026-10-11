@@ -707,7 +707,7 @@ impl LuaRuntime {
                 note: Some("Function name is dynamic: on_update_ + scene name"),
             },
             CbDef {
-                name: "phase_on_enter",
+                name: "phase_entered",
                 description: "Phase enter callback (:with_lua_phase_entered): called on every phase entered; branch on ctx.phase",
                 params: &[("ctx", "EntityContext"), ("input", "InputSnapshot")],
                 returns: Some("string?"),
@@ -715,7 +715,7 @@ impl LuaRuntime {
                 note: Some("Return phase name to trigger transition"),
             },
             CbDef {
-                name: "phase_on_update",
+                name: "phase_update",
                 description: "Phase update callback (:with_lua_phase_update): called every sim tick while Playing; branch on ctx.phase",
                 params: &[
                     ("ctx", "EntityContext"),
@@ -727,7 +727,7 @@ impl LuaRuntime {
                 note: Some("Return phase name to trigger transition"),
             },
             CbDef {
-                name: "phase_on_exit",
+                name: "phase_exited",
                 description: "Phase exit callback (:with_lua_phase_exited): called on every phase left; ctx.previous_phase is the phase left",
                 params: &[("ctx", "EntityContext")],
                 returns: None,

@@ -422,8 +422,8 @@ fn meta_callbacks_table_is_populated() {
 
         -- Key callbacks must exist
         local required = {"on_setup", "on_enter_play", "on_switch_scene",
-                          "on_update_<scene>", "phase_on_enter", "phase_on_update",
-                          "phase_on_exit", "timer_callback", "collision_callback",
+                          "on_update_<scene>", "phase_entered", "phase_update",
+                          "phase_exited", "timer_callback", "collision_callback",
                           "menu_callback"}
         for _, name in ipairs(required) do
             assert(cbs[name], "missing callback: " .. name)
@@ -432,11 +432,11 @@ fn meta_callbacks_table_is_populated() {
         end
 
         -- Spot-check param shapes
-        local pe = cbs.phase_on_enter
-        assert(#pe.params == 2, "phase_on_enter should have 2 params, got " .. #pe.params)
-        assert(pe.params[1].name == "ctx", "phase_on_enter param 1 should be ctx")
-        assert(pe.params[1].type == "EntityContext", "phase_on_enter ctx should be EntityContext")
-        assert(pe.returns and pe.returns.type == "string?", "phase_on_enter should return string?")
+        local pe = cbs.phase_entered
+        assert(#pe.params == 2, "phase_entered should have 2 params, got " .. #pe.params)
+        assert(pe.params[1].name == "ctx", "phase_entered param 1 should be ctx")
+        assert(pe.params[1].type == "EntityContext", "phase_entered ctx should be EntityContext")
+        assert(pe.returns and pe.returns.type == "string?", "phase_entered should return string?")
 
         local cc = cbs.collision_callback
         assert(#cc.params == 1, "collision_callback should have 1 param")
