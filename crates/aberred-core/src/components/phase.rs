@@ -33,10 +33,17 @@
 //! - `aberred_lua::components::lua_on_phase` – Lua callbacks on a `Phase`
 //!   (observers of the same events, plus a per-tick update runner)
 
+use bevy_ecs::entity::{ComponentCloneCtx, SourceComponent};
 use bevy_ecs::prelude::Component;
 
 /// Per-entity phase state machine; see the [module docs](self).
-#[derive(Clone, Debug, Component)]
+///
+/// Cloning an entity (`clone_and_spawn`, a particle emission, a Lua
+/// `engine.clone`) restarts its `Phase` in the source's current phase, so the
+/// clone fires its own initial enter with `time_in_phase` at zero. Moving the
+/// component to another entity keeps its state, and so does `Phase::clone`.
+#[derive(Clone, Debug, PartialEq, Component)]
+#[component(clone_behavior = Custom(restart_on_clone))]
 pub struct Phase {
     /// The current phase label (e.g., "idle", "playing").
     pub current: String,
@@ -81,9 +88,23 @@ impl Phase {
     }
 }
 
+/// Entity clone handler for [`Phase`]: a clone restarts in the source's
+/// current phase, a move keeps the whole state.
+fn restart_on_clone(source: &SourceComponent, ctx: &mut ComponentCloneCtx) {
+    if let Some(phase) = source.read::<Phase>() {
+        let target = if ctx.moving() {
+            phase.clone()
+        } else {
+            Phase::new(phase.current.clone())
+        };
+        ctx.write_target_component(target);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use bevy_ecs::world::World;
 
     #[test]
     fn begin_is_true_only_once() {
@@ -112,5 +133,39 @@ mod tests {
         assert_eq!(phase.previous.as_deref(), Some("idle"));
         assert!(phase.next.is_none());
         assert_eq!(phase.time_in_phase, 0.0);
+    }
+
+    /// A source already in "run", entered, aged, with a pending transition.
+    fn aged_phase() -> Phase {
+        let mut phase = Phase::new("idle");
+        phase.begin();
+        phase.next = Some("run".into());
+        phase.apply_next();
+        phase.time_in_phase = 1.0;
+        phase.next = Some("jump".into());
+        phase
+    }
+
+    #[test]
+    fn entity_clone_restarts_the_phase() {
+        let mut world = World::new();
+        let source = world.spawn(aged_phase()).id();
+
+        let clone = world.entity_mut(source).clone_and_spawn();
+
+        assert_eq!(world.get::<Phase>(clone).unwrap(), &Phase::new("run"));
+        assert_eq!(world.get::<Phase>(source).unwrap(), &aged_phase());
+    }
+
+    #[test]
+    fn moved_phase_keeps_its_state() {
+        let mut world = World::new();
+        let source = world.spawn(aged_phase()).id();
+        let target = world.spawn_empty().id();
+
+        world.entity_mut(source).move_components::<Phase>(target);
+
+        assert!(world.get::<Phase>(source).is_none());
+        assert_eq!(world.get::<Phase>(target).unwrap(), &aged_phase());
     }
 }

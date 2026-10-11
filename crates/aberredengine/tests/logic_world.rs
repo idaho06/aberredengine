@@ -11,11 +11,14 @@ use aberredengine::bevy_ecs::prelude::*;
 use aberredengine::core::components::boxcollider::BoxCollider;
 use aberredengine::core::components::collision::{BoxSides, CollisionRule};
 use aberredengine::core::components::dynamictext::DynamicText;
+use aberredengine::core::components::emittedparticle::EmittedParticle;
 use aberredengine::core::components::group::Group;
 use aberredengine::core::components::guiinteractable::GuiInteractable;
 use aberredengine::core::components::mapposition::MapPosition;
 use aberredengine::core::components::menu::{Menu, MenuAction, MenuActions};
+use aberredengine::core::components::particleemitter::ParticleEmitter;
 use aberredengine::core::components::phase::Phase;
+use aberredengine::core::components::rigidbody::RigidBody;
 use aberredengine::core::components::scene::SceneName;
 use aberredengine::core::components::screenposition::ScreenPosition;
 use aberredengine::core::components::signals::Signals;
@@ -436,6 +439,54 @@ fn phase_transition_requested_by_observer_applies_next_tick() {
 
     tw.tick(1, DT);
     assert_eq!(take_phase_log(&mut tw), ["exited:idle", "entered:run"]);
+}
+
+/// A particle cloned from a template that has a `Phase` fires its own initial
+/// enter, in the template's current phase, even though the template entered
+/// long ago.
+#[test]
+fn particle_from_phase_template_fires_its_initial_enter() {
+    let mut tw = TestWorld::builder()
+        .add_observer(log_phase_entered)
+        .build()
+        .expect("build should succeed");
+    tw.world.init_resource::<PhaseLog>();
+    tw.tick_to_play(DT, 8);
+
+    let template = tw
+        .world
+        .spawn((
+            MapPosition::new(0.0, 0.0),
+            RigidBody::new(),
+            Phase::new("fade"),
+        ))
+        .id();
+    tw.tick(3, DT);
+    assert_eq!(take_phase_log(&mut tw), ["entered:fade"]);
+
+    tw.world.spawn((
+        MapPosition::new(0.0, 0.0),
+        ParticleEmitter {
+            templates: vec![template],
+            emissions_per_second: 1000.0,
+            emissions_remaining: 1,
+            initial_emissions_remaining: 1,
+            ..Default::default()
+        },
+    ));
+    tw.tick(3, DT);
+
+    let particles = tw
+        .world
+        .query_filtered::<(), With<EmittedParticle>>()
+        .iter(&tw.world)
+        .count();
+    assert_eq!(particles, 1, "the emitter emits exactly one particle");
+    assert_eq!(
+        take_phase_log(&mut tw),
+        ["entered:fade"],
+        "the particle fires its own initial enter"
+    );
 }
 
 /// (c) Spawn a map sprite; `present()` and assert it appears in the

@@ -129,6 +129,19 @@ mod tests {
     }
 
     #[test]
+    fn cloned_entity_fires_its_own_initial_enter() {
+        let mut world = make_phase_world(0.1);
+        let source = world.spawn(Phase::new("idle")).id();
+        tick_phases(&mut world);
+        take_log(&mut world);
+
+        world.entity_mut(source).clone_and_spawn();
+        tick_phases(&mut world);
+
+        assert_eq!(take_log(&mut world), ["entered:idle:-@idle"]);
+    }
+
+    #[test]
     fn next_triggers_exit_then_enter_with_names() {
         let mut world = make_phase_world(0.1);
         let entity = world.spawn(Phase::new("idle")).id();
