@@ -559,13 +559,11 @@ fn collision_enter_despawn_prevents_stay_callback() {
             .expect("lua load");
     }
 
-    let a = world
-        .spawn((
-            Group::new("hero"),
-            MapPosition::new(0.0, 0.0),
-            BoxCollider::new(10.0, 10.0),
-        ))
-        .id();
+    world.spawn((
+        Group::new("hero"),
+        MapPosition::new(0.0, 0.0),
+        BoxCollider::new(10.0, 10.0),
+    ));
     let b = world
         .spawn((
             Group::new("enemy"),
