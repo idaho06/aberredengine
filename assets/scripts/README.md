@@ -1792,10 +1792,11 @@ which makes map-spawned entities phase-driven.
 - The update callback runs once per sim tick while Playing, after collision.
 - A transition requested during a tick (a returned name, `engine.phase_transition`, a collision
   callback) applies at the start of the next tick, so chained transitions advance one per tick.
-- Enter and exit callbacks see the entity's phase after that tick's swap. Normally `ctx.phase` in
-  an enter callback is the phase entered; the exception is a transition already requested before
-  the initial enter fires (for example `entity_insert_phase` and `phase_transition` in the same
-  tick), where both enter callbacks see the newer phase.
+- In an enter callback, `ctx.phase` is the phase entered. That holds even when a transition was
+  already requested before the initial enter fires (for example `entity_insert_phase` and
+  `phase_transition` in the same callback): the initial enter sees the initial phase and the next
+  enter sees the new one, both at the start of the same tick. Returning the phase the entity is
+  already in by then requests nothing. In an exit callback, `ctx.phase` is the new phase.
 
 **EntityContext Structure:**
 

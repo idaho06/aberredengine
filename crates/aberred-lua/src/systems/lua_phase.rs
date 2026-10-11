@@ -13,7 +13,7 @@ use mlua::prelude::LuaValue;
 use crate::components::lua_on_phase::{LuaOnPhaseEntered, LuaOnPhaseExited, LuaOnPhaseUpdate};
 use crate::resources::lua_runtime::PhaseSnapshot;
 use crate::systems::lua_commands::{
-    CallShape, DrainScope, LuaDispatch, build_ctx_or_log, dispatch_and_drain_returning,
+    CallShape, DrainScope, LuaDispatch, PhaseCtx, build_ctx_or_log, dispatch_and_drain_returning,
     drain_dispatch_commands, refresh_signal_cache, request_phase,
 };
 use aberred_core::components::phase::Phase;
@@ -23,7 +23,9 @@ use aberred_core::events::phase::{PhaseEntered, PhaseExited};
 /// callback with `(ctx, input)`; `ctx.previous_phase` is the event's
 /// `previous`. A returned phase name sets `Phase.next` after the callback's
 /// queued commands drain, so it beats an `engine.phase_transition` from the
-/// same callback; returning the entered phase is a no-op.
+/// same callback. `ctx.phase` is the entered phase (the event's `name`), even
+/// when the same `phase_system` run already moved on; returning the phase the
+/// entity is in by then is a no-op.
 pub fn lua_phase_entered_observer(
     trigger: On<PhaseEntered>,
     callbacks: Query<&LuaOnPhaseEntered>,
@@ -39,11 +41,18 @@ pub fn lua_phase_entered_observer(
         &on_entered.callback,
         "PhaseEntered",
         CallShape::CtxAndInput,
-        ev.previous.as_deref(),
+        PhaseCtx {
+            name: Some(&ev.name),
+            previous: ev.previous.as_deref(),
+        },
     ) else {
         return;
     };
-    if let Some(next) = phase_from_return(result, &ev.name, &on_entered.callback) {
+    let current = p
+        .phase_query
+        .get(ev.entity)
+        .map_or(&*ev.name, |phase| phase.current.as_str());
+    if let Some(next) = phase_from_return(result, current, &on_entered.callback) {
         request_phase(&mut p.commands, ev.entity, next);
     }
 }
@@ -67,7 +76,10 @@ pub fn lua_phase_exited_observer(
         &on_exited.callback,
         "PhaseExited",
         CallShape::CtxWithPhase,
-        Some(&ev.name),
+        PhaseCtx {
+            name: None,
+            previous: Some(&ev.name),
+        },
     );
 }
 
@@ -280,6 +292,46 @@ mod tests {
         assert_eq!(phase.next.as_deref(), Some("b"));
     }
 
+    /// An entity whose initial phase `idle` already has `next = "run"`, so
+    /// one `phase_system` run fires Entered(idle), Exited(idle), Entered(run).
+    fn spawn_with_preset_next(world: &mut World, callback: &str) -> Entity {
+        let entity = spawn_in_phase(world, "idle", callback);
+        world.get_mut::<Phase>(entity).expect("Phase").next = Some("run".into());
+        entity
+    }
+
+    fn run_phase_system(world: &mut World) {
+        world
+            .run_system_once(phase_system)
+            .expect("phase_system should run");
+        world.flush();
+    }
+
+    #[test]
+    fn initial_enter_and_transition_in_one_run_see_their_own_phase() {
+        let mut world = setup_world(
+            "seen = \"\"\nfunction on_enter(ctx) seen = seen .. ctx.phase .. \",\" end",
+        );
+        spawn_with_preset_next(&mut world, "on_enter");
+
+        run_phase_system(&mut world);
+
+        assert_eq!(global::<String>(&world, "seen"), "idle,run,");
+    }
+
+    #[test]
+    fn returning_the_phase_already_moved_to_is_noop() {
+        let mut world = setup_world(
+            "function on_enter(ctx) if ctx.phase == \"idle\" then return \"run\" end end",
+        );
+        let entity = spawn_with_preset_next(&mut world, "on_enter");
+
+        run_phase_system(&mut world);
+
+        assert_eq!(world.get::<Phase>(entity).expect("Phase").current, "run");
+        assert_eq!(next(&world, entity), None);
+    }
+
     #[test]
     fn ctx_has_previous_phase() {
         let mut world = setup_world("function on_enter(ctx) prev = ctx.previous_phase end");
@@ -374,7 +426,7 @@ mod tests {
         assert_eq!(next(&world, entity).as_deref(), Some("run"));
         assert_eq!(world.get::<Phase>(entity).unwrap().current, "idle");
 
-        world.run_system_once(phase_system).expect("phase_system");
+        run_phase_system(&mut world);
 
         assert_eq!(world.get::<Phase>(entity).unwrap().current, "run");
     }
