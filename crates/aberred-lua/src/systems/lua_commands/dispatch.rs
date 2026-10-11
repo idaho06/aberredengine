@@ -3,22 +3,22 @@
 //! Bundles the params and steps shared by `lua_timer_fired_observer`,
 //! `lua_setup_entity_system`, `lua_animation_finished_observer`,
 //! `lua_tween_finished_observer`, `lua_gui_interactable_click_observer`,
-//! `lua_menu_selection_observer`, the Lua phase enter/exit observers, and the
-//! Lua collision observers: sync the signal cache, build the callback's
-//! arguments (an entity context and optional input table, or a custom context
-//! table), call the named Lua function, then drain the commands it queued (the
-//! collision observers drain the collision-scoped queues).
+//! `lua_menu_selection_observer`, and the Lua collision observers: sync the
+//! signal cache, build the callback's arguments (an entity context and
+//! optional input table, or a custom context table), call the named Lua
+//! function, then drain the commands it queued (the collision observers drain
+//! the collision-scoped queues).
 //!
 //! `lua_phase_update_system` (`crate::systems::lua_phase`) batches like
 //! `lua_setup_entity_system` (one signal refresh, one drain per run) but
-//! passes one shared input table and `dt`, so it builds ctx with
-//! [`build_ctx_or_log`] and calls Lua itself instead of going through a
-//! [`CallShape`].
+//! passes one shared input table, the event's phase fields and `dt`, so it
+//! builds ctx with [`build_ctx_or_log`] and calls Lua itself instead of going
+//! through a [`CallShape`].
 
 use bevy_ecs::prelude::*;
 use bevy_ecs::system::SystemParam;
 use log::error;
-use mlua::prelude::{Lua, LuaResult, LuaTable, LuaValue};
+use mlua::prelude::{Lua, LuaResult, LuaTable};
 
 use crate::resources::lua_runtime::{LuaRuntime, PhaseSnapshot};
 use aberred_core::components::phase::Phase;
@@ -52,30 +52,14 @@ pub struct LuaDispatch<'w, 's> {
     pub effect_bufs: Local<'s, EffectCmdBufs>,
 }
 
-/// The call shapes the dispatch sites need: whether the ctx carries the
-/// phase fields (`wants_phase`) and whether an input table is passed
-/// (`wants_input`) are independent choices.
+/// The call shapes the dispatch sites need.
 #[derive(Clone, Copy)]
 pub enum CallShape {
     /// Resolve the phase snapshot, build the input table, call `(ctx, input)`
-    /// — timer/anim/tween/phase-enter path.
+    /// — timer/anim/tween path.
     CtxAndInput,
-    /// Resolve the phase snapshot, no input table; call `(ctx)` — phase-exit path.
-    CtxWithPhase,
     /// Skip the phase snapshot, no input table; call `(ctx)` — `lua_setup` path.
     CtxOnly,
-}
-
-impl CallShape {
-    /// Whether the callback gets an input table as its second argument.
-    fn wants_input(self) -> bool {
-        matches!(self, CallShape::CtxAndInput)
-    }
-
-    /// Whether the ctx carries `phase` / `time_in_phase`.
-    fn wants_phase(self) -> bool {
-        !matches!(self, CallShape::CtxOnly)
-    }
 }
 
 /// Sync the Lua signal cache from `WorldSignals`. Call once per system
@@ -99,94 +83,39 @@ pub fn call_entity_callback(
     label: &str,
     call_shape: CallShape,
 ) -> bool {
-    call_entity_callback_value(
-        p,
-        entity,
-        callback_name,
-        label,
-        call_shape,
-        PhaseCtx::default(),
-    )
-    .is_some()
-}
-
-/// The phase fields a phase callback's ctx shows instead of the defaults.
-#[derive(Clone, Copy, Default)]
-pub(crate) struct PhaseCtx<'a> {
-    /// The `ctx.phase` to show instead of the live `Phase.current` (see
-    /// [`phase_snapshot`]).
-    pub(crate) name: Option<&'a str>,
-    /// The `ctx.previous_phase`.
-    pub(crate) previous: Option<&'a str>,
-}
-
-/// [`call_entity_callback`] with the phase fields of `phase_ctx`, returning
-/// the callback's return value: `None` if input-table or ctx construction
-/// failed (already logged), `Some(Nil)` if the function is missing or errored
-/// (also logged).
-fn call_entity_callback_value(
-    p: &mut LuaDispatch,
-    entity: Entity,
-    callback_name: &str,
-    label: &str,
-    call_shape: CallShape,
-    phase_ctx: PhaseCtx,
-) -> Option<LuaValue> {
-    let input_table = if call_shape.wants_input() {
-        match p
-            .lua_runtime
-            .resolve_input_table(&p.input, p.time.frame_count)
-        {
-            Ok(table) => Some(table),
-            Err(e) => {
-                error!(
-                    target: "lua",
-                    "{label}: error creating input table for {:?}: {}",
-                    entity, e
-                );
-                return None;
-            }
+    match call_shape {
+        CallShape::CtxAndInput => {
+            let input_table = match p
+                .lua_runtime
+                .resolve_input_table(&p.input, p.time.frame_count)
+            {
+                Ok(table) => table,
+                Err(e) => {
+                    error!(
+                        target: "lua",
+                        "{label}: error creating input table for {:?}: {}",
+                        entity, e
+                    );
+                    return false;
+                }
+            };
+            let phase = p.phase_query.get(entity).ok().map(PhaseSnapshot::from);
+            let Some(ctx_table) = build_ctx_or_log(p, entity, label, phase, None) else {
+                return false;
+            };
+            p.lua_runtime.call_named(callback_name, label, |func| {
+                func.call::<()>((ctx_table, input_table))
+            });
         }
-    } else {
-        None
-    };
-
-    let phase = if call_shape.wants_phase() {
-        p.phase_query
-            .get(entity)
-            .ok()
-            .map(|live| phase_snapshot(live, phase_ctx.name))
-    } else {
-        None
-    };
-
-    let ctx_table = build_ctx_or_log(p, entity, label, phase, phase_ctx.previous)?;
-
-    let result = match input_table {
-        Some(input_table) => p.lua_runtime.call_named(callback_name, label, |func| {
-            func.call::<LuaValue>((ctx_table, input_table))
-        }),
-        None => p.lua_runtime.call_named(callback_name, label, |func| {
-            func.call::<LuaValue>(ctx_table)
-        }),
-    };
-
-    Some(result.unwrap_or(LuaValue::Nil))
-}
-
-/// The ctx phase fields for `live`, naming `phase_name` when it is set. An
-/// enter observer passes the event's phase: `phase_system` triggers an
-/// initial enter and a transition in one run, and both observers see the
-/// post-swap `Phase`, so the first must not report the phase it is not in.
-/// A phase other than the live one was left this run, so its time is 0.
-fn phase_snapshot<'a>(live: &'a Phase, phase_name: Option<&'a str>) -> PhaseSnapshot<'a> {
-    match phase_name {
-        Some(name) if name != live.current => PhaseSnapshot {
-            current: name,
-            time_in_phase: 0.0,
-        },
-        _ => PhaseSnapshot::from(live),
+        CallShape::CtxOnly => {
+            let Some(ctx_table) = build_ctx_or_log(p, entity, label, None, None) else {
+                return false;
+            };
+            p.lua_runtime
+                .call_named(callback_name, label, |func| func.call::<()>(ctx_table));
+        }
     }
+    true
 }
 
 /// Refresh the signal cache, call the named entity callback with
@@ -197,14 +126,10 @@ fn phase_snapshot<'a>(live: &'a Phase, phase_name: Option<&'a str>) -> PhaseSnap
 /// `drain_dispatch_commands` directly, since it batches one refresh and one
 /// drain across many entities per invocation instead of one each.
 pub fn dispatch_and_drain(p: &mut LuaDispatch, entity: Entity, callback_name: &str, label: &str) {
-    dispatch_and_drain_returning(
-        p,
-        entity,
-        callback_name,
-        label,
-        CallShape::CtxAndInput,
-        PhaseCtx::default(),
-    );
+    refresh_signal_cache(p);
+    if call_entity_callback(p, entity, callback_name, label, CallShape::CtxAndInput) {
+        drain_dispatch_commands(p, DrainScope::Regular);
+    }
 }
 
 /// Build `entity`'s ctx table from the dispatch queries, logging (with
@@ -234,26 +159,6 @@ pub(crate) fn build_ctx_or_log(
             None
         }
     }
-}
-
-/// [`dispatch_and_drain`] with a chosen [`CallShape`] and [`PhaseCtx`]
-/// (phase callbacks). Hands the callback's return value back after the
-/// drain, so a phase it returns can be applied after (and so beat) any
-/// `engine.phase_transition` the callback queued. `None` if the call did not
-/// happen (ctx or input construction failed).
-pub(crate) fn dispatch_and_drain_returning(
-    p: &mut LuaDispatch,
-    entity: Entity,
-    callback_name: &str,
-    label: &str,
-    call_shape: CallShape,
-    phase_ctx: PhaseCtx,
-) -> Option<LuaValue> {
-    refresh_signal_cache(p);
-    let result =
-        call_entity_callback_value(p, entity, callback_name, label, call_shape, phase_ctx)?;
-    drain_dispatch_commands(p, DrainScope::Regular);
-    Some(result)
 }
 
 /// Refresh the signal cache, call the named Lua function with a single

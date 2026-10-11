@@ -64,6 +64,8 @@ use aberred_core::systems::scene_dispatch::{
 };
 
 #[cfg(feature = "lua")]
+use aberred_lua::resources::lua_phase_events::LuaPhaseEvents;
+#[cfg(feature = "lua")]
 use aberred_lua::resources::lua_runtime::LuaRuntime;
 #[cfg(feature = "lua")]
 use aberred_lua::systems::lua_animation_finished::lua_animation_finished_observer;
@@ -341,6 +343,7 @@ impl EngineBuilder {
         if has_lua {
             world.spawn((Observer::new(lua_timer_fired_observer), Persistent));
             world.spawn((Observer::new(lua_timer_removed_observer), Persistent));
+            world.init_resource::<LuaPhaseEvents>();
             world.spawn((Observer::new(lua_phase_entered_observer), Persistent));
             world.spawn((Observer::new(lua_phase_exited_observer), Persistent));
             world.spawn((Observer::new(lua_menu_selection_observer), Persistent));

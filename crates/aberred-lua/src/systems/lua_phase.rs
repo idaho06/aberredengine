@@ -1,100 +1,75 @@
 //! Lua phase callbacks on core `Phase`.
 //!
-//! Core `phase_system` drives every `Phase`; these observers call the entity's
-//! Lua callbacks (`crate::components::lua_on_phase`) from its `PhaseEntered` /
-//! `PhaseExited` triggers, so they run wherever `phase_system` runs, in every
-//! game state. [`lua_phase_update_system`] calls the per-tick update callbacks.
-//! All three are registered only in games that run a Lua script.
+//! Core `phase_system` drives every `Phase` at the start of the tick. The Lua
+//! observers only queue its `PhaseEntered` / `PhaseExited` triggers into
+//! [`LuaPhaseEvents`]; [`lua_phase_update_system`] calls the entity's Lua
+//! callbacks (`crate::components::lua_on_phase`) later in the tick, after
+//! collision, in Playing only. All three are registered only in games that run
+//! a Lua script.
 
 use bevy_ecs::prelude::*;
 use log::{error, warn};
-use mlua::prelude::LuaValue;
+use mlua::prelude::{LuaFunction, LuaResult, LuaTable, LuaValue};
 
 use crate::components::lua_on_phase::{LuaOnPhaseEntered, LuaOnPhaseExited, LuaOnPhaseUpdate};
+use crate::resources::lua_phase_events::{LuaPhaseEvent, LuaPhaseEvents};
 use crate::resources::lua_runtime::PhaseSnapshot;
 use crate::systems::lua_commands::{
-    CallShape, DrainScope, LuaDispatch, PhaseCtx, build_ctx_or_log, dispatch_and_drain_returning,
-    drain_dispatch_commands, refresh_signal_cache, request_phase,
+    DrainScope, LuaDispatch, build_ctx_or_log, drain_dispatch_commands, refresh_signal_cache,
+    request_phase,
 };
 use aberred_core::components::phase::Phase;
 use aberred_core::events::phase::{PhaseEntered, PhaseExited};
 
-/// Reacts to `PhaseEntered` by calling the entity's [`LuaOnPhaseEntered`]
-/// callback with `(ctx, input)`; `ctx.previous_phase` is the event's
-/// `previous`. A returned phase name sets `Phase.next` after the callback's
-/// queued commands drain, so it beats an `engine.phase_transition` from the
-/// same callback. `ctx.phase` is the entered phase (the event's `name`), even
-/// when the same `phase_system` run already moved on; returning the phase the
-/// entity is in by then is a no-op.
-pub fn lua_phase_entered_observer(
-    trigger: On<PhaseEntered>,
-    callbacks: Query<&LuaOnPhaseEntered>,
-    mut p: LuaDispatch,
-) {
+/// Queues `PhaseEntered` for [`lua_phase_update_system`], which calls the
+/// entity's [`LuaOnPhaseEntered`] callback.
+pub fn lua_phase_entered_observer(trigger: On<PhaseEntered>, mut events: ResMut<LuaPhaseEvents>) {
     let ev = trigger.event();
-    let Ok(on_entered) = callbacks.get(ev.entity) else {
-        return;
-    };
-    let Some(result) = dispatch_and_drain_returning(
-        &mut p,
-        ev.entity,
-        &on_entered.callback,
-        "PhaseEntered",
-        CallShape::CtxAndInput,
-        PhaseCtx {
-            name: Some(&ev.name),
-            previous: ev.previous.as_deref(),
-        },
-    ) else {
-        return;
-    };
-    let current = p
-        .phase_query
-        .get(ev.entity)
-        .map_or(&*ev.name, |phase| phase.current.as_str());
-    if let Some(next) = phase_from_return(result, current, &on_entered.callback) {
-        request_phase(&mut p.commands, ev.entity, next);
-    }
+    events.0.push(LuaPhaseEvent::Entered {
+        entity: ev.entity,
+        name: ev.name.clone(),
+        previous: ev.previous.clone(),
+    });
 }
 
-/// Reacts to `PhaseExited` by calling the entity's [`LuaOnPhaseExited`]
-/// callback with `(ctx)`. `ctx.phase` is already the new phase and
-/// `ctx.previous_phase` is the exited one. The return value is ignored.
-pub fn lua_phase_exited_observer(
-    trigger: On<PhaseExited>,
-    callbacks: Query<&LuaOnPhaseExited>,
-    mut p: LuaDispatch,
-) {
+/// Queues `PhaseExited` for [`lua_phase_update_system`], which calls the
+/// entity's [`LuaOnPhaseExited`] callback.
+pub fn lua_phase_exited_observer(trigger: On<PhaseExited>, mut events: ResMut<LuaPhaseEvents>) {
     let ev = trigger.event();
-    let Ok(on_exited) = callbacks.get(ev.entity) else {
-        return;
-    };
-    // Exit callbacks have no return sugar.
-    let _ = dispatch_and_drain_returning(
-        &mut p,
-        ev.entity,
-        &on_exited.callback,
-        "PhaseExited",
-        CallShape::CtxWithPhase,
-        PhaseCtx {
-            name: None,
-            previous: Some(&ev.name),
-        },
-    );
+    events.0.push(LuaPhaseEvent::Exited {
+        entity: ev.entity,
+        name: ev.name.clone(),
+    });
 }
 
-/// Calls each core-`Phase` entity's [`LuaOnPhaseUpdate`] callback with
-/// `(ctx, input, dt)`, once per run. Returned phase names are applied to
-/// `Phase.next` after the queued commands drain (same precedence as
-/// [`lua_phase_entered_observer`]); core `phase_system` applies them on the
-/// next tick.
+/// Runs the Lua phase callbacks of one tick:
+///
+/// 1. The queued [`LuaPhaseEvents`], in trigger order: [`LuaOnPhaseExited`]
+///    with `(ctx)`, where `ctx.phase` is already the new phase and
+///    `ctx.previous_phase` the exited one; [`LuaOnPhaseEntered`] with
+///    `(ctx, input)`, where `ctx.phase` is the entered phase and
+///    `ctx.previous_phase` the one left. An entity that lost its callback or
+///    its `Phase` since the trigger is skipped.
+/// 2. Each core-`Phase` entity's [`LuaOnPhaseUpdate`] with `(ctx, input, dt)`.
+///
+/// The queued commands drain once, after every callback. Then the returned
+/// phase names (enter and update; exit returns are ignored) set `Phase.next`
+/// in call order, so they beat an `engine.phase_transition` from the same
+/// tick and an update's return beats its entity's enter return. Returning the
+/// phase the entity is in is a no-op. Core `phase_system` applies `next` on
+/// the next tick.
 pub fn lua_phase_update_system(
-    callbacks: Query<(Entity, &LuaOnPhaseUpdate), With<Phase>>,
+    entered: Query<&LuaOnPhaseEntered>,
+    exited: Query<&LuaOnPhaseExited>,
+    updates: Query<(Entity, &LuaOnPhaseUpdate), With<Phase>>,
+    mut events: ResMut<LuaPhaseEvents>,
     mut p: LuaDispatch,
     mut returns: Local<Vec<(Entity, String)>>,
 ) {
     aberred_core::tracy::tracy_span!("lua_phase_update");
-    if callbacks.is_empty() {
+    if updates.is_empty() && entered.is_empty() && exited.is_empty() {
+        // No Lua phase callbacks: the queued events are all Rust-only.
+        events.0.clear();
         return;
     }
     refresh_signal_cache(&mut p);
@@ -110,25 +85,63 @@ pub fn lua_phase_update_system(
     };
     let dt = p.time.delta;
 
-    for (entity, on_update) in &callbacks {
+    for event in events.0.drain(..) {
+        match event {
+            LuaPhaseEvent::Entered {
+                entity,
+                name,
+                previous,
+            } => {
+                let (Ok(on_entered), Ok(phase)) = (entered.get(entity), p.phase_query.get(entity))
+                else {
+                    continue;
+                };
+                let result = call_phase_callback(
+                    &p,
+                    entity,
+                    &on_entered.callback,
+                    "PhaseEntered",
+                    phase_snapshot(phase, &name),
+                    previous.as_deref(),
+                    |func, ctx| func.call((ctx, &input_table)),
+                );
+                if let Some(next) = phase_from_return(result, &phase.current, &on_entered.callback)
+                {
+                    returns.push((entity, next));
+                }
+            }
+            LuaPhaseEvent::Exited { entity, name } => {
+                let (Ok(on_exited), Ok(phase)) = (exited.get(entity), p.phase_query.get(entity))
+                else {
+                    continue;
+                };
+                // Exit callbacks have no return sugar.
+                call_phase_callback(
+                    &p,
+                    entity,
+                    &on_exited.callback,
+                    "PhaseExited",
+                    PhaseSnapshot::from(phase),
+                    Some(&name),
+                    |func, ctx| func.call(ctx),
+                );
+            }
+        }
+    }
+
+    for (entity, on_update) in &updates {
         let Ok(phase) = p.phase_query.get(entity) else {
             continue;
         };
-        let Some(ctx_table) = build_ctx_or_log(
+        let result = call_phase_callback(
             &p,
             entity,
+            &on_update.callback,
             "PhaseUpdate",
-            Some(PhaseSnapshot::from(phase)),
+            PhaseSnapshot::from(phase),
             None,
-        ) else {
-            continue;
-        };
-        let result = p
-            .lua_runtime
-            .call_named(&on_update.callback, "PhaseUpdate", |func| {
-                func.call::<LuaValue>((ctx_table, &input_table, dt))
-            })
-            .unwrap_or(LuaValue::Nil);
+            |func, ctx| func.call((ctx, &input_table, dt)),
+        );
         if let Some(next) = phase_from_return(result, &phase.current, &on_update.callback) {
             returns.push((entity, next));
         }
@@ -137,6 +150,42 @@ pub fn lua_phase_update_system(
     drain_dispatch_commands(&mut p, DrainScope::Regular);
     for (entity, next) in returns.drain(..) {
         request_phase(&mut p.commands, entity, next);
+    }
+}
+
+/// Builds `entity`'s ctx with the `phase` fields and calls `callback` through
+/// `call`. `Nil` when the ctx cannot be built, the function is missing or the
+/// call errors (each logged).
+fn call_phase_callback(
+    p: &LuaDispatch,
+    entity: Entity,
+    callback: &str,
+    label: &str,
+    phase: PhaseSnapshot<'_>,
+    previous: Option<&str>,
+    call: impl FnOnce(LuaFunction, LuaTable) -> LuaResult<LuaValue>,
+) -> LuaValue {
+    let Some(ctx_table) = build_ctx_or_log(p, entity, label, Some(phase), previous) else {
+        return LuaValue::Nil;
+    };
+    p.lua_runtime
+        .call_named(callback, label, |func| call(func, ctx_table))
+        .unwrap_or(LuaValue::Nil)
+}
+
+/// The enter ctx phase fields for `live`, naming the entered phase `name`.
+/// `phase_system` can trigger an initial enter and a transition in one run,
+/// and both are called after the swap, so the first must not report the
+/// phase it is not in. A phase other than the live one was left this tick,
+/// so its time is 0.
+fn phase_snapshot<'a>(live: &'a Phase, name: &'a str) -> PhaseSnapshot<'a> {
+    if name == live.current {
+        PhaseSnapshot::from(live)
+    } else {
+        PhaseSnapshot {
+            current: name,
+            time_in_phase: 0.0,
+        }
     }
 }
 
@@ -172,6 +221,7 @@ mod tests {
     fn setup_world(script: &str) -> World {
         let mut world = World::new();
         init_dispatch_resources(&mut world);
+        world.init_resource::<LuaPhaseEvents>();
         world.insert_non_send(LuaRuntime::new().expect("LuaRuntime::new"));
         world.spawn(Observer::new(lua_phase_entered_observer));
         world.spawn(Observer::new(lua_phase_exited_observer));
@@ -209,6 +259,7 @@ mod tests {
             previous: previous.map(Into::into),
         });
         world.flush();
+        run_update(world);
     }
 
     fn next(world: &World, entity: Entity) -> Option<String> {
@@ -305,6 +356,7 @@ mod tests {
             .run_system_once(phase_system)
             .expect("phase_system should run");
         world.flush();
+        run_update(world);
     }
 
     #[test]
@@ -357,6 +409,7 @@ mod tests {
             next: next.into(),
         });
         world.flush();
+        run_update(world);
     }
 
     #[test]
@@ -429,6 +482,41 @@ mod tests {
         run_phase_system(&mut world);
 
         assert_eq!(world.get::<Phase>(entity).unwrap().current, "run");
+    }
+
+    #[test]
+    fn enter_and_update_returns_in_one_tick_update_wins() {
+        let mut world = setup_world(
+            "function on_enter(ctx) return \"a\" end\nfunction on_update(ctx) return \"b\" end",
+        );
+        let entity = world
+            .spawn((
+                Phase::new("idle"),
+                LuaOnPhaseEntered::new("on_enter"),
+                LuaOnPhaseUpdate::new("on_update"),
+            ))
+            .id();
+
+        enter(&mut world, entity, "idle", None);
+
+        assert_eq!(next(&world, entity).as_deref(), Some("b"));
+    }
+
+    #[test]
+    fn queued_enter_skips_despawned_entity() {
+        let mut world = setup_world("calls = 0\nfunction on_enter(ctx) calls = calls + 1 end");
+        let entity = spawn_in_phase(&mut world, "idle", "on_enter");
+        world.trigger(PhaseEntered {
+            entity,
+            name: "idle".into(),
+            previous: None,
+        });
+        world.flush();
+        world.despawn(entity);
+
+        run_update(&mut world);
+
+        assert_eq!(global::<i64>(&world, "calls"), 0);
     }
 
     #[test]

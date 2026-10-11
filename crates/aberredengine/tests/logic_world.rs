@@ -1531,6 +1531,7 @@ end
 
 /// `engine.collision_phase_transition` from a collision callback sets
 /// `Phase.next`; core `phase_system` applies it at the start of the next tick.
+/// The Lua enter callback runs after collision, so after the hit.
 #[cfg(feature = "lua")]
 #[test]
 fn lua_collision_phase_transition_applies_next_tick() {
@@ -1559,7 +1560,7 @@ end
     spawn_box(&mut tw, "b", 5.0, ());
 
     tw.tick(1, DT);
-    assert_eq!(take_lua_log(&mut tw), ["enter:idle", "hit"]);
+    assert_eq!(take_lua_log(&mut tw), ["hit", "enter:idle"]);
     let phase = tw.world.get::<Phase>(a).unwrap();
     assert_eq!(phase.current, "idle");
     assert_eq!(phase.next.as_deref(), Some("hurt"));
@@ -1598,21 +1599,95 @@ fn lua_phase_transition_drives_a_rust_phase_entity() {
     assert_eq!(take_phase_log(&mut tw), ["exited:idle", "entered:run"]);
 }
 
+/// A Lua phase enter runs after this tick's collision: the initial enter on
+/// the tick the pair first touches sees the flag the stay callback set.
+#[cfg(feature = "lua")]
+#[test]
+fn lua_phase_enter_sees_this_ticks_collision() {
+    use aberredengine::lua::components::lua_on_phase::LuaOnPhaseEntered;
+
+    let mut tw = lua_script_world(
+        "phase_after_collision",
+        r#"
+function on_hit(ctx) engine.collision_entity_signal_set_flag(ctx.a.id, "touching") end
+function on_enter(ctx)
+    local seen = false
+    for _, flag in ipairs(ctx.signals.flags) do
+        if flag == "touching" then seen = true end
+    end
+    table.insert(LOG, "enter:" .. tostring(seen))
+end
+"#,
+    );
+    spawn_lua_rule(&mut tw, Some("on_hit"), "");
+    spawn_box(
+        &mut tw,
+        "a",
+        0.0,
+        (
+            Phase::new("idle"),
+            LuaOnPhaseEntered::new("on_enter"),
+            Signals::default(),
+        ),
+    );
+    spawn_box(&mut tw, "b", 5.0, ());
+
+    tw.tick(1, DT);
+
+    assert_eq!(take_lua_log(&mut tw), ["enter:true"]);
+}
+
+/// A phase entered during Setup, before its Lua callback exists, gets its
+/// enter callback once the game is Playing.
+#[cfg(feature = "lua")]
+#[test]
+fn lua_phase_enter_during_setup_runs_once_playing() {
+    use aberredengine::core::components::persistent::Persistent;
+    use aberredengine::lua::components::lua_on_phase::LuaOnPhaseEntered;
+
+    let mut tw = lua_script_world_unplayed(
+        "phase_setup_enter",
+        r#"
+function on_enter_play()
+    function on_enter(ctx) table.insert(LOG, "enter:" .. ctx.phase) end
+    return ""
+end
+"#,
+    );
+    tw.world.spawn((
+        Phase::new("idle"),
+        LuaOnPhaseEntered::new("on_enter"),
+        Persistent,
+    ));
+
+    tw.tick_to_play(DT, 8);
+    tw.tick(1, DT);
+
+    assert_eq!(take_lua_log(&mut tw), ["enter:idle"]);
+}
+
 /// Lua game running `script_body`, after `LOG = {}` (a global table its
-/// callbacks can append to; see `take_lua_log`).
+/// callbacks can append to; see `take_lua_log`), ticked to Playing.
 #[cfg(feature = "lua")]
 fn lua_script_world(name: &str, script_body: &str) -> TestWorld {
+    let mut tw = lua_script_world_unplayed(name, script_body);
+    tw.tick_to_play(DT, 8);
+    tw
+}
+
+/// [`lua_script_world`] before its first tick, still in Setup.
+#[cfg(feature = "lua")]
+fn lua_script_world_unplayed(name: &str, script_body: &str) -> TestWorld {
     let script = std::env::temp_dir().join(format!(
         "aberred_lua_script_{name}_{}.lua",
         std::process::id()
     ));
     std::fs::write(&script, format!("LOG = {{}}\n{script_body}")).unwrap();
-    let mut tw = TestWorld::builder()
+    let tw = TestWorld::builder()
         .with_lua(&script)
         .build()
         .expect("build should succeed");
     std::fs::remove_file(&script).ok();
-    tw.tick_to_play(DT, 8);
     tw
 }
 
