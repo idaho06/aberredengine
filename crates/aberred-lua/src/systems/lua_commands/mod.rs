@@ -64,7 +64,6 @@ use aberred_core::components::globaltransform2d::GlobalTransform2D;
 use aberred_core::components::guiinteractable::GuiInteractable;
 use aberred_core::components::guiprogressbar::GuiProgressBar;
 use aberred_core::components::mapposition::MapPosition;
-use aberred_core::components::phase::Phase;
 use aberred_core::components::rigidbody::RigidBody;
 use aberred_core::components::rotation::Rotation;
 use aberred_core::components::scale::Scale;
@@ -96,6 +95,7 @@ pub struct EffectCmdBufs {
     pub(crate) clones: Vec<CloneCmd>,
     pub(crate) audios: Vec<AudioLuaCmd>,
     pub(crate) cameras: Vec<CameraCmd>,
+    pub(crate) phases: Vec<PhaseCmd>,
 }
 
 /// Selects which set of command queues to drain from the Lua runtime.
@@ -108,13 +108,14 @@ pub(crate) enum DrainScope {
     Collision,
 }
 
-/// Drain and process the 6 effect queues shared by all Lua callback contexts.
+/// Drain and process the 7 command queues shared by all Lua callback contexts.
 ///
-/// Canonical order: `signal → entity → spawn → clone → audio → camera`
+/// Canonical order: `signal → entity → spawn → clone → audio → camera → phase`
 ///
-/// Phase is drained separately ([`drain_and_process_phase_commands`]), first,
-/// so a callback's returned phase name, applied after both drains, wins over
-/// an `engine.phase_transition` it queued.
+/// Phase requests are deferred commands queued last, so an
+/// `engine.phase_transition` lands after an `engine.entity_insert_phase` from
+/// the same callback, and a phase name the callback returns, requested after
+/// this drain, wins over the `phase_transition`.
 ///
 /// `bufs` must be a caller-owned [`EffectCmdBufs`] (typically `Local<EffectCmdBufs>`).
 /// The Vecs retain capacity across frames to avoid repeated allocation.
@@ -138,6 +139,7 @@ pub(crate) fn drain_and_process_effect_commands(
             lua_runtime.drain_clone_commands_into(&mut bufs.clones);
             lua_runtime.drain_audio_commands_into(&mut bufs.audios);
             lua_runtime.drain_camera_commands_into(&mut bufs.cameras);
+            lua_runtime.drain_phase_commands_into(&mut bufs.phases);
         }
         DrainScope::Collision => {
             lua_runtime.drain_collision_signal_commands_into(&mut bufs.signals);
@@ -146,6 +148,7 @@ pub(crate) fn drain_and_process_effect_commands(
             lua_runtime.drain_collision_clone_commands_into(&mut bufs.clones);
             lua_runtime.drain_collision_audio_commands_into(&mut bufs.audios);
             lua_runtime.drain_collision_camera_commands_into(&mut bufs.cameras);
+            lua_runtime.drain_collision_phase_commands_into(&mut bufs.phases);
         }
     }
 
@@ -172,21 +175,8 @@ pub(crate) fn drain_and_process_effect_commands(
     for cmd in bufs.cameras.drain(..) {
         process_camera_command(commands, cmd);
     }
-}
-
-/// Drains the `scope`'s phase command queue and processes each command.
-pub(crate) fn drain_and_process_phase_commands(
-    lua_runtime: &LuaRuntime,
-    scope: DrainScope,
-    buf: &mut Vec<PhaseCmd>,
-    phase_query: &mut Query<&mut Phase>,
-) {
-    match scope {
-        DrainScope::Regular => lua_runtime.drain_phase_commands_into(buf),
-        DrainScope::Collision => lua_runtime.drain_collision_phase_commands_into(buf),
-    }
-    for cmd in buf.drain(..) {
-        process_phase_command(phase_query, cmd);
+    for cmd in bufs.phases.drain(..) {
+        process_phase_command(commands, cmd);
     }
 }
 

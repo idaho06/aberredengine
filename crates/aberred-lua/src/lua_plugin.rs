@@ -11,14 +11,12 @@
 //!
 //! - [`ScriptingContext`] – `LuaRuntime` + audio command writer
 //! - [`GameSceneState`] – world signals, post-process, config, camera follow, stores
-//! - [`EntityProcessing`] – entity command queries + core `Phase` query
 
 use crate::resources::lua_runtime::{
     AnimationCmd, AssetCmd, CameraFollowCmd, GameConfigCmd, GroupCmd, InputCmd, LuaRuntime,
-    PhaseCmd, RenderCmd,
+    RenderCmd,
 };
 use aberred_core::components::persistent::SceneCleanup;
-use aberred_core::components::phase::Phase;
 use aberred_core::protocol::audio::AudioCmd;
 use aberred_core::protocol::render_assets::RenderAssetCmd;
 use aberred_core::resources::animationstore::AnimationStore;
@@ -38,10 +36,9 @@ use aberred_core::resources::systemsstore::SystemsStore;
 
 use crate::systems::lua_commands::{
     DrainScope, EffectCmdBufs, EntityCmdQueries, asset_cmd_to_audio_cmd,
-    asset_cmd_to_render_asset_cmd, drain_and_process_effect_commands,
-    drain_and_process_phase_commands, process_animation_command, process_camera_follow_command,
-    process_gameconfig_command, process_group_command, process_input_command,
-    process_render_command, process_signal_command, translate_asset_command,
+    asset_cmd_to_render_asset_cmd, drain_and_process_effect_commands, process_animation_command,
+    process_camera_follow_command, process_gameconfig_command, process_group_command,
+    process_input_command, process_render_command, process_signal_command, translate_asset_command,
 };
 use aberred_core::resources::camera2d::Camera2D;
 use aberred_core::resources::signal_keys as sk;
@@ -70,20 +67,12 @@ pub struct GameSceneState<'w> {
     pub anim_store: ResMut<'w, AnimationStore>,
 }
 
-/// Bundled entity processing queries.
-#[derive(SystemParam)]
-pub struct EntityProcessing<'w, 's> {
-    pub cmd_queries: EntityCmdQueries<'w, 's>,
-    pub phases: Query<'w, 's, &'static mut Phase>,
-}
-
 /// Persistent per-frame buffers for the command queues drained by `drain_common_commands`.
 ///
 /// Hold one of these in a `Local<CommonCmdBufs>` on each Bevy system that calls
 /// `drain_common_commands`. The Vecs retain heap capacity across frames.
 #[derive(Default)]
 pub struct CommonCmdBufs {
-    phase: Vec<PhaseCmd>,
     effects: EffectCmdBufs,
     render: Vec<RenderCmd>,
     gui_theme: Vec<RenderCmd>,
@@ -206,7 +195,7 @@ pub fn enter_play(
 fn drain_common_commands(
     lua_runtime: &LuaRuntime,
     commands: &mut Commands,
-    entities: &mut EntityProcessing,
+    cmd_queries: &mut EntityCmdQueries,
     scene_state: &mut GameSceneState,
     audio_cmd_writer: &mut MessageWriter<AudioCmd>,
     bindings: &mut InputBindings,
@@ -222,20 +211,13 @@ fn drain_common_commands(
         process_animation_command(&mut scene_state.anim_store, cmd);
     }
 
-    drain_and_process_phase_commands(
-        lua_runtime,
-        DrainScope::Regular,
-        &mut bufs.phase,
-        &mut entities.phases,
-    );
-
     drain_and_process_effect_commands(
         lua_runtime,
         DrainScope::Regular,
         &mut bufs.effects,
         commands,
         &mut scene_state.world_signals,
-        &mut entities.cmd_queries,
+        cmd_queries,
         audio_cmd_writer,
         &scene_state.systems_store,
         &scene_state.anim_store,
@@ -385,7 +367,7 @@ pub fn update(
     mut next_game_state: ResMut<NextGameState>,
     mut scripting: ScriptingContext,
     mut scene_state: GameSceneState,
-    mut entities: EntityProcessing,
+    mut cmd_queries: EntityCmdQueries,
     mut bindings: ResMut<InputBindings>,
     mut tracked_groups: ResMut<TrackedGroups>,
     mut common_bufs: Local<CommonCmdBufs>,
@@ -437,7 +419,7 @@ pub fn update(
     drain_common_commands(
         lua_runtime,
         &mut commands,
-        &mut entities,
+        &mut cmd_queries,
         &mut scene_state,
         &mut scripting.audio_cmd_writer,
         &mut bindings,
@@ -473,7 +455,7 @@ pub fn switch_scene(
     mut scene_state: GameSceneState,
     scene_cleanup: SceneCleanup,
     mut tracked_groups: ResMut<TrackedGroups>,
-    mut entities: EntityProcessing,
+    mut cmd_queries: EntityCmdQueries,
     mut bindings: ResMut<InputBindings>,
     mut common_bufs: Local<CommonCmdBufs>,
     gui_theme_store: Res<GuiThemeStore>,
@@ -534,7 +516,7 @@ pub fn switch_scene(
     drain_common_commands(
         lua_runtime,
         &mut commands,
-        &mut entities,
+        &mut cmd_queries,
         &mut scene_state,
         &mut scripting.audio_cmd_writer,
         &mut bindings,
@@ -609,7 +591,7 @@ mod tests {
         let mut system_state = SystemState::<(
             Commands,
             NonSend<LuaRuntime>,
-            EntityProcessing,
+            EntityCmdQueries,
             GameSceneState,
             MessageWriter<AudioCmd>,
             ResMut<InputBindings>,
@@ -623,7 +605,7 @@ mod tests {
             let (
                 mut commands,
                 lua_runtime,
-                mut entities,
+                mut cmd_queries,
                 mut scene_state,
                 mut audio_cmd_writer,
                 mut bindings,
@@ -637,7 +619,7 @@ mod tests {
             drain_common_commands(
                 &lua_runtime,
                 &mut commands,
-                &mut entities,
+                &mut cmd_queries,
                 &mut scene_state,
                 &mut audio_cmd_writer,
                 &mut bindings,

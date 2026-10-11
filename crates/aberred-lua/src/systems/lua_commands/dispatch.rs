@@ -20,7 +20,7 @@ use bevy_ecs::system::SystemParam;
 use log::error;
 use mlua::prelude::{Lua, LuaResult, LuaTable, LuaValue};
 
-use crate::resources::lua_runtime::{LuaRuntime, PhaseCmd, PhaseSnapshot};
+use crate::resources::lua_runtime::{LuaRuntime, PhaseSnapshot};
 use aberred_core::components::phase::Phase;
 use aberred_core::protocol::audio::AudioCmd;
 use aberred_core::resources::animationstore::AnimationStore;
@@ -31,7 +31,7 @@ use aberred_core::resources::worldtime::WorldTime;
 
 use super::{
     ContextQueries, DrainScope, EffectCmdBufs, EntityCmdQueries, build_entity_context,
-    drain_and_process_effect_commands, drain_and_process_phase_commands,
+    drain_and_process_effect_commands,
 };
 
 /// Everything needed to dispatch one Lua entity callback and drain the
@@ -43,13 +43,12 @@ pub struct LuaDispatch<'w, 's> {
     pub time: Res<'w, WorldTime>,
     pub ctx_queries: ContextQueries<'w, 's>,
     pub cmd_queries: EntityCmdQueries<'w, 's>,
-    pub phase_query: Query<'w, 's, &'static mut Phase>,
+    pub phase_query: Query<'w, 's, &'static Phase>,
     pub world_signals: ResMut<'w, WorldSignals>,
     pub lua_runtime: NonSend<'w, LuaRuntime>,
     pub audio_cmd_writer: MessageWriter<'w, AudioCmd>,
     pub systems_store: Res<'w, SystemsStore>,
     pub animation_store: Res<'w, AnimationStore>,
-    pub phase_buf: Local<'s, Vec<PhaseCmd>>,
     pub effect_bufs: Local<'s, EffectCmdBufs>,
 }
 
@@ -238,10 +237,8 @@ pub fn dispatch_custom_and_drain(
     drain_dispatch_commands(p, DrainScope::Regular);
 }
 
-/// Drain the `scope`'s phase queue, then its 6 effect queues, in the
-/// canonical order.
+/// Drain the `scope`'s command queues, in the canonical order.
 pub(crate) fn drain_dispatch_commands(p: &mut LuaDispatch, scope: DrainScope) {
-    drain_and_process_phase_commands(&p.lua_runtime, scope, &mut p.phase_buf, &mut p.phase_query);
     drain_and_process_effect_commands(
         &p.lua_runtime,
         scope,

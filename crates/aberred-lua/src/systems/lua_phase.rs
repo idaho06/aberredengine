@@ -44,7 +44,7 @@ pub fn lua_phase_entered_observer(
         return;
     };
     if let Some(next) = phase_from_return(result, &ev.name, &on_entered.callback) {
-        request_phase(&mut p.phase_query, ev.entity, next);
+        request_phase(&mut p.commands, ev.entity, next);
     }
 }
 
@@ -124,7 +124,7 @@ pub fn lua_phase_update_system(
 
     drain_dispatch_commands(&mut p, DrainScope::Regular);
     for (entity, next) in returns.drain(..) {
-        request_phase(&mut p.phase_query, entity, next);
+        request_phase(&mut p.commands, entity, next);
     }
 }
 
@@ -257,6 +257,27 @@ mod tests {
         enter(&mut world, entity, "idle", None);
 
         assert_eq!(next(&world, entity), None);
+    }
+
+    #[test]
+    fn phase_transition_after_entity_insert_phase_in_same_callback() {
+        let mut world = setup_world(
+            "function on_enter(ctx) engine.entity_insert_phase(target, \"a\"); engine.phase_transition(target, \"b\") end",
+        );
+        let target = world.spawn_empty().id();
+        world
+            .non_send::<LuaRuntime>()
+            .lua()
+            .globals()
+            .set("target", target.to_bits())
+            .expect("set target");
+        let entity = spawn_in_phase(&mut world, "idle", "on_enter");
+
+        enter(&mut world, entity, "idle", None);
+
+        let phase = world.get::<Phase>(target).expect("Phase inserted");
+        assert_eq!(phase.current, "a");
+        assert_eq!(phase.next.as_deref(), Some("b"));
     }
 
     #[test]

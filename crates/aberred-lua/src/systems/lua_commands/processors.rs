@@ -158,24 +158,29 @@ pub fn process_camera_command(commands: &mut Commands, cmd: CameraCmd) {
     }
 }
 
-/// Process a single phase command from Lua: set the entity's core `Phase.next`.
-pub fn process_phase_command(phase_query: &mut Query<&mut Phase>, cmd: PhaseCmd) {
+/// Process a single phase command from Lua: request the entity's core `Phase.next`.
+pub fn process_phase_command(commands: &mut Commands, cmd: PhaseCmd) {
     match cmd {
         PhaseCmd::TransitionTo { entity_id, phase } => {
             if let Some(entity) = super::entity_cmd::resolve_entity(entity_id) {
-                request_phase(phase_query, entity, phase);
+                request_phase(commands, entity, phase);
             }
         }
     }
 }
 
 /// Request `next` on `entity`'s core `Phase` (sets `Phase.next`; core
-/// `phase_system` applies it on its next run). No-op when the entity has no
-/// core `Phase`.
-pub(crate) fn request_phase(phase_query: &mut Query<&mut Phase>, entity: Entity, next: String) {
-    if let Ok(mut phase) = phase_query.get_mut(entity) {
-        phase.next = Some(next);
-    }
+/// `phase_system` applies it on its next run). Deferred, so it lands after
+/// the commands queued before it. No-op when the entity has no core `Phase`
+/// or is gone by then.
+pub(crate) fn request_phase(commands: &mut Commands, entity: Entity, next: String) {
+    commands
+        .entity(entity)
+        .queue_silenced(move |mut entity: EntityWorldMut| {
+            if let Some(mut phase) = entity.get_mut::<Phase>() {
+                phase.next = Some(next);
+            }
+        });
 }
 
 /// Translate a single Lua-queued [`AssetCmd`] into either an [`AudioCmd`]
