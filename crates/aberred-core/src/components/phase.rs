@@ -64,18 +64,15 @@ impl Phase {
     }
 
     /// Marks the initial phase as entered. Returns `true` only on the first call,
-    /// when the caller fires the initial enter. For phase runners only: calling it
-    /// from game code suppresses the initial `PhaseEntered`.
-    #[doc(hidden)]
-    pub fn begin(&mut self) -> bool {
+    /// when `phase_system` fires the initial enter.
+    pub(crate) fn begin(&mut self) -> bool {
         !std::mem::replace(&mut self.entered, true)
     }
 
     /// Applies a requested transition: `previous = current`, `current = next`,
     /// `time_in_phase = 0`. Returns the old phase name, or `None` (and changes
     /// nothing) when no transition is requested.
-    #[doc(hidden)]
-    pub fn apply_next(&mut self) -> Option<String> {
+    pub(crate) fn apply_next(&mut self) -> Option<String> {
         let next = self.next.take()?;
         let old = std::mem::replace(&mut self.current, next);
         self.previous = Some(old.clone());

@@ -54,8 +54,8 @@ pub struct LuaDispatch<'w, 's> {
 }
 
 /// The call shapes the dispatch sites need: whether the ctx carries the
-/// phase fields ([`CallShape::wants_phase`]) and whether an input table is
-/// passed ([`CallShape::wants_input`]) are independent choices.
+/// phase fields (`wants_phase`) and whether an input table is passed
+/// (`wants_input`) are independent choices.
 #[derive(Clone, Copy)]
 pub enum CallShape {
     /// Resolve the phase snapshot, build the input table, call `(ctx, input)`
@@ -69,12 +69,12 @@ pub enum CallShape {
 
 impl CallShape {
     /// Whether the callback gets an input table as its second argument.
-    pub fn wants_input(self) -> bool {
+    fn wants_input(self) -> bool {
         matches!(self, CallShape::CtxAndInput)
     }
 
     /// Whether the ctx carries `phase` / `time_in_phase`.
-    pub fn wants_phase(self) -> bool {
+    fn wants_phase(self) -> bool {
         !matches!(self, CallShape::CtxOnly)
     }
 }
@@ -206,7 +206,7 @@ pub(crate) fn build_ctx_or_log(
 /// so a phase it returns can be applied after (and so beat) any
 /// `engine.phase_transition` the callback queued. `None` if the call did not
 /// happen (ctx or input construction failed).
-pub fn dispatch_and_drain_returning(
+pub(crate) fn dispatch_and_drain_returning(
     p: &mut LuaDispatch,
     entity: Entity,
     callback_name: &str,

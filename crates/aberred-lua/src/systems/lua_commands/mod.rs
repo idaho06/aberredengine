@@ -30,10 +30,12 @@ pub(crate) use context::build_entity_context;
 #[cfg(test)]
 pub(crate) use dispatch::init_dispatch_resources;
 pub use dispatch::{
-    CallShape, LuaDispatch, call_entity_callback, dispatch_and_drain, dispatch_and_drain_returning,
-    dispatch_custom_and_drain, refresh_signal_cache,
+    CallShape, LuaDispatch, call_entity_callback, dispatch_and_drain, dispatch_custom_and_drain,
+    refresh_signal_cache,
 };
-pub(crate) use dispatch::{build_ctx_or_log, drain_dispatch_commands};
+pub(crate) use dispatch::{
+    build_ctx_or_log, dispatch_and_drain_returning, drain_dispatch_commands,
+};
 pub use entity_cmd::process_entity_commands;
 pub(crate) use processors::request_phase;
 pub use processors::{

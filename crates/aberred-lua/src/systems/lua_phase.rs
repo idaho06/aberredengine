@@ -131,11 +131,7 @@ pub fn lua_phase_update_system(
 /// A phase callback's return value as a requested phase: a string naming a
 /// phase other than `current`. `nil` and `current` request nothing; any other
 /// value is warned about and ignored.
-pub(crate) fn phase_from_return(
-    result: LuaValue,
-    current_phase: &str,
-    fn_name: &str,
-) -> Option<String> {
+fn phase_from_return(result: LuaValue, current_phase: &str, fn_name: &str) -> Option<String> {
     match result {
         LuaValue::String(s) => match s.to_str() {
             Ok(phase) => (*phase != *current_phase).then(|| phase.to_string()),
