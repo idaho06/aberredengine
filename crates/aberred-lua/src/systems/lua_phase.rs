@@ -269,6 +269,14 @@ mod tests {
         assert_eq!(global::<String>(&world, "prev"), "idle");
     }
 
+    /// An entity already in `current` (phase_system swaps before triggering
+    /// `PhaseExited`) with a `LuaOnPhaseExited` calling `callback`.
+    fn spawn_with_exit(world: &mut World, current: &str, callback: &str) -> Entity {
+        world
+            .spawn((Phase::new(current), LuaOnPhaseExited::new(callback)))
+            .id()
+    }
+
     fn exit(world: &mut World, entity: Entity, name: &str, next: &str) {
         world.trigger(PhaseExited {
             entity,
@@ -283,10 +291,7 @@ mod tests {
         let mut world = setup_world(
             "function on_exit(...) local ctx = ...; argc = select('#', ...); phase = ctx.phase; prev = ctx.previous_phase end",
         );
-        // phase_system swaps before triggering, so `current` is already the new phase.
-        let entity = world
-            .spawn((Phase::new("run"), LuaOnPhaseExited::new("on_exit")))
-            .id();
+        let entity = spawn_with_exit(&mut world, "run", "on_exit");
 
         exit(&mut world, entity, "idle", "run");
 
@@ -298,9 +303,7 @@ mod tests {
     #[test]
     fn exit_return_value_is_ignored() {
         let mut world = setup_world("function on_exit(ctx) return \"jump\" end");
-        let entity = world
-            .spawn((Phase::new("run"), LuaOnPhaseExited::new("on_exit")))
-            .id();
+        let entity = spawn_with_exit(&mut world, "run", "on_exit");
 
         exit(&mut world, entity, "idle", "run");
 
