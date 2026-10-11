@@ -503,6 +503,29 @@ mod tests {
     }
 
     #[test]
+    fn enter_and_first_update_see_zero_time() {
+        let mut world = setup_world(
+            "seen = \"\"\n\
+             function on_enter(ctx) seen = seen .. \"enter:\" .. ctx.time_in_phase .. \",\" end\n\
+             function on_update(ctx) seen = seen .. \"update:\" .. ctx.time_in_phase .. \",\" end",
+        );
+        world.resource_mut::<WorldTime>().delta = 0.25;
+        world.spawn((
+            Phase::new("idle"),
+            LuaOnPhaseEntered::new("on_enter"),
+            LuaOnPhaseUpdate::new("on_update"),
+        ));
+
+        run_phase_system(&mut world);
+        run_phase_system(&mut world);
+
+        assert_eq!(
+            global::<String>(&world, "seen"),
+            "enter:0,update:0,update:0.25,"
+        );
+    }
+
+    #[test]
     fn queued_enter_skips_despawned_entity() {
         let mut world = setup_world("calls = 0\nfunction on_enter(ctx) calls = calls + 1 end");
         let entity = spawn_in_phase(&mut world, "idle", "on_enter");

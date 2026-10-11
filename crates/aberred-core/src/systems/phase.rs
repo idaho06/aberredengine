@@ -11,7 +11,8 @@
 //! 1. On the first run, trigger `PhaseEntered` for the initial phase.
 //! 2. If `next` is set: swap phases and reset `time_in_phase`, then trigger
 //!    `PhaseExited` for the old phase and `PhaseEntered` for the new one.
-//! 3. Add the tick's delta to `time_in_phase`.
+//! 3. Otherwise, unless the initial phase was entered in this run, add the
+//!    tick's delta to `time_in_phase`. A phase reads 0 in the tick it starts.
 //!
 //! Observers run after the system, so they see the post-swap `current`: for a
 //! transition, the new phase in both events. The initial `PhaseEntered` sees a
@@ -41,7 +42,8 @@ pub fn phase_system(
     mut commands: Commands,
 ) {
     for (entity, mut phase) in &mut query {
-        if phase.begin() {
+        let started = phase.begin();
+        if started {
             commands.trigger(PhaseEntered {
                 entity,
                 name: phase.current.as_str().into(),
@@ -61,8 +63,9 @@ pub fn phase_system(
                 name: new,
                 previous: Some(old),
             });
+        } else if !started {
+            phase.time_in_phase += world_time.delta;
         }
-        phase.time_in_phase += world_time.delta;
     }
 }
 
@@ -196,10 +199,7 @@ mod tests {
         );
         let phase = world.get::<Phase>(entity).unwrap();
         assert_eq!(phase.previous.as_deref(), Some("idle"));
-        assert!(
-            approx_eq(phase.time_in_phase, 0.25),
-            "time resets on re-entry"
-        );
+        assert_eq!(phase.time_in_phase, 0.0, "time resets on re-entry");
     }
 
     #[test]
@@ -209,17 +209,40 @@ mod tests {
 
         tick_phases(&mut world);
         tick_phases(&mut world);
-        assert!(approx_eq(
-            world.get::<Phase>(entity).unwrap().time_in_phase,
-            0.5
-        ));
+        assert!(
+            approx_eq(world.get::<Phase>(entity).unwrap().time_in_phase, 0.25),
+            "the entering run adds nothing, the next run adds its delta"
+        );
 
         world.get_mut::<Phase>(entity).unwrap().next = Some("run".into());
         tick_phases(&mut world);
-        assert!(
-            approx_eq(world.get::<Phase>(entity).unwrap().time_in_phase, 0.25),
-            "reset on swap, then this run's delta"
+        assert_eq!(
+            world.get::<Phase>(entity).unwrap().time_in_phase,
+            0.0,
+            "reset on swap; the entry tick adds nothing"
         );
+    }
+
+    #[test]
+    fn entered_observer_sees_zero_time() {
+        let mut world = make_phase_world(0.25);
+        world.add_observer(
+            |ev: On<PhaseEntered>, phases: Query<&Phase>, mut log: ResMut<Log>| {
+                let time = phases.get(ev.entity).unwrap().time_in_phase;
+                log.0.push(format!("time:{}:{time}", ev.name));
+            },
+        );
+        let entity = world.spawn(Phase::new("idle")).id();
+        tick_phases(&mut world);
+        tick_phases(&mut world);
+        world.get_mut::<Phase>(entity).unwrap().next = Some("run".into());
+        tick_phases(&mut world);
+
+        let times: Vec<String> = take_log(&mut world)
+            .into_iter()
+            .filter(|line| line.starts_with("time:"))
+            .collect();
+        assert_eq!(times, ["time:idle:0", "time:run:0"]);
     }
 
     #[test]
