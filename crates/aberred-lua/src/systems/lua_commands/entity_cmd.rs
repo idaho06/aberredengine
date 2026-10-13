@@ -17,6 +17,7 @@ use aberred_core::components::globaltransform2d::GlobalTransform2D;
 use aberred_core::components::guiinteractable::GuiWidgetState;
 use aberred_core::components::mapposition::MapPosition;
 use aberred_core::components::phase::Phase;
+use aberred_core::components::rigidbody::RigidBody;
 use aberred_core::components::rotation::Rotation;
 use aberred_core::components::scale::Scale;
 use aberred_core::components::screenposition::ScreenPosition;
@@ -123,7 +124,7 @@ pub fn process_entity_commands(
             | EntityCmd::AddForce { .. }
             | EntityCmd::RemoveForce { .. }
             | EntityCmd::SetForceEnabled { .. }
-            | EntityCmd::SetForceValue { .. }) => process_physics_cmd(cmd, queries),
+            | EntityCmd::SetForceValue { .. }) => process_physics_cmd(cmd, commands),
 
             cmd @ (EntityCmd::SignalSetFlag { .. }
             | EntityCmd::SignalClearFlag { .. }
@@ -212,61 +213,33 @@ pub fn process_entity_commands(
     }
 }
 
-fn process_physics_cmd(cmd: EntityCmd, queries: &mut EntityCmdQueries) {
+fn process_physics_cmd(cmd: EntityCmd, commands: &mut Commands) {
     match cmd {
         EntityCmd::SetVelocity { entity_id, vx, vy } => {
-            let Some(entity) = resolve_entity(entity_id) else {
-                return;
-            };
-            if let Ok(mut rb) = queries.rigid_bodies.get_mut(entity) {
+            queue_on_rigid_body(commands, entity_id, move |rb| {
                 rb.velocity = Vec2 { x: vx, y: vy };
-            }
+            });
         }
         EntityCmd::SetSpeed { entity_id, speed } => {
-            let Some(entity) = resolve_entity(entity_id) else {
-                return;
-            };
-            if let Ok(mut rb) = queries.rigid_bodies.get_mut(entity) {
-                rb.set_speed(speed);
-            }
+            queue_on_rigid_body(commands, entity_id, move |rb| rb.set_speed(speed));
         }
         EntityCmd::SetFriction {
             entity_id,
             friction,
         } => {
-            let Some(entity) = resolve_entity(entity_id) else {
-                return;
-            };
-            if let Ok(mut rb) = queries.rigid_bodies.get_mut(entity) {
-                rb.friction = friction;
-            }
+            queue_on_rigid_body(commands, entity_id, move |rb| rb.friction = friction);
         }
         EntityCmd::SetMaxSpeed {
             entity_id,
             max_speed,
         } => {
-            let Some(entity) = resolve_entity(entity_id) else {
-                return;
-            };
-            if let Ok(mut rb) = queries.rigid_bodies.get_mut(entity) {
-                rb.max_speed = max_speed;
-            }
+            queue_on_rigid_body(commands, entity_id, move |rb| rb.max_speed = max_speed);
         }
         EntityCmd::FreezeEntity { entity_id } => {
-            let Some(entity) = resolve_entity(entity_id) else {
-                return;
-            };
-            if let Ok(mut rb) = queries.rigid_bodies.get_mut(entity) {
-                rb.freeze();
-            }
+            queue_on_rigid_body(commands, entity_id, RigidBody::freeze);
         }
         EntityCmd::UnfreezeEntity { entity_id } => {
-            let Some(entity) = resolve_entity(entity_id) else {
-                return;
-            };
-            if let Ok(mut rb) = queries.rigid_bodies.get_mut(entity) {
-                rb.unfreeze();
-            }
+            queue_on_rigid_body(commands, entity_id, RigidBody::unfreeze);
         }
         EntityCmd::AddForce {
             entity_id,
@@ -275,32 +248,23 @@ fn process_physics_cmd(cmd: EntityCmd, queries: &mut EntityCmdQueries) {
             y,
             enabled,
         } => {
-            let Some(entity) = resolve_entity(entity_id) else {
-                return;
-            };
-            if let Ok(mut rb) = queries.rigid_bodies.get_mut(entity) {
+            queue_on_rigid_body(commands, entity_id, move |rb| {
                 rb.add_force_with_state(&name, Vec2 { x, y }, enabled);
-            }
+            });
         }
         EntityCmd::RemoveForce { entity_id, name } => {
-            let Some(entity) = resolve_entity(entity_id) else {
-                return;
-            };
-            if let Ok(mut rb) = queries.rigid_bodies.get_mut(entity) {
+            queue_on_rigid_body(commands, entity_id, move |rb| {
                 rb.remove_force(&name);
-            }
+            });
         }
         EntityCmd::SetForceEnabled {
             entity_id,
             name,
             enabled,
         } => {
-            let Some(entity) = resolve_entity(entity_id) else {
-                return;
-            };
-            if let Ok(mut rb) = queries.rigid_bodies.get_mut(entity) {
+            queue_on_rigid_body(commands, entity_id, move |rb| {
                 rb.set_force_enabled(&name, enabled);
-            }
+            });
         }
         EntityCmd::SetForceValue {
             entity_id,
@@ -308,15 +272,26 @@ fn process_physics_cmd(cmd: EntityCmd, queries: &mut EntityCmdQueries) {
             x,
             y,
         } => {
-            let Some(entity) = resolve_entity(entity_id) else {
-                return;
-            };
-            if let Ok(mut rb) = queries.rigid_bodies.get_mut(entity) {
+            queue_on_rigid_body(commands, entity_id, move |rb| {
                 rb.set_force_value(&name, Vec2 { x, y });
-            }
+            });
         }
         _ => unreachable!(),
     }
+}
+
+/// [`queue_on_entity`] for a write to the entity's `RigidBody`; a no-op at
+/// apply time if it has none.
+fn queue_on_rigid_body(
+    commands: &mut Commands,
+    entity_id: u64,
+    f: impl FnOnce(&mut RigidBody) + Send + 'static,
+) {
+    queue_on_entity(commands, entity_id, move |mut e| {
+        if let Some(mut rb) = e.get_mut::<RigidBody>() {
+            f(&mut rb);
+        }
+    });
 }
 
 /// Query-mutation handler for GUI widget enable/disable. Mutates
@@ -808,8 +783,8 @@ fn process_hierarchy_cmd(cmd: EntityCmd, commands: &mut Commands, queries: &mut 
             let Some(target) = resolve_entity(target_id) else {
                 return;
             };
-            with_entity_cmd(commands, entity_id, |ec| {
-                ec.try_insert(StuckTo {
+            queue_on_entity(commands, entity_id, move |mut e| {
+                e.insert(StuckTo {
                     target,
                     offset: Vec2 {
                         x: offset_x,
@@ -822,25 +797,16 @@ fn process_hierarchy_cmd(cmd: EntityCmd, commands: &mut Commands, queries: &mut 
                         y: stored_vy,
                     }),
                 })
-                .try_remove::<aberred_core::components::rigidbody::RigidBody>();
+                .remove::<RigidBody>();
             });
         }
         EntityCmd::ReleaseStuckTo { entity_id } => {
-            let Some(entity) = resolve_entity(entity_id) else {
-                return;
-            };
-            let stored_velocity = queries
-                .stuckto
-                .get(entity)
-                .ok()
-                .and_then(|stuckto| stuckto.stored_velocity);
-            with_entity_cmds(commands, entity, |ec| {
-                if let Some(velocity) = stored_velocity {
-                    let mut rb = aberred_core::components::rigidbody::RigidBody::new();
+            queue_on_entity(commands, entity_id, |mut e| {
+                if let Some(velocity) = e.take::<StuckTo>().and_then(|s| s.stored_velocity) {
+                    let mut rb = RigidBody::new();
                     rb.velocity = velocity;
-                    ec.try_insert(rb);
+                    e.insert(rb);
                 }
-                ec.try_remove::<StuckTo>();
             });
         }
         _ => unreachable!(),
@@ -1374,7 +1340,6 @@ mod tests {
 
     #[test]
     fn physics_cmds_mutate_the_rigidbody() {
-        use aberred_core::components::rigidbody::RigidBody;
         let mut world = World::new();
         let mut signals = WorldSignals::default();
         let e = world.spawn(RigidBody::new()).id();
@@ -1469,7 +1434,6 @@ mod tests {
 
     #[test]
     fn query_mutation_cmds_never_insert_missing_components() {
-        use aberred_core::components::rigidbody::RigidBody;
         use aberred_core::components::signals::Signals;
         let mut world = World::new();
         let mut signals = WorldSignals::default();
@@ -1900,7 +1864,6 @@ mod tests {
 
     #[test]
     fn release_stuckto_restores_stored_velocity_as_rigidbody() {
-        use aberred_core::components::rigidbody::RigidBody;
         let mut world = World::new();
         let mut signals = WorldSignals::default();
         let target = world.spawn(MapPosition::new(0.0, 0.0)).id();
@@ -1945,7 +1908,6 @@ mod tests {
 
     #[test]
     fn release_stuckto_without_stored_velocity_adds_no_rigidbody() {
-        use aberred_core::components::rigidbody::RigidBody;
         let mut world = World::new();
         let mut signals = WorldSignals::default();
         let target = world.spawn(MapPosition::new(0.0, 0.0)).id();
@@ -1968,6 +1930,104 @@ mod tests {
         );
         assert!(world.get::<StuckTo>(e).is_none());
         assert!(world.get::<RigidBody>(e).is_none());
+    }
+
+    /// An entity stuck to a fresh target with stored velocity `(1, 1)`.
+    fn spawn_stuck(world: &mut World) -> Entity {
+        let target = world.spawn(MapPosition::new(0.0, 0.0)).id();
+        world
+            .spawn(StuckTo {
+                target,
+                offset: Vec2::ZERO,
+                follow_x: true,
+                follow_y: true,
+                stored_velocity: Some(Vec2::new(1.0, 1.0)),
+            })
+            .id()
+    }
+
+    #[test]
+    fn release_stuckto_then_set_velocity_keeps_velocity() {
+        let mut world = World::new();
+        let mut signals = WorldSignals::default();
+        let e = spawn_stuck(&mut world);
+        let id = e.to_bits();
+
+        run_entity_cmds(
+            &mut world,
+            &mut signals,
+            [
+                EntityCmd::ReleaseStuckTo { entity_id: id },
+                EntityCmd::SetVelocity {
+                    entity_id: id,
+                    vx: 5.0,
+                    vy: 0.0,
+                },
+            ],
+        );
+        assert!(world.get::<StuckTo>(e).is_none());
+        assert_eq!(
+            world.get::<RigidBody>(e).unwrap().velocity,
+            Vec2::new(5.0, 0.0)
+        );
+    }
+
+    #[test]
+    fn release_stuckto_then_add_force_keeps_force() {
+        let mut world = World::new();
+        let mut signals = WorldSignals::default();
+        let e = spawn_stuck(&mut world);
+        let id = e.to_bits();
+
+        run_entity_cmds(
+            &mut world,
+            &mut signals,
+            [
+                EntityCmd::ReleaseStuckTo { entity_id: id },
+                EntityCmd::AddForce {
+                    entity_id: id,
+                    name: "gravity".into(),
+                    x: 0.0,
+                    y: 9.8,
+                    enabled: true,
+                },
+            ],
+        );
+        let rb = world.get::<RigidBody>(e).unwrap();
+        assert_eq!(rb.velocity, Vec2::new(1.0, 1.0), "stored velocity restored");
+        assert!(rb.get_force("gravity").is_some());
+    }
+
+    #[test]
+    fn insert_stuckto_then_release_in_one_batch_restores_stored_velocity() {
+        let mut world = World::new();
+        let mut signals = WorldSignals::default();
+        let target = world.spawn(MapPosition::new(0.0, 0.0)).id();
+        let e = world.spawn(RigidBody::new()).id();
+        let id = e.to_bits();
+
+        run_entity_cmds(
+            &mut world,
+            &mut signals,
+            [
+                EntityCmd::InsertStuckTo {
+                    entity_id: id,
+                    target_id: target.to_bits(),
+                    follow_x: true,
+                    follow_y: true,
+                    offset_x: 0.0,
+                    offset_y: 0.0,
+                    stored_vx: 3.0,
+                    stored_vy: 4.0,
+                },
+                EntityCmd::ReleaseStuckTo { entity_id: id },
+            ],
+        );
+        assert!(world.get::<StuckTo>(e).is_none());
+        assert_eq!(
+            world.get::<RigidBody>(e).unwrap().velocity,
+            Vec2::new(3.0, 4.0)
+        );
     }
 
     #[derive(Resource, Default)]
