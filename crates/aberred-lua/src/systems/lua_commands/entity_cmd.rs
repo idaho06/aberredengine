@@ -181,9 +181,7 @@ pub fn process_entity_commands(
             | EntityCmd::SetRotation { .. }
             | EntityCmd::SetScale { .. }
             | EntityCmd::SetCameraTarget { .. }
-            | EntityCmd::RemoveCameraTarget { .. }) => {
-                process_transform_cmd(cmd, commands, queries)
-            }
+            | EntityCmd::RemoveCameraTarget { .. }) => process_transform_cmd(cmd, commands),
 
             cmd @ (EntityCmd::SetParent { .. }
             | EntityCmd::RemoveParent { .. }
@@ -613,25 +611,17 @@ fn shader_set_uniform(cmd: EntityCmd, commands: &mut Commands) {
     });
 }
 
-fn process_transform_cmd(cmd: EntityCmd, commands: &mut Commands, queries: &mut EntityCmdQueries) {
+fn process_transform_cmd(cmd: EntityCmd, commands: &mut Commands) {
     match cmd {
         EntityCmd::SetPosition { entity_id, x, y } => {
-            let Some(entity) = resolve_entity(entity_id) else {
-                return;
-            };
-            if let Ok(mut pos) = queries.positions.get_mut(entity) {
-                pos.pos.x = x;
-                pos.pos.y = y;
-            }
+            queue_on_component::<MapPosition>(commands, entity_id, move |pos| {
+                pos.pos = Vec2 { x, y };
+            });
         }
         EntityCmd::SetScreenPosition { entity_id, x, y } => {
-            let Some(entity) = resolve_entity(entity_id) else {
-                return;
-            };
-            if let Ok(mut pos) = queries.screen_positions.get_mut(entity) {
-                pos.pos.x = x;
-                pos.pos.y = y;
-            }
+            queue_on_component::<ScreenPosition>(commands, entity_id, move |pos| {
+                pos.pos = Vec2 { x, y };
+            });
         }
         EntityCmd::RemoveScreenPosition { entity_id } => {
             with_entity_cmd(commands, entity_id, |ec| {
@@ -653,16 +643,9 @@ fn process_transform_cmd(cmd: EntityCmd, commands: &mut Commands, queries: &mut 
             priority,
             zoom,
         } => {
-            let Some(entity) = resolve_entity(entity_id) else {
-                return;
-            };
-            let existing = queries
-                .camera_targets
-                .get(entity)
-                .copied()
-                .unwrap_or_default();
-            with_entity_cmds(commands, entity, |ec| {
-                ec.try_insert(CameraTarget {
+            queue_on_entity(commands, entity_id, move |mut e| {
+                let existing = e.get::<CameraTarget>().copied().unwrap_or_default();
+                e.insert(CameraTarget {
                     priority: priority.unwrap_or(existing.priority),
                     zoom: zoom.unwrap_or(existing.zoom).max(f32::EPSILON),
                 });
@@ -1111,6 +1094,9 @@ mod tests {
                 GuiProgressBar::new(10.0, 2.0, 5.0, 10.0),
                 Animation::new("walk"),
                 test_sprite("walk_sheet"),
+                MapPosition::new(0.0, 0.0),
+                ScreenPosition::from_vec(Vec2::ZERO),
+                CameraTarget::default(),
             ))
             .id();
         let id = doomed.to_bits();
@@ -1181,6 +1167,21 @@ mod tests {
                     entity_id: id,
                     flip_h: true,
                     flip_v: false,
+                },
+                EntityCmd::SetPosition {
+                    entity_id: id,
+                    x: 1.0,
+                    y: 1.0,
+                },
+                EntityCmd::SetScreenPosition {
+                    entity_id: id,
+                    x: 1.0,
+                    y: 1.0,
+                },
+                EntityCmd::SetCameraTarget {
+                    entity_id: id,
+                    priority: Some(1),
+                    zoom: None,
                 },
             ],
         );
@@ -2082,6 +2083,90 @@ mod tests {
 
     fn run_camera_target_cmd(world: &mut World, cmd: EntityCmd) {
         run_entity_cmd(world, &mut WorldSignals::default(), cmd);
+    }
+
+    fn set_camera_target(id: u64, priority: Option<u8>, zoom: Option<f32>) -> EntityCmd {
+        EntityCmd::SetCameraTarget {
+            entity_id: id,
+            priority,
+            zoom,
+        }
+    }
+
+    #[test]
+    fn set_camera_target_twice_in_one_batch_merges_in_call_order() {
+        let mut world = World::new();
+        let id = world.spawn_empty().id().to_bits();
+
+        run_entity_cmds(
+            &mut world,
+            &mut WorldSignals::default(),
+            [
+                set_camera_target(id, Some(5), None),
+                set_camera_target(id, None, Some(2.0)),
+            ],
+        );
+
+        let ct = world.get::<CameraTarget>(Entity::from_bits(id)).unwrap();
+        assert_eq!((ct.priority, ct.zoom), (5, 2.0));
+    }
+
+    #[test]
+    fn remove_camera_target_then_set_camera_target_starts_from_defaults() {
+        let mut world = World::new();
+        let e = world
+            .spawn(CameraTarget {
+                priority: 5,
+                zoom: 2.0,
+            })
+            .id();
+        let id = e.to_bits();
+
+        run_entity_cmds(
+            &mut world,
+            &mut WorldSignals::default(),
+            [
+                EntityCmd::RemoveCameraTarget { entity_id: id },
+                set_camera_target(id, None, None),
+            ],
+        );
+
+        let ct = world.get::<CameraTarget>(e).unwrap();
+        let default = CameraTarget::default();
+        assert_eq!((ct.priority, ct.zoom), (default.priority, default.zoom));
+    }
+
+    #[test]
+    fn insert_tween_screen_position_then_set_screen_position_keeps_the_set() {
+        let mut world = World::new();
+        // A hidden GUI widget: no ScreenPosition until the tween seeds one.
+        let e = world.spawn_empty().id();
+        let id = e.to_bits();
+
+        run_entity_cmds(
+            &mut world,
+            &mut WorldSignals::default(),
+            [
+                EntityCmd::InsertTweenScreenPosition {
+                    entity_id: id,
+                    from_x: 0.0,
+                    from_y: 0.0,
+                    to_x: 100.0,
+                    to_y: 0.0,
+                    config: TweenConfig::new(1.0),
+                },
+                EntityCmd::SetScreenPosition {
+                    entity_id: id,
+                    x: 40.0,
+                    y: 8.0,
+                },
+            ],
+        );
+
+        assert_eq!(
+            world.get::<ScreenPosition>(e).unwrap().pos,
+            Vec2::new(40.0, 8.0)
+        );
     }
 
     #[test]
