@@ -12,6 +12,7 @@ use bevy_ecs::prelude::*;
 
 use crate::components::lua_on_phase::{LuaOnPhaseEntered, LuaOnPhaseExited, LuaOnPhaseUpdate};
 use crate::components::lua_on_timer_fired::LuaOnTimerFired;
+use aberred_core::components::animation::Animation;
 use aberred_core::components::cameratarget::CameraTarget;
 use aberred_core::components::entityshader::EntityShader;
 use aberred_core::components::globaltransform2d::GlobalTransform2D;
@@ -25,6 +26,7 @@ use aberred_core::components::scale::Scale;
 use aberred_core::components::screenposition::ScreenPosition;
 use aberred_core::components::shadow::Shadow;
 use aberred_core::components::signals::Signals;
+use aberred_core::components::sprite::Sprite;
 use aberred_core::components::stuckto::StuckTo;
 use aberred_core::components::timer::Timer;
 use aberred_core::components::tint::Tint;
@@ -122,7 +124,7 @@ pub fn process_entity_commands(
     world_signals: &mut WorldSignals,
     queries: &mut EntityCmdQueries,
     systems_store: &SystemsStore,
-    anim_store: &AnimationStore,
+    _anim_store: &AnimationStore,
 ) {
     aberred_core::tracy::tracy_span!("lua_entity_cmds");
     for cmd in entity_commands {
@@ -150,7 +152,7 @@ pub fn process_entity_commands(
 
             cmd @ (EntityCmd::RestartAnimation { .. }
             | EntityCmd::SetAnimation { .. }
-            | EntityCmd::SetSpriteFlip { .. }) => process_animation_cmd(cmd, queries, anim_store),
+            | EntityCmd::SetSpriteFlip { .. }) => process_animation_cmd(cmd, commands),
 
             cmd @ (EntityCmd::InsertTweenPosition { .. }
             | EntityCmd::InsertTweenRotation { .. }
@@ -368,54 +370,48 @@ fn process_signal_cmd(cmd: EntityCmd, commands: &mut Commands) {
     }
 }
 
-fn process_animation_cmd(
-    cmd: EntityCmd,
-    queries: &mut EntityCmdQueries,
-    anim_store: &AnimationStore,
-) {
+fn process_animation_cmd(cmd: EntityCmd, commands: &mut Commands) {
     match cmd {
         EntityCmd::RestartAnimation { entity_id } => {
-            let Some(entity) = resolve_entity(entity_id) else {
-                return;
-            };
-            if let Ok(mut animation) = queries.animation.get_mut(entity) {
+            queue_on_component::<Animation>(commands, entity_id, |animation| {
                 animation.frame_index = 0;
                 animation.elapsed_time = 0.0;
                 animation.finished = false;
-            }
+            });
         }
         EntityCmd::SetAnimation {
             entity_id,
             animation_key,
         } => {
-            let Some(entity) = resolve_entity(entity_id) else {
-                return;
-            };
-            // Also update the sprite's texture to match the new animation
-            if let Some(anim_res) = anim_store.animations.get(&animation_key)
-                && let Ok(mut sprite) = queries.sprites.get_mut(entity)
-            {
-                sprite.tex_key = anim_res.tex_key.clone();
-            }
-            if let Ok(mut animation) = queries.animation.get_mut(entity) {
-                animation.animation_key = animation_key;
-                animation.frame_index = 0;
-                animation.elapsed_time = 0.0;
-                animation.finished = false;
-            }
+            queue_on_entity(commands, entity_id, move |mut e| {
+                // Also switch the sprite's texture to the new animation's sheet.
+                let tex_key = e
+                    .world()
+                    .get_resource::<AnimationStore>()
+                    .and_then(|store| store.animations.get(&animation_key))
+                    .map(|anim| anim.tex_key.clone());
+                if let Some(tex_key) = tex_key
+                    && let Some(mut sprite) = e.get_mut::<Sprite>()
+                {
+                    sprite.tex_key = tex_key;
+                }
+                if let Some(mut animation) = e.get_mut::<Animation>() {
+                    animation.animation_key = animation_key;
+                    animation.frame_index = 0;
+                    animation.elapsed_time = 0.0;
+                    animation.finished = false;
+                }
+            });
         }
         EntityCmd::SetSpriteFlip {
             entity_id,
             flip_h,
             flip_v,
         } => {
-            let Some(entity) = resolve_entity(entity_id) else {
-                return;
-            };
-            if let Ok(mut sprite) = queries.sprites.get_mut(entity) {
+            queue_on_component::<Sprite>(commands, entity_id, move |sprite| {
                 sprite.flip_h = flip_h;
                 sprite.flip_v = flip_v;
-            }
+            });
         }
         _ => unreachable!(),
     }
@@ -851,8 +847,6 @@ fn process_lifecycle_cmd(
 mod tests {
     use super::*;
     use crate::components::lua_on_tween_finished::LuaOnTweenFinished;
-    use aberred_core::components::animation::Animation;
-    use aberred_core::components::sprite::Sprite;
     use aberred_core::components::timer::TimerMode;
     use aberred_core::testing::approx_eq;
 
@@ -881,30 +875,14 @@ mod tests {
         world_signals: &mut WorldSignals,
         cmds: impl IntoIterator<Item = EntityCmd>,
     ) {
-        run_entity_cmds_with_store(world, world_signals, &AnimationStore::default(), cmds);
+        run_entity_cmds_in(world, world_signals, &SystemsStore::default(), cmds);
     }
 
-    /// [`run_entity_cmds`] with a caller-provided `AnimationStore`.
-    fn run_entity_cmds_with_store(
-        world: &mut World,
-        world_signals: &mut WorldSignals,
-        anim_store: &AnimationStore,
-        cmds: impl IntoIterator<Item = EntityCmd>,
-    ) {
-        run_entity_cmds_in(
-            world,
-            world_signals,
-            anim_store,
-            &SystemsStore::default(),
-            cmds,
-        );
-    }
-
-    /// [`run_entity_cmds`] with caller-provided `AnimationStore` and `SystemsStore`.
+    /// [`run_entity_cmds`] with a caller-provided `SystemsStore`. `SetAnimation`
+    /// reads the world's `AnimationStore` resource when it applies.
     fn run_entity_cmds_in(
         world: &mut World,
         world_signals: &mut WorldSignals,
-        anim_store: &AnimationStore,
         systems_store: &SystemsStore,
         cmds: impl IntoIterator<Item = EntityCmd>,
     ) {
@@ -921,7 +899,7 @@ mod tests {
                 world_signals,
                 &mut queries,
                 systems_store,
-                anim_store,
+                &AnimationStore::default(),
             );
         }
         system_state.apply(world);
@@ -1123,7 +1101,7 @@ mod tests {
     }
 
     #[test]
-    fn signal_and_gui_cmds_after_same_batch_despawn_are_silent_noops() {
+    fn component_write_cmds_after_same_batch_despawn_are_silent_noops() {
         let mut world = World::new();
         let mut signals = WorldSignals::default();
         let doomed = world
@@ -1131,6 +1109,8 @@ mod tests {
                 Signals::default(),
                 GuiInteractable::new(10.0, 10.0),
                 GuiProgressBar::new(10.0, 2.0, 5.0, 10.0),
+                Animation::new("walk"),
+                test_sprite("walk_sheet"),
             ))
             .id();
         let id = doomed.to_bits();
@@ -1191,6 +1171,16 @@ mod tests {
                 EntityCmd::SetGuiProgressMax {
                     entity_id: id,
                     max: 1.0,
+                },
+                EntityCmd::RestartAnimation { entity_id: id },
+                EntityCmd::SetAnimation {
+                    entity_id: id,
+                    animation_key: "run".into(),
+                },
+                EntityCmd::SetSpriteFlip {
+                    entity_id: id,
+                    flip_h: true,
+                    flip_v: false,
                 },
             ],
         );
@@ -1607,6 +1597,8 @@ mod tests {
             AnimationResource::new("run_sheet", 16.0, 4, 10.0),
         );
         let mut world = World::new();
+        // The texture lookup reads the world's store when the command applies.
+        world.insert_resource(store);
         let mut signals = WorldSignals::default();
         let mut running = Animation::new("walk");
         running.frame_index = 2;
@@ -1615,10 +1607,9 @@ mod tests {
         let e = world.spawn((running, test_sprite("walk_sheet"))).id();
         let id = e.to_bits();
 
-        run_entity_cmds_with_store(
+        run_entity_cmds(
             &mut world,
             &mut signals,
-            &store,
             [EntityCmd::SetAnimation {
                 entity_id: id,
                 animation_key: "run".into(),
@@ -1634,10 +1625,9 @@ mod tests {
         assert_eq!(&*sprite.tex_key, "run_sheet");
 
         // A key missing from the store still switches the animation but keeps the texture.
-        run_entity_cmds_with_store(
+        run_entity_cmds(
             &mut world,
             &mut signals,
-            &store,
             [EntityCmd::SetAnimation {
                 entity_id: id,
                 animation_key: "unknown".into(),
@@ -2071,7 +2061,6 @@ mod tests {
         run_entity_cmds_in(
             &mut world,
             &mut signals,
-            &AnimationStore::default(),
             &systems_store,
             [EntityCmd::MenuDespawn {
                 entity_id: menu.to_bits(),
