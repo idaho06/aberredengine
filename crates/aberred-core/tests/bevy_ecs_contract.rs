@@ -191,6 +191,82 @@ fn commands_trigger_at_despawned_target_reaches_global_observers_only() {
     assert_eq!(world.resource::<Counter>().0, 0);
 }
 
+#[derive(Event, Debug, Clone, Copy)]
+struct WriteHealth {
+    entity: Entity,
+    value: i32,
+}
+
+#[derive(Event, Debug, Clone, Copy)]
+struct ReadHealth {
+    entity: Entity,
+}
+
+/// Triggers its `WriteHealth`, then a `ReadHealth`, from inside an observer.
+#[derive(Event, Debug, Clone, Copy)]
+struct WriteThenRead(WriteHealth);
+
+/// An entity at `Health(0)` plus the observers; returns what `ReadHealth` saw.
+fn deferred_write_world() -> (World, Entity, Arc<Mutex<Vec<i32>>>) {
+    let mut world = World::new();
+    let entity = world.spawn(Health(0)).id();
+    let seen = Arc::new(Mutex::new(Vec::new()));
+    let seen_clone = seen.clone();
+    // The deferred-write mechanism the Lua entity command handlers use.
+    world.add_observer(|trigger: On<WriteHealth>, mut commands: Commands| {
+        let WriteHealth { entity, value } = *trigger.event();
+        commands
+            .entity(entity)
+            .queue_silenced(move |mut e: EntityWorldMut| {
+                e.insert(Health(value));
+            });
+    });
+    world.add_observer(move |trigger: On<ReadHealth>, query: Query<&Health>| {
+        let health = query.get(trigger.event().entity).expect("entity is alive");
+        seen_clone.lock().unwrap().push(health.0);
+    });
+    world.add_observer(|trigger: On<WriteThenRead>, mut commands: Commands| {
+        let write = trigger.event().0;
+        commands.trigger(write);
+        commands.trigger(ReadHealth {
+            entity: write.entity,
+        });
+    });
+    world.flush();
+    (world, entity, seen)
+}
+
+// `collision_detector` queues one `Overlapping` per pair: a Lua entity command
+// queued by one pair's observer must apply before the next pair's observer reads.
+#[test]
+fn observer_queued_entity_command_applies_before_next_queued_trigger() {
+    let (mut world, entity, seen) = deferred_write_world();
+
+    let mut state = SystemState::<Commands>::new(&mut world);
+    let mut commands = state.get_mut(&mut world).expect("Commands should fetch");
+    commands.trigger(WriteHealth { entity, value: 7 });
+    commands.trigger(ReadHealth { entity });
+    state.apply(&mut world);
+
+    assert_eq!(*seen.lock().unwrap(), vec![7]);
+}
+
+// `collision_rule_observer` queues `CollisionStarted` then `Collided`: a Lua
+// `enter` write is visible to the same pair's `stay`, and a write two observers
+// deep is visible to the next pair.
+#[test]
+fn nested_observer_queued_entity_command_applies_before_sibling_and_next_trigger() {
+    let (mut world, entity, seen) = deferred_write_world();
+
+    let mut state = SystemState::<Commands>::new(&mut world);
+    let mut commands = state.get_mut(&mut world).expect("Commands should fetch");
+    commands.trigger(WriteThenRead(WriteHealth { entity, value: 7 }));
+    commands.trigger(ReadHealth { entity });
+    state.apply(&mut world);
+
+    assert_eq!(*seen.lock().unwrap(), vec![7, 7]);
+}
+
 // =============================================================================
 // Registered systems
 // =============================================================================
