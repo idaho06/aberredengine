@@ -112,10 +112,10 @@ Command processing lives in a separate submodule:
 
 ```text
 crates/aberred-lua/src/systems/lua_commands/
-├── mod.rs              # Re-exports; EntityCmdQueries/ContextQueries SystemParams; EffectCmdBufs/DrainScope; drain_and_process_effect_commands/drain_and_process_phase_commands; build_tween/apply_tween_finished_callback helpers
+├── mod.rs              # Re-exports; ContextQueries SystemParam (read-only ctx queries); EffectCmdBufs/DrainScope; drain_and_process_effect_commands; build_tween/tween_finished_callback helpers
 ├── context.rs          # build_entity_context: gathers ECS data → pooled Lua ctx table
 ├── dispatch.rs          # LuaDispatch SystemParam bundle + call_entity_callback/dispatch_and_drain/dispatch_custom_and_drain/drain_dispatch_commands: shared callback dispatch flow used by the timer/on_animation_end/on_tween_finished/menu/GUI click/collision observers
-├── entity_cmd.rs        # process_entity_commands: runtime entity manipulation (physics, signals, tweens, shaders, hierarchy, GUI)
+├── entity_cmd.rs        # process_entity_commands: runtime entity manipulation (physics, signals, tweens, shaders, hierarchy, GUI), every handler a deferred queue_on_entity/queue_on_component command
 ├── processors.rs        # small per-command-domain process_* functions (signal, camera, camera_follow, audio, phase, gameconfig, input, group, render, animation) and asset-command translation helpers
 ├── spawn_cmd.rs         # process_spawn_command, process_clone_command: entity creation via apply_components()
 └── parse.rs             # Animation condition parsing helpers
@@ -242,7 +242,7 @@ A handful of functions with irregular shapes (`change_scene`, `quit`, `set_targe
 
 Every Lua callback except the phase update callback (timer, `on_animation_end`, `on_tween_finished`, setup, menu selection, GUI click, collision, phase enter/exit) goes through the shared `LuaDispatch` flow in `systems/lua_commands/dispatch.rs`: `refresh_signal_cache` syncs the signal cache from `WorldSignals`, `call_entity_callback` builds the entity context (and input table, if the call shape wants one) and invokes the named Lua function, then `drain_dispatch_commands` drains and processes its queued commands from the regular queues, or from the collision-scoped ones (`DrainScope::Collision`) for collision callbacks, which build their own pooled collision ctx. Menu selection and GUI click callbacks take a small custom context table instead of an entity context: `dispatch_custom_and_drain` refreshes the signal cache, calls the function with that table, and drains. `lua_phase_update_system` (`systems/lua_phase.rs`) takes a `LuaDispatch` too but does not call through a `CallShape`: it builds one input table for every phase entity per run and passes `dt`, so it builds each ctx with `build_ctx_or_log`, calls the Lua function itself, and drains once per run.
 
-The actual draining happens in `drain_and_process_effect_commands()` (`systems/lua_commands/mod.rs`), which drains the 6 non-phase effect queues in canonical order — `signal → entity → spawn → clone → audio → camera` — from either the regular or collision-scoped queue set (`DrainScope::Regular`/`DrainScope::Collision`), into a caller-owned `EffectCmdBufs` (a `Local<EffectCmdBufs>` on the calling system, so its `Vec`s retain heap capacity across frames):
+The actual draining happens in `drain_and_process_effect_commands()` (`systems/lua_commands/mod.rs`), which drains the 7 effect queues in canonical order — `signal → entity → spawn → clone → audio → camera → phase` — from either the regular or collision-scoped queue set (`DrainScope::Regular`/`DrainScope::Collision`), into a caller-owned `EffectCmdBufs` (a `Local<EffectCmdBufs>` on the calling system, so its `Vec`s retain heap capacity across frames):
 
 ```rust
 // In systems/lua_commands/mod.rs
@@ -252,10 +252,8 @@ pub(crate) fn drain_and_process_effect_commands(
     bufs: &mut EffectCmdBufs,
     commands: &mut Commands,
     world_signals: &mut WorldSignals,
-    cmd_queries: &mut EntityCmdQueries,
     audio: &mut MessageWriter<AudioCmd>,
     systems_store: &SystemsStore,
-    animation_store: &AnimationStore,
 ) { ... }
 ```
 
@@ -263,7 +261,7 @@ pub(crate) fn drain_and_process_effect_commands(
 
 ### Step 4: Commands are Processed
 
-The processing functions in `systems/lua_commands/` apply changes to the ECS. `process_entity_commands` takes an `EntityCmdQueries` SystemParam bundle and dispatches to sub-functions:
+The processing functions in `systems/lua_commands/` apply changes to the ECS. `process_entity_commands` dispatches each `EntityCmd` to a small handler:
 
 ```rust
 // In lua_commands/entity_cmd.rs
@@ -271,11 +269,13 @@ pub fn process_entity_commands(
     commands: &mut Commands,
     entity_commands: impl IntoIterator<Item = EntityCmd>,
     world_signals: &mut WorldSignals,
-    cmd_queries: &mut EntityCmdQueries,
     systems_store: &SystemsStore,
-    anim_store: &AnimationStore,
 ) { ... }
 ```
+
+Every handler queues its work as one deferred `EntityWorldMut` command — `queue_on_entity(commands, entity_id, |e| ...)`, or `queue_on_component::<C>(commands, entity_id, |c| ...)` for a write to one existing component — so a drained batch applies **in exactly the order the script made the calls**: `entity_set_shader` followed by `entity_shader_set_float`, or `release_stuckto` followed by `entity_set_velocity`, both land. Anything a handler depends on (an existing component, the `AnimationStore`) is read when the command applies, so it sees the earlier commands of the same batch. The commands land at the next command flush: right after the observer for observer callbacks (collision, timer, tween, animation end, menu, GUI click), and at the next sync point after the system for system callbacks (`update`, `switch_scene`, `lua_phase_update_system`, `lua_setup_entity_system`). Lua reads ctx snapshots, never the live world, so a script can't observe the difference inside one callback. An entity despawned in an earlier frame is warned about and skipped; one despawned earlier in the same batch is skipped silently. The one immediate effect is `Despawn`'s removal of the entity's `WorldSignals` registrations, so a later command in the same batch can't resolve a stale key.
+
+`Commands` declare no component access, so the scheduler can't see these writes: an engine system that reads a Lua-written component must be ordered after the Lua drain (any ordering edge is a sync point). An unordered system in the same set reads pre-flush state, and `assert_no_ambiguities` doesn't flag it.
 
 Spawn and clone commands are processed via `process_spawn_command()` and `process_clone_command()` in `lua_commands/spawn_cmd.rs`. Both delegate to the shared `apply_components()` helper. The remaining command categories (signal, camera, camera follow, audio, phase, game config, input, group, render, animation, asset translation) each have a small dedicated `process_*`/`translate_*` function in `lua_commands/processors.rs`.
 
@@ -294,7 +294,7 @@ The previous section covers how Lua calls *into* Rust. This section covers the o
 3. **`switch_scene()`** — runs whenever `WorldSignals`' `switch_scene` flag is taken (set by `engine.change_scene()`), both from `enter_play()`'s initial call and from `update()` mid-game. It: clears every `clear`-policy command queue and the cached-function-handle table (`clear_all_commands()`/`clear_function_cache()` — callbacks are re-injected per scene, so stale closures must not survive the switch), despawns every non-`Persistent` `CleanableEntity`, clears non-persistent `WorldSignals` entity registrations and group counts, applies any pending `engine.change_scene` target to the `scene` string (the target is recorded as `WorldSignals`' pending scene when the command drains — a mid-tick observer drain must not flip the scene before the current tick's `on_update_<scene>` runs), refreshes the signal cache so `on_switch_scene` observes the post-clear state (not a stale pre-clear snapshot), calls `on_switch_scene(scene_name)`, then drains the same "common" queue set `update()` does (`drain_common_commands`, below).
 4. **`update()`** — runs once per sim tick. Refreshes the signal/gameconfig/camera/bindings caches, resolves the pooled input table, calls `on_update_<scene>(input, dt)` (the callback name is cached as `"on_update_" .. scene` and only rebuilt when the scene string actually changes), drains the common queues, then checks the `quit_game`/`switch_scene` flags Lua may have just set. A same-tick `engine.change_scene()` call runs `switch_scene()` synchronously before `update()` returns — there is no one-tick lag between requesting a switch and it taking effect. The target only becomes the `scene` string when `switch_scene()` applies it, so a request queued by a mid-tick observer (menu/GUI-click/timer/phase callback) still lets this tick's `on_update_<old_scene>` run first; the new scene's update starts the next tick.
 
-`update()` and `switch_scene()` share `drain_common_commands()`, which drains, in order: `animation_commands` first (so a same-batch `entity_set_animation`/`entity_restart_animation` can resolve a texture key registered earlier in the same batch), phase commands, the 6 regular effect queues (via `drain_and_process_effect_commands`), `render_commands` + `gui_theme_commands` (merged into one `GuiThemeStore` clone-and-write-back, only performed when at least one was non-empty — this avoids marking `GuiThemeStore` "changed" on frames with no theme edits — and re-validated afterward for every staged theme's missing `normal`/`fill` skin), `gameconfig_commands`, `camera_follow_commands`, `input_commands`, and `group_commands`.
+`update()` and `switch_scene()` share `drain_common_commands()`, which drains, in order: `animation_commands` first (so a same-batch `entity_set_animation`/`entity_restart_animation` can resolve a texture key registered earlier in the same batch), the 7 regular effect queues (via `drain_and_process_effect_commands`, phase last), `render_commands` + `gui_theme_commands` (merged into one `GuiThemeStore` clone-and-write-back, only performed when at least one was non-empty — this avoids marking `GuiThemeStore` "changed" on frames with no theme edits — and re-validated afterward for every staged theme's missing `normal`/`fill` skin), `gameconfig_commands`, `camera_follow_commands`, `input_commands`, and `group_commands`.
 
 `process_lua_asset_commands` is the always-live drain site for `engine.load_*` calls made *after* `setup()` — `on_update_<scene>`, `on_switch_scene`, and every phase/timer/collision callback all queue into the same `asset_commands` queue; this system (registered on the sim schedule) is what actually translates and forwards them once `setup()`'s own one-shot local buffer is no longer in the picture.
 
@@ -315,7 +315,7 @@ A Lua timer is a core `Timer` plus a `LuaOnTimerFired { callback }` component na
 
 ### Collision System
 
-A Lua collision rule is a plain core `CollisionRule` plus a `LuaOnCollision { stay, enter, exit }` naming its callbacks (`:with_lua_collision_rule(a, b, cb|nil)`, then `:with_lua_collision_enter/exit(cb)`). Core does all matching and bookkeeping: `collision_rule_observer` matches each `Overlapping` against `CollisionRuleIndex` (lowest-`Entity` rule wins, Rust and Lua rules alike), records the contact in `CollisionContacts`, and triggers `CollisionStarted` (new contacts only) and then `Collided` on the rule entity; `collision_ended_system` (after `collision_detector`) triggers `CollisionEnded` for each contact that stopped touching, in `(rule, a, b)` entity order. When a Lua script is set, `lua_collision_rule_added_observer` (`lua_collision.rs`, on `Add` of `LuaOnCollision`) attaches three entity observers to each Lua rule entity, so a Rust rule's events never run Lua dispatch: `lua_collision_enter_observer` (on `CollisionStarted`) calls `enter`, `lua_collision_stay_observer` (on `Collided`) calls `stay`, `lua_collision_exit_observer` (on `CollisionEnded`) calls `exit`; a missing callback is skipped. A clone-ignored `LuaCollisionObserved` marker gives a cloned rule its own observers and keeps a re-inserted `LuaOnCollision` from doubling them; the observers despawn with the rule, so a despawned rule gets no `exit`. `enter` and `stay` get both sides' pooled collision context — `id`, `group`, `pos`, `vel`, `speed_sq`, `rect`, `signals` (each optional field sparse-populated the same way the entity ctx is, see [Context Table Pooling](#context-table-pooling)) — plus `ctx.sides.a`/`ctx.sides.b` string arrays (`"left"`/`"right"`/`"top"`/`"bottom"`), each with a fresh ctx whose rects and sides are resolved at call time, so `stay` sees any move `enter` made; collision callbacks receive the ctx only, with **no `input` argument**, unlike every other callback kind in this section. `exit` gets a ctx holding only each side's `id` and `group` (from the rule's `group_a`/`group_b`; the entities may already be despawned). After each callback the phase queue and the 6 effect queues are drained from the **collision-scoped** buffers (`DrainScope::Collision`) immediately, not batched with the rest of the tick — collision response (position/velocity corrections) must land before the next collision in the same tick is detected. Before each callback the signal cache is synced with `LuaRuntime::sync_signals`, which is O(1) when `WorldSignals` is unchanged. Scene switches forget contacts without calling `exit`.
+A Lua collision rule is a plain core `CollisionRule` plus a `LuaOnCollision { stay, enter, exit }` naming its callbacks (`:with_lua_collision_rule(a, b, cb|nil)`, then `:with_lua_collision_enter/exit(cb)`). Core does all matching and bookkeeping: `collision_rule_observer` matches each `Overlapping` against `CollisionRuleIndex` (lowest-`Entity` rule wins, Rust and Lua rules alike), records the contact in `CollisionContacts`, and triggers `CollisionStarted` (new contacts only) and then `Collided` on the rule entity; `collision_ended_system` (after `collision_detector`) triggers `CollisionEnded` for each contact that stopped touching, in `(rule, a, b)` entity order. When a Lua script is set, `lua_collision_rule_added_observer` (`lua_collision.rs`, on `Add` of `LuaOnCollision`) attaches three entity observers to each Lua rule entity, so a Rust rule's events never run Lua dispatch: `lua_collision_enter_observer` (on `CollisionStarted`) calls `enter`, `lua_collision_stay_observer` (on `Collided`) calls `stay`, `lua_collision_exit_observer` (on `CollisionEnded`) calls `exit`; a missing callback is skipped. A clone-ignored `LuaCollisionObserved` marker gives a cloned rule its own observers and keeps a re-inserted `LuaOnCollision` from doubling them; the observers despawn with the rule, so a despawned rule gets no `exit`. `enter` and `stay` get both sides' pooled collision context — `id`, `group`, `pos`, `vel`, `speed_sq`, `rect`, `signals` (each optional field sparse-populated the same way the entity ctx is, see [Context Table Pooling](#context-table-pooling)) — plus `ctx.sides.a`/`ctx.sides.b` string arrays (`"left"`/`"right"`/`"top"`/`"bottom"`), each with a fresh ctx whose rects and sides are resolved at call time, so `stay` sees any move `enter` made; collision callbacks receive the ctx only, with **no `input` argument**, unlike every other callback kind in this section. `exit` gets a ctx holding only each side's `id` and `group` (from the rule's `group_a`/`group_b`; the entities may already be despawned). After each callback the 7 effect queues are drained from the **collision-scoped** buffers (`DrainScope::Collision`) immediately, not batched with the rest of the tick, and the entity commands they queue apply when the observer returns, before the next queued trigger — collision response (position/velocity corrections) lands before the same pair's `stay` and before the next pair. Before each callback the signal cache is synced with `LuaRuntime::sync_signals`, which is O(1) when `WorldSignals` is unchanged. Scene switches forget contacts without calling `exit`.
 
 ### Animation-Finished / Tween-Finished Callbacks
 
@@ -1186,12 +1186,14 @@ In `crates/aberred-lua/src/systems/lua_commands/entity_cmd.rs`, add the match ar
 
 ```rust
 EntityCmd::SetHealth { entity_id, health } => {
-    let entity = Entity::from_bits(entity_id);
-    if let Ok(mut signals) = cmd_queries.signals.get_mut(entity) {
+    // Deferred, in call order; a no-op if the entity has no Signals by then.
+    queue_on_component::<Signals>(commands, entity_id, move |signals| {
         signals.set_scalar("health", health);
-    }
+    });
 }
 ```
+
+Never write through a query here: a query write applies at once, ahead of the deferred commands queued before it in the same batch.
 
 #### Step 4: Update Meta Schema (If Applicable)
 
@@ -1343,10 +1345,10 @@ EntityCmd::SetPositionAndVelocity { ... }  // Too broad
 ### 3. Handle Missing Entities Gracefully
 
 ```rust
-// Good: Silent failure if entity doesn't exist
-if let Ok(mut rb) = cmd_queries.rigid_bodies.get_mut(entity) {
+// Good: queue_on_component skips an entity without the component (or a dead one)
+queue_on_component::<RigidBody>(commands, entity_id, move |rb| {
     rb.velocity = Vec2::new(vx, vy);
-}
+});
 ```
 
 ### 4. Entity IDs are u64

@@ -2,8 +2,9 @@
 //!
 //! [`lua_setup_entity_system`] reacts to every entity that gains a
 //! [`LuaSetup`] component and calls the named Lua function once, passing the
-//! standard entity context table. It is ordered before `animation_controller`
-//! so that setup callbacks can set animation state in the same frame.
+//! standard entity context table. It runs in `SimSet::Drain`, and `animation`
+//! is ordered after it, so the entity commands a setup callback queues (e.g.
+//! `entity_set_animation`) apply before the entity's first animation tick.
 //!
 //! For timing and contract details see [`crate::components::luasetup`].
 

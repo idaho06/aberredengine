@@ -2,6 +2,13 @@
 //!
 //! [`process_entity_commands`] dispatches all [`EntityCmd`] variants to modify
 //! live entities — physics, signals, transforms, animation, shaders, tweens, etc.
+//!
+//! Every handler queues its work as a deferred `EntityWorldMut` command
+//! ([`queue_on_entity`], [`queue_on_component`]), so one drained batch applies
+//! in exactly the order the script made the calls, at the next command flush.
+//! A handler never touches the world while it queues: anything it depends on
+//! (an existing component, the `AnimationStore`) is read when the command
+//! applies, so it sees the earlier commands of the same batch.
 
 use log::warn;
 
@@ -88,6 +95,21 @@ pub(super) fn queue_on(
 
 /// Drains the Lua entity command queue and dispatches each `EntityCmd` to the
 /// matching ECS mutation (SetVelocity, SetAnimation, Despawn, etc.).
+///
+/// Nothing applies here: each command is queued on `commands` as deferred
+/// entity work, in call order, and lands at the next command flush — right
+/// after the observer for observer callbacks, at the next sync point after the
+/// system for system callbacks. An entity despawned in an earlier frame is
+/// warned about and skipped; one despawned earlier in the same batch is skipped
+/// silently when the command applies. The one immediate effect is `Despawn`'s
+/// removal of the entity's `WorldSignals` registrations, so a later command in
+/// the same batch can't resolve a stale key.
+///
+/// `Commands` declare no component access, so the scheduler can't see these
+/// writes: a system that reads a Lua-written component must be ordered after
+/// the Lua drain (any ordering edge is a sync point). An unordered system in
+/// the same set reads pre-flush state, and `assert_no_ambiguities` doesn't
+/// flag it.
 pub fn process_entity_commands(
     commands: &mut Commands,
     entity_commands: impl IntoIterator<Item = EntityCmd>,

@@ -292,12 +292,12 @@ Different callbacks process different types of engine commands. Here's what comm
 |----------|-------|
 | `on_setup()` | Asset → Animation |
 | `on_enter_play()` | Signal → Group |
-| `on_switch_scene(scene)` | Signal → Entity → Phase → Audio → Spawn → Clone → Group → Camera → Render → GameConfig → CameraFollow → InputBinding |
-| `on_update_<scene>(input, dt)` | Signal → Entity → Spawn → Clone → Phase → Audio → Camera → Render → GameConfig → CameraFollow → InputBinding |
-| Phase/Timer callbacks | Phase → Audio → Signal → Spawn → Clone → Entity → Camera |
-| `on_animation_end` callbacks | Phase → Audio → Signal → Spawn → Clone → Entity → Camera |
-| LuaSetup callbacks | Signal → Entity → Spawn → Clone → Audio → Camera |
-| Collision callbacks | Entity → Signal → Audio → Spawn → Clone → Phase → Camera |
+| `on_switch_scene(scene)` | Animation → Signal → Entity → Spawn → Clone → Audio → Camera → Phase → Render → GameConfig → CameraFollow → InputBinding → Group |
+| `on_update_<scene>(input, dt)` | Animation → Signal → Entity → Spawn → Clone → Audio → Camera → Phase → Render → GameConfig → CameraFollow → InputBinding → Group |
+| Phase/Timer/`on_animation_end`/LuaSetup/menu/GUI click callbacks | Signal → Entity → Spawn → Clone → Audio → Camera → Phase |
+| Collision callbacks | the same, from the collision queues |
+
+**Entity commands apply in call order.** Within one callback, every `engine.entity_*` call lands in the order you made it, so an insert followed by a write of the same component works: `engine.entity_set_shader(id, "wave")` then `engine.entity_shader_set_float(id, "u", 1.0)` keeps the uniform, and `engine.release_stuckto(id)` then `engine.entity_set_velocity(id, 5, 0)` keeps the velocity. They apply right after the callback's drain (for system callbacks such as `on_update_<scene>`, at the end of that step of the tick), and a callback's `ctx` is a snapshot taken before the call, so a script never sees its own writes inside the same callback.
 
 **Important: Collision Callbacks Use Separate Queues**
 
@@ -1953,6 +1953,7 @@ There are two ways to trigger phase transitions:
 - Returning the current phase name is ignored (no transition); `engine.phase_transition` to the
   current phase re-enters it (exit and enter both fire, `time_in_phase` resets)
 - Transitions apply at the start of the next sim tick (not immediately)
+- An `entity_id` that no longer exists logs a warning and is skipped, like every entity command
 - Exit callbacks do NOT support return values (transition already decided)
 - Exit fires **after** the phase swap: `ctx.phase` already reads as the new phase, and
   `ctx.previous_phase` is the phase being left
@@ -2148,7 +2149,7 @@ As the planet rotates via its tween, the satellite orbits at 80px radius. No man
 
 1. **MouseControlled on children:** The mouse sets world coordinates into `MapPosition`, which is local space for children. Avoid using `:with_mouse_controlled()` on child entities.
 2. **StuckTo with hierarchy:** `StuckTo` is automatically skipped for entities with a parent. Don't combine both systems on the same entity.
-3. **Spawn-time vs runtime parenting:** `:with_parent()` initializes the child's world transform immediately, so the child renders in the correct world position on its first frame. Runtime reparenting via `engine.entity_set_parent()` still depends on the next transform propagation pass before all derived world-space data reflects the new parent.
+3. **Parent that is itself a fresh child:** `:with_parent()` and `engine.entity_set_parent()` both compute the child's world transform as soon as they apply, so the child renders at the correct world position on its first frame. The exception is a parent that is itself a child whose own world transform isn't computed yet: the new child waits for the next transform propagation pass.
 
 ---
 
@@ -2974,7 +2975,7 @@ engine.entity_despawn(enemy_id)
 
 ### `engine.entity_set_parent(entity_id, parent_id)`
 
-Attach an entity to a parent for transform hierarchy. The child's `MapPosition`, `Rotation`, and `Scale` become local (relative to parent). World-space transforms are computed automatically.
+Attach an entity to a parent for transform hierarchy. The child's `MapPosition`, `Rotation`, and `Scale` become local (relative to parent). The child's world transform is computed as soon as the command applies, so it renders at the right world position on its first frame; propagation keeps it updated after that.
 
 **Parameters:**
 
@@ -2990,7 +2991,7 @@ engine.entity_set_parent(item_id, player_id)
 
 ### `engine.entity_remove_parent(entity_id)`
 
-Detach an entity from its parent. The entity's `MapPosition`, `Rotation`, and `Scale` are snapped to their current world-space values so the entity stays in place visually.
+Detach an entity from its parent. The entity's `MapPosition`, `Rotation`, and `Scale` are snapped to their current world-space values so the entity stays in place visually. Called right after `engine.entity_set_parent()` in the same callback, it keeps the world position the child had under that parent.
 
 **Parameters:**
 
@@ -3444,10 +3445,11 @@ engine.entity_insert_stuckto(ball_id, player_id, true, false, 0, 0, 300, -300)
 
 ### `engine.release_stuckto(entity_id)`
 
-Release entity from StuckTo, restore stored velocity as RigidBody.
+Release entity from StuckTo, restore stored velocity as RigidBody. Physics calls made after it in the same callback (`engine.entity_set_velocity()`, `engine.entity_add_force()`, ...) apply to the restored body, and an `engine.entity_insert_stuckto()` earlier in the same callback is released with its stored velocity.
 
 ```lua
 engine.release_stuckto(ball_id)
+engine.entity_set_velocity(ball_id, 0, -300)  -- applies to the restored body
 ```
 
 ### `engine.entity_set_animation(entity_id, animation_key)`
