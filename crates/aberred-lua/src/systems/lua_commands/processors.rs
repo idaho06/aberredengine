@@ -170,17 +170,15 @@ pub fn process_phase_command(commands: &mut Commands, cmd: PhaseCmd) {
 }
 
 /// Request `next` on `entity`'s core `Phase` (sets `Phase.next`; core
-/// `phase_system` applies it on its next run). Deferred, so it lands after
-/// the commands queued before it. No-op when the entity has no core `Phase`
-/// or is gone by then.
+/// `phase_system` applies it on its next run). Deferred like every entity
+/// command, so it lands after the commands queued before it. No-op when the
+/// entity has no core `Phase` by then.
 pub(crate) fn request_phase(commands: &mut Commands, entity: Entity, next: String) {
-    commands
-        .entity(entity)
-        .queue_silenced(move |mut entity: EntityWorldMut| {
-            if let Some(mut phase) = entity.get_mut::<Phase>() {
-                phase.next = Some(next);
-            }
-        });
+    super::entity_cmd::queue_on(commands, entity, move |mut entity| {
+        if let Some(mut phase) = entity.get_mut::<Phase>() {
+            phase.next = Some(next);
+        }
+    });
 }
 
 /// Translate a single Lua-queued [`AssetCmd`] into either an [`AudioCmd`]

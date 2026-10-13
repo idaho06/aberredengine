@@ -72,7 +72,7 @@ fn queue_on_entity(
 }
 
 /// [`queue_on_entity`] for an already-resolved `Entity`.
-fn queue_on(
+pub(super) fn queue_on(
     commands: &mut Commands,
     entity: Entity,
     f: impl FnOnce(EntityWorldMut) + Send + 'static,
