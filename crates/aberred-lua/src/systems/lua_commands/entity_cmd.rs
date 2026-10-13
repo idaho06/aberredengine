@@ -54,44 +54,6 @@ pub(super) fn resolve_entity(id: u64) -> Option<Entity> {
     }
 }
 
-/// Get `EntityCommands` for a live entity, warning and returning None if despawned.
-fn get_entity_cmd<'a>(entity: Entity, commands: &'a mut Commands) -> Option<EntityCommands<'a>> {
-    match commands.get_entity(entity) {
-        Ok(entity_cmds) => Some(entity_cmds),
-        Err(_) => {
-            warn!(
-                "Cannot apply command to entity {:?}: entity was despawned",
-                entity
-            );
-            None
-        }
-    }
-}
-
-/// Run `f` against the live `EntityCommands` for `entity_id`.
-///
-/// No-ops (with a warn log) if `entity_id` has invalid bits, or if the entity
-/// was already despawned in a prior frame's flush. `f` must use
-/// `try_insert`/`try_remove`/`try_despawn` (not the panicking
-/// `insert`/`remove`/`despawn`) so that an entity despawned *earlier in the
-/// same drained batch* (e.g. `Despawn{id}` then `SetRotation{id, ..}`) no-ops
-/// silently at apply time instead of panicking via Bevy's default (panic)
-/// error handler.
-fn with_entity_cmd(commands: &mut Commands, entity_id: u64, f: impl FnOnce(&mut EntityCommands)) {
-    let Some(entity) = resolve_entity(entity_id) else {
-        return;
-    };
-    with_entity_cmds(commands, entity, f);
-}
-
-/// Same as [`with_entity_cmd`], for callers that already hold a resolved
-/// `Entity` (avoids re-resolving it from bits).
-fn with_entity_cmds(commands: &mut Commands, entity: Entity, f: impl FnOnce(&mut EntityCommands)) {
-    if let Some(mut entity_cmds) = get_entity_cmd(entity, commands) {
-        f(&mut entity_cmds);
-    }
-}
-
 /// Queue `f` to run against `entity_id`'s `EntityWorldMut` at the next command
 /// flush, in push order with every other queued command, so a write that
 /// follows an insert in the same batch sees the inserted component.
@@ -104,9 +66,17 @@ fn queue_on_entity(
     entity_id: u64,
     f: impl FnOnce(EntityWorldMut) + Send + 'static,
 ) {
-    let Some(entity) = resolve_entity(entity_id) else {
-        return;
-    };
+    if let Some(entity) = resolve_entity(entity_id) {
+        queue_on(commands, entity, f);
+    }
+}
+
+/// [`queue_on_entity`] for an already-resolved `Entity`.
+fn queue_on(
+    commands: &mut Commands,
+    entity: Entity,
+    f: impl FnOnce(EntityWorldMut) + Send + 'static,
+) {
     match commands.get_entity(entity) {
         Ok(mut entity_cmds) => {
             entity_cmds.queue_silenced(f);
@@ -304,9 +274,8 @@ fn queue_on_component<C: Component<Mutability = Mutable>>(
     });
 }
 
-/// Query-mutation handler for GUI widget enable/disable. Mutates
-/// `GuiInteractable.state` only — never `try_insert`s a fresh component,
-/// since that would wipe its `size`.
+/// GUI widget enable/disable. Mutates `GuiInteractable.state` only — never
+/// inserts a fresh component, since that would wipe its `size`.
 fn process_gui_interactable_cmd(commands: &mut Commands, entity_id: u64, disabled: bool) {
     queue_on_component::<GuiInteractable>(commands, entity_id, move |interactable| {
         interactable.state = if disabled {
@@ -480,25 +449,25 @@ fn process_tween_cmd(cmd: EntityCmd, commands: &mut Commands) {
             });
             let to = ScreenPosition::from_vec(Vec2 { x: to_x, y: to_y });
             let tween = super::build_tween(from, to, &config);
-            with_entity_cmd(commands, entity_id, |ec| {
-                ec.try_insert(from);
-                ec.try_insert(tween);
-                super::apply_tween_finished_callback::<ScreenPosition>(ec, &config);
+            let set_callback = super::tween_finished_callback::<ScreenPosition>(&config);
+            queue_on_entity(commands, entity_id, move |mut e| {
+                e.insert((from, tween));
+                set_callback(e);
             });
         }
         EntityCmd::RemoveTweenPosition { entity_id } => {
-            with_entity_cmd(commands, entity_id, |ec| {
-                ec.try_remove::<Tween<MapPosition>>();
+            queue_on_entity(commands, entity_id, |mut e| {
+                e.remove::<Tween<MapPosition>>();
             });
         }
         EntityCmd::RemoveTweenRotation { entity_id } => {
-            with_entity_cmd(commands, entity_id, |ec| {
-                ec.try_remove::<Tween<Rotation>>();
+            queue_on_entity(commands, entity_id, |mut e| {
+                e.remove::<Tween<Rotation>>();
             });
         }
         EntityCmd::RemoveTweenScale { entity_id } => {
-            with_entity_cmd(commands, entity_id, |ec| {
-                ec.try_remove::<Tween<Scale>>();
+            queue_on_entity(commands, entity_id, |mut e| {
+                e.remove::<Tween<Scale>>();
             });
         }
         _ => unreachable!(),
@@ -510,9 +479,10 @@ where
     T: TweenValue + Send + Sync + 'static,
 {
     let tween = super::build_tween(from, to, config);
-    with_entity_cmd(commands, entity_id, |ec| {
-        ec.try_insert(tween);
-        super::apply_tween_finished_callback::<T>(ec, config);
+    let set_callback = super::tween_finished_callback::<T>(config);
+    queue_on_entity(commands, entity_id, move |mut e| {
+        e.insert(tween);
+        set_callback(e);
     });
 }
 
@@ -549,13 +519,13 @@ fn process_shader_cmd(cmd: EntityCmd, commands: &mut Commands) {
             b,
             a,
         } => {
-            with_entity_cmd(commands, entity_id, |ec| {
-                ec.try_insert(Tint::new(r, g, b, a));
+            queue_on_entity(commands, entity_id, move |mut e| {
+                e.insert(Tint::new(r, g, b, a));
             });
         }
         EntityCmd::RemoveTint { entity_id } => {
-            with_entity_cmd(commands, entity_id, |ec| {
-                ec.try_remove::<Tint>();
+            queue_on_entity(commands, entity_id, |mut e| {
+                e.remove::<Tint>();
             });
         }
         EntityCmd::SetShadow {
@@ -567,13 +537,13 @@ fn process_shader_cmd(cmd: EntityCmd, commands: &mut Commands) {
             b,
             a,
         } => {
-            with_entity_cmd(commands, entity_id, |ec| {
-                ec.try_insert(Shadow::new(dx, dy, r, g, b, a));
+            queue_on_entity(commands, entity_id, move |mut e| {
+                e.insert(Shadow::new(dx, dy, r, g, b, a));
             });
         }
         EntityCmd::RemoveShadow { entity_id } => {
-            with_entity_cmd(commands, entity_id, |ec| {
-                ec.try_remove::<Shadow>();
+            queue_on_entity(commands, entity_id, |mut e| {
+                e.remove::<Shadow>();
             });
         }
         _ => unreachable!(),
@@ -626,18 +596,18 @@ fn process_transform_cmd(cmd: EntityCmd, commands: &mut Commands) {
             });
         }
         EntityCmd::RemoveScreenPosition { entity_id } => {
-            with_entity_cmd(commands, entity_id, |ec| {
-                ec.try_remove::<ScreenPosition>();
+            queue_on_entity(commands, entity_id, |mut e| {
+                e.remove::<ScreenPosition>();
             });
         }
         EntityCmd::SetRotation { entity_id, degrees } => {
-            with_entity_cmd(commands, entity_id, |ec| {
-                ec.try_insert(Rotation { degrees });
+            queue_on_entity(commands, entity_id, move |mut e| {
+                e.insert(Rotation { degrees });
             });
         }
         EntityCmd::SetScale { entity_id, sx, sy } => {
-            with_entity_cmd(commands, entity_id, |ec| {
-                ec.try_insert(Scale::new(sx, sy));
+            queue_on_entity(commands, entity_id, move |mut e| {
+                e.insert(Scale::new(sx, sy));
             });
         }
         EntityCmd::SetCameraTarget {
@@ -654,8 +624,8 @@ fn process_transform_cmd(cmd: EntityCmd, commands: &mut Commands) {
             });
         }
         EntityCmd::RemoveCameraTarget { entity_id } => {
-            with_entity_cmd(commands, entity_id, |ec| {
-                ec.try_remove::<CameraTarget>();
+            queue_on_entity(commands, entity_id, |mut e| {
+                e.remove::<CameraTarget>();
             });
         }
         _ => unreachable!(),
@@ -758,18 +728,18 @@ fn process_lifecycle_cmd(
             callback,
             mode,
         } => {
-            with_entity_cmd(commands, entity_id, |ec| {
-                ec.try_insert(LuaOnTimerFired::timer(duration, callback, mode));
+            queue_on_entity(commands, entity_id, move |mut e| {
+                e.insert(LuaOnTimerFired::timer(duration, callback, mode));
             });
         }
         EntityCmd::RemoveLuaTimer { entity_id } => {
-            with_entity_cmd(commands, entity_id, |ec| {
-                ec.try_remove::<(Timer, LuaOnTimerFired)>();
+            queue_on_entity(commands, entity_id, |mut e| {
+                e.remove::<(Timer, LuaOnTimerFired)>();
             });
         }
         EntityCmd::InsertPhase { entity_id, initial } => {
-            with_entity_cmd(commands, entity_id, |ec| {
-                ec.try_insert(Phase::new(initial));
+            queue_on_entity(commands, entity_id, move |mut e| {
+                e.insert(Phase::new(initial));
             });
         }
         EntityCmd::InsertLuaPhaseCallback {
@@ -777,15 +747,15 @@ fn process_lifecycle_cmd(
             kind,
             callback,
         } => {
-            with_entity_cmd(commands, entity_id, |ec| match kind {
+            queue_on_entity(commands, entity_id, move |mut e| match kind {
                 LuaPhaseCallbackKind::Entered => {
-                    ec.try_insert(LuaOnPhaseEntered::new(callback));
+                    e.insert(LuaOnPhaseEntered::new(callback));
                 }
                 LuaPhaseCallbackKind::Exited => {
-                    ec.try_insert(LuaOnPhaseExited::new(callback));
+                    e.insert(LuaOnPhaseExited::new(callback));
                 }
                 LuaPhaseCallbackKind::Update => {
-                    ec.try_insert(LuaOnPhaseUpdate::new(callback));
+                    e.insert(LuaOnPhaseUpdate::new(callback));
                 }
             });
         }
@@ -795,9 +765,7 @@ fn process_lifecycle_cmd(
                 // (e.g. a clone of the key) already sees it gone; the engine's
                 // end-of-tick prune_dead_entity_registrations covers every other despawn.
                 world_signals.remove_entity_registrations_for(entity);
-                with_entity_cmds(commands, entity, |ec| {
-                    ec.try_despawn();
-                });
+                queue_on(commands, entity, |e| e.despawn());
             }
         }
         EntityCmd::MenuDespawn { entity_id } => {
@@ -809,8 +777,8 @@ fn process_lifecycle_cmd(
             }
         }
         EntityCmd::InsertTtl { entity_id, seconds } => {
-            with_entity_cmd(commands, entity_id, |ec| {
-                ec.try_insert(Ttl::new(seconds));
+            queue_on_entity(commands, entity_id, move |mut e| {
+                e.insert(Ttl::new(seconds));
             });
         }
         _ => unreachable!(),
@@ -936,8 +904,8 @@ mod tests {
         assert!(world_signals.get_entity("tpl").is_none());
     }
 
-    /// Every command whose handler inserts/removes components on `id` (the
-    /// `with_entity_cmd` + `try_*` family), plus `SetParent` onto `parent`.
+    /// Every command whose handler inserts/removes components on `id`, plus
+    /// `SetParent` onto `parent`.
     fn insert_remove_cmds_for(id: u64, parent: u64) -> Vec<EntityCmd> {
         vec![
             EntityCmd::InsertTweenPosition {
@@ -1063,7 +1031,7 @@ mod tests {
             entity_id: doomed.to_bits(),
         }];
         batch.extend(insert_remove_cmds_for(doomed.to_bits(), parent.to_bits()));
-        // Panics on apply if any handler uses a non-`try_` insert/remove/despawn.
+        // Panics on apply if any handler writes a despawned entity unguarded.
         run_entity_cmds(&mut world, &mut signals, batch);
 
         assert!(world.get_entity(doomed).is_err(), "despawn still applied");

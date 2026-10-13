@@ -349,7 +349,7 @@ fn apply_animation_components(
             }),
             &td.config,
         ));
-        super::apply_tween_finished_callback::<MapPosition>(entity_commands, &td.config);
+        entity_commands.queue_silenced(super::tween_finished_callback::<MapPosition>(&td.config));
     }
     if let Some(td) = tween_screen_position {
         entity_commands.insert(super::build_tween(
@@ -363,7 +363,8 @@ fn apply_animation_components(
             }),
             &td.config,
         ));
-        super::apply_tween_finished_callback::<ScreenPosition>(entity_commands, &td.config);
+        entity_commands
+            .queue_silenced(super::tween_finished_callback::<ScreenPosition>(&td.config));
     }
     if let Some(td) = tween_rotation {
         entity_commands.insert(super::build_tween(
@@ -371,7 +372,7 @@ fn apply_animation_components(
             Rotation { degrees: td.to },
             &td.config,
         ));
-        super::apply_tween_finished_callback::<Rotation>(entity_commands, &td.config);
+        entity_commands.queue_silenced(super::tween_finished_callback::<Rotation>(&td.config));
     }
     if let Some(td) = tween_scale {
         entity_commands.insert(super::build_tween(
@@ -379,7 +380,7 @@ fn apply_animation_components(
             Scale::new(td.to_x, td.to_y),
             &td.config,
         ));
-        super::apply_tween_finished_callback::<Scale>(entity_commands, &td.config);
+        entity_commands.queue_silenced(super::tween_finished_callback::<Scale>(&td.config));
     }
 }
 

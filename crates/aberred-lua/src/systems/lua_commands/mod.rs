@@ -189,8 +189,8 @@ pub(crate) fn build_tween<T: TweenValue>(from: T, to: T, config: &TweenConfig) -
     tween
 }
 
-/// Apply a tween's "on finished" callback to `ec`: inserts `LuaOnTweenFinished<T>`
-/// if `config.callback` is set, or removes it otherwise.
+/// An entity command that applies a tween's "on finished" callback: it inserts
+/// `LuaOnTweenFinished<T>` if `config.callback` is set, or removes it otherwise.
 ///
 /// The removal half matters as much as the insert half: re-inserting a
 /// `Tween<T>` on an entity that already has a stale `LuaOnTweenFinished<T>`
@@ -199,14 +199,18 @@ pub(crate) fn build_tween<T: TweenValue>(from: T, to: T, config: &TweenConfig) -
 /// fires again when the new, unrelated tween finishes. Owning both halves
 /// here means every call site gets this for free instead of re-deriving the
 /// `Some`/`None` branch itself.
-pub(crate) fn apply_tween_finished_callback<T: TweenValue>(
-    ec: &mut EntityCommands,
+pub(crate) fn tween_finished_callback<T: TweenValue>(
     config: &TweenConfig,
-) {
-    if config.callback.is_empty() {
-        ec.try_remove::<LuaOnTweenFinished<T>>();
-    } else {
-        ec.try_insert(LuaOnTweenFinished::<T>::new(config.callback.as_str()));
+) -> impl FnOnce(EntityWorldMut) + Send + 'static {
+    let callback = (!config.callback.is_empty())
+        .then(|| LuaOnTweenFinished::<T>::new(config.callback.as_str()));
+    move |mut e| match callback {
+        Some(callback) => {
+            e.insert(callback);
+        }
+        None => {
+            e.remove::<LuaOnTweenFinished<T>>();
+        }
     }
 }
 
