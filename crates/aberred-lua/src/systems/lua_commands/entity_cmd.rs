@@ -191,7 +191,17 @@ pub fn process_entity_commands(
             EntityCmd::SetGuiDisabled {
                 entity_id,
                 disabled,
-            } => process_gui_interactable_cmd(commands, entity_id, disabled),
+            } => {
+                // Mutates `state` only — never inserts a fresh component, since
+                // that would wipe the widget's `size`.
+                queue_on_component::<GuiInteractable>(commands, entity_id, move |interactable| {
+                    interactable.state = if disabled {
+                        GuiWidgetState::Disabled
+                    } else {
+                        GuiWidgetState::Normal
+                    };
+                });
+            }
 
             EntityCmd::SetGuiProgress { entity_id, value } => {
                 queue_on_component::<GuiProgressBar>(commands, entity_id, move |bar| {
@@ -292,18 +302,6 @@ fn queue_on_component<C: Component<Mutability = Mutable>>(
     });
 }
 
-/// GUI widget enable/disable. Mutates `GuiInteractable.state` only — never
-/// inserts a fresh component, since that would wipe its `size`.
-fn process_gui_interactable_cmd(commands: &mut Commands, entity_id: u64, disabled: bool) {
-    queue_on_component::<GuiInteractable>(commands, entity_id, move |interactable| {
-        interactable.state = if disabled {
-            GuiWidgetState::Disabled
-        } else {
-            GuiWidgetState::Normal
-        };
-    });
-}
-
 fn process_signal_cmd(cmd: EntityCmd, commands: &mut Commands) {
     match cmd {
         EntityCmd::SignalSetFlag { entity_id, flag } => {
@@ -360,11 +358,7 @@ fn process_signal_cmd(cmd: EntityCmd, commands: &mut Commands) {
 fn process_animation_cmd(cmd: EntityCmd, commands: &mut Commands) {
     match cmd {
         EntityCmd::RestartAnimation { entity_id } => {
-            queue_on_component::<Animation>(commands, entity_id, |animation| {
-                animation.frame_index = 0;
-                animation.elapsed_time = 0.0;
-                animation.finished = false;
-            });
+            queue_on_component::<Animation>(commands, entity_id, Animation::reset);
         }
         EntityCmd::SetAnimation {
             entity_id,
@@ -384,9 +378,7 @@ fn process_animation_cmd(cmd: EntityCmd, commands: &mut Commands) {
                 }
                 if let Some(mut animation) = e.get_mut::<Animation>() {
                     animation.animation_key = animation_key;
-                    animation.frame_index = 0;
-                    animation.elapsed_time = 0.0;
-                    animation.finished = false;
+                    animation.reset();
                 }
             });
         }

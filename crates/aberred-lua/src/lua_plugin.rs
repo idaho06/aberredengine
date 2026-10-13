@@ -203,8 +203,8 @@ fn drain_common_commands(
     gui_theme_store: &GuiThemeStore,
     gui_theme_warn_cache: &mut GuiThemeWarnCache,
 ) {
-    // Drain animation registrations first so any same-batch SetAnimation/RestartAnimation
-    // entity commands can resolve the newly-registered tex_key from AnimationStore.
+    // Animation registrations write AnimationStore immediately, so a same-batch
+    // SetAnimation (which reads the store when it applies, at the flush) sees them.
     lua_runtime.drain_animation_commands_into(&mut bufs.animation);
     for cmd in bufs.animation.drain(..) {
         process_animation_command(&mut scene_state.anim_store, cmd);
