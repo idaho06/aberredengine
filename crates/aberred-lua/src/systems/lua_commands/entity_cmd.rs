@@ -659,18 +659,12 @@ fn process_hierarchy_cmd(cmd: EntityCmd, commands: &mut Commands) {
             let Some(parent) = resolve_entity(parent_id) else {
                 return;
             };
-            // A dead child makes the whole command a no-op, parent included.
             queue_on_entity(commands, entity_id, move |mut child| {
-                child.insert((ChildOf(parent), GlobalTransform2D::default()));
-                let child_id = child.id();
+                child.insert(ChildOf(parent));
                 // Compute the real world transform now (no one-frame flash at the
-                // origin) BEFORE the parent gets a default one, so a standalone
-                // parent's transform is synthesized from its local components.
-                let world = child.into_world_mut();
-                ComputeInitialGlobalTransform.apply(world.entity_mut(child_id));
-                if let Ok(mut parent) = world.get_entity_mut(parent) {
-                    parent.insert_if_new(GlobalTransform2D::default());
-                }
+                // origin). A standalone parent's transform is synthesized from its
+                // local components; propagate_transforms gives it its own next tick.
+                ComputeInitialGlobalTransform.apply(child);
             });
         }
         EntityCmd::RemoveParent { entity_id } => {
@@ -1299,7 +1293,28 @@ mod tests {
             world.get::<GlobalTransform2D>(child).unwrap().position,
             Vec2::new(11.0, 7.0)
         );
-        assert!(world.get::<GlobalTransform2D>(parent).is_some());
+    }
+
+    #[test]
+    fn two_set_parents_onto_one_parent_in_a_batch_place_both_children() {
+        let mut world = World::new();
+        let mut signals = WorldSignals::default();
+        let parent = world.spawn(MapPosition::new(10.0, 5.0)).id();
+        let first = world.spawn(MapPosition::new(1.0, 2.0)).id();
+        let second = world.spawn(MapPosition::new(2.0, 3.0)).id();
+
+        run_entity_cmds(
+            &mut world,
+            &mut signals,
+            [first, second].map(|child| EntityCmd::SetParent {
+                entity_id: child.to_bits(),
+                parent_id: parent.to_bits(),
+            }),
+        );
+
+        let world_pos = |e| world.get::<GlobalTransform2D>(e).unwrap().position;
+        assert_eq!(world_pos(first), Vec2::new(11.0, 7.0));
+        assert_eq!(world_pos(second), Vec2::new(12.0, 8.0));
     }
 
     #[test]

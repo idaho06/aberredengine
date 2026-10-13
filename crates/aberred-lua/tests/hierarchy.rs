@@ -79,10 +79,12 @@ fn entity_cmd_set_parent_inserts_childof() {
         "Child should have GlobalTransform2D after SetParent"
     );
 
-    // Parent should also have GlobalTransform2D (auto-inserted)
+    // No placeholder on the root parent: world-position readers prefer a
+    // GlobalTransform2D, so a default one would put the parent at the origin
+    // until propagate_transforms runs. It keeps resolving from its MapPosition.
     assert!(
-        world.get::<GlobalTransform2D>(parent).is_some(),
-        "Parent should have GlobalTransform2D after SetParent"
+        world.get::<GlobalTransform2D>(parent).is_none(),
+        "SetParent must not give a root parent a placeholder GlobalTransform2D"
     );
 }
 
