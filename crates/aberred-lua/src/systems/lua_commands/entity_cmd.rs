@@ -84,6 +84,23 @@ fn with_entity_cmds(commands: &mut Commands, entity: Entity, f: impl FnOnce(&mut
     }
 }
 
+/// Queue `f` to run against `entity_id`'s `EntityWorldMut` at the next command
+/// flush, in push order with every other queued command, so a write that
+/// follows an insert in the same batch sees the inserted component.
+///
+/// No-ops (with a warn log) on invalid bits or an entity despawned in a prior
+/// frame's flush. An entity despawned *earlier in the same drained batch* is
+/// skipped silently at apply time.
+fn queue_on_entity(
+    commands: &mut Commands,
+    entity_id: u64,
+    f: impl FnOnce(EntityWorldMut) + Send + 'static,
+) {
+    with_entity_cmd(commands, entity_id, |ec| {
+        ec.queue_silenced(f);
+    });
+}
+
 /// Drains the Lua entity command queue and dispatches each `EntityCmd` to the
 /// matching ECS mutation (SetVelocity, SetAnimation, Despawn, etc.).
 pub fn process_entity_commands(
@@ -141,7 +158,7 @@ pub fn process_entity_commands(
             | EntityCmd::SetTint { .. }
             | EntityCmd::RemoveTint { .. }
             | EntityCmd::SetShadow { .. }
-            | EntityCmd::RemoveShadow { .. }) => process_shader_cmd(cmd, commands, queries),
+            | EntityCmd::RemoveShadow { .. }) => process_shader_cmd(cmd, commands),
 
             cmd @ (EntityCmd::SetPosition { .. }
             | EntityCmd::SetScreenPosition { .. }
@@ -560,37 +577,35 @@ where
     });
 }
 
-fn process_shader_cmd(cmd: EntityCmd, commands: &mut Commands, queries: &mut EntityCmdQueries) {
+fn process_shader_cmd(cmd: EntityCmd, commands: &mut Commands) {
     match cmd {
         EntityCmd::SetShader { entity_id, key } => {
-            with_entity_cmd(commands, entity_id, |ec| {
-                ec.try_insert(EntityShader::new(key));
+            queue_on_entity(commands, entity_id, move |mut e| {
+                e.insert(EntityShader::new(key));
             });
         }
         EntityCmd::RemoveShader { entity_id } => {
-            with_entity_cmd(commands, entity_id, |ec| {
-                ec.try_remove::<EntityShader>();
+            queue_on_entity(commands, entity_id, |mut e| {
+                e.remove::<EntityShader>();
             });
         }
         cmd @ (EntityCmd::ShaderSetFloat { .. }
         | EntityCmd::ShaderSetInt { .. }
         | EntityCmd::ShaderSetVec2 { .. }
-        | EntityCmd::ShaderSetVec4 { .. }) => shader_set_uniform(cmd, queries),
+        | EntityCmd::ShaderSetVec4 { .. }) => shader_set_uniform(cmd, commands),
         EntityCmd::ShaderClearUniform { entity_id, name } => {
-            let Some(entity) = resolve_entity(entity_id) else {
-                return;
-            };
-            if let Ok(mut shader) = queries.shaders.get_mut(entity) {
-                shader.uniforms_mut().remove(name.as_str());
-            }
+            queue_on_entity(commands, entity_id, move |mut e| {
+                if let Some(mut shader) = e.get_mut::<EntityShader>() {
+                    shader.uniforms_mut().remove(name.as_str());
+                }
+            });
         }
         EntityCmd::ShaderClearUniforms { entity_id } => {
-            let Some(entity) = resolve_entity(entity_id) else {
-                return;
-            };
-            if let Ok(mut shader) = queries.shaders.get_mut(entity) {
-                shader.uniforms_mut().clear();
-            }
+            queue_on_entity(commands, entity_id, |mut e| {
+                if let Some(mut shader) = e.get_mut::<EntityShader>() {
+                    shader.uniforms_mut().clear();
+                }
+            });
         }
         EntityCmd::SetTint {
             entity_id,
@@ -630,7 +645,7 @@ fn process_shader_cmd(cmd: EntityCmd, commands: &mut Commands, queries: &mut Ent
     }
 }
 
-fn shader_set_uniform(cmd: EntityCmd, queries: &mut EntityCmdQueries) {
+fn shader_set_uniform(cmd: EntityCmd, commands: &mut Commands) {
     let (entity_id, name, value) = match cmd {
         EntityCmd::ShaderSetFloat {
             entity_id,
@@ -658,12 +673,11 @@ fn shader_set_uniform(cmd: EntityCmd, queries: &mut EntityCmdQueries) {
         } => (entity_id, name, UniformValue::Vec4 { x, y, z, w }),
         _ => unreachable!(),
     };
-    let Some(entity) = resolve_entity(entity_id) else {
-        return;
-    };
-    if let Ok(mut shader) = queries.shaders.get_mut(entity) {
-        shader.set_uniform(&name, value);
-    }
+    queue_on_entity(commands, entity_id, move |mut e| {
+        if let Some(mut shader) = e.get_mut::<EntityShader>() {
+            shader.set_uniform(&name, value);
+        }
+    });
 }
 
 fn process_transform_cmd(cmd: EntityCmd, commands: &mut Commands, queries: &mut EntityCmdQueries) {
@@ -1791,6 +1805,97 @@ mod tests {
             EntityCmd::ShaderClearUniforms { entity_id: id },
         );
         assert!(world.get::<EntityShader>(e).unwrap().uniforms.is_empty());
+    }
+
+    fn set_shader(id: u64, key: &str) -> EntityCmd {
+        EntityCmd::SetShader {
+            entity_id: id,
+            key: key.into(),
+        }
+    }
+
+    fn set_float(id: u64, name: &str, value: f32) -> EntityCmd {
+        EntityCmd::ShaderSetFloat {
+            entity_id: id,
+            name: name.into(),
+            value,
+        }
+    }
+
+    #[test]
+    fn set_shader_then_set_uniform_keeps_uniform() {
+        let mut world = World::new();
+        let mut signals = WorldSignals::default();
+        let e = world.spawn_empty().id();
+        let id = e.to_bits();
+
+        run_entity_cmds(
+            &mut world,
+            &mut signals,
+            [set_shader(id, "wave"), set_float(id, "u", 1.0)],
+        );
+
+        let shader = world.get::<EntityShader>(e).expect("shader inserted");
+        assert_eq!(&*shader.shader_key, "wave");
+        assert_eq!(shader.uniforms.get("u"), Some(&UniformValue::Float(1.0)));
+    }
+
+    #[test]
+    fn set_shader_replacing_existing_then_set_uniform_keeps_uniform() {
+        let mut world = World::new();
+        let mut signals = WorldSignals::default();
+        let e = world.spawn(EntityShader::new("old")).id();
+        let id = e.to_bits();
+
+        run_entity_cmds(
+            &mut world,
+            &mut signals,
+            [set_shader(id, "wave"), set_float(id, "u", 1.0)],
+        );
+
+        let shader = world.get::<EntityShader>(e).unwrap();
+        assert_eq!(&*shader.shader_key, "wave");
+        assert_eq!(shader.uniforms.get("u"), Some(&UniformValue::Float(1.0)));
+    }
+
+    #[test]
+    fn shader_clear_after_set_shader_applies_in_order() {
+        let mut world = World::new();
+        let mut signals = WorldSignals::default();
+        let e = world.spawn(EntityShader::new("old")).id();
+        let id = e.to_bits();
+
+        run_entity_cmds(
+            &mut world,
+            &mut signals,
+            [
+                set_shader(id, "wave"),
+                set_float(id, "a", 1.0),
+                set_float(id, "b", 2.0),
+                EntityCmd::ShaderClearUniform {
+                    entity_id: id,
+                    name: "a".into(),
+                },
+            ],
+        );
+        let uniforms = &world.get::<EntityShader>(e).unwrap().uniforms;
+        assert_eq!(uniforms.get("a"), None, "cleared after the set");
+        assert_eq!(uniforms.get("b"), Some(&UniformValue::Float(2.0)));
+
+        run_entity_cmds(
+            &mut world,
+            &mut signals,
+            [
+                set_shader(id, "glow"),
+                set_float(id, "c", 3.0),
+                EntityCmd::ShaderClearUniforms { entity_id: id },
+                set_float(id, "d", 4.0),
+            ],
+        );
+        let shader = world.get::<EntityShader>(e).unwrap();
+        assert_eq!(&*shader.shader_key, "glow");
+        assert_eq!(shader.uniforms.len(), 1, "only the write after the clear");
+        assert_eq!(shader.uniforms.get("d"), Some(&UniformValue::Float(4.0)));
     }
 
     #[test]
