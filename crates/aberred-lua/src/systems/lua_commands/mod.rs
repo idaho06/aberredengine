@@ -14,9 +14,8 @@
 //!
 //! # SystemParam bundles
 //!
-//! - [`EntityCmdQueries`] – mutable queries needed by `process_entity_commands`
 //! - [`ContextQueries`] – read-only queries for building entity context tables
-//! - [`LuaDispatch`] – bundles both of the above plus everything needed to
+//! - [`LuaDispatch`] – bundles [`ContextQueries`] plus everything needed to
 //!   call one Lua entity callback and drain its queued commands
 
 mod context;
@@ -56,11 +55,7 @@ use crate::resources::lua_runtime::{
 };
 use aberred_core::components::animation::Animation;
 use aberred_core::components::boxcollider::BoxCollider;
-use aberred_core::components::cameratarget::CameraTarget;
-use aberred_core::components::entityshader::EntityShader;
 use aberred_core::components::globaltransform2d::GlobalTransform2D;
-use aberred_core::components::guiinteractable::GuiInteractable;
-use aberred_core::components::guiprogressbar::GuiProgressBar;
 use aberred_core::components::mapposition::MapPosition;
 use aberred_core::components::rigidbody::RigidBody;
 use aberred_core::components::rotation::Rotation;
@@ -68,11 +63,9 @@ use aberred_core::components::scale::Scale;
 use aberred_core::components::screenposition::ScreenPosition;
 use aberred_core::components::signals::Signals;
 use aberred_core::components::sprite::Sprite;
-use aberred_core::components::stuckto::StuckTo;
 use aberred_core::components::timer::Timer;
 use aberred_core::components::tween::{Tween, TweenValue};
 use aberred_core::protocol::audio::AudioCmd;
-use aberred_core::resources::animationstore::AnimationStore;
 use aberred_core::resources::systemsstore::SystemsStore;
 use aberred_core::resources::worldsignals::WorldSignals;
 
@@ -117,17 +110,14 @@ pub(crate) enum DrainScope {
 ///
 /// `bufs` must be a caller-owned [`EffectCmdBufs`] (typically `Local<EffectCmdBufs>`).
 /// The Vecs retain capacity across frames to avoid repeated allocation.
-#[allow(clippy::too_many_arguments)]
 pub(crate) fn drain_and_process_effect_commands(
     lua_runtime: &LuaRuntime,
     scope: DrainScope,
     bufs: &mut EffectCmdBufs,
     commands: &mut Commands,
     world_signals: &mut WorldSignals,
-    cmd_queries: &mut EntityCmdQueries,
     audio: &mut MessageWriter<AudioCmd>,
     systems_store: &SystemsStore,
-    animation_store: &AnimationStore,
 ) {
     match scope {
         DrainScope::Regular => {
@@ -157,9 +147,7 @@ pub(crate) fn drain_and_process_effect_commands(
         commands,
         bufs.entities.drain(..),
         world_signals,
-        cmd_queries,
         systems_store,
-        animation_store,
     );
     for cmd in bufs.spawns.drain(..) {
         process_spawn_command(commands, cmd, world_signals);
@@ -214,32 +202,18 @@ pub(crate) fn tween_finished_callback<T: TweenValue>(
     }
 }
 
-/// Mutable queries required by [`process_entity_commands`].
-///
-/// Embed this in any system or SystemParam that needs to call
-/// `process_entity_commands`, and pass `&mut entity_cmd_queries` directly.
-#[derive(SystemParam)]
-pub struct EntityCmdQueries<'w, 's> {
-    pub stuckto: Query<'w, 's, &'static StuckTo>,
-    pub signals: Query<'w, 's, &'static mut Signals>,
-    pub animation: Query<'w, 's, &'static mut Animation>,
-    pub rigid_bodies: Query<'w, 's, &'static mut RigidBody>,
-    pub positions: Query<'w, 's, &'static mut MapPosition>,
-    pub screen_positions: Query<'w, 's, &'static mut ScreenPosition>,
-    pub sprites: Query<'w, 's, &'static mut Sprite>,
-    pub shaders: Query<'w, 's, &'static mut EntityShader>,
-    pub global_transforms: Query<'w, 's, &'static GlobalTransform2D>,
-    pub camera_targets: Query<'w, 's, &'static mut CameraTarget>,
-    pub gui_interactables: Query<'w, 's, &'static mut GuiInteractable>,
-    pub gui_progress_bars: Query<'w, 's, &'static mut GuiProgressBar>,
-}
-
 /// Bundled read-only queries for building entity context tables.
 ///
-/// This SystemParam includes read-only components that can be shared by systems
-/// that also hold mutable command-processing queries.
+/// Entity commands never write through queries (they queue deferred
+/// `EntityWorldMut` work), so every component a ctx reads lives here.
 #[derive(SystemParam)]
 pub struct ContextQueries<'w, 's> {
+    pub positions: Query<'w, 's, &'static MapPosition>,
+    pub screen_positions: Query<'w, 's, &'static ScreenPosition>,
+    pub rigid_bodies: Query<'w, 's, &'static RigidBody>,
+    pub sprites: Query<'w, 's, &'static Sprite>,
+    pub animation: Query<'w, 's, &'static Animation>,
+    pub signals: Query<'w, 's, &'static Signals>,
     pub groups: Query<'w, 's, &'static aberred_core::components::group::Group>,
     pub rotations: Query<'w, 's, &'static Rotation>,
     pub scales: Query<'w, 's, &'static Scale>,

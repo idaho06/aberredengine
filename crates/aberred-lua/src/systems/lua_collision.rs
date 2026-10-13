@@ -53,7 +53,7 @@ use crate::resources::lua_runtime::{
     set_opt,
 };
 use crate::systems::lua_commands::{
-    DrainScope, EntityCmdQueries, LuaDispatch, drain_dispatch_commands, refresh_signal_cache,
+    ContextQueries, DrainScope, LuaDispatch, drain_dispatch_commands, refresh_signal_cache,
 };
 use aberred_core::components::collision::{BoxSide, CollisionRule};
 use aberred_core::components::signals::Signals;
@@ -78,17 +78,13 @@ struct CollisionSide<'a> {
 
 /// The full ctx side of a live entity, touching the other side on `sides`.
 fn live_side<'a>(
-    queries: &'a EntityCmdQueries,
+    queries: &'a ContextQueries,
     entity: Entity,
     group: &'a str,
     rect: Option<Rect>,
     sides: &'a [BoxSide],
 ) -> CollisionSide<'a> {
-    let pos = resolve_world_pos(
-        &queries.positions.as_readonly(),
-        &queries.global_transforms,
-        entity,
-    );
+    let pos = resolve_world_pos(&queries.positions, &queries.global_transforms, entity);
     let velocity = queries.rigid_bodies.get(entity).ok().map(|rb| rb.velocity);
     CollisionSide {
         id: entity.to_bits(),
@@ -133,16 +129,16 @@ impl LuaRuleDispatch<'_, '_> {
         let p = &mut self.dispatch;
         refresh_signal_cache(p);
         {
-            let queries = &p.cmd_queries;
+            let queries = &p.ctx_queries;
             // Early return if either entity was despawned by a prior callback
             if queries.positions.get(a).is_err() || queries.positions.get(b).is_err() {
                 return;
             }
             let rect_of = |entity| {
                 resolve_collider_rect(
-                    &queries.positions.as_readonly(),
+                    &queries.positions,
                     &queries.global_transforms,
-                    &p.ctx_queries.box_colliders,
+                    &queries.box_colliders,
                     entity,
                 )
             };

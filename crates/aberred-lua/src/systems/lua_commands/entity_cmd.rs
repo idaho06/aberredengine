@@ -41,8 +41,6 @@ use aberred_core::resources::systemsstore as hook_keys;
 use aberred_core::resources::systemsstore::SystemsStore;
 use aberred_core::resources::worldsignals::WorldSignals;
 
-use super::EntityCmdQueries;
-
 /// Resolve a Lua-supplied u64 entity ID, warning and returning None on invalid bits.
 pub(super) fn resolve_entity(id: u64) -> Option<Entity> {
     match Entity::try_from_bits(id) {
@@ -94,9 +92,7 @@ pub fn process_entity_commands(
     commands: &mut Commands,
     entity_commands: impl IntoIterator<Item = EntityCmd>,
     world_signals: &mut WorldSignals,
-    _queries: &mut EntityCmdQueries,
     systems_store: &SystemsStore,
-    _anim_store: &AnimationStore,
 ) {
     aberred_core::tracy::tracy_span!("lua_entity_cmds");
     for cmd in entity_commands {
@@ -830,19 +826,12 @@ mod tests {
     ) {
         use bevy_ecs::system::SystemState;
 
-        let mut system_state = SystemState::<(Commands, EntityCmdQueries)>::new(world);
+        let mut system_state = SystemState::<Commands>::new(world);
         {
-            let (mut commands, mut queries) = system_state
+            let mut commands = system_state
                 .get_mut(world)
                 .expect("Entity command test params should fetch");
-            process_entity_commands(
-                &mut commands,
-                cmds,
-                world_signals,
-                &mut queries,
-                systems_store,
-                &AnimationStore::default(),
-            );
+            process_entity_commands(&mut commands, cmds, world_signals, systems_store);
         }
         system_state.apply(world);
     }

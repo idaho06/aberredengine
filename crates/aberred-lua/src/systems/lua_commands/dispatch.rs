@@ -23,14 +23,13 @@ use mlua::prelude::{Lua, LuaResult, LuaTable};
 use crate::resources::lua_runtime::{LuaRuntime, PhaseSnapshot};
 use aberred_core::components::phase::Phase;
 use aberred_core::protocol::audio::AudioCmd;
-use aberred_core::resources::animationstore::AnimationStore;
 use aberred_core::resources::input::InputState;
 use aberred_core::resources::systemsstore::SystemsStore;
 use aberred_core::resources::worldsignals::WorldSignals;
 use aberred_core::resources::worldtime::WorldTime;
 
 use super::{
-    ContextQueries, DrainScope, EffectCmdBufs, EntityCmdQueries, build_entity_context,
+    ContextQueries, DrainScope, EffectCmdBufs, build_entity_context,
     drain_and_process_effect_commands,
 };
 
@@ -42,13 +41,11 @@ pub struct LuaDispatch<'w, 's> {
     pub input: Res<'w, InputState>,
     pub time: Res<'w, WorldTime>,
     pub ctx_queries: ContextQueries<'w, 's>,
-    pub cmd_queries: EntityCmdQueries<'w, 's>,
     pub phase_query: Query<'w, 's, &'static Phase>,
     pub world_signals: ResMut<'w, WorldSignals>,
     pub lua_runtime: NonSend<'w, LuaRuntime>,
     pub audio_cmd_writer: MessageWriter<'w, AudioCmd>,
     pub systems_store: Res<'w, SystemsStore>,
-    pub animation_store: Res<'w, AnimationStore>,
     pub effect_bufs: Local<'s, EffectCmdBufs>,
 }
 
@@ -145,7 +142,6 @@ pub(crate) fn build_ctx_or_log(
         &p.lua_runtime,
         entity,
         &p.ctx_queries,
-        &p.cmd_queries,
         phase,
         previous_phase,
     ) {
@@ -186,10 +182,8 @@ pub(crate) fn drain_dispatch_commands(p: &mut LuaDispatch, scope: DrainScope) {
         &mut p.effect_bufs,
         &mut p.commands,
         &mut p.world_signals,
-        &mut p.cmd_queries,
         &mut p.audio_cmd_writer,
         &p.systems_store,
-        &p.animation_store,
     );
 }
 
@@ -201,6 +195,5 @@ pub(crate) fn init_dispatch_resources(world: &mut World) {
     world.init_resource::<Messages<AudioCmd>>();
     world.init_resource::<InputState>();
     world.init_resource::<WorldTime>();
-    world.init_resource::<AnimationStore>();
     world.insert_resource(SystemsStore::default());
 }

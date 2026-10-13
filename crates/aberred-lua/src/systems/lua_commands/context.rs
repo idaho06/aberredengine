@@ -6,7 +6,7 @@ use crate::resources::lua_runtime::{
     RigidBodySnapshot, SpriteSnapshot, build_entity_context_pooled,
 };
 
-use super::{ContextQueries, EntityCmdQueries};
+use super::ContextQueries;
 
 /// Build entity context for Lua callbacks using pooled tables.
 ///
@@ -18,7 +18,6 @@ pub(crate) fn build_entity_context(
     lua_runtime: &LuaRuntime,
     entity: Entity,
     ctx_queries: &ContextQueries,
-    cmd_queries: &EntityCmdQueries,
     phase: Option<PhaseSnapshot<'_>>,
     previous_phase: Option<&str>,
 ) -> LuaResult<LuaTable> {
@@ -28,19 +27,19 @@ pub(crate) fn build_entity_context(
     // Query all optional components
     let group = ctx_queries.groups.get(entity).ok().map(|g| g.name());
 
-    let map_pos = cmd_queries
+    let map_pos = ctx_queries
         .positions
         .get(entity)
         .ok()
         .map(|p| (p.pos.x, p.pos.y));
 
-    let screen_pos = cmd_queries
+    let screen_pos = ctx_queries
         .screen_positions
         .get(entity)
         .ok()
         .map(|p| (p.pos.x, p.pos.y));
 
-    let rigid_body = cmd_queries
+    let rigid_body = ctx_queries
         .rigid_bodies
         .get(entity)
         .ok()
@@ -60,13 +59,13 @@ pub(crate) fn build_entity_context(
 
     // Compute collider rect using position
     let rect = ctx_queries.box_colliders.get(entity).ok().and_then(|bc| {
-        cmd_queries.positions.get(entity).ok().map(|pos| {
+        ctx_queries.positions.get(entity).ok().map(|pos| {
             let rect = bc.as_rectangle(pos.pos);
             (rect.x, rect.y, rect.width, rect.height)
         })
     });
 
-    let sprite = cmd_queries
+    let sprite = ctx_queries
         .sprites
         .get(entity)
         .ok()
@@ -76,7 +75,7 @@ pub(crate) fn build_entity_context(
             flip_v: s.flip_v,
         });
 
-    let animation = cmd_queries
+    let animation = ctx_queries
         .animation
         .get(entity)
         .ok()
@@ -86,7 +85,7 @@ pub(crate) fn build_entity_context(
             elapsed: a.elapsed_time,
         });
 
-    let signals_ref = cmd_queries.signals.get(entity).ok();
+    let signals_ref = ctx_queries.signals.get(entity).ok();
 
     let lua_timer = ctx_queries
         .lua_timers

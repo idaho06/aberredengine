@@ -16,7 +16,6 @@ use aberred_core::components::globaltransform2d::GlobalTransform2D;
 use aberred_core::components::mapposition::MapPosition;
 use aberred_core::components::rotation::Rotation;
 use aberred_core::components::scale::Scale;
-use aberred_core::resources::animationstore::AnimationStore;
 use aberred_core::resources::systemsstore::SystemsStore;
 use aberred_core::resources::worldsignals::WorldSignals;
 use aberred_core::systems::propagate_transforms::propagate_transforms;
@@ -24,7 +23,6 @@ use aberred_core::testing::approx_eq;
 use aberred_lua::resources::lua_runtime::{
     EntityCmd, EntitySnapshot, LuaRuntime, SpawnCmd, build_entity_context_pooled,
 };
-use aberred_lua::systems::lua_commands::EntityCmdQueries;
 use aberred_lua::systems::lua_commands::{process_entity_commands, process_spawn_command};
 
 fn tick_propagate(world: &mut World) {
@@ -40,32 +38,16 @@ fn tick_propagate(world: &mut World) {
 /// Helper to run process_entity_commands using SystemState.
 fn run_entity_cmds(world: &mut World, cmds: Vec<EntityCmd>) {
     world.insert_resource(SystemsStore::new());
-    world.insert_resource(AnimationStore {
-        animations: Default::default(),
-    });
     if !world.contains_resource::<WorldSignals>() {
         world.insert_resource(WorldSignals::default());
     }
 
-    let mut state = SystemState::<(
-        Commands,
-        EntityCmdQueries,
-        ResMut<WorldSignals>,
-        Res<SystemsStore>,
-        Res<AnimationStore>,
-    )>::new(world);
-    let (mut commands, mut queries, mut world_signals, systems_store, anim_store) = state
+    let mut state = SystemState::<(Commands, ResMut<WorldSignals>, Res<SystemsStore>)>::new(world);
+    let (mut commands, mut world_signals, systems_store) = state
         .get_mut(world)
         .expect("Hierarchy test params should fetch");
 
-    process_entity_commands(
-        &mut commands,
-        cmds,
-        &mut world_signals,
-        &mut queries,
-        &systems_store,
-        &anim_store,
-    );
+    process_entity_commands(&mut commands, cmds, &mut world_signals, &systems_store);
 
     state.apply(world);
 }
