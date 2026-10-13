@@ -32,6 +32,8 @@ use aberred_core::components::timer::Timer;
 use aberred_core::components::tint::Tint;
 use aberred_core::components::ttl::Ttl;
 use aberred_core::components::tween::{Tween, TweenValue};
+use aberred_core::systems::propagate_transforms::ComputeInitialGlobalTransform;
+use bevy_ecs::system::EntityCommand;
 
 use crate::resources::lua_runtime::{EntityCmd, LuaPhaseCallbackKind, TweenConfig, UniformValue};
 use aberred_core::resources::animationstore::AnimationStore;
@@ -122,7 +124,7 @@ pub fn process_entity_commands(
     commands: &mut Commands,
     entity_commands: impl IntoIterator<Item = EntityCmd>,
     world_signals: &mut WorldSignals,
-    queries: &mut EntityCmdQueries,
+    _queries: &mut EntityCmdQueries,
     systems_store: &SystemsStore,
     _anim_store: &AnimationStore,
 ) {
@@ -186,7 +188,7 @@ pub fn process_entity_commands(
             cmd @ (EntityCmd::SetParent { .. }
             | EntityCmd::RemoveParent { .. }
             | EntityCmd::InsertStuckTo { .. }
-            | EntityCmd::ReleaseStuckTo { .. }) => process_hierarchy_cmd(cmd, commands, queries),
+            | EntityCmd::ReleaseStuckTo { .. }) => process_hierarchy_cmd(cmd, commands),
 
             cmd @ (EntityCmd::InsertLuaTimer { .. }
             | EntityCmd::RemoveLuaTimer { .. }
@@ -660,56 +662,45 @@ fn process_transform_cmd(cmd: EntityCmd, commands: &mut Commands) {
     }
 }
 
-fn process_hierarchy_cmd(cmd: EntityCmd, commands: &mut Commands, queries: &mut EntityCmdQueries) {
+fn process_hierarchy_cmd(cmd: EntityCmd, commands: &mut Commands) {
     match cmd {
         EntityCmd::SetParent {
             entity_id,
             parent_id,
         } => {
-            let (Some(child), Some(parent)) =
-                (resolve_entity(entity_id), resolve_entity(parent_id))
-            else {
+            let Some(parent) = resolve_entity(parent_id) else {
                 return;
             };
             // A dead child makes the whole command a no-op, parent included.
-            let Some(mut child_cmds) = get_entity_cmd(child, commands) else {
-                return;
-            };
-            child_cmds.try_insert((ChildOf(parent), GlobalTransform2D::default()));
-            // Ensure parent also has GlobalTransform2D
-            if queries.global_transforms.get(parent).is_err() {
-                with_entity_cmds(commands, parent, |ec| {
-                    ec.try_insert(GlobalTransform2D::default());
-                });
-            }
+            queue_on_entity(commands, entity_id, move |mut child| {
+                child.insert((ChildOf(parent), GlobalTransform2D::default()));
+                let child_id = child.id();
+                // Compute the real world transform now (no one-frame flash at the
+                // origin) BEFORE the parent gets a default one, so a standalone
+                // parent's transform is synthesized from its local components.
+                let world = child.into_world_mut();
+                ComputeInitialGlobalTransform.apply(world.entity_mut(child_id));
+                if let Ok(mut parent) = world.get_entity_mut(parent) {
+                    parent.insert_if_new(GlobalTransform2D::default());
+                }
+            });
         }
         EntityCmd::RemoveParent { entity_id } => {
-            let Some(entity) = resolve_entity(entity_id) else {
-                return;
-            };
-            // Snap to world transform before detaching
-            let world_transform = queries
-                .global_transforms
-                .get(entity)
-                .ok()
-                .map(|gt| (gt.position, gt.rotation_degrees, gt.scale));
-            if let Some((position, rotation_degrees, scale)) = world_transform {
-                if let Ok(mut pos) = queries.positions.get_mut(entity) {
-                    pos.pos = position;
+            queue_on_entity(commands, entity_id, |mut e| {
+                // Snap to the world transform before detaching.
+                if let Some(gt) = e.get::<GlobalTransform2D>().copied() {
+                    if let Some(mut pos) = e.get_mut::<MapPosition>() {
+                        pos.pos = gt.position;
+                    }
+                    e.insert((
+                        Rotation {
+                            degrees: gt.rotation_degrees,
+                        },
+                        Scale::new(gt.scale.x, gt.scale.y),
+                    ));
                 }
-                with_entity_cmds(commands, entity, |ec| {
-                    ec.try_insert(Rotation {
-                        degrees: rotation_degrees,
-                    })
-                    .try_insert(Scale::new(scale.x, scale.y))
-                    .try_remove::<ChildOf>()
-                    .try_remove::<GlobalTransform2D>();
-                });
-            } else {
-                with_entity_cmds(commands, entity, |ec| {
-                    ec.try_remove::<ChildOf>().try_remove::<GlobalTransform2D>();
-                });
-            }
+                e.remove::<(ChildOf, GlobalTransform2D)>();
+            });
         }
         EntityCmd::InsertStuckTo {
             entity_id,
@@ -1302,6 +1293,64 @@ mod tests {
             "no command resurrects it"
         );
         assert_eq!(world.entities().count_spawned(), entities_before);
+    }
+
+    #[test]
+    fn set_parent_places_child_at_its_world_transform_immediately() {
+        let mut world = World::new();
+        let mut signals = WorldSignals::default();
+        let parent = world.spawn(MapPosition::new(10.0, 5.0)).id();
+        let child = world.spawn(MapPosition::new(1.0, 2.0)).id();
+
+        run_entity_cmd(
+            &mut world,
+            &mut signals,
+            EntityCmd::SetParent {
+                entity_id: child.to_bits(),
+                parent_id: parent.to_bits(),
+            },
+        );
+
+        assert_eq!(
+            world.get::<ChildOf>(child).map(ChildOf::parent),
+            Some(parent)
+        );
+        // No one-frame flash at the origin: the world transform is real at once.
+        assert_eq!(
+            world.get::<GlobalTransform2D>(child).unwrap().position,
+            Vec2::new(11.0, 7.0)
+        );
+        assert!(world.get::<GlobalTransform2D>(parent).is_some());
+    }
+
+    #[test]
+    fn set_parent_then_remove_parent_keeps_the_world_position() {
+        let mut world = World::new();
+        let mut signals = WorldSignals::default();
+        let parent = world.spawn(MapPosition::new(10.0, 5.0)).id();
+        let child = world.spawn(MapPosition::new(1.0, 2.0)).id();
+
+        run_entity_cmds(
+            &mut world,
+            &mut signals,
+            [
+                EntityCmd::SetParent {
+                    entity_id: child.to_bits(),
+                    parent_id: parent.to_bits(),
+                },
+                EntityCmd::RemoveParent {
+                    entity_id: child.to_bits(),
+                },
+            ],
+        );
+
+        assert!(world.get::<ChildOf>(child).is_none());
+        assert!(world.get::<GlobalTransform2D>(child).is_none());
+        assert_eq!(
+            world.get::<MapPosition>(child).unwrap().pos,
+            Vec2::new(11.0, 7.0),
+            "detaching keeps the world position it had as a child"
+        );
     }
 
     #[test]
