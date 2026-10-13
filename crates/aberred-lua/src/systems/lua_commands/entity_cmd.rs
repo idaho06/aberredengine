@@ -98,9 +98,18 @@ fn queue_on_entity(
     entity_id: u64,
     f: impl FnOnce(EntityWorldMut) + Send + 'static,
 ) {
-    with_entity_cmd(commands, entity_id, |ec| {
-        ec.queue_silenced(f);
-    });
+    let Some(entity) = resolve_entity(entity_id) else {
+        return;
+    };
+    match commands.get_entity(entity) {
+        Ok(mut entity_cmds) => {
+            entity_cmds.queue_silenced(f);
+        }
+        Err(_) => warn!(
+            "Cannot apply command to entity {:?}: entity was despawned",
+            entity
+        ),
+    }
 }
 
 /// Drains the Lua entity command queue and dispatches each `EntityCmd` to the
