@@ -1912,20 +1912,19 @@ mod tests {
         );
     }
 
+    /// An entity stuck to a fresh target, with an optional stored velocity.
+    fn spawn_stuck(world: &mut World, stored_velocity: Option<Vec2>) -> Entity {
+        let target = world.spawn(MapPosition::new(0.0, 0.0)).id();
+        let mut stuck = StuckTo::new(target);
+        stuck.stored_velocity = stored_velocity;
+        world.spawn(stuck).id()
+    }
+
     #[test]
     fn release_stuckto_without_stored_velocity_adds_no_rigidbody() {
         let mut world = World::new();
         let mut signals = WorldSignals::default();
-        let target = world.spawn(MapPosition::new(0.0, 0.0)).id();
-        let e = world
-            .spawn(StuckTo {
-                target,
-                offset: Vec2::ZERO,
-                follow_x: true,
-                follow_y: true,
-                stored_velocity: None,
-            })
-            .id();
+        let e = spawn_stuck(&mut world, None);
 
         run_entity_cmd(
             &mut world,
@@ -1938,25 +1937,11 @@ mod tests {
         assert!(world.get::<RigidBody>(e).is_none());
     }
 
-    /// An entity stuck to a fresh target with stored velocity `(1, 1)`.
-    fn spawn_stuck(world: &mut World) -> Entity {
-        let target = world.spawn(MapPosition::new(0.0, 0.0)).id();
-        world
-            .spawn(StuckTo {
-                target,
-                offset: Vec2::ZERO,
-                follow_x: true,
-                follow_y: true,
-                stored_velocity: Some(Vec2::new(1.0, 1.0)),
-            })
-            .id()
-    }
-
     #[test]
     fn release_stuckto_then_set_velocity_keeps_velocity() {
         let mut world = World::new();
         let mut signals = WorldSignals::default();
-        let e = spawn_stuck(&mut world);
+        let e = spawn_stuck(&mut world, Some(Vec2::new(1.0, 1.0)));
         let id = e.to_bits();
 
         run_entity_cmds(
@@ -1982,7 +1967,7 @@ mod tests {
     fn release_stuckto_then_add_force_keeps_force() {
         let mut world = World::new();
         let mut signals = WorldSignals::default();
-        let e = spawn_stuck(&mut world);
+        let e = spawn_stuck(&mut world, Some(Vec2::new(1.0, 1.0)));
         let id = e.to_bits();
 
         run_entity_cmds(
