@@ -6,6 +6,7 @@
 use log::warn;
 
 use aberred_core::math::Vec2;
+use bevy_ecs::component::Mutable;
 use bevy_ecs::hierarchy::ChildOf;
 use bevy_ecs::prelude::*;
 
@@ -216,30 +217,32 @@ pub fn process_entity_commands(
 fn process_physics_cmd(cmd: EntityCmd, commands: &mut Commands) {
     match cmd {
         EntityCmd::SetVelocity { entity_id, vx, vy } => {
-            queue_on_rigid_body(commands, entity_id, move |rb| {
+            queue_on_component::<RigidBody>(commands, entity_id, move |rb| {
                 rb.velocity = Vec2 { x: vx, y: vy };
             });
         }
         EntityCmd::SetSpeed { entity_id, speed } => {
-            queue_on_rigid_body(commands, entity_id, move |rb| rb.set_speed(speed));
+            queue_on_component::<RigidBody>(commands, entity_id, move |rb| rb.set_speed(speed));
         }
         EntityCmd::SetFriction {
             entity_id,
             friction,
         } => {
-            queue_on_rigid_body(commands, entity_id, move |rb| rb.friction = friction);
+            queue_on_component::<RigidBody>(commands, entity_id, move |rb| rb.friction = friction);
         }
         EntityCmd::SetMaxSpeed {
             entity_id,
             max_speed,
         } => {
-            queue_on_rigid_body(commands, entity_id, move |rb| rb.max_speed = max_speed);
+            queue_on_component::<RigidBody>(commands, entity_id, move |rb| {
+                rb.max_speed = max_speed
+            });
         }
         EntityCmd::FreezeEntity { entity_id } => {
-            queue_on_rigid_body(commands, entity_id, RigidBody::freeze);
+            queue_on_component::<RigidBody>(commands, entity_id, RigidBody::freeze);
         }
         EntityCmd::UnfreezeEntity { entity_id } => {
-            queue_on_rigid_body(commands, entity_id, RigidBody::unfreeze);
+            queue_on_component::<RigidBody>(commands, entity_id, RigidBody::unfreeze);
         }
         EntityCmd::AddForce {
             entity_id,
@@ -248,12 +251,12 @@ fn process_physics_cmd(cmd: EntityCmd, commands: &mut Commands) {
             y,
             enabled,
         } => {
-            queue_on_rigid_body(commands, entity_id, move |rb| {
+            queue_on_component::<RigidBody>(commands, entity_id, move |rb| {
                 rb.add_force_with_state(&name, Vec2 { x, y }, enabled);
             });
         }
         EntityCmd::RemoveForce { entity_id, name } => {
-            queue_on_rigid_body(commands, entity_id, move |rb| {
+            queue_on_component::<RigidBody>(commands, entity_id, move |rb| {
                 rb.remove_force(&name);
             });
         }
@@ -262,7 +265,7 @@ fn process_physics_cmd(cmd: EntityCmd, commands: &mut Commands) {
             name,
             enabled,
         } => {
-            queue_on_rigid_body(commands, entity_id, move |rb| {
+            queue_on_component::<RigidBody>(commands, entity_id, move |rb| {
                 rb.set_force_enabled(&name, enabled);
             });
         }
@@ -272,7 +275,7 @@ fn process_physics_cmd(cmd: EntityCmd, commands: &mut Commands) {
             x,
             y,
         } => {
-            queue_on_rigid_body(commands, entity_id, move |rb| {
+            queue_on_component::<RigidBody>(commands, entity_id, move |rb| {
                 rb.set_force_value(&name, Vec2 { x, y });
             });
         }
@@ -280,16 +283,16 @@ fn process_physics_cmd(cmd: EntityCmd, commands: &mut Commands) {
     }
 }
 
-/// [`queue_on_entity`] for a write to the entity's `RigidBody`; a no-op at
-/// apply time if it has none.
-fn queue_on_rigid_body(
+/// [`queue_on_entity`] for a write to the entity's `C`; a no-op at apply time
+/// if it has none (writes never insert a missing component).
+fn queue_on_component<C: Component<Mutability = Mutable>>(
     commands: &mut Commands,
     entity_id: u64,
-    f: impl FnOnce(&mut RigidBody) + Send + 'static,
+    f: impl FnOnce(&mut C) + Send + 'static,
 ) {
     queue_on_entity(commands, entity_id, move |mut e| {
-        if let Some(mut rb) = e.get_mut::<RigidBody>() {
-            f(&mut rb);
+        if let Some(mut c) = e.get_mut::<C>() {
+            f(&mut c);
         }
     });
 }
@@ -569,17 +572,13 @@ fn process_shader_cmd(cmd: EntityCmd, commands: &mut Commands) {
         | EntityCmd::ShaderSetVec2 { .. }
         | EntityCmd::ShaderSetVec4 { .. }) => shader_set_uniform(cmd, commands),
         EntityCmd::ShaderClearUniform { entity_id, name } => {
-            queue_on_entity(commands, entity_id, move |mut e| {
-                if let Some(mut shader) = e.get_mut::<EntityShader>() {
-                    shader.uniforms_mut().remove(name.as_str());
-                }
+            queue_on_component::<EntityShader>(commands, entity_id, move |shader| {
+                shader.uniforms_mut().remove(name.as_str());
             });
         }
         EntityCmd::ShaderClearUniforms { entity_id } => {
-            queue_on_entity(commands, entity_id, |mut e| {
-                if let Some(mut shader) = e.get_mut::<EntityShader>() {
-                    shader.uniforms_mut().clear();
-                }
+            queue_on_component::<EntityShader>(commands, entity_id, |shader| {
+                shader.uniforms_mut().clear();
             });
         }
         EntityCmd::SetTint {
@@ -648,10 +647,8 @@ fn shader_set_uniform(cmd: EntityCmd, commands: &mut Commands) {
         } => (entity_id, name, UniformValue::Vec4 { x, y, z, w }),
         _ => unreachable!(),
     };
-    queue_on_entity(commands, entity_id, move |mut e| {
-        if let Some(mut shader) = e.get_mut::<EntityShader>() {
-            shader.set_uniform(&name, value);
-        }
+    queue_on_component::<EntityShader>(commands, entity_id, move |shader| {
+        shader.set_uniform(&name, value);
     });
 }
 
