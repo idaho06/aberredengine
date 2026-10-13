@@ -1848,6 +1848,24 @@ fn lua_collision_stay_sees_what_enter_applied() {
     assert_eq!(take_lua_log(&mut tw), ["true"]);
 }
 
+/// An entity write `on_enter` makes is visible in the same pair's stay ctx.
+#[cfg(feature = "lua")]
+#[test]
+fn lua_collision_stay_sees_enter_entity_write() {
+    let mut tw = lua_script_world(
+        "enter_entity_write",
+        "function on_enter(ctx) engine.collision_entity_set_position(ctx.b.id, 3, 0) end\n\
+         function on_stay(ctx) LOG[#LOG + 1] = tostring(ctx.b.pos.x) end\n",
+    );
+    spawn_enter_exit_rule(&mut tw, Some("on_stay"));
+    spawn_box(&mut tw, "a", 0.0, ());
+    spawn_box(&mut tw, "b", 5.0, ());
+
+    tw.tick(1, DT);
+
+    assert_eq!(take_lua_log(&mut tw), ["3"]);
+}
+
 /// `engine.collision_*` commands queued in `on_enter`/`on_exit` are applied,
 /// on a rule without a stay callback.
 #[cfg(feature = "lua")]
