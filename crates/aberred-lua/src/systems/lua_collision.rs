@@ -226,6 +226,7 @@ pub fn lua_collision_rule_added_observer(
 /// Core triggers `CollisionStarted` just before the pair's first `Collided`,
 /// so `enter` runs before that tick's `stay`.
 fn lua_collision_enter_observer(trigger: On<CollisionStarted>, mut dispatch: LuaRuleDispatch) {
+    aberred_core::tracy::tracy_span!("lua_collision_enter");
     let ev = trigger.event();
     dispatch.call_touching((ev.rule, ev.a, ev.b), |callbacks| {
         callbacks.enter.as_deref()
@@ -235,6 +236,7 @@ fn lua_collision_enter_observer(trigger: On<CollisionStarted>, mut dispatch: Lua
 /// Observes core `Collided` on a Lua rule entity and calls its `stay`
 /// callback, every tick the pair touches.
 fn lua_collision_stay_observer(trigger: On<Collided>, mut dispatch: LuaRuleDispatch) {
+    aberred_core::tracy::tracy_span!("lua_collision_stay");
     let ev = trigger.event();
     dispatch.call_touching((ev.rule, ev.a, ev.b), |callbacks| callbacks.stay.as_deref());
 }
@@ -247,6 +249,7 @@ fn lua_collision_stay_observer(trigger: On<Collided>, mut dispatch: LuaRuleDispa
 /// and `signals` are nil and the sides are empty. A despawned rule takes its
 /// observers with it; a rule whose `LuaOnCollision` was removed is skipped.
 fn lua_collision_exit_observer(trigger: On<CollisionEnded>, mut dispatch: LuaRuleDispatch) {
+    aberred_core::tracy::tracy_span!("lua_collision_exit");
     dispatch.call_exit(*trigger.event());
 }
 

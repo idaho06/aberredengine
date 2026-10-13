@@ -94,6 +94,7 @@ pub fn process_entity_commands(
     systems_store: &SystemsStore,
     anim_store: &AnimationStore,
 ) {
+    aberred_core::tracy::tracy_span!("lua_entity_cmds");
     for cmd in entity_commands {
         match cmd {
             cmd @ (EntityCmd::SetVelocity { .. }
