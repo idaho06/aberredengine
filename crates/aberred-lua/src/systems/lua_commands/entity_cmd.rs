@@ -15,7 +15,8 @@ use crate::components::lua_on_timer_fired::LuaOnTimerFired;
 use aberred_core::components::cameratarget::CameraTarget;
 use aberred_core::components::entityshader::EntityShader;
 use aberred_core::components::globaltransform2d::GlobalTransform2D;
-use aberred_core::components::guiinteractable::GuiWidgetState;
+use aberred_core::components::guiinteractable::{GuiInteractable, GuiWidgetState};
+use aberred_core::components::guiprogressbar::GuiProgressBar;
 use aberred_core::components::mapposition::MapPosition;
 use aberred_core::components::phase::Phase;
 use aberred_core::components::rigidbody::RigidBody;
@@ -23,6 +24,7 @@ use aberred_core::components::rotation::Rotation;
 use aberred_core::components::scale::Scale;
 use aberred_core::components::screenposition::ScreenPosition;
 use aberred_core::components::shadow::Shadow;
+use aberred_core::components::signals::Signals;
 use aberred_core::components::stuckto::StuckTo;
 use aberred_core::components::timer::Timer;
 use aberred_core::components::tint::Tint;
@@ -144,7 +146,7 @@ pub fn process_entity_commands(
             | EntityCmd::SignalSetString { .. }
             | EntityCmd::SignalClearString { .. }
             | EntityCmd::SignalSetInteger { .. }
-            | EntityCmd::SignalClearInteger { .. }) => process_signal_cmd(cmd, queries),
+            | EntityCmd::SignalClearInteger { .. }) => process_signal_cmd(cmd, commands),
 
             cmd @ (EntityCmd::RestartAnimation { .. }
             | EntityCmd::SetAnimation { .. }
@@ -199,25 +201,19 @@ pub fn process_entity_commands(
             EntityCmd::SetGuiDisabled {
                 entity_id,
                 disabled,
-            } => process_gui_interactable_cmd(entity_id, disabled, queries),
+            } => process_gui_interactable_cmd(commands, entity_id, disabled),
 
             EntityCmd::SetGuiProgress { entity_id, value } => {
-                let Some(entity) = resolve_entity(entity_id) else {
-                    continue;
-                };
-                if let Ok(mut bar) = queries.gui_progress_bars.get_mut(entity) {
+                queue_on_component::<GuiProgressBar>(commands, entity_id, move |bar| {
                     bar.value = value.clamp(0.0, bar.max);
-                }
+                });
             }
 
             EntityCmd::SetGuiProgressMax { entity_id, max } => {
-                let Some(entity) = resolve_entity(entity_id) else {
-                    continue;
-                };
-                if let Ok(mut bar) = queries.gui_progress_bars.get_mut(entity) {
+                queue_on_component::<GuiProgressBar>(commands, entity_id, move |bar| {
                     bar.max = max.max(0.0);
                     bar.value = bar.value.min(bar.max);
-                }
+                });
             }
         }
     }
@@ -309,104 +305,64 @@ fn queue_on_component<C: Component<Mutability = Mutable>>(
 /// Query-mutation handler for GUI widget enable/disable. Mutates
 /// `GuiInteractable.state` only — never `try_insert`s a fresh component,
 /// since that would wipe its `size`.
-fn process_gui_interactable_cmd(entity_id: u64, disabled: bool, queries: &mut EntityCmdQueries) {
-    let Some(entity) = resolve_entity(entity_id) else {
-        return;
-    };
-    if let Ok(mut interactable) = queries.gui_interactables.get_mut(entity) {
+fn process_gui_interactable_cmd(commands: &mut Commands, entity_id: u64, disabled: bool) {
+    queue_on_component::<GuiInteractable>(commands, entity_id, move |interactable| {
         interactable.state = if disabled {
             GuiWidgetState::Disabled
         } else {
             GuiWidgetState::Normal
         };
-    }
+    });
 }
 
-fn process_signal_cmd(cmd: EntityCmd, queries: &mut EntityCmdQueries) {
+fn process_signal_cmd(cmd: EntityCmd, commands: &mut Commands) {
     match cmd {
         EntityCmd::SignalSetFlag { entity_id, flag } => {
-            let Some(entity) = resolve_entity(entity_id) else {
-                return;
-            };
-            if let Ok(mut signals) = queries.signals.get_mut(entity) {
-                signals.set_flag(flag);
-            }
+            queue_on_component::<Signals>(commands, entity_id, move |s| s.set_flag(flag));
         }
         EntityCmd::SignalClearFlag { entity_id, flag } => {
-            let Some(entity) = resolve_entity(entity_id) else {
-                return;
-            };
-            if let Ok(mut signals) = queries.signals.get_mut(entity) {
-                signals.remove_flag(&flag);
-            }
+            queue_on_component::<Signals>(commands, entity_id, move |s| {
+                s.remove_flag(&flag);
+            });
         }
         EntityCmd::SignalToggleFlag { entity_id, flag } => {
-            let Some(entity) = resolve_entity(entity_id) else {
-                return;
-            };
-            if let Ok(mut signals) = queries.signals.get_mut(entity) {
-                signals.toggle_flag(&flag);
-            }
+            queue_on_component::<Signals>(commands, entity_id, move |s| s.toggle_flag(&flag));
         }
         EntityCmd::SignalSetScalar {
             entity_id,
             key,
             value,
         } => {
-            let Some(entity) = resolve_entity(entity_id) else {
-                return;
-            };
-            if let Ok(mut signals) = queries.signals.get_mut(entity) {
-                signals.set_scalar(key, value);
-            }
+            queue_on_component::<Signals>(commands, entity_id, move |s| s.set_scalar(key, value));
         }
         EntityCmd::SignalClearScalar { entity_id, key } => {
-            let Some(entity) = resolve_entity(entity_id) else {
-                return;
-            };
-            if let Ok(mut signals) = queries.signals.get_mut(entity) {
-                signals.remove_scalar(&key);
-            }
+            queue_on_component::<Signals>(commands, entity_id, move |s| {
+                s.remove_scalar(&key);
+            });
         }
         EntityCmd::SignalSetString {
             entity_id,
             key,
             value,
         } => {
-            let Some(entity) = resolve_entity(entity_id) else {
-                return;
-            };
-            if let Ok(mut signals) = queries.signals.get_mut(entity) {
-                signals.set_string(key, value);
-            }
+            queue_on_component::<Signals>(commands, entity_id, move |s| s.set_string(key, value));
         }
         EntityCmd::SignalClearString { entity_id, key } => {
-            let Some(entity) = resolve_entity(entity_id) else {
-                return;
-            };
-            if let Ok(mut signals) = queries.signals.get_mut(entity) {
-                signals.remove_string(&key);
-            }
+            queue_on_component::<Signals>(commands, entity_id, move |s| {
+                s.remove_string(&key);
+            });
         }
         EntityCmd::SignalSetInteger {
             entity_id,
             key,
             value,
         } => {
-            let Some(entity) = resolve_entity(entity_id) else {
-                return;
-            };
-            if let Ok(mut signals) = queries.signals.get_mut(entity) {
-                signals.set_integer(key, value);
-            }
+            queue_on_component::<Signals>(commands, entity_id, move |s| s.set_integer(key, value));
         }
         EntityCmd::SignalClearInteger { entity_id, key } => {
-            let Some(entity) = resolve_entity(entity_id) else {
-                return;
-            };
-            if let Ok(mut signals) = queries.signals.get_mut(entity) {
-                signals.remove_integer(&key);
-            }
+            queue_on_component::<Signals>(commands, entity_id, move |s| {
+                s.remove_integer(&key);
+            });
         }
         _ => unreachable!(),
     }
@@ -896,7 +852,6 @@ mod tests {
     use super::*;
     use crate::components::lua_on_tween_finished::LuaOnTweenFinished;
     use aberred_core::components::animation::Animation;
-    use aberred_core::components::guiinteractable::GuiInteractable;
     use aberred_core::components::sprite::Sprite;
     use aberred_core::components::timer::TimerMode;
     use aberred_core::testing::approx_eq;
@@ -1165,6 +1120,82 @@ mod tests {
             world.get::<Children>(parent).is_none(),
             "no ChildOf may point at the parent from the despawned entity"
         );
+    }
+
+    #[test]
+    fn signal_and_gui_cmds_after_same_batch_despawn_are_silent_noops() {
+        let mut world = World::new();
+        let mut signals = WorldSignals::default();
+        let doomed = world
+            .spawn((
+                Signals::default(),
+                GuiInteractable::new(10.0, 10.0),
+                GuiProgressBar::new(10.0, 2.0, 5.0, 10.0),
+            ))
+            .id();
+        let id = doomed.to_bits();
+
+        // Panics on apply if any handler writes a despawned entity unguarded.
+        run_entity_cmds(
+            &mut world,
+            &mut signals,
+            [
+                EntityCmd::Despawn { entity_id: id },
+                EntityCmd::SignalSetFlag {
+                    entity_id: id,
+                    flag: "f".into(),
+                },
+                EntityCmd::SignalClearFlag {
+                    entity_id: id,
+                    flag: "f".into(),
+                },
+                EntityCmd::SignalToggleFlag {
+                    entity_id: id,
+                    flag: "f".into(),
+                },
+                EntityCmd::SignalSetScalar {
+                    entity_id: id,
+                    key: "s".into(),
+                    value: 1.0,
+                },
+                EntityCmd::SignalClearScalar {
+                    entity_id: id,
+                    key: "s".into(),
+                },
+                EntityCmd::SignalSetString {
+                    entity_id: id,
+                    key: "t".into(),
+                    value: "v".into(),
+                },
+                EntityCmd::SignalClearString {
+                    entity_id: id,
+                    key: "t".into(),
+                },
+                EntityCmd::SignalSetInteger {
+                    entity_id: id,
+                    key: "i".into(),
+                    value: 1,
+                },
+                EntityCmd::SignalClearInteger {
+                    entity_id: id,
+                    key: "i".into(),
+                },
+                EntityCmd::SetGuiDisabled {
+                    entity_id: id,
+                    disabled: true,
+                },
+                EntityCmd::SetGuiProgress {
+                    entity_id: id,
+                    value: 1.0,
+                },
+                EntityCmd::SetGuiProgressMax {
+                    entity_id: id,
+                    max: 1.0,
+                },
+            ],
+        );
+
+        assert!(world.get_entity(doomed).is_err(), "despawn still applied");
     }
 
     #[test]
@@ -1440,7 +1471,6 @@ mod tests {
 
     #[test]
     fn query_mutation_cmds_never_insert_missing_components() {
-        use aberred_core::components::signals::Signals;
         let mut world = World::new();
         let mut signals = WorldSignals::default();
         let e = world.spawn(MapPosition::new(0.0, 0.0)).id();
@@ -1475,7 +1505,6 @@ mod tests {
 
     #[test]
     fn signal_cmds_set_clear_and_toggle_each_kind() {
-        use aberred_core::components::signals::Signals;
         let mut world = World::new();
         let mut signals = WorldSignals::default();
         let e = world.spawn(Signals::default()).id();
@@ -1654,7 +1683,6 @@ mod tests {
 
     #[test]
     fn gui_progress_value_clamps_and_max_lowers_value() {
-        use aberred_core::components::guiprogressbar::GuiProgressBar;
         let mut world = World::new();
         let mut signals = WorldSignals::default();
         let e = world.spawn(GuiProgressBar::new(100.0, 8.0, 5.0, 10.0)).id();
