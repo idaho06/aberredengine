@@ -810,22 +810,23 @@ mod tests {
 
     /// Run a single `EntityCmd` through `process_entity_commands` against a
     /// fresh `World`, applying the resulting ECS commands before returning.
-    fn run_entity_cmd(world: &mut World, world_signals: &mut WorldSignals, cmd: EntityCmd) {
-        run_entity_cmds(world, world_signals, [cmd]);
+    fn run_entity_cmd(world: &mut World, cmd: EntityCmd) {
+        run_entity_cmds(world, [cmd]);
     }
 
     /// Run a batch of `EntityCmd`s as ONE drained queue (one `Commands` flush), like a
     /// single frame's drain.
-    fn run_entity_cmds(
-        world: &mut World,
-        world_signals: &mut WorldSignals,
-        cmds: impl IntoIterator<Item = EntityCmd>,
-    ) {
-        run_entity_cmds_in(world, world_signals, &SystemsStore::default(), cmds);
+    fn run_entity_cmds(world: &mut World, cmds: impl IntoIterator<Item = EntityCmd>) {
+        run_entity_cmds_in(
+            world,
+            &mut WorldSignals::default(),
+            &SystemsStore::default(),
+            cmds,
+        );
     }
 
-    /// [`run_entity_cmds`] with a caller-provided `SystemsStore`. `SetAnimation`
-    /// reads the world's `AnimationStore` resource when it applies.
+    /// [`run_entity_cmds`] with caller-provided `WorldSignals` and `SystemsStore`.
+    /// `SetAnimation` reads the world's `AnimationStore` resource when it applies.
     fn run_entity_cmds_in(
         world: &mut World,
         world_signals: &mut WorldSignals,
@@ -848,11 +849,9 @@ mod tests {
     fn shader_set_float_cmd_updates_the_named_uniform_on_the_target_entity() {
         let mut world = World::new();
         let entity = world.spawn(EntityShader::new("test")).id();
-        let mut world_signals = WorldSignals::default();
 
         run_entity_cmd(
             &mut world,
-            &mut world_signals,
             EntityCmd::ShaderSetFloat {
                 entity_id: entity.to_bits(),
                 name: "uIntensity".to_string(),
@@ -861,7 +860,6 @@ mod tests {
         );
         run_entity_cmd(
             &mut world,
-            &mut world_signals,
             EntityCmd::ShaderSetFloat {
                 entity_id: entity.to_bits(),
                 name: "uIntensity".to_string(),
@@ -889,12 +887,13 @@ mod tests {
         let mut world_signals = WorldSignals::default();
         world_signals.set_entity("tpl", entity);
 
-        run_entity_cmd(
+        run_entity_cmds_in(
             &mut world,
             &mut world_signals,
-            EntityCmd::Despawn {
+            &SystemsStore::default(),
+            [EntityCmd::Despawn {
                 entity_id: entity.to_bits(),
-            },
+            }],
         );
 
         assert!(world.get_entity(entity).is_err());
@@ -1020,7 +1019,6 @@ mod tests {
     #[test]
     fn insert_remove_cmds_after_same_batch_despawn_are_silent_noops() {
         let mut world = World::new();
-        let mut signals = WorldSignals::default();
         let doomed = world.spawn(MapPosition::new(0.0, 0.0)).id();
         let parent = world.spawn(MapPosition::new(0.0, 0.0)).id();
 
@@ -1029,7 +1027,7 @@ mod tests {
         }];
         batch.extend(insert_remove_cmds_for(doomed.to_bits(), parent.to_bits()));
         // Panics on apply if any handler writes a despawned entity unguarded.
-        run_entity_cmds(&mut world, &mut signals, batch);
+        run_entity_cmds(&mut world, batch);
 
         assert!(world.get_entity(doomed).is_err(), "despawn still applied");
         assert!(world.get_entity(parent).is_ok());
@@ -1042,7 +1040,6 @@ mod tests {
     #[test]
     fn component_write_cmds_after_same_batch_despawn_are_silent_noops() {
         let mut world = World::new();
-        let mut signals = WorldSignals::default();
         let doomed = world
             .spawn((
                 Signals::default(),
@@ -1060,7 +1057,6 @@ mod tests {
         // Panics on apply if any handler writes a despawned entity unguarded.
         run_entity_cmds(
             &mut world,
-            &mut signals,
             [
                 EntityCmd::Despawn { entity_id: id },
                 EntityCmd::SignalSetFlag {
@@ -1134,11 +1130,7 @@ mod tests {
                     x: 1.0,
                     y: 1.0,
                 },
-                EntityCmd::SetCameraTarget {
-                    entity_id: id,
-                    priority: Some(1),
-                    zoom: None,
-                },
+                set_camera_target(id, Some(1), None),
             ],
         );
 
@@ -1148,12 +1140,10 @@ mod tests {
     #[test]
     fn insert_lua_timer_cmd_carries_its_mode() {
         let mut world = World::new();
-        let mut signals = WorldSignals::default();
         let entity = world.spawn_empty().id();
 
         run_entity_cmd(
             &mut world,
-            &mut signals,
             EntityCmd::InsertLuaTimer {
                 entity_id: entity.to_bits(),
                 duration: 1.5,
@@ -1174,7 +1164,6 @@ mod tests {
     #[test]
     fn insert_phase_and_lua_phase_callbacks_on_a_live_entity() {
         let mut world = World::new();
-        let mut signals = WorldSignals::default();
         let entity = world.spawn_empty().id();
         let id = entity.to_bits();
         let callback = |kind, callback: &str| EntityCmd::InsertLuaPhaseCallback {
@@ -1185,7 +1174,6 @@ mod tests {
 
         run_entity_cmds(
             &mut world,
-            &mut signals,
             vec![
                 EntityCmd::InsertPhase {
                     entity_id: id,
@@ -1215,14 +1203,12 @@ mod tests {
     #[test]
     fn remove_lua_timer_cmd_removes_the_timer_and_its_callback() {
         let mut world = World::new();
-        let mut signals = WorldSignals::default();
         let entity = world
             .spawn((Timer::new(1.0), LuaOnTimerFired::new("boom")))
             .id();
 
         run_entity_cmd(
             &mut world,
-            &mut signals,
             EntityCmd::RemoveLuaTimer {
                 entity_id: entity.to_bits(),
             },
@@ -1235,12 +1221,10 @@ mod tests {
     #[test]
     fn insert_remove_cmds_for_entity_despawned_in_a_prior_frame_are_skipped() {
         let mut world = World::new();
-        let mut signals = WorldSignals::default();
         let doomed = world.spawn(MapPosition::new(0.0, 0.0)).id();
         let parent = world.spawn(MapPosition::new(0.0, 0.0)).id();
         run_entity_cmd(
             &mut world,
-            &mut signals,
             EntityCmd::Despawn {
                 entity_id: doomed.to_bits(),
             },
@@ -1250,7 +1234,6 @@ mod tests {
         let entities_before = world.entities().count_spawned();
         run_entity_cmds(
             &mut world,
-            &mut signals,
             insert_remove_cmds_for(doomed.to_bits(), parent.to_bits()),
         );
         assert!(
@@ -1263,13 +1246,11 @@ mod tests {
     #[test]
     fn set_parent_places_child_at_its_world_transform_immediately() {
         let mut world = World::new();
-        let mut signals = WorldSignals::default();
         let parent = world.spawn(MapPosition::new(10.0, 5.0)).id();
         let child = world.spawn(MapPosition::new(1.0, 2.0)).id();
 
         run_entity_cmd(
             &mut world,
-            &mut signals,
             EntityCmd::SetParent {
                 entity_id: child.to_bits(),
                 parent_id: parent.to_bits(),
@@ -1290,14 +1271,12 @@ mod tests {
     #[test]
     fn two_set_parents_onto_one_parent_in_a_batch_place_both_children() {
         let mut world = World::new();
-        let mut signals = WorldSignals::default();
         let parent = world.spawn(MapPosition::new(10.0, 5.0)).id();
         let first = world.spawn(MapPosition::new(1.0, 2.0)).id();
         let second = world.spawn(MapPosition::new(2.0, 3.0)).id();
 
         run_entity_cmds(
             &mut world,
-            &mut signals,
             [first, second].map(|child| EntityCmd::SetParent {
                 entity_id: child.to_bits(),
                 parent_id: parent.to_bits(),
@@ -1312,13 +1291,11 @@ mod tests {
     #[test]
     fn set_parent_then_remove_parent_keeps_the_world_position() {
         let mut world = World::new();
-        let mut signals = WorldSignals::default();
         let parent = world.spawn(MapPosition::new(10.0, 5.0)).id();
         let child = world.spawn(MapPosition::new(1.0, 2.0)).id();
 
         run_entity_cmds(
             &mut world,
-            &mut signals,
             [
                 EntityCmd::SetParent {
                     entity_id: child.to_bits(),
@@ -1342,13 +1319,11 @@ mod tests {
     #[test]
     fn set_parent_onto_parent_despawned_same_batch_leaves_child_unparented() {
         let mut world = World::new();
-        let mut signals = WorldSignals::default();
         let child = world.spawn(MapPosition::new(0.0, 0.0)).id();
         let parent = world.spawn(MapPosition::new(0.0, 0.0)).id();
 
         run_entity_cmds(
             &mut world,
-            &mut signals,
             [
                 EntityCmd::Despawn {
                     entity_id: parent.to_bits(),
@@ -1371,12 +1346,10 @@ mod tests {
     #[test]
     fn set_parent_from_dead_child_leaves_parent_untouched() {
         let mut world = World::new();
-        let mut signals = WorldSignals::default();
         let child = world.spawn(MapPosition::new(0.0, 0.0)).id();
         let parent = world.spawn(MapPosition::new(0.0, 0.0)).id();
         run_entity_cmd(
             &mut world,
-            &mut signals,
             EntityCmd::Despawn {
                 entity_id: child.to_bits(),
             },
@@ -1384,7 +1357,6 @@ mod tests {
 
         run_entity_cmd(
             &mut world,
-            &mut signals,
             EntityCmd::SetParent {
                 entity_id: child.to_bits(),
                 parent_id: parent.to_bits(),
@@ -1404,13 +1376,11 @@ mod tests {
     #[test]
     fn physics_cmds_mutate_the_rigidbody() {
         let mut world = World::new();
-        let mut signals = WorldSignals::default();
         let e = world.spawn(RigidBody::new()).id();
         let id = e.to_bits();
 
         run_entity_cmds(
             &mut world,
-            &mut signals,
             [
                 EntityCmd::SetVelocity {
                     entity_id: id,
@@ -1472,7 +1442,6 @@ mod tests {
 
         run_entity_cmds(
             &mut world,
-            &mut signals,
             [
                 EntityCmd::UnfreezeEntity { entity_id: id },
                 EntityCmd::SetSpeed {
@@ -1498,13 +1467,11 @@ mod tests {
     #[test]
     fn query_mutation_cmds_never_insert_missing_components() {
         let mut world = World::new();
-        let mut signals = WorldSignals::default();
         let e = world.spawn(MapPosition::new(0.0, 0.0)).id();
         let id = e.to_bits();
 
         run_entity_cmds(
             &mut world,
-            &mut signals,
             [
                 EntityCmd::SetVelocity {
                     entity_id: id,
@@ -1532,13 +1499,11 @@ mod tests {
     #[test]
     fn signal_cmds_set_clear_and_toggle_each_kind() {
         let mut world = World::new();
-        let mut signals = WorldSignals::default();
         let e = world.spawn(Signals::default()).id();
         let id = e.to_bits();
 
         run_entity_cmds(
             &mut world,
-            &mut signals,
             [
                 EntityCmd::SignalSetFlag {
                     entity_id: id,
@@ -1615,7 +1580,6 @@ mod tests {
 
         run_entity_cmd(
             &mut world,
-            &mut signals,
             EntityCmd::SignalToggleFlag {
                 entity_id: id,
                 flag: "toggled_on".into(),
@@ -1635,7 +1599,6 @@ mod tests {
         let mut world = World::new();
         // The texture lookup reads the world's store when the command applies.
         world.insert_resource(store);
-        let mut signals = WorldSignals::default();
         let mut running = Animation::new("walk");
         running.frame_index = 2;
         running.elapsed_time = 0.3;
@@ -1645,7 +1608,6 @@ mod tests {
 
         run_entity_cmds(
             &mut world,
-            &mut signals,
             [EntityCmd::SetAnimation {
                 entity_id: id,
                 animation_key: "run".into(),
@@ -1663,7 +1625,6 @@ mod tests {
         // A key missing from the store still switches the animation but keeps the texture.
         run_entity_cmds(
             &mut world,
-            &mut signals,
             [EntityCmd::SetAnimation {
                 entity_id: id,
                 animation_key: "unknown".into(),
@@ -1677,7 +1638,6 @@ mod tests {
     #[test]
     fn restart_animation_and_sprite_flip() {
         let mut world = World::new();
-        let mut signals = WorldSignals::default();
         let mut running = Animation::new("walk");
         running.frame_index = 5;
         running.elapsed_time = 1.0;
@@ -1687,7 +1647,6 @@ mod tests {
 
         run_entity_cmds(
             &mut world,
-            &mut signals,
             [
                 EntityCmd::RestartAnimation { entity_id: id },
                 EntityCmd::SetSpriteFlip {
@@ -1710,7 +1669,6 @@ mod tests {
     #[test]
     fn gui_progress_value_clamps_and_max_lowers_value() {
         let mut world = World::new();
-        let mut signals = WorldSignals::default();
         let e = world.spawn(GuiProgressBar::new(100.0, 8.0, 5.0, 10.0)).id();
         let id = e.to_bits();
         let bar = |world: &World| {
@@ -1720,7 +1678,6 @@ mod tests {
 
         run_entity_cmd(
             &mut world,
-            &mut signals,
             EntityCmd::SetGuiProgress {
                 entity_id: id,
                 value: 25.0,
@@ -1729,7 +1686,6 @@ mod tests {
         assert_eq!(bar(&world), (10.0, 10.0), "value clamps to max");
         run_entity_cmd(
             &mut world,
-            &mut signals,
             EntityCmd::SetGuiProgress {
                 entity_id: id,
                 value: -3.0,
@@ -1739,7 +1695,6 @@ mod tests {
 
         run_entity_cmd(
             &mut world,
-            &mut signals,
             EntityCmd::SetGuiProgress {
                 entity_id: id,
                 value: 8.0,
@@ -1747,7 +1702,6 @@ mod tests {
         );
         run_entity_cmd(
             &mut world,
-            &mut signals,
             EntityCmd::SetGuiProgressMax {
                 entity_id: id,
                 max: 6.0,
@@ -1756,7 +1710,6 @@ mod tests {
         assert_eq!(bar(&world), (6.0, 6.0), "lowering max pulls value down");
         run_entity_cmd(
             &mut world,
-            &mut signals,
             EntityCmd::SetGuiProgressMax {
                 entity_id: id,
                 max: 20.0,
@@ -1765,7 +1718,6 @@ mod tests {
         assert_eq!(bar(&world), (6.0, 20.0), "raising max keeps value");
         run_entity_cmd(
             &mut world,
-            &mut signals,
             EntityCmd::SetGuiProgressMax {
                 entity_id: id,
                 max: -1.0,
@@ -1777,13 +1729,11 @@ mod tests {
     #[test]
     fn shader_uniform_cmds_set_each_type_and_clear() {
         let mut world = World::new();
-        let mut signals = WorldSignals::default();
         let e = world.spawn(EntityShader::new("wave")).id();
         let id = e.to_bits();
 
         run_entity_cmds(
             &mut world,
-            &mut signals,
             [
                 EntityCmd::ShaderSetInt {
                     entity_id: id,
@@ -1823,11 +1773,7 @@ mod tests {
             })
         );
 
-        run_entity_cmd(
-            &mut world,
-            &mut signals,
-            EntityCmd::ShaderClearUniforms { entity_id: id },
-        );
+        run_entity_cmd(&mut world, EntityCmd::ShaderClearUniforms { entity_id: id });
         assert!(world.get::<EntityShader>(e).unwrap().uniforms.is_empty());
     }
 
@@ -1849,13 +1795,11 @@ mod tests {
     #[test]
     fn set_shader_then_set_uniform_keeps_uniform() {
         let mut world = World::new();
-        let mut signals = WorldSignals::default();
         let e = world.spawn_empty().id();
         let id = e.to_bits();
 
         run_entity_cmds(
             &mut world,
-            &mut signals,
             [set_shader(id, "wave"), set_float(id, "u", 1.0)],
         );
 
@@ -1867,13 +1811,11 @@ mod tests {
     #[test]
     fn set_shader_replacing_existing_then_set_uniform_keeps_uniform() {
         let mut world = World::new();
-        let mut signals = WorldSignals::default();
         let e = world.spawn(EntityShader::new("old")).id();
         let id = e.to_bits();
 
         run_entity_cmds(
             &mut world,
-            &mut signals,
             [set_shader(id, "wave"), set_float(id, "u", 1.0)],
         );
 
@@ -1885,13 +1827,11 @@ mod tests {
     #[test]
     fn shader_clear_after_set_shader_applies_in_order() {
         let mut world = World::new();
-        let mut signals = WorldSignals::default();
         let e = world.spawn(EntityShader::new("old")).id();
         let id = e.to_bits();
 
         run_entity_cmds(
             &mut world,
-            &mut signals,
             [
                 set_shader(id, "wave"),
                 set_float(id, "a", 1.0),
@@ -1908,7 +1848,6 @@ mod tests {
 
         run_entity_cmds(
             &mut world,
-            &mut signals,
             [
                 set_shader(id, "glow"),
                 set_float(id, "c", 3.0),
@@ -1925,7 +1864,6 @@ mod tests {
     #[test]
     fn release_stuckto_restores_stored_velocity_as_rigidbody() {
         let mut world = World::new();
-        let mut signals = WorldSignals::default();
         let target = world.spawn(MapPosition::new(0.0, 0.0)).id();
         let e = world
             .spawn((MapPosition::new(0.0, 0.0), RigidBody::new()))
@@ -1934,7 +1872,6 @@ mod tests {
 
         run_entity_cmd(
             &mut world,
-            &mut signals,
             EntityCmd::InsertStuckTo {
                 entity_id: id,
                 target_id: target.to_bits(),
@@ -1954,11 +1891,7 @@ mod tests {
         assert_eq!(stuck.target, target);
         assert_eq!(stuck.stored_velocity, Some(Vec2::new(5.0, -1.0)));
 
-        run_entity_cmd(
-            &mut world,
-            &mut signals,
-            EntityCmd::ReleaseStuckTo { entity_id: id },
-        );
+        run_entity_cmd(&mut world, EntityCmd::ReleaseStuckTo { entity_id: id });
         assert!(world.get::<StuckTo>(e).is_none());
         assert_eq!(
             world.get::<RigidBody>(e).unwrap().velocity,
@@ -1977,12 +1910,10 @@ mod tests {
     #[test]
     fn release_stuckto_without_stored_velocity_adds_no_rigidbody() {
         let mut world = World::new();
-        let mut signals = WorldSignals::default();
         let e = spawn_stuck(&mut world, None);
 
         run_entity_cmd(
             &mut world,
-            &mut signals,
             EntityCmd::ReleaseStuckTo {
                 entity_id: e.to_bits(),
             },
@@ -1994,13 +1925,11 @@ mod tests {
     #[test]
     fn release_stuckto_then_set_velocity_keeps_velocity() {
         let mut world = World::new();
-        let mut signals = WorldSignals::default();
         let e = spawn_stuck(&mut world, Some(Vec2::new(1.0, 1.0)));
         let id = e.to_bits();
 
         run_entity_cmds(
             &mut world,
-            &mut signals,
             [
                 EntityCmd::ReleaseStuckTo { entity_id: id },
                 EntityCmd::SetVelocity {
@@ -2020,13 +1949,11 @@ mod tests {
     #[test]
     fn release_stuckto_then_add_force_keeps_force() {
         let mut world = World::new();
-        let mut signals = WorldSignals::default();
         let e = spawn_stuck(&mut world, Some(Vec2::new(1.0, 1.0)));
         let id = e.to_bits();
 
         run_entity_cmds(
             &mut world,
-            &mut signals,
             [
                 EntityCmd::ReleaseStuckTo { entity_id: id },
                 EntityCmd::AddForce {
@@ -2046,14 +1973,12 @@ mod tests {
     #[test]
     fn insert_stuckto_then_release_in_one_batch_restores_stored_velocity() {
         let mut world = World::new();
-        let mut signals = WorldSignals::default();
         let target = world.spawn(MapPosition::new(0.0, 0.0)).id();
         let e = world.spawn(RigidBody::new()).id();
         let id = e.to_bits();
 
         run_entity_cmds(
             &mut world,
-            &mut signals,
             [
                 EntityCmd::InsertStuckTo {
                     entity_id: id,
@@ -2107,17 +2032,12 @@ mod tests {
         // Without a registered hook the command is a no-op.
         run_entity_cmd(
             &mut world,
-            &mut signals,
             EntityCmd::MenuDespawn {
                 entity_id: menu.to_bits(),
             },
         );
         assert_eq!(world.resource::<MenuDespawnCalls>().0.len(), 1);
         assert!(world.get_entity(menu).is_ok());
-    }
-
-    fn run_camera_target_cmd(world: &mut World, cmd: EntityCmd) {
-        run_entity_cmd(world, &mut WorldSignals::default(), cmd);
     }
 
     fn set_camera_target(id: u64, priority: Option<u8>, zoom: Option<f32>) -> EntityCmd {
@@ -2135,7 +2055,6 @@ mod tests {
 
         run_entity_cmds(
             &mut world,
-            &mut WorldSignals::default(),
             [
                 set_camera_target(id, Some(5), None),
                 set_camera_target(id, None, Some(2.0)),
@@ -2159,7 +2078,6 @@ mod tests {
 
         run_entity_cmds(
             &mut world,
-            &mut WorldSignals::default(),
             [
                 EntityCmd::RemoveCameraTarget { entity_id: id },
                 set_camera_target(id, None, None),
@@ -2180,7 +2098,6 @@ mod tests {
 
         run_entity_cmds(
             &mut world,
-            &mut WorldSignals::default(),
             [
                 EntityCmd::InsertTweenScreenPosition {
                     entity_id: id,
@@ -2209,7 +2126,7 @@ mod tests {
         let mut world = World::new();
         let entity = world.spawn_empty().id();
 
-        run_camera_target_cmd(
+        run_entity_cmd(
             &mut world,
             EntityCmd::SetCameraTarget {
                 entity_id: entity.to_bits(),
@@ -2233,7 +2150,7 @@ mod tests {
             })
             .id();
 
-        run_camera_target_cmd(
+        run_entity_cmd(
             &mut world,
             EntityCmd::SetCameraTarget {
                 entity_id: entity.to_bits(),
@@ -2257,7 +2174,7 @@ mod tests {
             })
             .id();
 
-        run_camera_target_cmd(
+        run_entity_cmd(
             &mut world,
             EntityCmd::SetCameraTarget {
                 entity_id: entity.to_bits(),
@@ -2271,16 +2188,12 @@ mod tests {
         assert_eq!(ct.zoom, 3.0);
     }
 
-    fn run_gui_disabled_cmd(world: &mut World, cmd: EntityCmd) {
-        run_entity_cmd(world, &mut WorldSignals::default(), cmd);
-    }
-
     #[test]
     fn set_gui_disabled_true_sets_state_disabled() {
         let mut world = World::new();
         let entity = world.spawn(GuiInteractable::new(80.0, 24.0)).id();
 
-        run_gui_disabled_cmd(
+        run_entity_cmd(
             &mut world,
             EntityCmd::SetGuiDisabled {
                 entity_id: entity.to_bits(),
@@ -2300,7 +2213,7 @@ mod tests {
             .spawn(GuiInteractable::new(80.0, 24.0).with_disabled())
             .id();
 
-        run_gui_disabled_cmd(
+        run_entity_cmd(
             &mut world,
             EntityCmd::SetGuiDisabled {
                 entity_id: entity.to_bits(),
@@ -2319,7 +2232,7 @@ mod tests {
 
         // Should not panic when the entity has no GuiInteractable (e.g. the
         // command races the one-frame-later gui_*_spawn_system insertion).
-        run_gui_disabled_cmd(
+        run_entity_cmd(
             &mut world,
             EntityCmd::SetGuiDisabled {
                 entity_id: entity.to_bits(),
@@ -2330,17 +2243,13 @@ mod tests {
         assert!(world.get::<GuiInteractable>(entity).is_none());
     }
 
-    fn run_screen_position_cmd(world: &mut World, cmd: EntityCmd) {
-        run_entity_cmd(world, &mut WorldSignals::default(), cmd);
-    }
-
     #[test]
     fn insert_tween_screen_position_adds_both_components_when_missing() {
         let mut world = World::new();
         let entity = world.spawn_empty().id();
         assert!(world.get::<ScreenPosition>(entity).is_none());
 
-        run_screen_position_cmd(
+        run_entity_cmd(
             &mut world,
             EntityCmd::InsertTweenScreenPosition {
                 entity_id: entity.to_bits(),
@@ -2377,7 +2286,7 @@ mod tests {
 
         let mut hide_config = TweenConfig::new(1.0);
         hide_config.callback = "on_hide_done".to_string();
-        run_screen_position_cmd(
+        run_entity_cmd(
             &mut world,
             EntityCmd::InsertTweenScreenPosition {
                 entity_id: entity.to_bits(),
@@ -2395,7 +2304,7 @@ mod tests {
             "hide-tween's callback component should be attached"
         );
 
-        run_screen_position_cmd(
+        run_entity_cmd(
             &mut world,
             EntityCmd::InsertTweenScreenPosition {
                 entity_id: entity.to_bits(),
@@ -2421,7 +2330,7 @@ mod tests {
             .spawn(ScreenPosition::from_vec(Vec2 { x: 10.0, y: 260.0 }))
             .id();
 
-        run_screen_position_cmd(
+        run_entity_cmd(
             &mut world,
             EntityCmd::InsertTweenScreenPosition {
                 entity_id: entity.to_bits(),
@@ -2446,7 +2355,7 @@ mod tests {
             .spawn(ScreenPosition::from_vec(Vec2 { x: 1.0, y: 2.0 }))
             .id();
 
-        run_screen_position_cmd(
+        run_entity_cmd(
             &mut world,
             EntityCmd::RemoveScreenPosition {
                 entity_id: entity.to_bits(),
@@ -2461,7 +2370,7 @@ mod tests {
         let mut world = World::new();
         let entity = world.spawn_empty().id();
 
-        run_screen_position_cmd(
+        run_entity_cmd(
             &mut world,
             EntityCmd::RemoveScreenPosition {
                 entity_id: entity.to_bits(),
