@@ -214,8 +214,8 @@ impl LuaRuntime {
                 let data = lua
                     .app_data_ref::<LuaAppData>()
                     .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?;
-                // Deferred switch: the scene string must stay put until
-                // `switch_scene` applies the target (see request_scene_switch).
+                // A request (NextScene), applied by the next scene switch poll;
+                // the scene string stays put until then.
                 data.push(
                     &data.signal_commands,
                     SignalCmd::ChangeScene { scene: scene_name },
@@ -227,7 +227,7 @@ impl LuaRuntime {
             &self.lua,
             &meta_fns,
             "change_scene",
-            "Switch to a new scene by name (applied by the next switch_scene)",
+            "Switch to a new scene by name (applied by the next scene switch poll)",
             "base",
             &[("scene_name", "string")],
             None,

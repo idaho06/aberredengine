@@ -24,12 +24,13 @@ use crate::resources::lua_runtime::{LuaRuntime, PhaseSnapshot};
 use aberred_core::components::phase::Phase;
 use aberred_core::protocol::audio::AudioCmd;
 use aberred_core::resources::input::InputState;
+use aberred_core::resources::next_scene::NextScene;
 use aberred_core::resources::systemsstore::SystemsStore;
 use aberred_core::resources::worldsignals::WorldSignals;
 use aberred_core::resources::worldtime::WorldTime;
 
 use super::{
-    ContextQueries, DrainScope, EffectCmdBufs, build_entity_context,
+    ContextQueries, DrainScope, EffectCmdBufs, SignalTargets, build_entity_context,
     drain_and_process_effect_commands,
 };
 
@@ -43,6 +44,7 @@ pub struct LuaDispatch<'w, 's> {
     pub ctx_queries: ContextQueries<'w, 's>,
     pub phase_query: Query<'w, 's, &'static Phase>,
     pub world_signals: ResMut<'w, WorldSignals>,
+    pub next_scene: ResMut<'w, NextScene>,
     pub lua_runtime: NonSend<'w, LuaRuntime>,
     pub audio_cmd_writer: MessageWriter<'w, AudioCmd>,
     pub systems_store: Res<'w, SystemsStore>,
@@ -182,7 +184,10 @@ pub(crate) fn drain_dispatch_commands(p: &mut LuaDispatch, scope: DrainScope) {
         scope,
         &mut p.effect_bufs,
         &mut p.commands,
-        &mut p.world_signals,
+        &mut SignalTargets {
+            world_signals: &mut p.world_signals,
+            next_scene: &mut p.next_scene,
+        },
         &mut p.audio_cmd_writer,
         &p.systems_store,
     );
@@ -193,6 +198,7 @@ pub(crate) fn drain_dispatch_commands(p: &mut LuaDispatch, scope: DrainScope) {
 #[cfg(test)]
 pub(crate) fn init_dispatch_resources(world: &mut World) {
     world.init_resource::<WorldSignals>();
+    world.init_resource::<NextScene>();
     world.init_resource::<Messages<AudioCmd>>();
     world.init_resource::<InputState>();
     world.init_resource::<WorldTime>();

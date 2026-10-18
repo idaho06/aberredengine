@@ -28,6 +28,7 @@ use aberred_core::resources::guitheme::{
     GuiButtonSkin, GuiNinePatch, GuiProgressBarSkin, GuiTheme, GuiThemeStore,
 };
 use aberred_core::resources::input_bindings::{InputBindings, binding_from_str};
+use aberred_core::resources::next_scene::NextScene;
 use aberred_core::resources::postprocessshader::PostProcessShader;
 use aberred_core::resources::texturefilter::TextureFilter;
 use aberred_core::resources::worldsignals::WorldSignals;
@@ -77,8 +78,19 @@ pub fn process_audio_command(audio_cmd_writer: &mut MessageWriter<AudioCmd>, cmd
     }
 }
 
-/// Process a single signal command from Lua and update world signals.
-pub fn process_signal_command(world_signals: &mut WorldSignals, cmd: SignalCmd) {
+/// The resources a [`SignalCmd`] writes.
+pub struct SignalTargets<'a> {
+    pub world_signals: &'a mut WorldSignals,
+    pub next_scene: &'a mut NextScene,
+}
+
+/// Process a single signal command from Lua: update world signals, or request
+/// a scene switch.
+pub fn process_signal_command(targets: &mut SignalTargets, cmd: SignalCmd) {
+    let SignalTargets {
+        world_signals,
+        next_scene,
+    } = targets;
     match cmd {
         SignalCmd::SetScalar { key, value } => {
             world_signals.set_scalar(key, value);
@@ -98,11 +110,9 @@ pub fn process_signal_command(world_signals: &mut WorldSignals, cmd: SignalCmd) 
         SignalCmd::SetString { key, value } => {
             world_signals.set_string(key, value);
         }
-        SignalCmd::ChangeScene { scene } => {
-            // Deferred switch: this drain can run mid-tick; `switch_scene`
-            // applies the recorded target to the `scene` string.
-            world_signals.request_scene_switch(scene);
-        }
+        // A request, not a write: this drain can run mid-tick, and the scene
+        // switch poll applies it at the end of the tick.
+        SignalCmd::ChangeScene { scene } => next_scene.set(scene),
         SignalCmd::ClearScalar { key } => {
             world_signals.remove_scalar(&key);
         }
@@ -635,7 +645,7 @@ mod tests {
     use bevy_ecs::system::SystemState;
 
     use super::{
-        process_animation_command, process_audio_command, process_render_command,
+        SignalTargets, process_animation_command, process_audio_command, process_render_command,
         process_signal_command, translate_asset_command,
     };
     use crate::resources::lua_runtime::{
@@ -1123,7 +1133,7 @@ mod tests {
             },
             SignalCmd::RemoveEntity { key: s("gone_e") },
         ] {
-            process_signal_command(&mut ws, cmd);
+            apply_signal(&mut ws, cmd);
         }
         assert_eq!(
             (ws.get_scalar("speed"), ws.get_scalar("gone_s")),
@@ -1144,25 +1154,29 @@ mod tests {
         assert!(ws.get_entity("gone_e").is_none());
     }
 
-    /// `engine.change_scene` must not write the `scene` string here: observer
-    /// drains run mid-tick, and `switch_scene` (not this processor) applies
-    /// the recorded target.
+    /// `engine.change_scene` requests the scene through `NextScene` and never
+    /// writes the `scene` string: observer drains run mid-tick, and
+    /// `switch_scene` (not this processor) applies the request.
     #[test]
-    fn signal_cmd_change_scene_defers_the_scene_string() {
+    fn signal_cmd_change_scene_requests_next_scene() {
+        use aberred_core::resources::next_scene::NextScene;
         use aberred_core::resources::signal_keys as sk;
         let mut ws = WorldSignals::default();
         ws.set_string(sk::SCENE, "menu");
+        let mut next_scene = NextScene::default();
 
         process_signal_command(
-            &mut ws,
+            &mut SignalTargets {
+                world_signals: &mut ws,
+                next_scene: &mut next_scene,
+            },
             SignalCmd::ChangeScene {
                 scene: "level2".into(),
             },
         );
 
         assert_eq!(ws.get_string(sk::SCENE), Some("menu"));
-        assert!(ws.has_flag(sk::SWITCH_SCENE));
-        assert_eq!(ws.take_pending_scene().as_deref(), Some("level2"));
+        assert_eq!(next_scene.get(), Some("level2"));
     }
 
     #[test]
@@ -1225,11 +1239,23 @@ mod tests {
         assert!(animation.looped);
     }
 
+    /// Applies `cmd` to `ws` alone (a scene request lands in a throwaway `NextScene`).
+    fn apply_signal(ws: &mut WorldSignals, cmd: SignalCmd) {
+        let mut next_scene = aberred_core::resources::next_scene::NextScene::default();
+        process_signal_command(
+            &mut SignalTargets {
+                world_signals: ws,
+                next_scene: &mut next_scene,
+            },
+            cmd,
+        );
+    }
+
     #[test]
     fn toggle_flag_updates_world_signals() {
         let mut world_signals = WorldSignals::default();
 
-        process_signal_command(
+        apply_signal(
             &mut world_signals,
             SignalCmd::ToggleFlag {
                 key: "paused".to_string(),
@@ -1237,7 +1263,7 @@ mod tests {
         );
         assert!(world_signals.has_flag("paused"));
 
-        process_signal_command(
+        apply_signal(
             &mut world_signals,
             SignalCmd::ToggleFlag {
                 key: "paused".to_string(),

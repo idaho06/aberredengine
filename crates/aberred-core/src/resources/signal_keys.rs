@@ -3,11 +3,6 @@
 //! Use these constants everywhere a signal key is written or read to get
 //! compile-time-checked references and a single rename point.
 
-/// Flag: set by `engine.change_scene` (Lua), which records the target as the
-/// pending scene; the Lua `switch_scene` system applies it to [`SCENE`] when
-/// it consumes this flag. Rust requests go through `NextScene`.
-pub const SWITCH_SCENE: &str = "switch_scene";
-
 /// Flag: set by `engine.quit()` to request a clean engine shutdown.
 pub const QUIT_GAME: &str = "quit_game";
 
@@ -31,10 +26,11 @@ pub const SPEED_SQ: &str = "speed_sq";
 
 /// The scene a Rust game without `EngineBuilder::add_scene` runs in: the engine
 /// registers and enters it, so scene events, `in_scene` and scene systems work.
-/// Unrelated to [`DEFAULT_SCENE`], the switch target used when [`SCENE`] is unset.
+/// Unrelated to [`DEFAULT_SCENE`], the scene a Lua game enters when nothing was requested.
 pub const MAIN_SCENE: &str = "main";
 
-/// The scene name used as fallback when `SCENE` has not been set.
+/// The scene a Lua game's `switch_scene` enters when no scene was requested
+/// (an `on_enter_play` that never calls `engine.change_scene`).
 pub const DEFAULT_SCENE: &str = "menu";
 
 /// Prefix for integer signals that track live entity counts per group.

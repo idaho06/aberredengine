@@ -5,7 +5,7 @@
 //! - [`setup`] – calls `on_setup` in Lua to queue asset loads, then drains them into stores
 //! - [`enter_play`] – calls `on_enter_play`, processes initial signals/groups, triggers first scene switch
 //! - [`switch_scene`] – despawns non-persistent entities, calls `on_switch_scene`, drains all command queues
-//! - [`update`] – refreshes Lua caches, calls `on_update_<scene>`, drains command queues, handles quit/scene-switch flags
+//! - [`update`] – refreshes Lua caches, calls `on_update_<scene>`, drains command queues, handles the quit flag and scene requests
 //!
 //! # SystemParam Bundles
 //!
@@ -36,10 +36,10 @@ use aberred_core::resources::systemsstore as hook_keys;
 use aberred_core::resources::systemsstore::SystemsStore;
 
 use crate::systems::lua_commands::{
-    DrainScope, EffectCmdBufs, asset_cmd_to_audio_cmd, asset_cmd_to_render_asset_cmd,
-    drain_and_process_effect_commands, process_animation_command, process_camera_follow_command,
-    process_gameconfig_command, process_group_command, process_input_command,
-    process_render_command, process_signal_command, translate_asset_command,
+    DrainScope, EffectCmdBufs, SignalTargets, asset_cmd_to_audio_cmd,
+    asset_cmd_to_render_asset_cmd, drain_and_process_effect_commands, process_animation_command,
+    process_camera_follow_command, process_gameconfig_command, process_group_command,
+    process_input_command, process_render_command, process_signal_command, translate_asset_command,
 };
 use aberred_core::resources::camera2d::Camera2D;
 use aberred_core::resources::signal_keys as sk;
@@ -148,6 +148,7 @@ use aberred_core::systems::gamestate::take_quit_request;
 pub fn enter_play(
     mut commands: Commands,
     mut worldsignals: ResMut<WorldSignals>,
+    mut next_scene: ResMut<NextScene>,
     mut tracked_groups: ResMut<TrackedGroups>,
     systems_store: Res<SystemsStore>,
     lua_runtime: NonSend<LuaRuntime>,
@@ -167,8 +168,12 @@ pub fn enter_play(
     // enter_play runs once; stack-local buffers are sufficient
     let mut signal_buf = Vec::new();
     lua_runtime.drain_signal_commands_into(&mut signal_buf);
+    let mut signals = SignalTargets {
+        world_signals: &mut worldsignals,
+        next_scene: &mut next_scene,
+    };
     for Ordered { cmd, .. } in signal_buf {
-        process_signal_command(&mut worldsignals, cmd);
+        process_signal_command(&mut signals, cmd);
     }
 
     let mut group_buf = Vec::new();
@@ -217,7 +222,10 @@ fn drain_common_commands(
         DrainScope::Regular,
         &mut bufs.effects,
         commands,
-        &mut scene_state.world_signals,
+        &mut SignalTargets {
+            world_signals: &mut scene_state.world_signals,
+            next_scene: &mut scene_state.next_scene,
+        },
         audio_cmd_writer,
         &scene_state.systems_store,
     );
@@ -324,7 +332,7 @@ fn resolve_input_table(
 
 /// Per-sim-tick update system for scene gameplay logic: refreshes Lua caches,
 /// calls `on_update_<scene>` once per sim tick, drains common command queues,
-/// then reacts to flags Lua may have set ("switch_scene", "quit_game").
+/// then reacts to the quit flag ("quit_game") and a pending scene request.
 ///
 /// Runs in `SimSet::Bookkeeping` -- last among the engine's own groups each
 /// tick, i.e. *after* `Movement`/`Transforms` (so `camera_follow_system` has
@@ -431,10 +439,10 @@ pub fn update(
         return;
     }
 
-    // Check for a scene switch request (NextScene, or the flag set by Lua)
-    if scene_state.world_signals.take_flag(sk::SWITCH_SCENE) || scene_state.next_scene.is_pending()
-    {
-        debug!("Scene switch requested in world signals.");
+    // Run the scene switch for a request made this tick (engine.change_scene,
+    // a menu's SetScene, a Rust system)
+    if scene_state.next_scene.is_pending() {
+        debug!("Scene switch requested.");
         commands.run_system(
             *scene_state
                 .systems_store
@@ -485,24 +493,18 @@ pub fn switch_scene(
     scene_state.world_signals.clear_group_counts();
     lua_runtime.update_tracked_groups_cache(&tracked_groups.groups);
 
-    // Apply the request (NextScene, else a pending engine.change_scene target;
-    // both consumed) here, so a mid-tick observer drain cannot flip the scene
-    // before this tick's on_update_<scene> runs. A direct writer (enter_play)
-    // has no request — no-op.
-    let pending = scene_state.world_signals.take_pending_scene();
-    if let Some(target) = scene_state.next_scene.take().or(pending) {
-        scene_state.world_signals.set_string(sk::SCENE, target);
-    }
+    // Take the request here, so a mid-tick observer drain cannot flip the
+    // scene before this tick's on_update_<scene> runs. No request (enter_play
+    // without engine.change_scene): the default scene.
+    let scene = scene_state
+        .next_scene
+        .take()
+        .unwrap_or_else(|| sk::DEFAULT_SCENE.to_owned());
+    scene_state.world_signals.set_string(sk::SCENE, &scene);
 
     // Refresh the Lua signal cache so on_switch_scene sees the post-clear state
     // (cleared entity registry and group counts), not the previous scene's snapshot.
     lua_runtime.sync_signals(&mut scene_state.world_signals);
-
-    let scene = scene_state
-        .world_signals
-        .get_string(sk::SCENE)
-        .unwrap_or(sk::DEFAULT_SCENE)
-        .to_owned();
 
     // Call Lua on_switch_scene function if it exists
     if lua_runtime.has_function("on_switch_scene")
@@ -1073,13 +1075,9 @@ mod tests {
         world.run_system_once(update).unwrap();
     }
 
-    /// `on_update_<scene>` and the switch/quit flag check now live in the
-    /// same system call (no more early/late split), so a switch requested by
-    /// this tick's callback is fully processed (`switch_scene` run,
-    /// `SWITCH_SCENE` cleared) before `update()` returns -- restoring the
-    /// pre-thread-split engine's single-`lua_plugin::update` behavior, which
-    /// had no separate guard for a "switch requested earlier this tick"
-    /// case because there was only one call site to begin with.
+    /// `on_update_<scene>` and the scene request poll live in the same system
+    /// call, so a switch requested by this tick's callback is fully processed
+    /// (`switch_scene` run, request consumed) before `update()` returns.
     #[test]
     fn update_processes_scene_switch_within_the_same_tick() {
         let mut world = new_update_test_world();
@@ -1092,7 +1090,7 @@ mod tests {
         define_level1_switches_to_level2_lua_callbacks(&world);
 
         // Tick 1: level1's callback requests the switch; switch_scene runs
-        // and SWITCH_SCENE is cleared before this same call returns.
+        // and consumes the request before this same call returns.
         world.run_system_once(update).unwrap();
 
         // Ticks 2-3: the switch already happened, so these run against
@@ -1114,8 +1112,8 @@ mod tests {
             "level2's callback should run on the two ticks after the switch"
         );
         assert!(
-            !world.resource::<WorldSignals>().has_flag(sk::SWITCH_SCENE),
-            "SWITCH_SCENE should be cleared by update() the same tick it was set"
+            !world.resource::<NextScene>().is_pending(),
+            "update() consumes the request the same tick it was made"
         );
     }
 
@@ -1170,7 +1168,7 @@ mod tests {
             Some("menu"),
             "the observer drain must not apply the change_scene target"
         );
-        assert!(world.resource::<WorldSignals>().has_flag(sk::SWITCH_SCENE));
+        assert_eq!(world.resource::<NextScene>().get(), Some("level2"));
 
         // This tick still runs the old scene's update; the switch lands at
         // the end of it. Repro's expected log: ['update_menu', 'switch level2'].
@@ -1188,16 +1186,11 @@ mod tests {
         assert_eq!(
             world.resource::<WorldSignals>().get_string(sk::SCENE),
             Some("level2"),
-            "switch_scene applies the pending target"
+            "switch_scene applies the requested target"
         );
         assert!(
-            !world.resource::<WorldSignals>().has_flag(sk::SWITCH_SCENE),
-            "SWITCH_SCENE should be cleared by update() the same tick it was set"
-        );
-        assert_eq!(
-            world.resource_mut::<WorldSignals>().take_pending_scene(),
-            None,
-            "the pending target must be consumed, not left to re-apply"
+            !world.resource::<NextScene>().is_pending(),
+            "the request must be consumed, not left to re-apply"
         );
 
         // The new scene's update starts the tick after the switch.
@@ -1207,34 +1200,6 @@ mod tests {
             lua_runtime.lua().globals().get("order").unwrap()
         };
         assert_eq!(order, "update_menu update_level2 ");
-    }
-
-    /// `switch_scene` also applies a pending target when it is invoked
-    /// directly (enter_play's initial switch, or a game calling the hook
-    /// itself), and `on_switch_scene` observes the applied name.
-    #[test]
-    fn switch_scene_applies_a_pending_change_scene_target() {
-        let mut world = new_drain_test_world();
-        world
-            .resource_mut::<WorldSignals>()
-            .set_string(sk::SCENE, "menu");
-        world
-            .resource_mut::<WorldSignals>()
-            .request_scene_switch("level2");
-        record_switched_scene(&world);
-
-        world.run_system_once(switch_scene).unwrap();
-
-        assert_eq!(
-            world.resource::<WorldSignals>().get_string(sk::SCENE),
-            Some("level2")
-        );
-        assert_eq!(
-            world.resource_mut::<WorldSignals>().take_pending_scene(),
-            None,
-            "the pending target must be consumed, not left to re-apply"
-        );
-        assert_eq!(switched_to(&world).as_deref(), Some("level2"));
     }
 
     /// Defines `on_switch_scene` recording the scene it enters in `switched_to`.
@@ -1286,6 +1251,48 @@ mod tests {
 
         assert_eq!(switched_to(&world).as_deref(), Some("level2"));
         assert!(!world.resource::<NextScene>().is_pending());
+    }
+
+    /// Writing the `scene` string and the `switch_scene` flag requests nothing.
+    #[test]
+    fn raw_scene_signals_switch_nothing() {
+        let mut world = new_update_test_world();
+        world
+            .resource_mut::<WorldSignals>()
+            .set_string(sk::SCENE, "level1");
+        register_switch_scene_hook(&mut world);
+        world
+            .get_non_send::<LuaRuntime>()
+            .unwrap()
+            .lua()
+            .load(
+                "function on_update_level1(input, dt)\n\
+                     engine.set_string('scene', 'level2')\n\
+                     engine.set_flag('switch_scene')\n\
+                 end",
+            )
+            .exec()
+            .expect("define on_update_level1");
+        record_switched_scene(&world);
+
+        world.run_system_once(update).unwrap();
+
+        assert_eq!(switched_to(&world), None);
+    }
+
+    /// With no request, `switch_scene` enters [`sk::DEFAULT_SCENE`], whatever
+    /// the `scene` string holds.
+    #[test]
+    fn switch_scene_without_a_request_enters_the_default_scene() {
+        let mut world = new_drain_test_world();
+        world
+            .resource_mut::<WorldSignals>()
+            .set_string(sk::SCENE, "level1");
+        record_switched_scene(&world);
+
+        world.run_system_once(switch_scene).unwrap();
+
+        assert_eq!(switched_to(&world).as_deref(), Some(sk::DEFAULT_SCENE));
     }
 
     #[test]

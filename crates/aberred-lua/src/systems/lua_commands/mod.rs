@@ -36,10 +36,11 @@ pub(crate) use dispatch::{build_ctx_or_log, drain_dispatch_commands};
 pub use entity_cmd::process_entity_commands;
 pub(crate) use processors::request_phase;
 pub use processors::{
-    asset_cmd_to_audio_cmd, asset_cmd_to_render_asset_cmd, process_animation_command,
-    process_audio_command, process_camera_command, process_camera_follow_command,
-    process_gameconfig_command, process_group_command, process_input_command,
-    process_phase_command, process_render_command, process_signal_command, translate_asset_command,
+    SignalTargets, asset_cmd_to_audio_cmd, asset_cmd_to_render_asset_cmd,
+    process_animation_command, process_audio_command, process_camera_command,
+    process_camera_follow_command, process_gameconfig_command, process_group_command,
+    process_input_command, process_phase_command, process_render_command, process_signal_command,
+    translate_asset_command,
 };
 pub use spawn_cmd::{process_clone_command, process_spawn_command};
 
@@ -68,7 +69,6 @@ use aberred_core::components::timer::Timer;
 use aberred_core::components::tween::{Tween, TweenValue};
 use aberred_core::protocol::audio::AudioCmd;
 use aberred_core::resources::systemsstore::SystemsStore;
-use aberred_core::resources::worldsignals::WorldSignals;
 
 /// Persistent per-frame buffers for the 7 effect command queues drained by
 /// `drain_and_process_effect_commands`.
@@ -118,7 +118,7 @@ pub(crate) fn drain_and_process_effect_commands(
     scope: DrainScope,
     bufs: &mut EffectCmdBufs,
     commands: &mut Commands,
-    world_signals: &mut WorldSignals,
+    targets: &mut SignalTargets,
     audio: &mut MessageWriter<AudioCmd>,
     systems_store: &SystemsStore,
 ) {
@@ -165,23 +165,23 @@ pub(crate) fn drain_and_process_effect_commands(
         match kind {
             Kind::Signal => {
                 for cmd in run(&mut signals, limit) {
-                    process_signal_command(world_signals, cmd);
+                    process_signal_command(targets, cmd);
                 }
             }
             Kind::Entity => process_entity_commands(
                 commands,
                 run(&mut entities, limit),
-                world_signals,
+                targets.world_signals,
                 systems_store,
             ),
             Kind::Spawn => {
                 for cmd in run(&mut spawns, limit) {
-                    process_spawn_command(commands, cmd, world_signals);
+                    process_spawn_command(commands, cmd, targets.world_signals);
                 }
             }
             Kind::Clone => {
                 for cmd in run(&mut clones, limit) {
-                    process_clone_command(commands, cmd, world_signals);
+                    process_clone_command(commands, cmd, targets.world_signals);
                 }
             }
         }

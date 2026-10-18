@@ -27,6 +27,7 @@ use aberred_core::resources::animationstore::AnimationStore;
 use aberred_core::resources::collision_contacts::CollisionContacts;
 use aberred_core::resources::collision_rule_index::CollisionRuleIndex;
 use aberred_core::resources::input::InputState;
+use aberred_core::resources::next_scene::NextScene;
 use aberred_core::resources::systemsstore::SystemsStore;
 use aberred_core::resources::worldsignals::WorldSignals;
 use aberred_core::resources::worldtime::WorldTime;
@@ -58,6 +59,7 @@ fn make_lua_callback_world(delta: f32) -> World {
     });
     world.insert_resource(InputState::default());
     world.insert_resource(WorldSignals::default());
+    world.init_resource::<NextScene>();
     world.init_resource::<Messages<AudioCmd>>();
     world.insert_resource(SystemsStore::new());
     world.insert_resource(AnimationStore::default());

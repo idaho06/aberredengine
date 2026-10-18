@@ -1767,6 +1767,29 @@ end
     assert_eq!(take_lua_log(&mut tw), ["enter:idle"]);
 }
 
+/// `engine.change_scene` from `on_enter_play` picks the first scene, entered once.
+#[cfg(feature = "lua")]
+#[test]
+fn lua_change_scene_in_on_enter_play_enters_that_scene() {
+    let mut tw = lua_script_world(
+        "change_scene_enter_play",
+        r#"
+function on_enter_play()
+    engine.change_scene("a")
+    return ""
+end
+function on_switch_scene(scene) table.insert(LOG, "switch:" .. scene) end
+"#,
+    );
+    tw.tick(1, DT);
+
+    assert_eq!(take_lua_log(&mut tw), ["switch:a"]);
+    assert_eq!(
+        tw.world.resource::<WorldSignals>().get_string(sk::SCENE),
+        Some("a")
+    );
+}
+
 /// Confirming a Lua menu item built with `:with_menu_action_set_scene`
 /// switches to that scene through the real schedule.
 #[cfg(feature = "lua")]

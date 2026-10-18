@@ -2,8 +2,10 @@
 -- Entry point for the Aberred Engine showcase
 -- This file is loaded when the engine starts
 --
+-- Scenes switch through engine.change_scene(name); the "scene" string signal
+-- holds the active scene's name (read it, don't write it).
+--
 -- Global flags used by the engine:
--- - "switch_scene": Set to trigger scene switching (cleared by engine after processing)
 -- - "quit_game": Set to exit the game (cleared by engine after processing)
 --
 -- ============================================================================
@@ -154,7 +156,7 @@ function on_enter_play()
     engine.set_integer("high_score", 0)
     engine.set_integer("lives", 3)
     engine.set_integer("level", 1)
-    engine.set_string("scene", "menu") -- Start at menu scene
+    engine.change_scene("menu") -- Start at menu scene
 
     return "Hello from Lua! Ready to play."
 end
