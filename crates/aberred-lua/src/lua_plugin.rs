@@ -189,7 +189,8 @@ pub fn enter_play(
     // Update the tracked groups cache for Lua
     lua_runtime.update_tracked_groups_cache(&tracked_groups.groups);
 
-    // NOTE: World signals (score, high_score, lives, level, scene) are now initialized by Lua in on_enter_play()
+    // Game signals (score, lives, ...) are initialized by Lua in on_enter_play();
+    // the first scene is its engine.change_scene request, else sk::DEFAULT_SCENE.
 
     // Finally, run the switch_scene system to spawn initial scene entities
     commands.run_system(
@@ -337,9 +338,8 @@ fn resolve_input_table(
 
 /// Per-sim-tick update system for scene gameplay logic: refreshes Lua caches,
 /// calls `on_update_<scene>` of the [`LuaActiveScene`] once per sim tick,
-/// drains common command queues,
-/// then runs the scene switch for a pending scene request (unless a quit is
-/// pending).
+/// drains common command queues, then runs the scene switch for a pending
+/// scene request (unless a quit is pending).
 ///
 /// Runs in `SimSet::Bookkeeping` -- last among the engine's own groups each
 /// tick, i.e. *after* `Movement`/`Transforms` (so `camera_follow_system` has
@@ -497,9 +497,7 @@ pub fn switch_scene(
     scene_state.world_signals.clear_group_counts();
     lua_runtime.update_tracked_groups_cache(&tracked_groups.groups);
 
-    // Take the request here, so a mid-tick observer drain cannot flip the
-    // scene before this tick's on_update_<scene> runs. No request (enter_play
-    // without engine.change_scene): the default scene.
+    // No request (enter_play without engine.change_scene): the default scene.
     let scene = scene_state
         .next_scene
         .take()
@@ -1235,9 +1233,6 @@ mod tests {
     #[test]
     fn switch_scene_enters_the_next_scene_target() {
         let mut world = new_drain_test_world();
-        world
-            .resource_mut::<WorldSignals>()
-            .set_string(sk::SCENE, "menu");
         world.resource_mut::<NextScene>().set("level2");
         record_switched_scene(&world);
 
@@ -1254,9 +1249,6 @@ mod tests {
     #[test]
     fn update_runs_the_switch_when_next_scene_is_pending() {
         let mut world = new_update_test_world();
-        world
-            .resource_mut::<WorldSignals>()
-            .set_string(sk::SCENE, "menu");
         register_switch_scene_hook(&mut world);
         world.resource_mut::<NextScene>().set("level2");
         record_switched_scene(&world);

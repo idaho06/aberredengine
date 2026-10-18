@@ -550,7 +550,8 @@ mod tests {
 
     /// During `Setup` the only scene switch is entering the loading scene:
     /// once a scene is active, a switch (e.g. a menu's `SetScene`) is refused
-    /// until the engine leaves it on `Playing`.
+    /// until the engine leaves it on `Playing`. The refused request is
+    /// consumed, not retried.
     #[test]
     fn no_switch_away_from_the_loading_scene_during_setup() {
         let (mut world, menu_entity) = world_in_menu_switching_to("level");
@@ -563,6 +564,7 @@ mod tests {
 
         assert!(world.resource::<SeenEvents>().0.is_empty());
         assert!(world.get_entity(menu_entity).is_ok());
+        assert!(!world.resource::<NextScene>().is_pending());
         assert_eq!(
             world.resource::<SceneManager>().active_scene.as_deref(),
             Some("menu")
@@ -610,34 +612,15 @@ mod tests {
         );
     }
 
-    /// A request the switch refuses (during `Setup`) or cannot honor (an
-    /// unregistered name) is consumed, not retried.
-    #[test]
-    fn a_refused_or_unknown_request_is_consumed() {
-        for (target, in_setup) in [("level", true), ("nope", false)] {
-            let (mut world, _) = world_in_menu_switching_to(target);
-            if in_setup {
-                let mut state = GameState::new();
-                state.set(GameStates::Setup);
-                world.insert_resource(state);
-            }
-
-            world.run_system_once(scene_switch_system).unwrap();
-
-            assert!(!world.resource::<NextScene>().is_pending(), "{target}");
-            assert_eq!(
-                world.resource::<SceneManager>().active_scene.as_deref(),
-                Some("menu")
-            );
-        }
-    }
-
+    /// An unregistered name keeps the current scene; the request is consumed,
+    /// not retried.
     #[test]
     fn switch_to_an_unknown_scene_keeps_the_current_scene() {
         let (mut world, menu_entity) = world_in_menu_switching_to("nope");
         world.run_system_once(scene_switch_system).unwrap();
 
         assert!(world.get_entity(menu_entity).is_ok(), "entities kept");
+        assert!(!world.resource::<NextScene>().is_pending());
         assert!(world.resource::<TrackedGroups>().has_group("enemies"));
         assert_eq!(
             world.resource::<SceneManager>().active_scene.as_deref(),

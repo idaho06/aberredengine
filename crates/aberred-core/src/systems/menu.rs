@@ -576,7 +576,7 @@ pub fn menu_selection_observer(
 mod tests {
     use super::*;
     use crate::math::{Color, Vec2};
-    use crate::resources::gamestate::{GameStates, NextGameStates};
+    use crate::resources::gamestate::NextGameStates;
     use crate::resources::worldsignals::WorldSignals;
     use bevy_ecs::message::Messages;
     use bevy_ecs::system::RunSystemOnce;
@@ -1025,10 +1025,7 @@ mod tests {
             &NextGameStates::Unchanged
         );
         select(&mut world, menu, "quit");
-        assert_eq!(
-            world.resource::<NextGameState>().get(),
-            &NextGameStates::Pending(GameStates::Quitting)
-        );
+        assert!(world.resource::<NextGameState>().quit_requested());
     }
 
     #[test]

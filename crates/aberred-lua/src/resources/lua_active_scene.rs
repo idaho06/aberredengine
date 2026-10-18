@@ -8,7 +8,7 @@ use bevy_ecs::prelude::*;
 ///
 /// Scripts cannot write it: the `scene` world signal is a published copy, so
 /// a script write to that string changes only the string.
-#[derive(Resource, Debug, Clone, PartialEq, Eq)]
+#[derive(Resource, Debug)]
 pub struct LuaActiveScene(pub String);
 
 impl Default for LuaActiveScene {

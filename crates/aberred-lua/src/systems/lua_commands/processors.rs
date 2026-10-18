@@ -659,7 +659,7 @@ mod tests {
     use aberred_core::protocol::audio::AudioCmd;
     use aberred_core::protocol::render_assets::RenderAssetCmd;
     use aberred_core::resources::animationstore::AnimationStore;
-    use aberred_core::resources::gamestate::{GameStates, NextGameState};
+    use aberred_core::resources::gamestate::NextGameState;
     use aberred_core::resources::guitheme::GuiThemeStore;
     use aberred_core::resources::postprocessshader::PostProcessShader;
     use aberred_core::resources::texturefilter::TextureFilter;
@@ -1188,7 +1188,6 @@ mod tests {
     /// `engine.quit` requests `Quitting` through `NextGameState`.
     #[test]
     fn signal_cmd_quit_requests_quitting() {
-        use aberred_core::resources::gamestate::NextGameStates;
         use aberred_core::resources::next_scene::NextScene;
         let mut next_game_state = NextGameState::default();
 
@@ -1201,10 +1200,7 @@ mod tests {
             SignalCmd::Quit,
         );
 
-        assert_eq!(
-            next_game_state.get(),
-            &NextGameStates::Pending(GameStates::Quitting)
-        );
+        assert!(next_game_state.quit_requested());
     }
 
     #[test]
