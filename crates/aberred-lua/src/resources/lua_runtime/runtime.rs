@@ -11,7 +11,7 @@ use aberred_core::resources::input::InputState;
 use aberred_core::resources::worldsignals::SignalSnapshot;
 use mlua::prelude::*;
 use rustc_hash::{FxHashMap, FxHashSet};
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::sync::Arc;
 
 /// Cached camera state snapshot for Lua to read via `engine.get_camera()` / `engine.get_camera_view_rect()`.
@@ -92,7 +92,54 @@ crate::lua_queues! {app_data_struct {
     /// by `update_input_table` to skip redundant writes within a frame and
     /// diff against the previous frame's values.
     pub(super) last_input: RefCell<Option<(u64, InputSnapshot)>>,
+    /// Next [`Ordered::seq`], shared by every stamped queue.
+    pub(super) next_seq: Cell<u64>,
 }}
+
+/// A queued command stamped with its place in the script's call order.
+///
+/// The element type of the stamped queues in `lua_queues!`. Only
+/// `LuaAppData::push` builds one, taking `seq` from the shared counter.
+#[derive(Debug)]
+pub struct Ordered<T> {
+    seq: u64,
+    /// The queued command.
+    pub cmd: T,
+}
+
+impl<T> Ordered<T> {
+    /// Position in call order across every stamped queue.
+    pub fn seq(&self) -> u64 {
+        self.seq
+    }
+}
+
+impl LuaAppData {
+    /// Pushes `cmd` onto `queue`, stamping it when the queue holds [`Ordered`]
+    /// commands. The queue's element type picks the [`QueueItem`] impl.
+    pub(super) fn push<C, E: QueueItem<C>>(&self, queue: &RefCell<Vec<E>>, cmd: C) {
+        queue.borrow_mut().push(E::wrap(cmd, self));
+    }
+}
+
+/// How a command becomes a queue element: unchanged, or stamped as [`Ordered`].
+pub(super) trait QueueItem<C> {
+    fn wrap(cmd: C, data: &LuaAppData) -> Self;
+}
+
+impl<C> QueueItem<C> for C {
+    fn wrap(cmd: C, _: &LuaAppData) -> Self {
+        cmd
+    }
+}
+
+impl<C> QueueItem<C> for Ordered<C> {
+    fn wrap(cmd: C, data: &LuaAppData) -> Self {
+        let seq = data.next_seq.get();
+        data.next_seq.set(seq + 1);
+        Ordered { seq, cmd }
+    }
+}
 
 /// Pooled inner tables for one entity's `signals` ctx field
 /// (`flags`/`integers`/`scalars`/`strings`), reused in place via

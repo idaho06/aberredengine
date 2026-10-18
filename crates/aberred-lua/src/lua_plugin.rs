@@ -14,7 +14,7 @@
 
 use crate::resources::lua_runtime::{
     AnimationCmd, AssetCmd, CameraFollowCmd, GameConfigCmd, GroupCmd, InputCmd, LuaRuntime,
-    RenderCmd,
+    Ordered, RenderCmd,
 };
 use aberred_core::components::persistent::SceneCleanup;
 use aberred_core::protocol::audio::AudioCmd;
@@ -165,7 +165,7 @@ pub fn enter_play(
     // enter_play runs once; stack-local buffers are sufficient
     let mut signal_buf = Vec::new();
     lua_runtime.drain_signal_commands_into(&mut signal_buf);
-    for cmd in signal_buf {
+    for Ordered { cmd, .. } in signal_buf {
         process_signal_command(&mut worldsignals, cmd);
     }
 

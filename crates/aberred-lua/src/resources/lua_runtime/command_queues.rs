@@ -4,7 +4,7 @@
 //! to process queued commands and update read-only caches.
 
 use super::commands::*;
-use super::runtime::{LuaAppData, LuaRuntime};
+use super::runtime::{LuaAppData, LuaRuntime, Ordered};
 use super::spawn_data::*;
 use aberred_core::resources::worldsignals::{SignalSnapshot, WorldSignals};
 use rustc_hash::FxHashSet;
@@ -197,5 +197,36 @@ mod tests {
 
         runtime.sync_signals(&mut signals);
         assert!(lua_sees_flag(&runtime, "boss_dead"));
+    }
+
+    #[test]
+    fn one_sequence_counter_stamps_every_kind_and_scope_in_call_order() {
+        let runtime = LuaRuntime::new().expect("LuaRuntime::new");
+        runtime
+            .lua()
+            .load(
+                "engine.set_flag('x')\n\
+                 engine.entity_despawn(1)\n\
+                 engine.collision_set_flag('y')\n\
+                 engine.spawn():build()\n\
+                 engine.clone('tpl'):build()\n\
+                 engine.set_flag('z')",
+            )
+            .exec()
+            .expect("script runs");
+
+        fn seqs<T>(drain: impl FnOnce(&mut Vec<Ordered<T>>)) -> Vec<u64> {
+            let mut out = Vec::new();
+            drain(&mut out);
+            out.iter().map(Ordered::seq).collect()
+        }
+        assert_eq!(seqs(|o| runtime.drain_signal_commands_into(o)), [0, 5]);
+        assert_eq!(seqs(|o| runtime.drain_entity_commands_into(o)), [1]);
+        assert_eq!(
+            seqs(|o| runtime.drain_collision_signal_commands_into(o)),
+            [2]
+        );
+        assert_eq!(seqs(|o| runtime.drain_spawn_commands_into(o)), [3]);
+        assert_eq!(seqs(|o| runtime.drain_clone_commands_into(o)), [4]);
     }
 }

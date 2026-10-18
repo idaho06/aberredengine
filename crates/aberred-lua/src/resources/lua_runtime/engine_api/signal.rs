@@ -216,9 +216,10 @@ impl LuaRuntime {
                     .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?;
                 // Deferred switch: the scene string must stay put until
                 // `switch_scene` applies the target (see request_scene_switch).
-                data.signal_commands
-                    .borrow_mut()
-                    .push(SignalCmd::ChangeScene { scene: scene_name });
+                data.push(
+                    &data.signal_commands,
+                    SignalCmd::ChangeScene { scene: scene_name },
+                );
                 Ok(())
             })?,
         )?;
@@ -238,9 +239,12 @@ impl LuaRuntime {
                 let data = lua
                     .app_data_ref::<LuaAppData>()
                     .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?;
-                data.signal_commands.borrow_mut().push(SignalCmd::SetFlag {
-                    key: sk::QUIT_GAME.into(),
-                });
+                data.push(
+                    &data.signal_commands,
+                    SignalCmd::SetFlag {
+                        key: sk::QUIT_GAME.into(),
+                    },
+                );
                 Ok(())
             })?,
         )?;

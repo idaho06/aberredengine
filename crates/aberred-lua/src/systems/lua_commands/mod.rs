@@ -50,8 +50,8 @@ use bevy_ecs::system::SystemParam;
 use crate::components::lua_on_timer_fired::LuaOnTimerFired;
 use crate::components::lua_on_tween_finished::LuaOnTweenFinished;
 use crate::resources::lua_runtime::{
-    AudioLuaCmd, CameraCmd, CloneCmd, EntityCmd, LuaRuntime, PhaseCmd, SignalCmd, SpawnCmd,
-    TweenConfig,
+    AudioLuaCmd, CameraCmd, CloneCmd, EntityCmd, LuaRuntime, Ordered, PhaseCmd, SignalCmd,
+    SpawnCmd, TweenConfig,
 };
 use aberred_core::components::animation::Animation;
 use aberred_core::components::boxcollider::BoxCollider;
@@ -77,13 +77,12 @@ use aberred_core::resources::worldsignals::WorldSignals;
 /// no allocation occurs after the first warm-up frame.
 #[derive(Default)]
 pub struct EffectCmdBufs {
-    pub(crate) signals: Vec<SignalCmd>,
-    pub(crate) entities: Vec<EntityCmd>,
+    pub(crate) signals: Vec<Ordered<SignalCmd>>,
+    pub(crate) entities: Vec<Ordered<EntityCmd>>,
     // SpawnCmd is ~2KB; boxing keeps this Vec's per-element push/drain/realloc cost
-    // at 8 bytes instead of a full-struct memcpy.
-    #[allow(clippy::vec_box)]
-    pub(crate) spawns: Vec<Box<SpawnCmd>>,
-    pub(crate) clones: Vec<CloneCmd>,
+    // at 16 bytes instead of a full-struct memcpy.
+    pub(crate) spawns: Vec<Ordered<Box<SpawnCmd>>>,
+    pub(crate) clones: Vec<Ordered<CloneCmd>>,
     pub(crate) audios: Vec<AudioLuaCmd>,
     pub(crate) cameras: Vec<CameraCmd>,
     pub(crate) phases: Vec<PhaseCmd>,
@@ -140,19 +139,19 @@ pub(crate) fn drain_and_process_effect_commands(
         }
     }
 
-    for cmd in bufs.signals.drain(..) {
+    for Ordered { cmd, .. } in bufs.signals.drain(..) {
         process_signal_command(world_signals, cmd);
     }
     process_entity_commands(
         commands,
-        bufs.entities.drain(..),
+        bufs.entities.drain(..).map(|o| o.cmd),
         world_signals,
         systems_store,
     );
-    for cmd in bufs.spawns.drain(..) {
+    for Ordered { cmd, .. } in bufs.spawns.drain(..) {
         process_spawn_command(commands, cmd, world_signals);
     }
-    for cmd in bufs.clones.drain(..) {
+    for Ordered { cmd, .. } in bufs.clones.drain(..) {
         process_clone_command(commands, cmd, world_signals);
     }
     for cmd in bufs.audios.drain(..) {

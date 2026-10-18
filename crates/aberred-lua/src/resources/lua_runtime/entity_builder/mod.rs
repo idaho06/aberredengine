@@ -279,35 +279,31 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
 
         // Take the built command out of the builder rather than cloning it — the
         // builder is consumed by build() in normal (single-call) usage.
-        match (this.mode, this.context) {
-            (BuilderMode::Spawn, BuilderContext::Regular) => {
-                app_data
-                    .spawn_commands
-                    .borrow_mut()
-                    .push(Box::new(std::mem::take(&mut this.cmd)));
+        let collision = matches!(this.context, BuilderContext::Collision);
+        let overrides = Box::new(std::mem::take(&mut this.cmd));
+        match this.mode {
+            BuilderMode::Spawn => {
+                let queue = if collision {
+                    &app_data.collision_spawn_commands
+                } else {
+                    &app_data.spawn_commands
+                };
+                app_data.push(queue, overrides);
             }
-            (BuilderMode::Spawn, BuilderContext::Collision) => {
-                app_data
-                    .collision_spawn_commands
-                    .borrow_mut()
-                    .push(Box::new(std::mem::take(&mut this.cmd)));
-            }
-            (BuilderMode::Clone, BuilderContext::Regular) => {
+            BuilderMode::Clone => {
+                let queue = if collision {
+                    &app_data.collision_clone_commands
+                } else {
+                    &app_data.clone_commands
+                };
                 let source_key = this.source_key.take().unwrap_or_default();
-                app_data.clone_commands.borrow_mut().push(CloneCmd {
-                    source_key,
-                    overrides: Box::new(std::mem::take(&mut this.cmd)),
-                });
-            }
-            (BuilderMode::Clone, BuilderContext::Collision) => {
-                let source_key = this.source_key.take().unwrap_or_default();
-                app_data
-                    .collision_clone_commands
-                    .borrow_mut()
-                    .push(CloneCmd {
+                app_data.push(
+                    queue,
+                    CloneCmd {
                         source_key,
-                        overrides: Box::new(std::mem::take(&mut this.cmd)),
-                    });
+                        overrides,
+                    },
+                );
             }
         }
         Ok(())
@@ -349,7 +345,7 @@ mod test_helpers {
         let app_data = runtime.lua().app_data_ref::<LuaAppData>().unwrap();
         let mut queued = app_data.spawn_commands.borrow_mut();
         assert_eq!(queued.len(), 1, "expected exactly one queued spawn command");
-        *queued.pop().unwrap()
+        *queued.pop().unwrap().cmd
     }
 }
 

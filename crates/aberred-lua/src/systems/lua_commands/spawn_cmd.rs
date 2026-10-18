@@ -1072,7 +1072,7 @@ mod tests {
         let mut system_state = SystemState::<Commands>::new(world);
         {
             let mut commands = system_state.get_mut(world).unwrap();
-            process_spawn_command(&mut commands, queued.pop().unwrap(), world_signals);
+            process_spawn_command(&mut commands, queued.pop().unwrap().cmd, world_signals);
         }
         system_state.apply(world);
         let spawned: Vec<Entity> = world

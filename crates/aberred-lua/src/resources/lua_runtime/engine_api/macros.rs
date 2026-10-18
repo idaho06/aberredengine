@@ -89,11 +89,9 @@ macro_rules! register_cmd {
         $engine.set(
             $name,
             $lua.create_function(|lua, $args: $arg_ty| {
-                lua.app_data_ref::<LuaAppData>()
-                    .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?
-                    .$queue
-                    .borrow_mut()
-                    .push($cmd);
+                let data = lua.app_data_ref::<LuaAppData>()
+                    .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?;
+                data.push(&data.$queue, $cmd);
                 Ok(())
             })?,
         )?;
