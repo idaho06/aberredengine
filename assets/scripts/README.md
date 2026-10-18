@@ -292,12 +292,14 @@ Different callbacks process different types of engine commands. Here's what comm
 |----------|-------|
 | `on_setup()` | Asset → Animation |
 | `on_enter_play()` | Signal → Group |
-| `on_switch_scene(scene)` | Animation → Signal → Entity → Spawn → Clone → Audio → Camera → Phase → Render → GameConfig → CameraFollow → InputBinding → Group |
-| `on_update_<scene>(input, dt)` | Animation → Signal → Entity → Spawn → Clone → Audio → Camera → Phase → Render → GameConfig → CameraFollow → InputBinding → Group |
-| Phase/Timer/`on_animation_end`/LuaSetup/menu/GUI click callbacks | Signal → Entity → Spawn → Clone → Audio → Camera → Phase |
+| `on_switch_scene(scene)` | Animation → (Signal, Entity, Spawn, Clone in call order) → Audio → Camera → Phase → Render → GameConfig → CameraFollow → InputBinding → Group |
+| `on_update_<scene>(input, dt)` | Animation → (Signal, Entity, Spawn, Clone in call order) → Audio → Camera → Phase → Render → GameConfig → CameraFollow → InputBinding → Group |
+| Phase/Timer/`on_animation_end`/LuaSetup/menu/GUI click callbacks | (Signal, Entity, Spawn, Clone in call order) → Audio → Camera → Phase |
 | Collision callbacks | the same, from the collision queues |
 
-**Entity commands apply in call order.** Within one callback, every `engine.entity_*` call lands in the order you made it, so an insert followed by a write of the same component works: `engine.entity_set_shader(id, "wave")` then `engine.entity_shader_set_float(id, "u", 1.0)` keeps the uniform, and `engine.release_stuckto(id)` then `engine.entity_set_velocity(id, 5, 0)` keeps the velocity. They apply right after the callback's drain (for system callbacks such as `on_update_<scene>`, at the end of that step of the tick), and a callback's `ctx` is a snapshot taken before the call, so a script never sees its own writes inside the same callback.
+**Signal, entity, spawn and clone commands apply in call order.** Within one callback, every `engine.entity_*`, `engine.spawn()`/`engine.clone()` `:build()` and world-signal call (`set_flag`, `set_entity`, `remove_entity`, …) lands in the order you made it, so an insert followed by a write of the same component works: `engine.entity_set_shader(id, "wave")` then `engine.entity_shader_set_float(id, "u", 1.0)` keeps the uniform, and `engine.release_stuckto(id)` then `engine.entity_set_velocity(id, 5, 0)` keeps the velocity. They apply right after the callback's drain (for system callbacks such as `on_update_<scene>`, at the end of that step of the tick), and a callback's `ctx` is a snapshot taken before the call, so a script never sees its own writes inside the same callback.
+
+So a clone copies its template as it is at the `clone()` call: moving it afterwards (`engine.entity_set_position(tpl_id, x, y)`) doesn't change the clone, and despawning it or removing its key (`engine.entity_despawn(tpl_id)`, `engine.remove_entity("tpl")`) doesn't cancel the clone. And a spawn or clone that looks up a key (a clone source, a particle `templates` entry, a menu cursor) sees only keys set *earlier* in the callback, by `:register_as()` or `engine.set_entity()`.
 
 **Important: Collision Callbacks Use Separate Queues**
 
@@ -1081,6 +1083,7 @@ engine.clone("bullet_template")
 - **All components cloned**: Every component implementing `Clone` or `Reflect` is copied
 - **Animation reset**: Animation always starts at frame 0, even without override
 - **New entity registered**: `:register_as()` stores the NEW cloned entity's ID, not the template
+- **Copied at the call**: the clone copies the template as it is at the `clone()` call, and its source key must be set earlier in the callback (see [Callback Command Processing](#3-callback-command-processing))
 
 **When to use cloning:**
 

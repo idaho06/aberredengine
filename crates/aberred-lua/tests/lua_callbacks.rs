@@ -203,8 +203,8 @@ fn collision_callback_error_still_drains_queued_commands() {
     assert!(signals.has_flag("hit"));
 }
 
-// Command-drain ordering: a callback's queued commands are drained in a fixed
-// order within one pass (spawn before clone), and no queue is dropped.
+// Command-drain ordering: a callback's queued commands apply in call order
+// within one drain pass, and no queue is dropped.
 
 /// Register the Lua timer observers.
 fn add_lua_timer_observers(world: &mut World) {
@@ -222,8 +222,8 @@ fn tick_timers(world: &mut World) {
 /// Regular path: spawn before clone (timer callback)
 ///
 /// A timer callback registers a freshly spawned entity under a key, then
-/// clones it.  The clone must succeed, which requires spawn to be processed
-/// before clone inside the same drain pass.
+/// clones it.  The clone must succeed: the spawn is called first, so the
+/// drain applies it (and its `register_as`) before the clone.
 #[test]
 fn timer_callback_spawn_then_clone_same_drain() {
     let mut world = make_lua_callback_world(1.0);
@@ -430,8 +430,8 @@ fn timer_callback_ctx_timer_reports_the_firing_timer() {
 ///
 /// A collision callback registers a freshly spawned entity then clones it.
 /// Both operations go through collision-scoped queues
-/// (collision_spawn / collision_clone).  The clone must succeed, which
-/// requires spawn to drain before clone.
+/// (collision_spawn / collision_clone).  The clone must succeed: the spawn is
+/// called first, so the drain applies it before the clone.
 #[test]
 fn collision_callback_spawn_then_clone_same_drain() {
     let mut world = make_lua_callback_world(0.0);
