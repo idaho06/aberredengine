@@ -5,6 +5,7 @@
 //! and entity registrations on every switch.
 
 use aberredengine::core::events::scene::{SceneEntered, SceneExited};
+use aberredengine::core::resources::gamestate::{GameStates, NextGameState};
 use aberredengine::core::resources::next_scene::NextScene;
 use aberredengine::core::resources::scenemanager::SceneManager;
 use aberredengine::core::resources::systemsstore::{self as hook_keys, SystemsStore};
@@ -42,6 +43,7 @@ fn scene_world(scenes: &[&str]) -> World {
     insert_scene_switch_resources(&mut world);
     world.insert_resource(Messages::<AudioCmd>::default());
     world.insert_resource(SystemsStore::new());
+    world.init_resource::<NextGameState>();
     world.init_resource::<SceneLog>();
     insert_scene_manager(
         &mut world,
@@ -207,6 +209,25 @@ fn scene_switch_poll_runs_the_switch_for_a_next_scene_request() {
     assert!(!world.resource::<NextScene>().is_pending());
     assert_eq!(active_scene(&world), Some("level1"));
     assert_eq!(SceneLog::take(&mut world), ["exit menu", "enter level1"]);
+}
+
+/// A quit requested the same tick wins: the poll does not switch scenes on
+/// the way out (the Lua poll behaves the same).
+#[test]
+fn scene_switch_poll_yields_to_a_pending_quit() {
+    let mut world = scene_world(&["menu", "level1"]);
+    enter_play(&mut world);
+    SceneLog::take(&mut world);
+
+    world.resource_mut::<NextScene>().set("level1");
+    world
+        .resource_mut::<NextGameState>()
+        .set(GameStates::Quitting);
+    world.run_system_once(scene_switch_poll).unwrap();
+    world.flush();
+
+    assert_eq!(active_scene(&world), Some("menu"));
+    assert!(SceneLog::take(&mut world).is_empty());
 }
 
 // ---------------------------------------------------------------------------

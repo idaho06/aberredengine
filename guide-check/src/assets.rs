@@ -35,10 +35,10 @@ mod waiting_for_loads {
         log::info!("{:?} '{}' is ready", ev.kind, ev.key);
     }
 
-    fn on_asset_failed(ev: On<AssetLoadFailed>, mut signals: ResMut<WorldSignals>) {
+    fn on_asset_failed(ev: On<AssetLoadFailed>, mut next_state: ResMut<NextGameState>) {
         // The engine has already logged the error.
         if ev.kind == AssetKind::Texture && ev.key == "player" {
-            signals.request_quit();
+            next_state.set(GameStates::Quitting);
         }
     }
 

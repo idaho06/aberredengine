@@ -211,11 +211,11 @@ mod menus {
     fn on_menu_select(
         ev: On<MenuSelected>,
         mut next_scene: ResMut<NextScene>,
-        mut signals: ResMut<WorldSignals>,
+        mut next_state: ResMut<NextGameState>,
     ) {
         match ev.item_id.as_str() {
             "start" => next_scene.set("level01"),
-            "quit" => signals.request_quit(),
+            "quit" => next_state.set(GameStates::Quitting),
             _ => {}
         }
     }

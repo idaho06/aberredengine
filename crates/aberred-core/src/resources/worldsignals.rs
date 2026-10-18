@@ -394,11 +394,6 @@ impl WorldSignals {
         self.flags_dirty = true;
     }
 
-    /// Request that the game quit: sets the [`sk::QUIT_GAME`] flag, which the
-    /// engine turns into a `Quitting` state transition on the next poll.
-    pub fn request_quit(&mut self) {
-        self.set_flag(sk::QUIT_GAME);
-    }
     /// Read-only view of all flags.
     pub fn get_flags(&self) -> &FxHashSet<String> {
         &self.flags
@@ -724,15 +719,6 @@ mod tests {
         ws.snapshot(); // clear dirty
         ws.toggle_flag("x"); // absent → insert
         assert!(ws.flags_dirty && ws.has_flag("x"));
-    }
-
-    // --- Scene / quit requests ---
-
-    #[test]
-    fn request_quit_sets_the_quit_flag() {
-        let mut ws = WorldSignals::default();
-        ws.request_quit();
-        assert!(ws.has_flag(sk::QUIT_GAME));
     }
 
     // --- Entities ---

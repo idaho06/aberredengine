@@ -769,10 +769,10 @@ fn on_asset_loaded(ev: On<AssetLoaded>) {
     log::info!("{:?} '{}' is ready", ev.kind, ev.key);
 }
 
-fn on_asset_failed(ev: On<AssetLoadFailed>, mut signals: ResMut<WorldSignals>) {
+fn on_asset_failed(ev: On<AssetLoadFailed>, mut next_state: ResMut<NextGameState>) {
     // The engine has already logged the error.
     if ev.kind == AssetKind::Texture && ev.key == "player" {
-        signals.request_quit();
+        next_state.set(GameStates::Quitting);
     }
 }
 
@@ -1833,11 +1833,11 @@ use aberredengine::prelude::*;
 fn on_menu_select(
     ev: On<MenuSelected>,
     mut next_scene: ResMut<NextScene>,
-    mut signals: ResMut<WorldSignals>,
+    mut next_state: ResMut<NextGameState>,
 ) {
     match ev.item_id.as_str() {
         "start" => next_scene.set("level01"),
-        "quit" => signals.request_quit(),
+        "quit" => next_state.set(GameStates::Quitting),
         _ => {}
     }
 }

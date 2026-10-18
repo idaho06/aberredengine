@@ -57,9 +57,7 @@ impl SystemsStore {
 //
 // Use these constants everywhere a SystemsStore key is written or read to
 // get compile-time-checked references and a single rename point (mirrors
-// src/resources/signal_keys.rs's convention for WorldSignals keys -- this is
-// a distinct namespace even where a string value happens to coincide, e.g.
-// "quit_game" is also a WorldSignals flag name; do not conflate the two).
+// src/resources/signal_keys.rs's convention for WorldSignals keys).
 
 /// One-shot asset-loading hook, called during the `Setup` game state.
 pub const SETUP: &str = "setup";

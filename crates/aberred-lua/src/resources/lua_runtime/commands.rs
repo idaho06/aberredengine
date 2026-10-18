@@ -184,6 +184,7 @@ pub enum SignalCmd {
     SetString { key: String, value: String },
     SetFlag { key: String },
     ChangeScene { scene: String },
+    Quit,
     ClearFlag { key: String },
     ToggleFlag { key: String },
     ClearScalar { key: String },

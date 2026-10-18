@@ -34,7 +34,7 @@ use crate::math::{Color, Vec2};
 use crate::resources::appstate::AppState;
 use crate::resources::camera2d::Camera2D;
 use crate::resources::collision_contacts::CollisionContacts;
-use crate::resources::gamestate::{GameState, GameStates};
+use crate::resources::gamestate::{GameState, GameStates, NextGameState};
 use crate::resources::group::TrackedGroups;
 use crate::resources::next_scene::NextScene;
 use crate::resources::scenemanager::SceneManager;
@@ -274,7 +274,8 @@ pub fn in_scene(name: &str) -> impl FnMut(Option<Res<SceneManager>>) -> bool + C
     }
 }
 
-/// Runs the scene switch system when a [`NextScene`] request is pending.
+/// Runs the scene switch system when a [`NextScene`] request is pending and
+/// no quit is ([`NextGameState::quit_requested`]).
 /// Registered in `SimSet::Drain`, after the tick's systems, so a request made
 /// during the tick switches at its end and the new scene's systems start the
 /// next tick.
@@ -284,9 +285,10 @@ pub fn in_scene(name: &str) -> impl FnMut(Option<Res<SceneManager>>) -> bool + C
 pub fn scene_switch_poll(
     mut commands: Commands,
     next_scene: Res<NextScene>,
+    next_state: Res<NextGameState>,
     systems_store: Res<SystemsStore>,
 ) {
-    if next_scene.is_pending() {
+    if next_scene.is_pending() && !next_state.quit_requested() {
         commands.run_system(
             *systems_store
                 .get(hook_keys::SWITCH_SCENE)

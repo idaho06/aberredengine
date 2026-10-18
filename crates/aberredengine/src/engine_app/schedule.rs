@@ -22,9 +22,9 @@ use aberred_core::systems::collision_rule::{collision_ended_system, has_rule_con
 use aberred_core::systems::collision_rule_index::rebuild_rule_index;
 use aberred_core::systems::dynamictext_size::dynamictext_size_system;
 use aberred_core::systems::entity_registrations::prune_dead_entity_registrations;
-use aberred_core::systems::gamestate::{
-    check_pending_state, finish_setup, quit_flag_poll, state_is_playing, state_runs_scenes,
-};
+#[cfg(feature = "lua")]
+use aberred_core::systems::gamestate::state_is_playing;
+use aberred_core::systems::gamestate::{check_pending_state, finish_setup, state_runs_scenes};
 use aberred_core::systems::gridlayout::gridlayout_spawn_system;
 use aberred_core::systems::group::update_group_counts_system;
 use aberred_core::systems::gui_hit_test::gui_hit_test_system;
@@ -153,17 +153,12 @@ pub enum SimSet {
 impl EngineBuilder {
     /// Registers the systems a game without Lua needs in place of the Lua
     /// plugin's: the `PostCollision` pair (`update_group_counts_system` +
-    /// `animation_controller`, with no `lua_phase_update_system` edges) and
-    /// `quit_flag_poll`. Called from both the `has_lua` else-arm and the
+    /// `animation_controller`, with no `lua_phase_update_system` edges).
+    /// Called from both the `has_lua` else-arm and the
     /// `#[cfg(not(feature = "lua"))]` block in `build_logic_schedules`.
     fn add_non_lua_systems(sim: &mut Schedule) {
         sim.add_systems(update_group_counts_system.in_set(SimSet::PostCollision));
         sim.add_systems(animation_controller.in_set(SimSet::PostCollision));
-        sim.add_systems(
-            quit_flag_poll
-                .run_if(state_is_playing)
-                .in_set(SimSet::Drain),
-        );
     }
 
     /// Registers `animation` (`SimSet::Drain`) exactly once, regardless of

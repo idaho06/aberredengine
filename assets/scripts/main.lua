@@ -2,11 +2,9 @@
 -- Entry point for the Aberred Engine showcase
 -- This file is loaded when the engine starts
 --
--- Scenes switch through engine.change_scene(name); the "scene" string signal
--- holds the active scene's name (read it, don't write it).
---
--- Global flags used by the engine:
--- - "quit_game": Set to exit the game (cleared by engine after processing)
+-- Scenes switch through engine.change_scene(name) and the game quits through
+-- engine.quit(); the "scene" string signal holds the active scene's name (read
+-- it, don't write it).
 --
 -- ============================================================================
 -- CALLBACK INJECTION SYSTEM

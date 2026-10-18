@@ -5,7 +5,7 @@
 //! - [`setup`] – calls `on_setup` in Lua to queue asset loads, then drains them into stores
 //! - [`enter_play`] – calls `on_enter_play`, processes initial signals/groups, triggers first scene switch
 //! - [`switch_scene`] – despawns non-persistent entities, calls `on_switch_scene`, drains all command queues
-//! - [`update`] – refreshes Lua caches, calls `on_update_<scene>`, drains command queues, handles the quit flag and scene requests
+//! - [`update`] – refreshes Lua caches, calls `on_update_<scene>`, drains command queues, runs a requested scene switch
 //!
 //! # SystemParam Bundles
 //!
@@ -63,6 +63,7 @@ pub struct ScriptingContext<'w> {
 pub struct GameSceneState<'w> {
     pub world_signals: ResMut<'w, WorldSignals>,
     pub next_scene: ResMut<'w, NextScene>,
+    pub next_game_state: ResMut<'w, NextGameState>,
     pub active_scene: ResMut<'w, LuaActiveScene>,
     pub post_process: ResMut<'w, PostProcessShader>,
     pub config: ResMut<'w, GameConfig>,
@@ -144,13 +145,13 @@ pub fn setup(
 }
 
 pub use aberred_core::systems::gamestate::quit_game;
-use aberred_core::systems::gamestate::take_quit_request;
 
 // Create initial state of the game and observers
 pub fn enter_play(
     mut commands: Commands,
     mut worldsignals: ResMut<WorldSignals>,
     mut next_scene: ResMut<NextScene>,
+    mut next_game_state: ResMut<NextGameState>,
     mut tracked_groups: ResMut<TrackedGroups>,
     systems_store: Res<SystemsStore>,
     lua_runtime: NonSend<LuaRuntime>,
@@ -173,6 +174,7 @@ pub fn enter_play(
     let mut signals = SignalTargets {
         world_signals: &mut worldsignals,
         next_scene: &mut next_scene,
+        next_game_state: &mut next_game_state,
     };
     for Ordered { cmd, .. } in signal_buf {
         process_signal_command(&mut signals, cmd);
@@ -227,6 +229,7 @@ fn drain_common_commands(
         &mut SignalTargets {
             world_signals: &mut scene_state.world_signals,
             next_scene: &mut scene_state.next_scene,
+            next_game_state: &mut scene_state.next_game_state,
         },
         audio_cmd_writer,
         &scene_state.systems_store,
@@ -335,7 +338,8 @@ fn resolve_input_table(
 /// Per-sim-tick update system for scene gameplay logic: refreshes Lua caches,
 /// calls `on_update_<scene>` of the [`LuaActiveScene`] once per sim tick,
 /// drains common command queues,
-/// then reacts to the quit flag ("quit_game") and a pending scene request.
+/// then runs the scene switch for a pending scene request (unless a quit is
+/// pending).
 ///
 /// Runs in `SimSet::Bookkeeping` -- last among the engine's own groups each
 /// tick, i.e. *after* `Movement`/`Transforms` (so `camera_follow_system` has
@@ -374,7 +378,6 @@ pub fn update(
     camera: Res<Camera2DRes>,
     screen: Res<ScreenSize>,
     mut commands: Commands,
-    mut next_game_state: ResMut<NextGameState>,
     mut scripting: ScriptingContext,
     mut scene_state: GameSceneState,
     mut bindings: ResMut<InputBindings>,
@@ -433,8 +436,8 @@ pub fn update(
         &mut gui_theme_warn_cache,
     );
 
-    // Check for quit flag (set by Lua)
-    if take_quit_request(&mut scene_state.world_signals, &mut next_game_state) {
+    // A quit requested this tick wins over a scene request.
+    if scene_state.next_game_state.quit_requested() {
         return;
     }
 
@@ -573,6 +576,7 @@ mod tests {
         let mut world = World::new();
         world.insert_resource(WorldSignals::default());
         world.insert_resource(NextScene::default());
+        world.insert_resource(NextGameState::default());
         world.init_resource::<LuaActiveScene>();
         world.insert_resource(PostProcessShader::default());
         world.insert_resource(GameConfig::default());
@@ -982,7 +986,6 @@ mod tests {
         let screen = ScreenSize { w: 800, h: 600 };
         world.insert_resource(screen);
         world.insert_resource(Camera2DRes(Camera2D::screen_centered(&screen)));
-        world.insert_resource(NextGameState::default());
         world
     }
 

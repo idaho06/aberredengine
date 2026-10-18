@@ -803,27 +803,50 @@ fn rust_despawn_prunes_world_signals_registration_same_tick() {
     assert_eq!(signals.get_entity("test:survivor"), Some(survivor));
 }
 
-/// The `quit_game` flag quits a Rust-only game (no Lua): set while
-/// `Playing`, the next tick reaches `Quitting`, and `quit_game` runs exactly
-/// once even though entering `Quitting` sets the flag again.
+/// Number of `RenderMsg::Quit` sent so far (one per `quit_game` run).
+fn render_quits(tw: &TestWorld) -> usize {
+    tw.sent_to_render
+        .try_iter()
+        .filter(|msg| matches!(msg, RenderMsg::Quit))
+        .count()
+}
+
+/// A `Quitting` request quits a Rust-only game (no Lua): made while
+/// `Playing`, the game reaches `Quitting`, and `quit_game` runs exactly once.
 #[test]
-fn quit_game_flag_quits_a_rust_only_game_exactly_once() {
+fn quit_request_quits_a_rust_only_game_exactly_once() {
     let mut tw = TestWorld::new();
     tw.tick_to_play(DT, 8);
-    tw.world.resource_mut::<WorldSignals>().request_quit();
+    tw.world
+        .resource_mut::<NextGameState>()
+        .set(GameStates::Quitting);
 
     tw.tick(5, DT);
 
-    assert!(matches!(
-        tw.world.resource::<GameState>().get(),
+    assert_eq!(
+        *tw.world.resource::<GameState>().get(),
         GameStates::Quitting
-    ));
-    let quits = tw
-        .sent_to_render
-        .try_iter()
-        .filter(|msg| matches!(msg, RenderMsg::Quit))
-        .count();
-    assert_eq!(quits, 1, "quit_game runs exactly once");
+    );
+    assert_eq!(render_quits(&tw), 1, "quit_game runs exactly once");
+}
+
+/// A `Quitting` request made during `Setup` (from the loading scene) applies
+/// at once: the game never reaches `Playing`.
+#[test]
+fn a_quit_requested_during_setup_applies_at_once() {
+    let mut tw = loading_scene_world(|builder| {
+        builder.add_scene_system("loading", |mut next: ResMut<NextGameState>| {
+            next.set(GameStates::Quitting)
+        })
+    });
+
+    tw.tick(2, DT);
+
+    assert_eq!(
+        *tw.world.resource::<GameState>().get(),
+        GameStates::Quitting
+    );
+    assert_eq!(render_quits(&tw), 1);
 }
 
 #[derive(EntityEvent)]
@@ -1788,6 +1811,27 @@ function on_switch_scene(scene) table.insert(LOG, "switch:" .. scene) end
         tw.world.resource::<WorldSignals>().get_string(sk::SCENE),
         Some("a")
     );
+}
+
+/// `engine.quit()` from `on_update_<scene>` quits a Lua game exactly once.
+#[cfg(feature = "lua")]
+#[test]
+fn lua_engine_quit_quits_exactly_once() {
+    let mut tw = lua_script_world(
+        "engine_quit",
+        r#"
+function on_enter_play() return "" end
+function on_update_menu(input, dt) engine.quit() end
+"#,
+    );
+
+    tw.tick(5, DT);
+
+    assert_eq!(
+        *tw.world.resource::<GameState>().get(),
+        GameStates::Quitting
+    );
+    assert_eq!(render_quits(&tw), 1, "quit_game runs exactly once");
 }
 
 /// Confirming a Lua menu item built with `:with_menu_action_set_scene`

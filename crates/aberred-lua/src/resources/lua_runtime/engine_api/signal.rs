@@ -1,5 +1,4 @@
 use super::*;
-use aberred_core::resources::signal_keys as sk;
 
 impl LuaRuntime {
     pub(in crate::resources::lua_runtime) fn register_signal_api(&self) -> LuaResult<()> {
@@ -239,12 +238,7 @@ impl LuaRuntime {
                 let data = lua
                     .app_data_ref::<LuaAppData>()
                     .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?;
-                data.push(
-                    &data.signal_commands,
-                    SignalCmd::SetFlag {
-                        key: sk::QUIT_GAME.into(),
-                    },
-                );
+                data.push(&data.signal_commands, SignalCmd::Quit);
                 Ok(())
             })?,
         )?;
@@ -252,7 +246,7 @@ impl LuaRuntime {
             &self.lua,
             &meta_fns,
             "quit",
-            "Quit the game engine (sets quit_game flag)",
+            "Quit the game engine (requests the Quitting state)",
             "base",
             &[],
             None,

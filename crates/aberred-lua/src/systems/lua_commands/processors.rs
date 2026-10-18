@@ -23,6 +23,7 @@ use aberred_core::resources::animationstore::{AnimationResource, AnimationStore}
 use aberred_core::resources::camera2d::Camera2DRes;
 use aberred_core::resources::camerafollowconfig::{CameraFollowConfig, EasingCurve, FollowMode};
 use aberred_core::resources::gameconfig::GameConfig;
+use aberred_core::resources::gamestate::{GameStates, NextGameState};
 use aberred_core::resources::group::TrackedGroups;
 use aberred_core::resources::guitheme::{
     GuiButtonSkin, GuiNinePatch, GuiProgressBarSkin, GuiTheme, GuiThemeStore,
@@ -82,14 +83,16 @@ pub fn process_audio_command(audio_cmd_writer: &mut MessageWriter<AudioCmd>, cmd
 pub struct SignalTargets<'a> {
     pub world_signals: &'a mut WorldSignals,
     pub next_scene: &'a mut NextScene,
+    pub next_game_state: &'a mut NextGameState,
 }
 
 /// Process a single signal command from Lua: update world signals, or request
-/// a scene switch.
+/// a scene switch or the quit.
 pub fn process_signal_command(targets: &mut SignalTargets, cmd: SignalCmd) {
     let SignalTargets {
         world_signals,
         next_scene,
+        next_game_state,
     } = targets;
     match cmd {
         SignalCmd::SetScalar { key, value } => {
@@ -113,6 +116,7 @@ pub fn process_signal_command(targets: &mut SignalTargets, cmd: SignalCmd) {
         // A request, not a write: this drain can run mid-tick, and the scene
         // switch poll applies it at the end of the tick.
         SignalCmd::ChangeScene { scene } => next_scene.set(scene),
+        SignalCmd::Quit => next_game_state.set(GameStates::Quitting),
         SignalCmd::ClearScalar { key } => {
             world_signals.remove_scalar(&key);
         }
@@ -655,6 +659,7 @@ mod tests {
     use aberred_core::protocol::audio::AudioCmd;
     use aberred_core::protocol::render_assets::RenderAssetCmd;
     use aberred_core::resources::animationstore::AnimationStore;
+    use aberred_core::resources::gamestate::{GameStates, NextGameState};
     use aberred_core::resources::guitheme::GuiThemeStore;
     use aberred_core::resources::postprocessshader::PostProcessShader;
     use aberred_core::resources::texturefilter::TextureFilter;
@@ -1169,6 +1174,7 @@ mod tests {
             &mut SignalTargets {
                 world_signals: &mut ws,
                 next_scene: &mut next_scene,
+                next_game_state: &mut NextGameState::default(),
             },
             SignalCmd::ChangeScene {
                 scene: "level2".into(),
@@ -1177,6 +1183,28 @@ mod tests {
 
         assert_eq!(ws.get_string(sk::SCENE), Some("menu"));
         assert_eq!(next_scene.get(), Some("level2"));
+    }
+
+    /// `engine.quit` requests `Quitting` through `NextGameState`.
+    #[test]
+    fn signal_cmd_quit_requests_quitting() {
+        use aberred_core::resources::gamestate::NextGameStates;
+        use aberred_core::resources::next_scene::NextScene;
+        let mut next_game_state = NextGameState::default();
+
+        process_signal_command(
+            &mut SignalTargets {
+                world_signals: &mut WorldSignals::default(),
+                next_scene: &mut NextScene::default(),
+                next_game_state: &mut next_game_state,
+            },
+            SignalCmd::Quit,
+        );
+
+        assert_eq!(
+            next_game_state.get(),
+            &NextGameStates::Pending(GameStates::Quitting)
+        );
     }
 
     #[test]
@@ -1239,13 +1267,13 @@ mod tests {
         assert!(animation.looped);
     }
 
-    /// Applies `cmd` to `ws` alone (a scene request lands in a throwaway `NextScene`).
+    /// Applies `cmd` to `ws` alone (scene and quit requests land in throwaway resources).
     fn apply_signal(ws: &mut WorldSignals, cmd: SignalCmd) {
-        let mut next_scene = aberred_core::resources::next_scene::NextScene::default();
         process_signal_command(
             &mut SignalTargets {
                 world_signals: ws,
-                next_scene: &mut next_scene,
+                next_scene: &mut aberred_core::resources::next_scene::NextScene::default(),
+                next_game_state: &mut NextGameState::default(),
             },
             cmd,
         );

@@ -69,6 +69,7 @@ pub use aberred_core::resources::appstate::AppState;
 pub use aberred_core::resources::camera2d::{Camera2D, Camera2DRes};
 pub use aberred_core::resources::camerafollowconfig::{CameraFollowConfig, FollowMode};
 pub use aberred_core::resources::gameconfig::GameConfig;
+pub use aberred_core::resources::gamestate::{GameStates, NextGameState};
 pub use aberred_core::resources::guitheme::{GuiButtonSkin, GuiNinePatch, GuiThemeStore};
 pub use aberred_core::resources::input::InputState;
 pub use aberred_core::resources::next_scene::NextScene;
