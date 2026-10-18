@@ -71,6 +71,7 @@ pub use aberred_core::resources::camerafollowconfig::{CameraFollowConfig, Follow
 pub use aberred_core::resources::gameconfig::GameConfig;
 pub use aberred_core::resources::guitheme::{GuiButtonSkin, GuiNinePatch, GuiThemeStore};
 pub use aberred_core::resources::input::InputState;
+pub use aberred_core::resources::next_scene::NextScene;
 pub use aberred_core::resources::pending_assets::PendingAssets;
 pub use aberred_core::resources::postprocessshader::PostProcessShader;
 pub use aberred_core::resources::screensize::ScreenSize;

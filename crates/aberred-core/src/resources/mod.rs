@@ -21,6 +21,7 @@
 //! - [`guiinputstate`] – per-frame scratch state for GUI click consumption
 //! - [`guitheme`] – theme resource for GUI rendering (nine-patch window/button skins)
 //! - [`input`] – per-frame keyboard state of keys relevant to the game
+//! - [`next_scene`] – pending scene switch request
 //! - [`screensize`] – game's internal render resolution in pixels
 //! - [`scenemanager`] – scene registry for `SceneManager`-based Rust games
 //! - [`signal_intents`] – deferred `WorldSignals` writes queued by render-side scene callbacks
@@ -52,6 +53,7 @@ pub mod input;
 pub mod input_bindings;
 pub mod loaded_assets;
 pub mod mapdata;
+pub mod next_scene;
 pub mod pending_assets;
 pub mod postprocessshader;
 pub mod rawinput;
