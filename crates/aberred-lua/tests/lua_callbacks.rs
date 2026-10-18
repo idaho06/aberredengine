@@ -219,7 +219,7 @@ fn tick_timers(world: &mut World) {
         .expect("update_timers should run");
 }
 
-/// Regular path: spawn before clone (timer callback)
+/// Regular path: spawn called before clone (timer callback)
 ///
 /// A timer callback registers a freshly spawned entity under a key, then
 /// clones it.  The clone must succeed: the spawn is called first, so the
@@ -426,7 +426,7 @@ fn timer_callback_ctx_timer_reports_the_firing_timer() {
     );
 }
 
-/// Collision path: spawn before clone (collision callback)
+/// Collision path: spawn called before clone (collision callback)
 ///
 /// A collision callback registers a freshly spawned entity then clones it.
 /// Both operations go through collision-scoped queues

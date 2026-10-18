@@ -664,6 +664,13 @@ mod tests {
             .collect()
     }
 
+    /// A template at (1, 2), registered as `"tpl"`.
+    fn spawn_registered_template(world: &mut World) -> Entity {
+        let tpl = world.spawn(MapPosition::new(1.0, 2.0)).id();
+        world.resource_mut::<WorldSignals>().set_entity("tpl", tpl);
+        tpl
+    }
+
     #[test]
     fn spawn_register_as_then_clone_in_one_script_clones() {
         let mut world = new_drain_test_world();
@@ -716,13 +723,6 @@ mod tests {
         );
 
         assert_eq!(positions_except(&mut world, tpl), vec![Vec2::new(1.0, 2.0)]);
-    }
-
-    /// A template at (1, 2), registered as `"tpl"`.
-    fn spawn_registered_template(world: &mut World) -> Entity {
-        let tpl = world.spawn(MapPosition::new(1.0, 2.0)).id();
-        world.resource_mut::<WorldSignals>().set_entity("tpl", tpl);
-        tpl
     }
 
     #[test]

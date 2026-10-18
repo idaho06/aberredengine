@@ -174,7 +174,8 @@ pub fn dispatch_custom_and_drain(
     drain_dispatch_commands(p, DrainScope::Regular);
 }
 
-/// Drain the `scope`'s command queues, in the canonical order.
+/// Drain and process the `scope`'s command queues (see
+/// `drain_and_process_effect_commands` for the order).
 pub(crate) fn drain_dispatch_commands(p: &mut LuaDispatch, scope: DrainScope) {
     drain_and_process_effect_commands(
         &p.lua_runtime,

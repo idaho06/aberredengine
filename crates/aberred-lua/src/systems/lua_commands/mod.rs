@@ -70,7 +70,7 @@ use aberred_core::protocol::audio::AudioCmd;
 use aberred_core::resources::systemsstore::SystemsStore;
 use aberred_core::resources::worldsignals::WorldSignals;
 
-/// Persistent per-frame buffers for the 6 effect command queues drained by
+/// Persistent per-frame buffers for the 7 effect command queues drained by
 /// `drain_and_process_effect_commands`.
 ///
 /// Hold one of these in a `Local<EffectCmdBufs>` on each Bevy system that
@@ -199,7 +199,7 @@ pub(crate) fn drain_and_process_effect_commands(
 
 /// The stamped command kinds merged by `drain_and_process_effect_commands`,
 /// one per `Ordered` row pair (regular and `collision_`) in `queue_registry.rs`.
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(PartialEq, Eq, PartialOrd, Ord)]
 enum Kind {
     Signal,
     Entity,
