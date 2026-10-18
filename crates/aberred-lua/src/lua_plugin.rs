@@ -554,7 +554,9 @@ pub fn process_lua_asset_commands(
 mod tests {
     use super::*;
     use aberred_core::components::animation::Animation;
+    use aberred_core::components::mapposition::MapPosition;
     use aberred_core::components::sprite::Sprite;
+    use aberred_core::math::Vec2;
     use bevy_ecs::message::Messages;
     use bevy_ecs::system::{RunSystemOnce, SystemState};
 
@@ -638,6 +640,83 @@ mod tests {
         run_drain_common_commands(&mut world);
 
         assert!(world.resource::<TrackedGroups>().groups.contains("enemies"));
+    }
+
+    /// Runs `script` through real Lua, then one [`drain_common_commands`] pass.
+    fn exec_and_drain(world: &mut World, script: &str) {
+        world
+            .get_non_send::<LuaRuntime>()
+            .unwrap()
+            .lua()
+            .load(script)
+            .exec()
+            .expect("script runs");
+        run_drain_common_commands(world);
+    }
+
+    /// Every entity's `MapPosition`, other than `except`'s.
+    fn positions_except(world: &mut World, except: Entity) -> Vec<Vec2> {
+        world
+            .query::<(Entity, &MapPosition)>()
+            .iter(world)
+            .filter(|(e, _)| *e != except)
+            .map(|(_, p)| p.pos)
+            .collect()
+    }
+
+    #[test]
+    fn spawn_register_as_then_clone_in_one_script_clones() {
+        let mut world = new_drain_test_world();
+
+        exec_and_drain(
+            &mut world,
+            "engine.spawn():with_position(1, 2):register_as('a'):build()\n\
+             engine.clone('a'):build()",
+        );
+
+        let mut positions = world.query::<&MapPosition>();
+        assert_eq!(
+            positions.iter(&world).map(|p| p.pos).collect::<Vec<_>>(),
+            vec![Vec2::new(1.0, 2.0); 2]
+        );
+    }
+
+    #[test]
+    fn set_template_position_then_clone_gives_the_clone_the_new_position() {
+        let mut world = new_drain_test_world();
+        let tpl = world.spawn(MapPosition::new(1.0, 2.0)).id();
+        world.resource_mut::<WorldSignals>().set_entity("tpl", tpl);
+
+        exec_and_drain(
+            &mut world,
+            &format!(
+                "engine.entity_set_position({}, 10, 20)\n\
+                 engine.clone('tpl'):build()",
+                tpl.to_bits()
+            ),
+        );
+
+        assert_eq!(
+            positions_except(&mut world, tpl),
+            vec![Vec2::new(10.0, 20.0)]
+        );
+    }
+
+    #[test]
+    fn set_entity_then_clone_in_one_script_clones() {
+        let mut world = new_drain_test_world();
+        let tpl = world.spawn(MapPosition::new(1.0, 2.0)).id();
+
+        exec_and_drain(
+            &mut world,
+            &format!(
+                "engine.set_entity('tpl', {})\n\
+                 engine.clone('tpl'):build()",
+                tpl.to_bits()
+            ),
+        );
+
+        assert_eq!(positions_except(&mut world, tpl), vec![Vec2::new(1.0, 2.0)]);
     }
 
     #[test]
