@@ -60,12 +60,8 @@ use rustc_hash::FxHashMap;
 mod common;
 use common::DT;
 
-/// (a) Input pipeline: a synthetic key-down sample resolves into exactly one
-/// `just_pressed` edge, consumed by the tick that observes it.
-#[test]
-fn input_edge_fires_exactly_once_and_clears() {
-    let mut tw = TestWorld::new();
-
+/// Sends one raw input sample with Space held (`Action1`, menu confirm).
+fn press_space(tw: &mut TestWorld) {
     let mut raw = RawDeviceSnapshot {
         window_w: 800,
         window_h: 600,
@@ -73,6 +69,15 @@ fn input_edge_fires_exactly_once_and_clears() {
     };
     raw.set_key(KeyboardKey::KEY_SPACE as u32);
     tw.send_input(raw);
+}
+
+/// (a) Input pipeline: a synthetic key-down sample resolves into exactly one
+/// `just_pressed` edge, consumed by the tick that observes it.
+#[test]
+fn input_edge_fires_exactly_once_and_clears() {
+    let mut tw = TestWorld::new();
+
+    press_space(&mut tw);
 
     {
         let input = tw.world.resource::<InputState>();
@@ -1181,6 +1186,33 @@ fn a_switch_requested_during_loading_does_not_repeat_after_it() {
     assert_eq!(entered_game, 1);
 }
 
+/// During Setup the loading scene is the only scene: a request for any other
+/// scene is ignored, and the engine still moves on to the initial scene.
+#[test]
+fn a_switch_to_another_scene_during_loading_is_ignored() {
+    let mut tw = loading_scene_world(|builder| {
+        builder.add_scene("other").add_scene_system(
+            "loading",
+            |mut signals: ResMut<WorldSignals>| {
+                signals.request_scene("other");
+            },
+        )
+    });
+
+    tw.tick(2, DT);
+    tw.deliver_texture_dims("player", 8, 8);
+    tw.tick(4, DT);
+
+    assert_eq!(
+        tw.world.resource::<SceneLog>().0,
+        [
+            "enter loading (entity loading) from None",
+            "exit loading -> game",
+            "enter game (entity game) from Some(\"loading\")",
+        ]
+    );
+}
+
 #[derive(Resource, Default)]
 struct LoadLog(Vec<String>);
 
@@ -1466,13 +1498,7 @@ fn menu_set_scene_switches_in_the_confirming_tick_without_lua() {
     ));
     tw.tick(1, DT);
 
-    let mut raw = RawDeviceSnapshot {
-        window_w: 800,
-        window_h: 600,
-        ..Default::default()
-    };
-    raw.set_key(KeyboardKey::KEY_SPACE as u32);
-    tw.send_input(raw);
+    press_space(&mut tw);
     tw.tick(1, DT);
 
     assert_eq!(
@@ -1715,6 +1741,38 @@ end
     tw.tick(1, DT);
 
     assert_eq!(take_lua_log(&mut tw), ["enter:idle"]);
+}
+
+/// Confirming a Lua menu item built with `:with_menu_action_set_scene`
+/// switches to that scene through the real schedule.
+#[cfg(feature = "lua")]
+#[test]
+fn lua_menu_action_set_scene_switches_the_scene() {
+    let mut tw = lua_script_world(
+        "menu_action_set_scene",
+        r#"
+function on_enter_play() return "" end
+function on_switch_scene(scene)
+    table.insert(LOG, "switch:" .. scene)
+    if scene == "menu" then
+        engine.spawn()
+            :with_menu({ {id='go', label='Go'} }, 0, 0, 'f', 12, 10, true)
+            :with_menu_action_set_scene('go', 'b')
+            :build()
+    end
+end
+"#,
+    );
+    tw.tick(1, DT);
+
+    press_space(&mut tw);
+    tw.tick(2, DT);
+
+    assert_eq!(take_lua_log(&mut tw), ["switch:menu", "switch:b"]);
+    assert_eq!(
+        tw.world.resource::<WorldSignals>().get_string(sk::SCENE),
+        Some("b")
+    );
 }
 
 /// Lua game running `script_body`, after `LOG = {}` (a global table its
