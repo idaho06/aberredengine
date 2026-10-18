@@ -278,8 +278,9 @@ pub struct RenderResources<'w> {
 /// Extra resources needed for the imgui debug panels.
 #[derive(SystemParam)]
 pub struct DebugResources<'w> {
-    /// Buffered writes queued by `GuiCallback` -- applied to `WorldSignals`
-    /// logic-side by `apply_signal_intents` at the top of the next sim tick.
+    /// Buffered writes and scene/quit requests queued by `GuiCallback` --
+    /// applied logic-side by `apply_signal_intents` at the top of the next
+    /// sim tick.
     /// `GuiCallback`/`WorldDrawCallback` reads come from `RenderResources`
     /// (`signals`, `app_state`), not a live resource -- `render_system` holds no
     /// `ResMut<WorldSignals>`/`Res<AppState>` at all.

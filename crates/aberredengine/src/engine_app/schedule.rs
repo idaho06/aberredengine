@@ -103,7 +103,8 @@ use aberred_lua::systems::lua_setup_entity::lua_setup_entity_system;
 #[non_exhaustive]
 pub enum SimSet {
     /// Drain `SignalIntents` queued by the render thread's `GuiCallback` into
-    /// `WorldSignals`, before anything this tick reads them.
+    /// `WorldSignals`, `NextScene` and `NextGameState`, before anything this
+    /// tick reads them.
     ApplyIntents,
     /// `phase_system`, in every game state: applies `Phase` transitions
     /// requested during the previous tick and triggers `PhaseEntered`/

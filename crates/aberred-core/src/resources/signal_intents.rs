@@ -1,18 +1,23 @@
-//! Deferred `WorldSignals` writes produced by render-side scene callbacks.
+//! Deferred `WorldSignals` writes and scene/quit requests produced by render-side scene
+//! callbacks.
 //!
 //! `GuiCallback` (`aberred_render::resources::scene_table`) runs inside `render_system`,
-//! which holds no live `&mut WorldSignals` — reads come from the snapshot's `SignalSnapshot`,
-//! and writes are buffered here instead, applied logic-side by `apply_signal_intents` at the
-//! top of the next sim tick.
+//! which holds no live `&mut WorldSignals`, [`NextScene`] or [`NextGameState`] — reads come from
+//! the snapshot's `SignalSnapshot`, and writes are buffered here instead, applied logic-side by
+//! `apply_signal_intents` at the top of the next sim tick.
 //!
 //! Keep the [`SignalIntent`] variant set minimal; extend on demand as real `GuiCallback` bodies
-//! need more `WorldSignals` methods.
+//! need more `WorldSignals` methods or typed requests.
 
+use crate::resources::gamestate::{GameStates, NextGameState};
+use crate::resources::next_scene::NextScene;
 use crate::resources::worldsignals::WorldSignals;
 use bevy_ecs::prelude::{Entity, Resource};
 
-/// One deferred write against [`WorldSignals`], produced by a render-side scene callback and
-/// applied logic-side by `apply_signal_intents`.
+/// One deferred write against [`WorldSignals`], or a scene/quit request, produced by a
+/// render-side scene callback and applied logic-side by `apply_signal_intents`.
+///
+/// Variants are serialized by index into replay files: append new ones at the end.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum SignalIntent {
     SetFlag(String),
@@ -21,10 +26,14 @@ pub enum SignalIntent {
     SetInteger(String, i32),
     SetString(String, String),
     SetEntity(String, u64),
+    /// Request a scene switch: sets [`NextScene`].
+    RequestScene(String),
+    /// Request a quit: sets [`NextGameState`] to [`GameStates::Quitting`].
+    RequestQuit,
 }
 
 /// Buffer of [`SignalIntent`]s queued during render (`GuiCallback`), drained into
-/// [`WorldSignals`] by `apply_signal_intents`.
+/// [`WorldSignals`], [`NextScene`] and [`NextGameState`] by `apply_signal_intents`.
 #[derive(Resource, Debug, Default)]
 pub struct SignalIntents(pub Vec<SignalIntent>);
 
@@ -66,8 +75,28 @@ impl SignalIntents {
             .push(SignalIntent::SetEntity(key.into(), entity.to_bits()));
     }
 
-    /// Drain all queued intents into `signals`, applying each in the order queued.
-    pub fn apply_to(&mut self, signals: &mut WorldSignals) {
+    /// Queue a scene switch request. Applied to [`NextScene`] at the top of the next sim tick;
+    /// the scene switch poll enters the scene later in that same tick.
+    ///
+    /// During `Setup` the switch only accepts the loading scene and drops any other target. A
+    /// deterministic game holds Setup input back to the first `Playing` tick, so there the
+    /// request applies after the initial scene is entered.
+    pub fn request_scene(&mut self, name: impl Into<String>) {
+        self.0.push(SignalIntent::RequestScene(name.into()));
+    }
+
+    /// Queue a quit request. Applied to [`NextGameState`] at the top of the next sim tick.
+    pub fn request_quit(&mut self) {
+        self.0.push(SignalIntent::RequestQuit);
+    }
+
+    /// Drain all queued intents into their targets, applying each in the order queued.
+    pub fn apply_to(
+        &mut self,
+        signals: &mut WorldSignals,
+        next_scene: &mut NextScene,
+        next_state: &mut NextGameState,
+    ) {
         for intent in self.0.drain(..) {
             match intent {
                 SignalIntent::SetFlag(key) => signals.set_flag(key),
@@ -80,6 +109,8 @@ impl SignalIntents {
                 SignalIntent::SetEntity(key, bits) => {
                     signals.set_entity(key, Entity::from_bits(bits))
                 }
+                SignalIntent::RequestScene(name) => next_scene.set(name),
+                SignalIntent::RequestQuit => next_state.set(GameStates::Quitting),
             }
         }
     }
@@ -88,6 +119,15 @@ impl SignalIntents {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::resources::signal_keys as sk;
+
+    fn targets() -> (WorldSignals, NextScene, NextGameState) {
+        (
+            WorldSignals::default(),
+            NextScene::default(),
+            NextGameState::default(),
+        )
+    }
 
     #[test]
     fn apply_to_routes_each_variant_to_the_right_domain() {
@@ -97,8 +137,8 @@ mod tests {
         intents.set_integer("score", 42);
         intents.set_string("player_name", "Ada");
 
-        let mut signals = WorldSignals::default();
-        intents.apply_to(&mut signals);
+        let (mut signals, mut next_scene, mut next_state) = targets();
+        intents.apply_to(&mut signals, &mut next_scene, &mut next_state);
 
         assert!(signals.has_flag("gui:action:save"));
         assert_eq!(signals.get_scalar("volume"), Some(0.5));
@@ -108,12 +148,12 @@ mod tests {
 
     #[test]
     fn apply_to_clears_flag() {
-        let mut signals = WorldSignals::default();
+        let (mut signals, mut next_scene, mut next_state) = targets();
         signals.set_flag("gui:action:save");
 
         let mut intents = SignalIntents::default();
         intents.remove_flag("gui:action:save");
-        intents.apply_to(&mut signals);
+        intents.apply_to(&mut signals, &mut next_scene, &mut next_state);
 
         assert!(!signals.has_flag("gui:action:save"));
     }
@@ -124,10 +164,35 @@ mod tests {
         let entity = Entity::from_bits(7);
         intents.set_entity("selected", entity);
 
-        let mut signals = WorldSignals::default();
-        intents.apply_to(&mut signals);
+        let (mut signals, mut next_scene, mut next_state) = targets();
+        intents.apply_to(&mut signals, &mut next_scene, &mut next_state);
 
         assert_eq!(signals.get_entity("selected"), Some(entity));
+    }
+
+    #[test]
+    fn request_scene_sets_next_scene_and_leaves_signals_alone() {
+        let mut intents = SignalIntents::default();
+        intents.request_scene("b");
+
+        let (mut signals, mut next_scene, mut next_state) = targets();
+        intents.apply_to(&mut signals, &mut next_scene, &mut next_state);
+
+        assert_eq!(next_scene.get(), Some("b"));
+        assert_eq!(signals.get_string(sk::SCENE), None);
+        assert!(!next_state.quit_requested());
+    }
+
+    #[test]
+    fn request_quit_sets_next_game_state_to_quitting() {
+        let mut intents = SignalIntents::default();
+        intents.request_quit();
+
+        let (mut signals, mut next_scene, mut next_state) = targets();
+        intents.apply_to(&mut signals, &mut next_scene, &mut next_state);
+
+        assert!(next_state.quit_requested());
+        assert!(!next_scene.is_pending());
     }
 
     #[test]
@@ -137,8 +202,8 @@ mod tests {
         intents.set_flag("b");
         assert_eq!(intents.0.len(), 2);
 
-        let mut signals = WorldSignals::default();
-        intents.apply_to(&mut signals);
+        let (mut signals, mut next_scene, mut next_state) = targets();
+        intents.apply_to(&mut signals, &mut next_scene, &mut next_state);
 
         assert!(intents.0.is_empty());
     }

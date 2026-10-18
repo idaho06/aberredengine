@@ -72,8 +72,9 @@ pub enum LogicMsg {
     /// `Signals` clone. Sent on change only.
     OverlayConfig(DebugOverlayConfig),
     /// `SignalIntents` drained from the render world after `render_system`
-    /// each frame (queued by `GuiCallback`); applied to `WorldSignals` by
-    /// `apply_signal_intents` at the top of the next sim tick.
+    /// each frame (queued by `GuiCallback`); applied to `WorldSignals`,
+    /// `NextScene` and `NextGameState` by `apply_signal_intents` at the top
+    /// of the next sim tick.
     SignalIntents(Vec<SignalIntent>),
     /// The window is closing; the logic thread breaks its loop, shuts down
     /// audio, and joins.

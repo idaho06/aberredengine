@@ -37,7 +37,11 @@ pub const REPLAY_MAGIC: [u8; 4] = *b"ABRR";
 /// during them, and in deterministic mode their input is held for the first
 /// `Playing` tick. A v4 file starts with `Setup` ticks and numbers its
 /// checkpoints from them, so its entries would land one or more ticks off.
-pub const REPLAY_FORMAT_VERSION: u32 = 5;
+///
+/// `6`: `SignalIntent` gains `RequestScene`/`RequestQuit`, and a raw `"scene"`
+/// string or `"switch_scene"` flag intent no longer switches scenes. A v5
+/// file that switched scenes through raw intents would diverge on playback.
+pub const REPLAY_FORMAT_VERSION: u32 = 6;
 
 /// A stable, version-controlled FNV-1a-style hash mixer.
 ///

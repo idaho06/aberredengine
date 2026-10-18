@@ -504,6 +504,54 @@ fn record_replay_roundtrip_matches_live_hash_trail() {
     );
 }
 
+/// A `SignalIntent::RequestScene` survives a replay round-trip and switches
+/// the scene on playback, as it did live.
+#[test]
+fn a_replayed_scene_request_intent_switches_the_scene() {
+    fn scene_after(ticks: &[TickInput]) -> (Option<String>, u64) {
+        let mut tw = TestWorldBuilder::new()
+            .deterministic(3)
+            .add_scene("a")
+            .add_scene("b")
+            .initial_scene("a")
+            .build()
+            .expect("build should succeed");
+        tw.tick_to_play(DT, 8);
+        for ti in ticks {
+            tw.apply_tick_input(ti, DT);
+        }
+        let scene = tw
+            .world
+            .resource::<WorldSignals>()
+            .get_string(sk::SCENE)
+            .map(str::to_owned);
+        (scene, hash_world_state(&tw.world))
+    }
+
+    let ticks = vec![
+        TickInput {
+            tick: 0,
+            intents: vec![SignalIntent::RequestScene("b".into())],
+            ..Default::default()
+        },
+        TickInput {
+            tick: 1,
+            ..Default::default()
+        },
+    ];
+    let live = scene_after(&ticks);
+    assert_eq!(live.0.as_deref(), Some("b"));
+
+    let path = temp_replay_path("scene_request");
+    write_tick_inputs_to_replay(&path, placeholder_header(3), &ticks)
+        .expect("write_tick_inputs_to_replay should succeed");
+    let (_header, read_ticks) = read_tick_inputs_from_replay(&path, ticks.len());
+    let _ = std::fs::remove_file(&path);
+
+    assert_eq!(read_ticks, ticks);
+    assert_eq!(scene_after(&read_ticks), live);
+}
+
 #[test]
 fn codec_roundtrip_preserves_f32_bits() {
     let sample = RawDeviceSnapshot {

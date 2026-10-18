@@ -18,9 +18,10 @@ use aberred_core::systems::scene_dispatch::WorldDrawCallback;
 ///   is drawn, at window resolution (not render-target resolution).
 /// - Called whether or not debug mode (F11) is active.
 /// - Interaction results must be communicated via [`SignalIntents`] (action flags,
-///   pending edit values); queued intents are applied to `WorldSignals` at the top
-///   of the next sim tick by `apply_signal_intents` (`SimSet::ApplyIntents`) —
-///   one tick of latency, since this callback holds no live `&mut WorldSignals`.
+///   pending edit values, `request_scene`/`request_quit`); queued intents are applied to
+///   `WorldSignals`, `NextScene` and `NextGameState` at the top of the next sim tick by
+///   `apply_signal_intents` (`SimSet::ApplyIntents`) — one tick of latency, since this
+///   callback holds no live logic-world resources.
 ///   `AppState` is read-only from the GUI's perspective — it's a snapshot clone,
 ///   not the live resource.
 /// - `TextureStore` and `FontStore` are read-only; mutations go through observer events.
@@ -36,7 +37,8 @@ pub struct GuiCtx<'a> {
     pub ui: &'a ImguiUi,
     /// The latest snapshot of the logic world's signals.
     pub signals: &'a SignalSnapshot,
-    /// Queued writes back to `WorldSignals`, applied at the start of the next sim tick.
+    /// Queued `WorldSignals` writes and scene/quit requests, applied at the start of the next
+    /// sim tick.
     pub intents: &'a mut SignalIntents,
     /// Loaded textures, e.g. for image previews.
     pub textures: &'a TextureStore,
