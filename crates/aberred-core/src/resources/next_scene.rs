@@ -1,10 +1,12 @@
 //! The pending scene switch request.
 //!
 //! [`NextScene`] is to scenes what
-//! [`NextGameState`](crate::resources::gamestate::NextGameState) is to game
+//! [`NextGameState`] is to game
 //! states: a requester writes the target, and the scene switch takes it.
 
 use bevy_ecs::prelude::Resource;
+
+use crate::resources::gamestate::NextGameState;
 
 /// Request to switch to a scene, by name.
 ///
@@ -33,11 +35,18 @@ impl NextScene {
     pub fn is_pending(&self) -> bool {
         self.0.is_some()
     }
+
+    /// Whether a scene switch poll runs the switch now: a switch is requested
+    /// and no quit is pending (a quit wins over a scene request).
+    pub fn switch_due(&self, next_state: &NextGameState) -> bool {
+        self.is_pending() && !next_state.quit_requested()
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::resources::gamestate::GameStates;
 
     #[test]
     fn take_returns_the_requested_scene_once() {
@@ -60,5 +69,18 @@ mod tests {
         next.set("a");
         next.set("b");
         assert_eq!(next.take().as_deref(), Some("b"));
+    }
+
+    #[test]
+    fn a_switch_is_due_for_a_request_unless_a_quit_is_pending() {
+        let mut next = NextScene::default();
+        let mut state = NextGameState::default();
+        assert!(!next.switch_due(&state));
+
+        next.set("b");
+        assert!(next.switch_due(&state));
+
+        state.set(GameStates::Quitting);
+        assert!(!next.switch_due(&state));
     }
 }

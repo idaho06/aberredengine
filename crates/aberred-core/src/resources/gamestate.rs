@@ -94,8 +94,9 @@ impl NextGameState {
         // The system `check_pending_state` will handle the state change event emission.
     }
 
-    /// Whether a transition to [`GameStates::Quitting`] is requested. Both
-    /// scene switch polls skip the switch then: the quit wins.
+    /// Whether a transition to [`GameStates::Quitting`] is requested. A
+    /// pending quit wins over a scene request
+    /// (`NextScene::switch_due`).
     pub fn quit_requested(&self) -> bool {
         self.next == NextGameStates::Pending(GameStates::Quitting)
     }

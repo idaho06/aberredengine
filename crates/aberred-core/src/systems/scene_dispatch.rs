@@ -288,7 +288,7 @@ pub fn scene_switch_poll(
     next_state: Res<NextGameState>,
     systems_store: Res<SystemsStore>,
 ) {
-    if next_scene.is_pending() && !next_state.quit_requested() {
+    if next_scene.switch_due(&next_state) {
         commands.run_system(
             *systems_store
                 .get(hook_keys::SWITCH_SCENE)

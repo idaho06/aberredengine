@@ -1813,6 +1813,39 @@ function on_switch_scene(scene) table.insert(LOG, "switch:" .. scene) end
     );
 }
 
+/// A GUI `request_scene` intent switches a Lua game's scene on its delivery
+/// tick, through the Lua poll at the end of `update`.
+#[cfg(feature = "lua")]
+#[test]
+fn gui_scene_request_switches_a_lua_game() {
+    let mut tw = lua_script_world(
+        "gui_scene_request",
+        r#"
+function on_enter_play()
+    engine.change_scene("a")
+    return ""
+end
+function on_switch_scene(scene) table.insert(LOG, "switch:" .. scene) end
+"#,
+    );
+    tw.tick(1, DT);
+    assert_eq!(take_lua_log(&mut tw), ["switch:a"]);
+
+    tw.apply_tick_input(
+        &TickInput {
+            intents: vec![SignalIntent::RequestScene("b".into())],
+            ..Default::default()
+        },
+        DT,
+    );
+
+    assert_eq!(take_lua_log(&mut tw), ["switch:b"]);
+    assert_eq!(
+        tw.world.resource::<WorldSignals>().get_string(sk::SCENE),
+        Some("b")
+    );
+}
+
 /// `engine.quit()` from `on_update_<scene>` quits a Lua game exactly once.
 #[cfg(feature = "lua")]
 #[test]

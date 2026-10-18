@@ -436,14 +436,12 @@ pub fn update(
         &mut gui_theme_warn_cache,
     );
 
-    // A quit requested this tick wins over a scene request.
-    if scene_state.next_game_state.quit_requested() {
-        return;
-    }
-
     // Run the scene switch for a request made this tick (engine.change_scene,
-    // a menu's SetScene, a Rust system)
-    if scene_state.next_scene.is_pending() {
+    // a menu's SetScene, a GUI intent, a Rust system), unless a quit is pending.
+    if scene_state
+        .next_scene
+        .switch_due(&scene_state.next_game_state)
+    {
         debug!("Scene switch requested.");
         commands.run_system(
             *scene_state
@@ -1129,6 +1127,25 @@ mod tests {
             !world.resource::<NextScene>().is_pending(),
             "update() consumes the request the same tick it was made"
         );
+    }
+
+    /// A quit requested in the same tick as a scene request wins: `update`
+    /// runs no scene switch on the way out.
+    #[test]
+    fn update_yields_the_scene_switch_to_a_pending_quit() {
+        let mut world = new_update_test_world();
+        set_active_scene(&mut world, "level1");
+        register_switch_scene_hook(&mut world);
+        define_level1_and_level2_lua_callbacks(
+            &world,
+            "engine.change_scene('level2'); engine.quit()",
+        );
+        record_switched_scene(&world);
+
+        world.run_system_once(update).unwrap();
+
+        assert_eq!(switched_to(&world), None);
+        assert!(world.resource::<NextGameState>().quit_requested());
     }
 
     /// The bug this guards against: a menu/GUI-click observer fires from
