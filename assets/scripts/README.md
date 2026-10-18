@@ -118,7 +118,7 @@ end
 
 -- Called when entering Playing game state
 function on_enter_play()
-    engine.set_string("scene", "menu")
+    engine.change_scene("menu")        -- the first scene (default: "menu")
     return "Hello from Lua!"
 end
 
@@ -265,10 +265,12 @@ Shared assets (fonts, cursor, shaders) are loaded without prefix in `load_common
 `on_update_<scene>` runs every frame. Avoid spawning entities here — prefer
 `M.spawn()`, phase callbacks, or collision callbacks instead.
 
-**Global Flags**:
+**Engine signals** (the scene switch writes them; writing them switches nothing):
 
-- `"switch_scene"` - Set this flag to trigger a scene change (cleared by engine after processing). Prefer using `engine.change_scene(name)`, which records the target scene and sets this flag; the engine applies the switch when it processes the flag.
-- `"quit_game"` - Set this flag to exit the game (cleared by engine after processing). Prefer using `engine.quit()` instead.
+- `"scene"` - The active scene's name.
+- `"previous_scene"` - The scene active before the last switch (unset until the first switch away from a scene).
+
+Request scenes with `engine.change_scene(name)` and quit with `engine.quit()`.
 
 ### 3. Callback Command Processing
 
@@ -1483,7 +1485,8 @@ Play sound when selection changes (requires `:with_menu()`).
 
 #### `:with_menu_action_set_scene(item_id, scene)`
 
-Define scene switch action (requires `:with_menu()`).
+Define scene switch action (requires `:with_menu()`). Confirming the item requests the scene like
+`engine.change_scene`: the switch runs at the end of the tick.
 
 ```lua
 :with_menu_action_set_scene("start", "level01")
@@ -2724,8 +2727,8 @@ local scene_name = engine.get_string("scene")
 Check if boolean flag is set.
 
 ```lua
-if engine.has_flag("switch_scene") then
-    -- Scene transition requested
+if engine.has_flag("game_paused") then
+    -- Pause menu is open
 end
 ```
 
@@ -2813,7 +2816,7 @@ engine.set_integer("lives", 3)
 Set string world signal.
 
 ```lua
-engine.set_string("scene", "menu")
+engine.set_string("player_name", "Ada")
 engine.set_string("current_level", "level01")
 ```
 
@@ -2822,7 +2825,7 @@ engine.set_string("current_level", "level01")
 Set boolean flag to true.
 
 ```lua
-engine.set_flag("switch_scene")
+engine.set_flag("boss_defeated")
 engine.set_flag("game_paused")
 ```
 
@@ -2831,7 +2834,7 @@ engine.set_flag("game_paused")
 Clear boolean flag (set to false).
 
 ```lua
-engine.clear_flag("switch_scene")
+engine.clear_flag("boss_defeated")
 engine.clear_flag("game_paused")
 ```
 
@@ -2888,22 +2891,17 @@ engine.remove_entity("special_enemy")
 
 #### `engine.change_scene(scene_name)`
 
-Requests a switch to a new scene. The target scene is recorded and the `switch_scene` flag is set; the engine performs the switch at the end of the current tick, after this tick's `on_update_<scene>` has run, updating the `scene` string and calling `on_switch_scene`. The new scene's `on_update_<scene>` starts on the next tick.
+Requests a switch to a new scene. The engine performs the switch at the end of the current tick, after this tick's `on_update_<scene>` has run, updating the `scene` and `previous_scene` strings and calling `on_switch_scene`. The new scene's `on_update_<scene>` starts on the next tick. The last request in a tick wins, and during play a quit requested in the same tick wins over it.
+
+Called from `on_enter_play`, it picks the first scene; without a request the first scene is `"menu"`. The first scene is always entered after `on_enter_play`, even if it also calls `engine.quit()`.
 
 ```lua
 engine.change_scene("level01")
 ```
 
-Setting the signals manually still works but applies the scene string immediately, before the switch itself:
-
-```lua
-engine.set_string("scene", "level01")
-engine.set_flag("switch_scene")
-```
-
 #### `engine.quit()`
 
-Convenience function to quit the game engine. Equivalent to `engine.set_flag("quit_game")`.
+Requests a clean shutdown. During play, a scene switch requested in the same tick does not run.
 
 ```lua
 engine.quit()
@@ -6257,11 +6255,11 @@ end
    local player_id = engine.get_entity("player")
    ```
 
-3. **Use world signals for global state** - Score, lives, scene name, etc.
+3. **Use world signals for global state** - Score, lives, current level, etc.
 
    ```lua
    engine.set_integer("score", 0)
-   engine.set_string("scene", "menu")
+   engine.set_string("current_level", "level01")
    ```
 
 4. **Track groups for counting** - Enable tracking before using `get_group_count()`.

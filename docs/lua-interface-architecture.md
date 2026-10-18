@@ -105,7 +105,7 @@ crates/aberred-lua/src/resources/lua_runtime/
 Signal key constants live in `aberred-core`, since Rust-side gameplay code that has no Lua dependency also reads/writes them:
 
 ```text
-crates/aberred-core/src/resources/signal_keys.rs   # pub const SWITCH_SCENE, QUIT_GAME, SCENE, MOVING, SPEED_SQ, etc.
+crates/aberred-core/src/resources/signal_keys.rs   # pub const SCENE, PREVIOUS_SCENE, MOVING, SPEED_SQ, etc.
 ```
 
 Command processing lives in a separate submodule:
@@ -199,7 +199,7 @@ Each command type is a Rust enum that encapsulates all data needed to perform an
 ```lua
 -- In a Lua script
 engine.entity_set_velocity(ball_id, new_vx, new_vy)
-engine.set_flag("switch_scene")
+engine.set_flag("game_paused")
 ```
 
 ### Step 2: Command is Queued
@@ -295,8 +295,8 @@ The previous section covers how Lua calls *into* Rust. This section covers the o
 
 1. **`setup()`** — runs once at startup. Calls `on_setup()` if defined, drains `asset_commands` (translating each into an `AudioCmd` or a `RenderAssetCmd`), drains `animation_commands` into a fresh `AnimationStore` resource, then transitions `GameState` to `Playing`.
 2. **`enter_play()`** — runs once, immediately after `setup()`. Calls `on_enter_play()` if defined, drains `signal_commands`/`group_commands` (world signals aren't touched by `setup()` — Lua is expected to seed them here), updates the tracked-groups cache, then runs the `switch_scene` system hook to spawn the initial scene.
-3. **`switch_scene()`** — runs whenever `WorldSignals`' `switch_scene` flag is taken (set by `engine.change_scene()`), both from `enter_play()`'s initial call and from `update()` mid-game. It: clears every `clear`-policy command queue and the cached-function-handle table (`clear_all_commands()`/`clear_function_cache()` — callbacks are re-injected per scene, so stale closures must not survive the switch), despawns every non-`Persistent` `CleanableEntity`, clears non-persistent `WorldSignals` entity registrations and group counts, applies any pending `engine.change_scene` target to the `scene` string (the target is recorded as `WorldSignals`' pending scene when the command drains — a mid-tick observer drain must not flip the scene before the current tick's `on_update_<scene>` runs), refreshes the signal cache so `on_switch_scene` observes the post-clear state (not a stale pre-clear snapshot), calls `on_switch_scene(scene_name)`, then drains the same "common" queue set `update()` does (`drain_common_commands`, below).
-4. **`update()`** — runs once per sim tick. Refreshes the signal/gameconfig/camera/bindings caches, resolves the pooled input table, calls `on_update_<scene>(input, dt)` (the callback name is cached as `"on_update_" .. scene` and only rebuilt when the scene string actually changes), drains the common queues, then checks the `quit_game`/`switch_scene` flags Lua may have just set. A same-tick `engine.change_scene()` call runs `switch_scene()` synchronously before `update()` returns — there is no one-tick lag between requesting a switch and it taking effect. The target only becomes the `scene` string when `switch_scene()` applies it, so a request queued by a mid-tick observer (menu/GUI-click/timer/phase callback) still lets this tick's `on_update_<old_scene>` run first; the new scene's update starts the next tick.
+3. **`switch_scene()`** — runs from `enter_play()`'s initial call and from `update()` whenever a scene request is pending in `NextScene` (`engine.change_scene()`, a menu's `SetScene`, a GUI intent, a Rust system). It: clears every `clear`-policy command queue and the cached-function-handle table (`clear_all_commands()`/`clear_function_cache()` — callbacks are re-injected per scene, so stale closures must not survive the switch), despawns every non-`Persistent` `CleanableEntity`, clears non-persistent `WorldSignals` entity registrations and group counts, takes the `NextScene` target (no request: `sk::DEFAULT_SCENE`) and publishes it as `LuaActiveScene` and the `scene` string (after the first switch, the scene it left becomes `previous_scene`), refreshes the signal cache so `on_switch_scene` observes the post-clear state (not a stale pre-clear snapshot), calls `on_switch_scene(scene_name)`, then drains the same "common" queue set `update()` does (`drain_common_commands`, below).
+4. **`update()`** — runs once per sim tick. Refreshes the signal/gameconfig/camera/bindings caches, resolves the pooled input table, calls `on_update_<scene>(input, dt)` for the `LuaActiveScene` (the callback name is cached as `"on_update_" .. scene` and only rebuilt when the active scene changes; a script write to the `scene` string redirects nothing), drains the common queues, then runs `switch_scene()` if `NextScene::switch_due` holds (a scene request is pending and no quit is; a quit wins). `update()` queues `switch_scene()` with `commands.run_system`, so it runs when `update()`'s commands apply, in the same tick — there is no one-tick lag between requesting a switch and it taking effect. A request made earlier in the tick (menu/GUI-click/timer/phase callback) still lets this tick's `on_update_<old_scene>` run first; the new scene's update starts the next tick.
 
 `update()` and `switch_scene()` share `drain_common_commands()`, which drains, in order: `animation_commands` first (so a same-batch `entity_set_animation`/`entity_restart_animation` can resolve a texture key registered earlier in the same batch), the 7 regular effect queues (via `drain_and_process_effect_commands`: signal/entity/spawn/clone in call order, then audio, camera, phase), `render_commands` + `gui_theme_commands` (merged into one `GuiThemeStore` clone-and-write-back, only performed when at least one was non-empty — this avoids marking `GuiThemeStore` "changed" on frames with no theme edits — and re-validated afterward for every staged theme's missing `normal`/`fill` skin), `gameconfig_commands`, `camera_follow_commands`, `input_commands`, and `group_commands`.
 
@@ -415,7 +415,7 @@ This section is meant to stay in sync with the actual implementation.
 
 - `change_scene`, `quit`
 
-Both are registered in `engine_api/signal.rs`: `change_scene(scene_name)` queues a deferred switch — the target is recorded as `WorldSignals`' pending scene plus the `switch_scene` flag, and the `switch_scene` system applies it to the `scene` string; `quit()` sets the `quit_game` flag. See [Signal Keys Vocabulary](#signal-keys-vocabulary).
+Both are registered in `engine_api/signal.rs`: `change_scene(scene_name)` queues `SignalCmd::ChangeScene`, which sets `NextScene` when it drains; the scene switch runs at the tail of `update()` (see [Scene Lifecycle](#scene-lifecycle) step 4). `quit()` queues `SignalCmd::Quit`, which sets `NextGameState` to `Quitting`. Both reach their targets through `SignalTargets` (`processors.rs`).
 
 #### Global Signals (read)
 
@@ -797,17 +797,19 @@ Spawn and clone commands are processed via `process_spawn_command()` and `proces
 Engine-internal signal keys (WorldSignals flags/scalars/strings used by the engine itself) are centralized in `crates/aberred-core/src/resources/signal_keys.rs` as `pub const` values:
 
 ```rust
-pub const SWITCH_SCENE: &str = "switch_scene";  // flag: set by engine.change_scene() to request a scene change
-pub const QUIT_GAME:    &str = "quit_game";      // flag: set by engine.quit() to request a clean shutdown
-pub const SCENE:        &str = "scene";          // string: name of the currently active scene
+pub const SCENE:        &str = "scene";          // string output: name of the active scene, written by the scene switch
+pub const PREVIOUS_SCENE: &str = "previous_scene"; // string output: the scene active before the last switch
 pub const ANIMATION_ENDED: &str = "animation_ended"; // entity Signals flag: non-looped animation reached last frame
 pub const MOVING:       &str = "moving";         // entity Signals flag: set by `movement` while velocity is non-zero
 pub const SPEED_SQ:     &str = "speed_sq";       // entity Signals scalar: squared speed, published each frame by `movement`
-pub const DEFAULT_SCENE:   &str = "menu";        // fallback scene name when SCENE is unset
+pub const MAIN_SCENE:    &str = "main";          // the implicit scene of a Rust game with no .add_scene()
+pub const DEFAULT_SCENE:   &str = "menu";        // the scene a Lua game enters when nothing was requested
 pub const GROUP_COUNT_PREFIX: &str = "group_count:"; // integer key prefix
 ```
 
-All callers import with `use aberred_core::resources::signal_keys as sk;` (or `crate::resources::signal_keys` from within `aberred-core` itself) and reference `sk::SWITCH_SCENE` etc. This gives a single rename point and compile-time typo detection. **Never write these as bare string literals in new code.**
+All callers import with `use aberred_core::resources::signal_keys as sk;` (or `crate::resources::signal_keys` from within `aberred-core` itself) and reference `sk::SCENE` etc. This gives a single rename point and compile-time typo detection. **Never write these as bare string literals in new code.**
+
+Scene and quit requests are not signals: they go through `NextScene` and `NextGameState` (`engine.change_scene()` / `engine.quit()`).
 
 ---
 
@@ -1371,10 +1373,10 @@ Always import and use `aberred_core::resources::signal_keys as sk` instead of ba
 ```rust
 // Good
 use aberred_core::resources::signal_keys as sk;
-world_signals.take_flag(sk::SWITCH_SCENE);
+world_signals.get_string(sk::SCENE);
 
 // Bad — no compile-time check, silently wrong on typo
-world_signals.take_flag("switch_scene");
+world_signals.get_string("scene");
 ```
 
 ### 6. Regenerate Stubs After API Changes
