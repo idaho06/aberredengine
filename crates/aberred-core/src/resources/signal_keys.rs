@@ -6,7 +6,9 @@
 /// Flag: set by `engine.quit()` to request a clean engine shutdown.
 pub const QUIT_GAME: &str = "quit_game";
 
-/// String: holds the name of the currently active scene.
+/// String: the name of the active scene, an output written by both scene
+/// switch systems. Writing it switches nothing; request a scene through
+/// `NextScene` (`engine.change_scene` in Lua).
 pub const SCENE: &str = "scene";
 
 /// String: holds the name of the scene active before the last scene switch.
