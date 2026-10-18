@@ -8,7 +8,8 @@
 /// `NextScene` (`engine.change_scene` in Lua).
 pub const SCENE: &str = "scene";
 
-/// String: holds the name of the scene active before the last scene switch.
+/// String: the scene active before the last scene switch, an output written by
+/// both scene switch systems (unset until the first switch away from a scene).
 pub const PREVIOUS_SCENE: &str = "previous_scene";
 
 /// Flag: set on an entity's `Signals` component when its non-looped animation

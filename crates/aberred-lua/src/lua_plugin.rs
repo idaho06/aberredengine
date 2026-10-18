@@ -455,7 +455,8 @@ pub fn update(
 /// Processes scene switching: despawns old entities, enters the requested
 /// scene ([`NextScene`], else [`sk::DEFAULT_SCENE`]) as [`LuaActiveScene`] and
 /// the published `scene` string, calls Lua callbacks, and processes all queued
-/// commands for the new scene.
+/// commands for the new scene. Every switch after the first publishes the
+/// scene it left as `previous_scene`, as the core switch does.
 #[allow(clippy::too_many_arguments, private_interfaces)]
 pub fn switch_scene(
     mut commands: Commands,
@@ -468,6 +469,7 @@ pub fn switch_scene(
     gui_theme_store: Res<GuiThemeStore>,
     mut gui_theme_warn_cache: ResMut<GuiThemeWarnCache>,
     mut contacts: ResMut<CollisionContacts>,
+    mut entered_a_scene: Local<bool>,
 ) {
     let lua_runtime = &scripting.lua_runtime;
     debug!("switch_scene: System called!");
@@ -500,6 +502,11 @@ pub fn switch_scene(
         .next_scene
         .take()
         .unwrap_or_else(|| sk::DEFAULT_SCENE.to_owned());
+    if std::mem::replace(&mut *entered_a_scene, true) {
+        scene_state
+            .world_signals
+            .set_string(sk::PREVIOUS_SCENE, &scene_state.active_scene.0);
+    }
     scene_state.world_signals.set_string(sk::SCENE, &scene);
     scene_state.active_scene.0.clone_from(&scene);
 
@@ -1127,6 +1134,33 @@ mod tests {
             !world.resource::<NextScene>().is_pending(),
             "update() consumes the request the same tick it was made"
         );
+    }
+
+    /// Like the core switch, a real switch publishes the scene it left as
+    /// `previous_scene`; the first entry has none.
+    #[test]
+    fn switch_scene_publishes_the_scene_it_left() {
+        let mut world = new_drain_test_world();
+        record_switched_scene(&world);
+        let switch = world.register_system(switch_scene);
+        // Like the engine's hook systems, it survives the teardown it runs.
+        world
+            .entity_mut(switch.entity())
+            .insert(aberred_core::components::persistent::Persistent);
+        let previous = |world: &World| {
+            world
+                .resource::<WorldSignals>()
+                .get_string(sk::PREVIOUS_SCENE)
+                .map(str::to_owned)
+        };
+
+        world.resource_mut::<NextScene>().set("level1");
+        world.run_system(switch).unwrap();
+        assert_eq!(previous(&world), None);
+
+        world.resource_mut::<NextScene>().set("level2");
+        world.run_system(switch).unwrap();
+        assert_eq!(previous(&world).as_deref(), Some("level1"));
     }
 
     /// A quit requested in the same tick as a scene request wins: `update`
