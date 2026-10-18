@@ -891,7 +891,7 @@ use aberredengine::core::{
         screenposition::ScreenPosition,
         zindex::ZIndex,
     },
-    resources::guitheme::*,
+    resources::{guitheme::*, next_scene::NextScene},
     systems::GameCtx,
 };
 use bevy_ecs::hierarchy::ChildOf;
@@ -953,8 +953,8 @@ fn scene_enter(ctx: &mut GameCtx) {
     )).observe(on_retreat_clicked);
 }
 
-fn on_retreat_clicked(_ev: On<GuiClicked>, mut signals: ResMut<WorldSignals>) {
-    signals.request_scene("menu");
+fn on_retreat_clicked(_ev: On<GuiClicked>, mut next_scene: ResMut<NextScene>) {
+    next_scene.set("menu");
 }
 
 // ── Engine setup ─────────────────────────────────────────────────────────────

@@ -186,8 +186,8 @@ Setup ──→ Playing ──→ Quitting
 
 1. **Setup** — The engine calls the `setup` hook once, on the logic thread. Load assets here (textures, fonts, sounds, shaders, animations; see [Section 6](#6-loading-assets)). Omit `.on_setup()` if you have nothing to load. With `.loading_scene(name)`, that scene is entered right after the hook and stays active until Setup ends. Once the hook has run, the engine moves to `Playing` on its own, as soon as every load queued so far has been answered (see [Waiting for loads](#waiting-for-loads)); a failed load counts as answered. A hook that requests `Playing` itself waits the same way. A hook that requests another state through `ResMut<NextGameState>` (e.g. `GameStates::Quitting`) gets it at once.
 2. **Playing** — The engine enters the initial scene (triggering `SceneEntered`) and runs your systems every sim tick.
-3. **Scene switches** — `WorldSignals::request_scene(name)` or a `MenuAction::SetScene` menu item runs the exit→enter sequence; see [Triggering scene transitions](#triggering-scene-transitions).
-4. **Quitting** — When the game state becomes `GameStates::Quitting` (via `NextGameState::set(GameStates::Quitting)`, `WorldSignals::request_quit()`, or a `MenuAction::QuitGame` menu item) or the window is closed, the engine shuts down. Request it from any system or observer through `ResMut<WorldSignals>` or `ResMut<NextGameState>`.
+3. **Scene switches** — A request through `NextScene::set(name)`, a `MenuAction::SetScene` menu item or a GUI callback's `intents.request_scene(name)` runs the exit→enter sequence at the end of the tick; see [Triggering scene transitions](#triggering-scene-transitions).
+4. **Quitting** — When the game state becomes `GameStates::Quitting` (via `NextGameState::set(GameStates::Quitting)`, a `MenuAction::QuitGame` menu item or a GUI callback's `intents.request_quit()`) or the window is closed, the engine shuts down. Request it from any system or observer through `ResMut<NextGameState>`.
 
 ---
 
@@ -378,10 +378,13 @@ fn on_tile_selected(trigger: On<TileSelectedEvent>, /* params */) {
 
 ### Triggering scene transitions
 
-There are two ways to switch scenes:
+Every scene switch is a request through the `NextScene` resource (in the prelude):
 
-- **From a menu:** a `MenuAction::SetScene("level01")` item; the menu selection observer runs the switch itself.
-- **From a system or observer:** call `WorldSignals::request_scene(name)`. It sets the target scene name (`signal_keys::SCENE`) and the `signal_keys::SWITCH_SCENE` flag. The engine's `scene_switch_poll` system (registered automatically for every Rust game) picks up the flag in `SimSet::Drain`, late in the tick after your systems, and runs the switch; a flag set after that point is picked up on the next tick.
+- **From a system or observer:** take `ResMut<NextScene>` and call `.set(name)`.
+- **From a menu:** a `MenuAction::SetScene("level01")` item sets `NextScene` when it is confirmed.
+- **From a GUI callback:** `ctx.intents.request_scene(name)`; it reaches `NextScene` at the start of the next sim tick.
+
+The engine's `scene_switch_poll` system (registered automatically for every Rust game) checks `NextScene` in `SimSet::Drain`, late in the tick after your systems, and runs `scene_switch_system`, a one-shot system registered in `SystemsStore` under the key `"switch_scene"`; a request made after that point is picked up on the next tick. The last request before the poll wins. A quit requested in the same tick wins over a scene request: the game quits without switching.
 
 ```rust
 fn update(mut next_scene: ResMut<NextScene>) {
@@ -391,7 +394,7 @@ fn update(mut next_scene: ResMut<NextScene>) {
 }
 ```
 
-Both paths run `scene_switch_system`, a one-shot system registered in `SystemsStore` under the key `"switch_scene"`. After `request_scene`, the new scene's `.add_scene_system()` systems start on the next sim tick. A menu selection is handled before the tick's systems run, so after `SetScene` they run in that same tick.
+The new scene's `.add_scene_system()` systems start on the next sim tick.
 
 > **Note:** a mistyped scene name only logs an error ("No scene registered for '…'", followed by the list of registered scenes), so it is easy to miss. Prefer constants over repeated string literals.
 
@@ -399,13 +402,13 @@ Both paths run `scene_switch_system`, a one-shot system registered in `SystemsSt
 
 When the `scene_switch_system` runs, it performs these steps in order:
 
-1. **Read and check the target scene** — reads `WorldSignals["scene"]` for the target scene name (defaults to `"menu"` if unset). If no scene is registered under that name, the system logs "No scene registered" and returns: nothing below runs, and the current scene keeps running untouched
+1. **Take and check the target scene** — takes the requested name from `NextScene`. If no scene is registered under that name, the system logs "No scene registered" and returns: nothing below runs, and the current scene keeps running untouched. The request is consumed either way; it is not retried
 2. **Forget collision contacts, then trigger `SceneExited`** — if a scene was active, the touching pairs are forgotten without a `CollisionEnded` (see [Contact events](#contact-events)), then its exit observers run while its entities, `WorldSignals` entity registrations and group counts are all still in place
 3. **Despawn non-persistent entities** — every entity *without* the `Persistent` component is despawned
 4. **Clear entity registrations** — non-persistent entity refs stored in `WorldSignals` are removed
 5. **Reset group tracking** — `TrackedGroups` (the set of counted groups, see [Group tracking across scenes](#group-tracking-across-scenes)) drops every group except the `.track_group()` ones, and `WorldSignals` group counts are wiped (they are published again on the next tick)
 6. **Write `previous_scene`** — the old active scene name is stored in `WorldSignals["previous_scene"]`
-7. **Set active scene** — updates `SceneManager.active_scene` to the new scene name
+7. **Set active scene** — updates `SceneManager.active_scene` and `WorldSignals["scene"]` to the new scene name
 8. **Trigger `SceneEntered`** — the new scene's enter observers run, typically spawning entities and setting up initial state; what they spawn belongs to the new scene
 
 Steps 2–6 tear down the scene being left, so they run only when a scene is active. Entering the first scene skips them: entities spawned before it (during Setup) survive into it.
@@ -500,11 +503,12 @@ coordinates, `scroll_y` and the gamepad axes are plain fields.
 | `Query<D, F>` | Read or write the components of matching entities, e.g. `Query<&mut MapPosition, With<Player>>`. |
 | `Res<InputState>` | Bound actions, mouse and gamepad. See [InputState key bindings](#inputstate-key-bindings). |
 | `Res<WorldTime>` | `delta`, the fixed tick length (see [The sim tick and `dt`](#the-sim-tick-and-dt)), and elapsed game time. |
-| `ResMut<WorldSignals>` | Shared scalars, integers, strings, flags and entity refs; scene and quit requests. See [WorldSignals API](#worldsignals-api). |
+| `ResMut<WorldSignals>` | Shared scalars, integers, strings, flags and entity refs. See [WorldSignals API](#worldsignals-api). |
+| `ResMut<NextScene>` | Request a scene switch. See [Triggering scene transitions](#triggering-scene-transitions). |
 | `ResMut<SimRng>` | Randomness that reproduces under `.deterministic()`. See [Section 10](#10-determinism-and-replay). |
 | `AssetLoader` | Queue texture, font, shader, tilemap, sound and music loads; check whether a texture or font has loaded. See [Section 6](#6-loading-assets). |
 | `MessageWriter<AudioCmd>` | Play, stop and unload sounds and music. A system that takes `AssetLoader` writes through `assets.audio()` instead. |
-| `ResMut<NextGameState>` | Request a game-state change, e.g. quitting (`aberredengine::core::resources::gamestate`). |
+| `ResMut<NextGameState>` | Request a game-state change, e.g. quitting with `.set(GameStates::Quitting)`. |
 | `Res<TextureDimsStore>` | Pixel size of a loaded texture (`aberredengine::core::resources::texturedims`). `AssetLoader::texture_size` reads it too. |
 
 Every logic-thread resource is listed in [Section 11](#11-engine-resources-quick-reference).
@@ -835,7 +839,7 @@ fn main() -> Result<(), EngineError> {
 - `WorldTime` doesn't advance during Setup, so a loading scene shows progress, not time-based animation (tweens, sprite animations).
 - Its text appears once its font has loaded; until then it simply doesn't draw.
 - Leaving it tears it down along with everything spawned during Setup, the setup hook's spawns included. Mark what must survive `Persistent`, or spawn it in the initial scene.
-- During Setup the loading scene is the only scene: any other switch (`request_scene`, a menu's `SetScene`) is ignored with a warning, with or without a loading scene, and the engine always moves on to the initial scene. A quit requested during Setup takes effect on the first `Playing` tick.
+- During Setup the loading scene is the only scene: any other scene request (`NextScene::set`, a menu's `SetScene`) is ignored with a warning, with or without a loading scene, and the engine always moves on to the initial scene. A quit requested during Setup takes effect without waiting for loads.
 - In a deterministic game, spawn only from the loading scene's `SceneEntered` observer, never from its per-tick systems: the number of Setup ticks depends on load times, and entity ids must not.
 - The loading scene must differ from the initial scene.
 
@@ -1821,7 +1825,7 @@ commands.spawn((menu, actions));
 
 | Variant | Effect |
 |---------|--------|
-| `SetScene(String)` | Switches scene in the same tick (calls `commands.run_system()` internally) |
+| `SetScene(String)` | Requests the scene through `NextScene`; the switch runs at the end of the tick |
 | `QuitGame` | Transitions to quitting state |
 | `Noop` | Does nothing |
 
@@ -2170,7 +2174,7 @@ It takes a `&mut GuiCtx`:
 
 - `ui: &imgui::Ui` for drawing widgets
 - `signals: &SignalSnapshot` — a read-only, frame-stale-by-one-tick copy of `WorldSignals`. Read it with the same getters as `WorldSignals` (`ctx.signals.get_scalar("key")`, `ctx.signals.has_flag("key")`, etc.), which both types implement through the `SignalsRead` trait in the prelude.
-- `intents: &mut SignalIntents` — queue writes here (`ctx.intents.set_flag("key")`, `ctx.intents.set_scalar("key", 1.0)`, etc. — the method names mirror `WorldSignals`' setters). Queued writes are applied to the live `WorldSignals` on the logic thread at the start of its next sim tick — not immediately.
+- `intents: &mut SignalIntents` — queue writes here (`ctx.intents.set_flag("key")`, `ctx.intents.set_scalar("key", 1.0)`, etc. — the method names mirror `WorldSignals`' setters), and scene or quit requests (`ctx.intents.request_scene("level01")`, `ctx.intents.request_quit()`). Queued intents are applied on the logic thread at the start of its next sim tick — not immediately.
 - `textures: &TextureStore` for texture previews
 - `fonts: &FontStore` for font access (e.g. measuring text)
 - `app_state: &AppState` for richer Rust-only typed snapshots/view-models produced by systems and observers
@@ -2366,6 +2370,7 @@ All resources are accessed as Bevy ECS system parameters. Use `Res<T>` / `ResMut
 | `InputBindings` | `ResMut` | Runtime key/mouse binding map (`InputAction` → `Vec<InputBinding>`). Modify to rebind actions at runtime — takes effect the very next sim tick. |
 | `GameState` | `Res` | Current state: `None → Setup → Playing → Quitting` |
 | `NextGameState` | `ResMut` | Request state transitions, e.g. `.set(GameStates::Quitting)` |
+| `NextScene` | `ResMut` | Request a scene switch with `.set(name)`; `scene_switch_poll` takes it at the end of the tick |
 | `PostProcessShader` | `ResMut` | Shader chain + uniforms (reserved: `uTime`, `uDeltaTime`, `uResolution`, `uFrame`, `uWindowResolution`, `uLetterbox`) |
 | `CameraFollowConfig` | `ResMut` | Camera-follow behavior (mode, easing, zoom speed, bounds, offsets); see [Following an entity](#following-an-entity) |
 | `DebugOverlayConfig` | `ResMut` | F11 debug overlay toggles for colliders, signals, bounds, and crosshairs |
@@ -2467,7 +2472,7 @@ Fullscreen is not a resource your game can insert: the engine's `FullScreen` mar
 
 `WorldSignals` intentionally stays limited to those primitive/value-like channels. For richer Rust-only typed data, use `AppState` instead.
 
-The engine's own reserved signal keys (`"scene"`, `"switch_scene"`, `"quit_game"`, and others) are exposed as constants in `aberredengine::core::resources::signal_keys` ; the prelude imports the module as `sk`. Prefer `sk::SCENE`/`sk::SWITCH_SCENE`/etc. over hand-typing the string literals: a typo in a bare string key fails silently, with no compiler error.
+The engine's own reserved signal keys (`"scene"`, `"previous_scene"`, and others) are exposed as constants in `aberredengine::core::resources::signal_keys` ; the prelude imports the module as `sk`. Prefer `sk::SCENE`/`sk::PREVIOUS_SCENE`/etc. over hand-typing the string literals: a typo in a bare string key fails silently, with no compiler error. `sk::SCENE` and `sk::PREVIOUS_SCENE` are outputs the scene switch writes; writing them switches nothing (request scenes through `NextScene`).
 
 ### AppState API
 
