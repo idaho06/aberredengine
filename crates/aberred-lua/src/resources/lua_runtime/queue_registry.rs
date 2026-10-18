@@ -7,6 +7,10 @@
 /// (left untouched — for scene-agnostic queues whose only drain site runs
 /// after `switch_scene`, e.g. `map_commands`/`asset_commands`).
 ///
+/// A row typed `Ordered<T>` is stamped on push (`LuaAppData::push`) and must
+/// also be a `Kind` merged by `drain_and_process_effect_commands`
+/// (`systems/lua_commands/mod.rs`), or its call order is lost.
+///
 /// Drain methods (`drain_<field>_into`), `clear_all_commands`'s body, and
 /// `LuaAppData`'s queue fields (runtime.rs) are all generated automatically
 /// from this single list.

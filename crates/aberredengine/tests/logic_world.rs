@@ -1866,6 +1866,45 @@ fn lua_collision_stay_sees_enter_entity_write() {
     assert_eq!(take_lua_log(&mut tw), ["3"]);
 }
 
+/// A collision callback's `collision_clone` of a template, then a
+/// `collision_entity_set_position` of that template, clones it where it was:
+/// the collision queues apply in call order too.
+#[cfg(feature = "lua")]
+#[test]
+fn lua_collision_clone_then_move_template_clones_the_old_position() {
+    use aberredengine::core::resources::worldsignals::WorldSignals;
+    let mut tw = lua_script_world(
+        "collision_clone_order",
+        "function on_enter(ctx)\n\
+           engine.collision_clone('tpl'):build()\n\
+           engine.collision_entity_set_position(engine.get_entity('tpl'), 50, 0)\n\
+         end\n\
+         function on_exit(ctx) end\n",
+    );
+    let tpl = tw
+        .world
+        .spawn((Group::new("tpl"), MapPosition::new(-100.0, 0.0)))
+        .id();
+    tw.world
+        .resource_mut::<WorldSignals>()
+        .set_entity("tpl", tpl);
+    spawn_enter_exit_rule(&mut tw, None);
+    spawn_box(&mut tw, "a", 0.0, ());
+    spawn_box(&mut tw, "b", 5.0, ());
+
+    tw.tick(1, DT);
+
+    let clones: Vec<f32> = tw
+        .world
+        .query::<(Entity, &Group, &MapPosition)>()
+        .iter(&tw.world)
+        .filter(|(e, g, _)| *e != tpl && g.name() == "tpl")
+        .map(|(_, _, p)| p.pos.x)
+        .collect();
+    assert_eq!(clones, [-100.0]);
+    assert_eq!(tw.world.get::<MapPosition>(tpl).unwrap().pos.x, 50.0);
+}
+
 /// `engine.collision_*` commands queued in `on_enter`/`on_exit` are applied,
 /// on a rule without a stay callback.
 #[cfg(feature = "lua")]

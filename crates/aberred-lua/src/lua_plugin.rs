@@ -684,8 +684,7 @@ mod tests {
     #[test]
     fn set_template_position_then_clone_gives_the_clone_the_new_position() {
         let mut world = new_drain_test_world();
-        let tpl = world.spawn(MapPosition::new(1.0, 2.0)).id();
-        world.resource_mut::<WorldSignals>().set_entity("tpl", tpl);
+        let tpl = spawn_registered_template(&mut world);
 
         exec_and_drain(
             &mut world,
@@ -717,6 +716,85 @@ mod tests {
         );
 
         assert_eq!(positions_except(&mut world, tpl), vec![Vec2::new(1.0, 2.0)]);
+    }
+
+    /// A template at (1, 2), registered as `"tpl"`.
+    fn spawn_registered_template(world: &mut World) -> Entity {
+        let tpl = world.spawn(MapPosition::new(1.0, 2.0)).id();
+        world.resource_mut::<WorldSignals>().set_entity("tpl", tpl);
+        tpl
+    }
+
+    #[test]
+    fn clone_then_set_template_position_keeps_the_old_position() {
+        let mut world = new_drain_test_world();
+        let tpl = spawn_registered_template(&mut world);
+
+        exec_and_drain(
+            &mut world,
+            &format!(
+                "engine.clone('tpl'):build()\n\
+                 engine.entity_set_position({}, 10, 20)",
+                tpl.to_bits()
+            ),
+        );
+
+        assert_eq!(positions_except(&mut world, tpl), vec![Vec2::new(1.0, 2.0)]);
+    }
+
+    #[test]
+    fn clone_then_despawn_template_still_clones() {
+        let mut world = new_drain_test_world();
+        let tpl = spawn_registered_template(&mut world);
+
+        exec_and_drain(
+            &mut world,
+            &format!(
+                "engine.clone('tpl'):build()\n\
+                 engine.entity_despawn({})",
+                tpl.to_bits()
+            ),
+        );
+
+        assert!(world.get_entity(tpl).is_err(), "template despawned");
+        assert_eq!(positions_except(&mut world, tpl), vec![Vec2::new(1.0, 2.0)]);
+    }
+
+    #[test]
+    fn clone_then_remove_entity_key_still_clones() {
+        let mut world = new_drain_test_world();
+        let tpl = spawn_registered_template(&mut world);
+
+        exec_and_drain(
+            &mut world,
+            "engine.clone('tpl'):build()\n\
+             engine.remove_entity('tpl')",
+        );
+
+        assert!(world.resource::<WorldSignals>().get_entity("tpl").is_none());
+        assert_eq!(positions_except(&mut world, tpl), vec![Vec2::new(1.0, 2.0)]);
+    }
+
+    #[test]
+    fn clone_register_as_then_spawn_reading_the_key_finds_it() {
+        use aberred_core::components::particleemitter::ParticleEmitter;
+        let mut world = new_drain_test_world();
+        spawn_registered_template(&mut world);
+
+        exec_and_drain(
+            &mut world,
+            "engine.clone('tpl'):register_as('x'):build()\n\
+             engine.spawn():with_particle_emitter({ templates = { 'x' } }):build()",
+        );
+
+        let x = world.resource::<WorldSignals>().get_entity("x");
+        assert!(x.is_some(), "clone registered as x");
+        let templates: Vec<Vec<Entity>> = world
+            .query::<&ParticleEmitter>()
+            .iter(&world)
+            .map(|e| e.templates.clone())
+            .collect();
+        assert_eq!(templates, vec![vec![x.unwrap()]]);
     }
 
     #[test]

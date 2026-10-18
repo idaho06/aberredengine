@@ -46,6 +46,7 @@ pub use spawn_cmd::{process_clone_command, process_spawn_command};
 use bevy_ecs::hierarchy::ChildOf;
 use bevy_ecs::prelude::*;
 use bevy_ecs::system::SystemParam;
+use std::iter::Peekable;
 
 use crate::components::lua_on_timer_fired::LuaOnTimerFired;
 use crate::components::lua_on_tween_finished::LuaOnTweenFinished;
@@ -100,7 +101,10 @@ pub(crate) enum DrainScope {
 
 /// Drain and process the 7 command queues shared by all Lua callback contexts.
 ///
-/// Canonical order: `signal → entity → spawn → clone → audio → camera → phase`
+/// Signal, entity, spawn and clone commands apply in the script's call order,
+/// merged by their [`Ordered`] stamps; then audio → camera → phase. So a
+/// `clone` copies its template as it was at the call, and a spawn or clone
+/// that reads a key (template, cursor) sees only keys set before it.
 ///
 /// Phase requests are deferred commands queued last, so an
 /// `engine.phase_transition` lands after an `engine.entity_insert_phase` from
@@ -139,20 +143,48 @@ pub(crate) fn drain_and_process_effect_commands(
         }
     }
 
-    for Ordered { cmd, .. } in bufs.signals.drain(..) {
-        process_signal_command(world_signals, cmd);
-    }
-    process_entity_commands(
-        commands,
-        bufs.entities.drain(..).map(|o| o.cmd),
-        world_signals,
-        systems_store,
-    );
-    for Ordered { cmd, .. } in bufs.spawns.drain(..) {
-        process_spawn_command(commands, cmd, world_signals);
-    }
-    for Ordered { cmd, .. } in bufs.clones.drain(..) {
-        process_clone_command(commands, cmd, world_signals);
+    // Merge the four stamped kinds by `seq`: take the kind whose head is
+    // oldest and hand its processor the run of commands older than every
+    // other head. A callback that uses one kind is one run.
+    let mut signals = bufs.signals.drain(..).peekable();
+    let mut entities = bufs.entities.drain(..).peekable();
+    let mut spawns = bufs.spawns.drain(..).peekable();
+    let mut clones = bufs.clones.drain(..).peekable();
+    loop {
+        let mut heads = [
+            (head_seq(&mut signals), Kind::Signal),
+            (head_seq(&mut entities), Kind::Entity),
+            (head_seq(&mut spawns), Kind::Spawn),
+            (head_seq(&mut clones), Kind::Clone),
+        ];
+        heads.sort_unstable();
+        let [(oldest, kind), (limit, _), ..] = heads;
+        if oldest == u64::MAX {
+            break;
+        }
+        match kind {
+            Kind::Signal => {
+                for cmd in run(&mut signals, limit) {
+                    process_signal_command(world_signals, cmd);
+                }
+            }
+            Kind::Entity => process_entity_commands(
+                commands,
+                run(&mut entities, limit),
+                world_signals,
+                systems_store,
+            ),
+            Kind::Spawn => {
+                for cmd in run(&mut spawns, limit) {
+                    process_spawn_command(commands, cmd, world_signals);
+                }
+            }
+            Kind::Clone => {
+                for cmd in run(&mut clones, limit) {
+                    process_clone_command(commands, cmd, world_signals);
+                }
+            }
+        }
     }
     for cmd in bufs.audios.drain(..) {
         process_audio_command(audio, cmd);
@@ -163,6 +195,29 @@ pub(crate) fn drain_and_process_effect_commands(
     for cmd in bufs.phases.drain(..) {
         process_phase_command(commands, cmd);
     }
+}
+
+/// The stamped command kinds merged by `drain_and_process_effect_commands`,
+/// one per `Ordered` row pair (regular and `collision_`) in `queue_registry.rs`.
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+enum Kind {
+    Signal,
+    Entity,
+    Spawn,
+    Clone,
+}
+
+/// The `seq` of the next command in `queue`, or `u64::MAX` once it is empty.
+fn head_seq<T>(queue: &mut Peekable<impl Iterator<Item = Ordered<T>>>) -> u64 {
+    queue.peek().map_or(u64::MAX, Ordered::seq)
+}
+
+/// The commands at the head of `queue` stamped before `limit`.
+fn run<T>(
+    queue: &mut Peekable<impl Iterator<Item = Ordered<T>>>,
+    limit: u64,
+) -> impl Iterator<Item = T> {
+    std::iter::from_fn(move || queue.next_if(|o| o.seq() < limit).map(|o| o.cmd))
 }
 
 /// Build a configured `Tween<T>` from component values and shared config.
