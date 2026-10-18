@@ -12,6 +12,7 @@ use glam::Vec2;
 use crate::components::sprite::Sprite;
 use crate::resources::collision_contacts::CollisionContacts;
 use crate::resources::group::TrackedGroups;
+use crate::resources::next_scene::NextScene;
 use crate::resources::worldsignals::WorldSignals;
 
 /// Allowed error, in float steps (`f32::EPSILON` scaled to the compared
@@ -48,6 +49,7 @@ pub fn sprite_with_origin(w: f32, h: f32, origin_x: f32, origin_y: f32) -> Sprit
 /// [`insert_scene_manager`]: crate::systems::scene_dispatch::insert_scene_manager
 pub fn insert_scene_switch_resources(world: &mut World) {
     world.insert_resource(WorldSignals::default());
+    world.insert_resource(NextScene::default());
     world.insert_resource(TrackedGroups::default());
     world.insert_resource(CollisionContacts::default());
 }

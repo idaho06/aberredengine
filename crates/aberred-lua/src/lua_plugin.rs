@@ -29,6 +29,7 @@ use aberred_core::resources::group::TrackedGroups;
 use aberred_core::resources::guitheme::{GuiThemeStore, GuiThemeWarnCache};
 use aberred_core::resources::input::InputState;
 use aberred_core::resources::input_bindings::InputBindings;
+use aberred_core::resources::next_scene::NextScene;
 use aberred_core::resources::postprocessshader::PostProcessShader;
 use aberred_core::resources::screensize::ScreenSize;
 use aberred_core::resources::systemsstore as hook_keys;
@@ -60,6 +61,7 @@ pub struct ScriptingContext<'w> {
 #[derive(SystemParam)]
 pub struct GameSceneState<'w> {
     pub world_signals: ResMut<'w, WorldSignals>,
+    pub next_scene: ResMut<'w, NextScene>,
     pub post_process: ResMut<'w, PostProcessShader>,
     pub config: ResMut<'w, GameConfig>,
     pub camera_follow: ResMut<'w, CameraFollowConfig>,
@@ -429,8 +431,9 @@ pub fn update(
         return;
     }
 
-    // Check for scene switch flag (set by Lua)
-    if scene_state.world_signals.take_flag(sk::SWITCH_SCENE) {
+    // Check for a scene switch request (NextScene, or the flag set by Lua)
+    if scene_state.world_signals.take_flag(sk::SWITCH_SCENE) || scene_state.next_scene.is_pending()
+    {
         debug!("Scene switch requested in world signals.");
         commands.run_system(
             *scene_state
@@ -482,12 +485,13 @@ pub fn switch_scene(
     scene_state.world_signals.clear_group_counts();
     lua_runtime.update_tracked_groups_cache(&tracked_groups.groups);
 
-    // Apply a pending engine.change_scene target before the scene string is
-    // read: the write is deferred so a mid-tick observer drain cannot flip
-    // the scene before this tick's on_update_<scene> runs. Direct writers
-    // (enter_play, MenuAction::SetScene) have no pending target — no-op.
-    if let Some(pending) = scene_state.world_signals.take_pending_scene() {
-        scene_state.world_signals.set_string(sk::SCENE, pending);
+    // Apply the request (NextScene, else a pending engine.change_scene target;
+    // both consumed) here, so a mid-tick observer drain cannot flip the scene
+    // before this tick's on_update_<scene> runs. Direct writers (enter_play,
+    // MenuAction::SetScene) have no request — no-op.
+    let pending = scene_state.world_signals.take_pending_scene();
+    if let Some(target) = scene_state.next_scene.take().or(pending) {
+        scene_state.world_signals.set_string(sk::SCENE, target);
     }
 
     // Refresh the Lua signal cache so on_switch_scene sees the post-clear state
@@ -564,6 +568,7 @@ mod tests {
     fn new_drain_test_world() -> World {
         let mut world = World::new();
         world.insert_resource(WorldSignals::default());
+        world.insert_resource(NextScene::default());
         world.insert_resource(PostProcessShader::default());
         world.insert_resource(GameConfig::default());
         world.insert_resource(CameraFollowConfig::default());
@@ -976,6 +981,14 @@ mod tests {
         world
     }
 
+    /// Registers [`switch_scene`] as the `switch_scene` hook `update` runs.
+    fn register_switch_scene_hook(world: &mut World) {
+        let switch_scene_id = world.register_system(switch_scene);
+        world
+            .resource_mut::<SystemsStore>()
+            .insert(hook_keys::SWITCH_SCENE, switch_scene_id);
+    }
+
     /// Defines `on_update_level1`/`on_update_level2` Lua globals shared by the
     /// scene-switch-timing tests below: level1 requests a switch to level2 and
     /// counts its own calls; level2 just counts its calls. Used to observe how
@@ -1074,10 +1087,7 @@ mod tests {
             .resource_mut::<WorldSignals>()
             .set_string(sk::SCENE, "level1");
 
-        let switch_scene_id = world.register_system(switch_scene);
-        world
-            .resource_mut::<SystemsStore>()
-            .insert(hook_keys::SWITCH_SCENE, switch_scene_id);
+        register_switch_scene_hook(&mut world);
 
         define_level1_switches_to_level2_lua_callbacks(&world);
 
@@ -1123,10 +1133,7 @@ mod tests {
             .resource_mut::<WorldSignals>()
             .set_string(sk::SCENE, "menu");
 
-        let switch_scene_id = world.register_system(switch_scene);
-        world
-            .resource_mut::<SystemsStore>()
-            .insert(hook_keys::SWITCH_SCENE, switch_scene_id);
+        register_switch_scene_hook(&mut world);
 
         {
             let lua_runtime = world.get_non_send::<LuaRuntime>().unwrap();
@@ -1214,19 +1221,7 @@ mod tests {
         world
             .resource_mut::<WorldSignals>()
             .request_scene_switch("level2");
-
-        {
-            let lua_runtime = world.get_non_send::<LuaRuntime>().unwrap();
-            lua_runtime
-                .lua()
-                .load(
-                    "function on_switch_scene(scene)\n\
-                         _G.switched_to = scene\n\
-                     end",
-                )
-                .exec()
-                .expect("define on_switch_scene");
-        }
+        record_switched_scene(&world);
 
         world.run_system_once(switch_scene).unwrap();
 
@@ -1239,10 +1234,58 @@ mod tests {
             None,
             "the pending target must be consumed, not left to re-apply"
         );
+        assert_eq!(switched_to(&world).as_deref(), Some("level2"));
+    }
 
+    /// Defines `on_switch_scene` recording the scene it enters in `switched_to`.
+    fn record_switched_scene(world: &World) {
+        world
+            .get_non_send::<LuaRuntime>()
+            .unwrap()
+            .lua()
+            .load("function on_switch_scene(scene) _G.switched_to = scene end")
+            .exec()
+            .expect("define on_switch_scene");
+    }
+
+    fn switched_to(world: &World) -> Option<String> {
         let lua_runtime = world.get_non_send::<LuaRuntime>().unwrap();
-        let switched_to: String = lua_runtime.lua().globals().get("switched_to").unwrap();
-        assert_eq!(switched_to, "level2");
+        lua_runtime.lua().globals().get("switched_to").unwrap()
+    }
+
+    #[test]
+    fn switch_scene_enters_the_next_scene_target() {
+        let mut world = new_drain_test_world();
+        world
+            .resource_mut::<WorldSignals>()
+            .set_string(sk::SCENE, "menu");
+        world.resource_mut::<NextScene>().set("level2");
+        record_switched_scene(&world);
+
+        world.run_system_once(switch_scene).unwrap();
+
+        assert_eq!(switched_to(&world).as_deref(), Some("level2"));
+        assert_eq!(
+            world.resource::<WorldSignals>().get_string(sk::SCENE),
+            Some("level2")
+        );
+        assert!(!world.resource::<NextScene>().is_pending());
+    }
+
+    #[test]
+    fn update_runs_the_switch_when_next_scene_is_pending() {
+        let mut world = new_update_test_world();
+        world
+            .resource_mut::<WorldSignals>()
+            .set_string(sk::SCENE, "menu");
+        register_switch_scene_hook(&mut world);
+        world.resource_mut::<NextScene>().set("level2");
+        record_switched_scene(&world);
+
+        world.run_system_once(update).unwrap();
+
+        assert_eq!(switched_to(&world).as_deref(), Some("level2"));
+        assert!(!world.resource::<NextScene>().is_pending());
     }
 
     #[test]

@@ -5,6 +5,7 @@
 //! and entity registrations on every switch.
 
 use aberredengine::core::events::scene::{SceneEntered, SceneExited};
+use aberredengine::core::resources::next_scene::NextScene;
 use aberredengine::core::resources::scenemanager::SceneManager;
 use aberredengine::core::resources::signal_keys as sk;
 use aberredengine::core::resources::systemsstore::{self as hook_keys, SystemsStore};
@@ -208,6 +209,21 @@ fn scene_switch_poll_triggers_transition() {
     world.flush();
 
     assert!(!world.resource::<WorldSignals>().has_flag(sk::SWITCH_SCENE));
+    assert_eq!(active_scene(&world), Some("level1"));
+    assert_eq!(SceneLog::take(&mut world), ["exit menu", "enter level1"]);
+}
+
+#[test]
+fn scene_switch_poll_runs_the_switch_for_a_next_scene_request() {
+    let mut world = scene_world(&["menu", "level1"]);
+    enter_play(&mut world);
+    SceneLog::take(&mut world);
+
+    world.resource_mut::<NextScene>().set("level1");
+    world.run_system_once(scene_switch_poll).unwrap();
+    world.flush();
+
+    assert!(!world.resource::<NextScene>().is_pending());
     assert_eq!(active_scene(&world), Some("level1"));
     assert_eq!(SceneLog::take(&mut world), ["exit menu", "enter level1"]);
 }

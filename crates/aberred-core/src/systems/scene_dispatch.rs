@@ -36,6 +36,7 @@ use crate::resources::camera2d::Camera2D;
 use crate::resources::collision_contacts::CollisionContacts;
 use crate::resources::gamestate::{GameState, GameStates};
 use crate::resources::group::TrackedGroups;
+use crate::resources::next_scene::NextScene;
 use crate::resources::scenemanager::SceneManager;
 use crate::resources::screensize::ScreenSize;
 use crate::resources::signal_keys as sk;
@@ -156,7 +157,9 @@ type SceneTeardown = (
 /// This system is registered into [`SystemsStore`] under `"switch_scene"` when
 /// the developer uses `aberredengine::EngineBuilder::add_scene`.
 ///
-/// Reads the target from `WorldSignals["scene"]`. During `Setup` the only
+/// Takes the target from [`NextScene`], else reads it from
+/// `WorldSignals["scene"]`; entering a scene writes its name to
+/// [`sk::SCENE`]. A refused or unknown request is consumed. During `Setup` the only
 /// allowed target is the loading scene (the engine entering it); any other
 /// switch is logged and ignored. An unregistered name logs an error and leaves
 /// the current scene untouched. Otherwise, when a scene is active, it tears that scene down: it triggers
@@ -169,11 +172,14 @@ type SceneTeardown = (
 pub fn scene_switch_system(world: &mut World, state: &mut SystemState<SceneTeardown>) {
     debug!("scene_switch_system: System called!");
 
-    let scene_name: Arc<str> = world
-        .resource::<WorldSignals>()
-        .get_string(sk::SCENE)
-        .unwrap_or(sk::DEFAULT_SCENE)
-        .into();
+    let scene_name: Arc<str> = match world.resource_mut::<NextScene>().take() {
+        Some(requested) => requested.into(),
+        None => world
+            .resource::<WorldSignals>()
+            .get_string(sk::SCENE)
+            .unwrap_or(sk::DEFAULT_SCENE)
+            .into(),
+    };
     let scene_manager = world.resource::<SceneManager>();
     let in_setup = world
         .get_resource::<GameState>()
@@ -225,6 +231,7 @@ pub fn scene_switch_system(world: &mut World, state: &mut SystemState<SceneTeard
     }
 
     info!("scene_switch_system: Entering scene '{}'", scene_name);
+    world_signals.set_string(sk::SCENE, &*scene_name);
     scene_manager.active_scene = Some(scene_name.to_string());
     state.apply(world);
 
@@ -270,17 +277,18 @@ pub fn in_scene(name: &str) -> impl FnMut(Option<Res<SceneManager>>) -> bool + C
     }
 }
 
-/// Polls the `"switch_scene"` flag in [`WorldSignals`] and runs the
-/// scene switch system when set.
+/// Runs the scene switch system when a [`NextScene`] request is pending or
+/// the `"switch_scene"` flag in [`WorldSignals`] is set (taking the flag).
 ///
 /// Added to the sim schedule for every game without Lua (all of them have
 /// scenes: their own, or the implicit `"main"`).
 pub fn scene_switch_poll(
     mut commands: Commands,
     mut world_signals: ResMut<WorldSignals>,
+    next_scene: Res<NextScene>,
     systems_store: Res<SystemsStore>,
 ) {
-    if world_signals.take_flag(sk::SWITCH_SCENE) {
+    if world_signals.take_flag(sk::SWITCH_SCENE) || next_scene.is_pending() {
         commands.run_system(
             *systems_store
                 .get(hook_keys::SWITCH_SCENE)
@@ -297,7 +305,7 @@ pub fn scene_switch_poll(
 /// enters the initial scene (stored in [`SceneManager`]).
 pub fn scene_enter_play(
     commands: Commands,
-    world_signals: ResMut<WorldSignals>,
+    next_scene: ResMut<NextScene>,
     systems_store: Res<SystemsStore>,
     scene_manager: Res<SceneManager>,
 ) {
@@ -305,14 +313,14 @@ pub fn scene_enter_play(
         .initial_scene
         .clone()
         .expect("SceneManager.initial_scene not set; validate_builder should have caught this");
-    switch_to(commands, world_signals, &systems_store, initial);
+    switch_to(commands, next_scene, &systems_store, initial);
 }
 
 /// One-shot system registered as `"enter_setup"` when the game has a loading
 /// scene: enters it on entering `Setup`, right after the setup hook.
 pub fn scene_enter_loading(
     commands: Commands,
-    world_signals: ResMut<WorldSignals>,
+    next_scene: ResMut<NextScene>,
     systems_store: Res<SystemsStore>,
     scene_manager: Res<SceneManager>,
 ) {
@@ -320,18 +328,17 @@ pub fn scene_enter_loading(
         .loading_scene
         .clone()
         .expect("scene_enter_loading is registered only with a loading scene");
-    switch_to(commands, world_signals, &systems_store, loading);
+    switch_to(commands, next_scene, &systems_store, loading);
 }
 
-/// Seeds `WorldSignals[`[`sk::SCENE`]`]` with `scene` and runs the
-/// `switch_scene` system.
+/// Requests `scene` through [`NextScene`] and runs the `switch_scene` system.
 fn switch_to(
     mut commands: Commands,
-    mut world_signals: ResMut<WorldSignals>,
+    mut next_scene: ResMut<NextScene>,
     systems_store: &SystemsStore,
     scene: String,
 ) {
-    world_signals.set_string(sk::SCENE, scene);
+    next_scene.set(scene);
     commands.run_system(
         *systems_store
             .get(hook_keys::SWITCH_SCENE)
@@ -605,6 +612,47 @@ mod tests {
             world.resource::<SceneManager>().active_scene.as_deref(),
             Some("level")
         );
+    }
+
+    #[test]
+    fn switch_takes_its_target_from_next_scene() {
+        let (mut world, _) = world_in_menu_switching_to("nope");
+        world.resource_mut::<NextScene>().set("level");
+        record_scene_events(&mut world);
+
+        world.run_system_once(scene_switch_system).unwrap();
+
+        assert_eq!(
+            world.resource::<SeenEvents>().0,
+            ["exit menu -> level", "enter level from Some(\"menu\")"]
+        );
+        assert!(!world.resource::<NextScene>().is_pending());
+        let signals = world.resource::<WorldSignals>();
+        assert_eq!(signals.get_string(sk::SCENE), Some("level"));
+        assert_eq!(signals.get_string(sk::PREVIOUS_SCENE), Some("menu"));
+    }
+
+    /// A request the switch refuses (during `Setup`) or cannot honor (an
+    /// unregistered name) is consumed, not retried.
+    #[test]
+    fn a_refused_or_unknown_request_is_consumed() {
+        for (target, in_setup) in [("level", true), ("nope", false)] {
+            let (mut world, _) = world_in_menu_switching_to("menu");
+            if in_setup {
+                let mut state = GameState::new();
+                state.set(GameStates::Setup);
+                world.insert_resource(state);
+            }
+            world.resource_mut::<NextScene>().set(target);
+
+            world.run_system_once(scene_switch_system).unwrap();
+
+            assert!(!world.resource::<NextScene>().is_pending(), "{target}");
+            assert_eq!(
+                world.resource::<SceneManager>().active_scene.as_deref(),
+                Some("menu")
+            );
+        }
     }
 
     #[test]
