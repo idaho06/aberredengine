@@ -184,7 +184,7 @@ crate::lua_queues! {app_data_struct {
 
 The 23 generated queue fields, in `queue_registry.rs`'s row order: `asset_commands` (preserve), `spawn_commands`, `audio_commands`, `signal_commands`, `phase_commands`, `entity_commands`, `group_commands`, `camera_commands`, `animation_commands`, `render_commands`, `gui_theme_commands` (preserve, `RenderCmd`), `clone_commands`, `gameconfig_commands`, `camera_follow_commands`, `input_commands`, `map_commands` (preserve), then the 7 collision-scoped queues: `collision_entity_commands`, `collision_signal_commands`, `collision_audio_commands`, `collision_spawn_commands`, `collision_clone_commands`, `collision_phase_commands`, `collision_camera_commands`.
 
-The signal, entity, spawn and clone rows (regular and `collision_`) are typed `Ordered<T>`: a command plus its `seq`, its place in the script's call order. Every push goes through `LuaAppData::push`, whose `QueueItem<C>` trait leaves a plain queue's command as is and stamps an `Ordered` queue's command with the next value of the `next_seq` counter shared by all eight. `Ordered`'s `seq` is private, so only that push can build one, and a raw `borrow_mut().push(cmd)` onto a stamped queue is a type error. A new `Ordered` row must also be a `Kind` in the drain's merge (below), or its call order is lost.
+The signal, entity, spawn and clone rows (regular and `collision_`) are typed `Ordered<T>`: a command plus its `seq`, its place in the script's call order. Every push onto a stamped queue goes through `LuaAppData::push` (as do `register_cmd!`'s pushes onto plain queues), whose `QueueItem<C>` trait leaves a plain queue's command as is and stamps an `Ordered` queue's command with the next value of the `next_seq` counter shared by all eight. `Ordered`'s `seq` is private, so only that push can build one, and a raw `borrow_mut().push(cmd)` onto a stamped queue is a type error. A new `Ordered` row must also be a `Kind` in the drain's merge (below), or its call order is lost.
 
 #### Command Enums (commands.rs)
 
@@ -357,7 +357,7 @@ This distinction matters because collision callbacks need immediate processing t
 | Category | Enum | Purpose |
 | -------- | ---- | ------- |
 | **Entity** | `EntityCmd` | Manipulate existing entities (velocity, position, signals, shaders, tweens, hierarchy, camera target, GUI widget state) |
-| **Spawn** | `SpawnCmd` | Create new entities with components (boxed — `SpawnCmd` is ~2KB, so queues hold `Box<SpawnCmd>`) |
+| **Spawn** | `SpawnCmd` | Create new entities with components (boxed — `SpawnCmd` is ~2KB, so queues hold `Ordered<Box<SpawnCmd>>`) |
 | **Clone** | `CloneCmd` | Clone an entity registered in WorldSignals and apply builder overrides |
 | **Signal** | `SignalCmd` | Modify global WorldSignals |
 | **Audio** | `AudioLuaCmd` | Play/stop music and sounds (with optional pitch) |
