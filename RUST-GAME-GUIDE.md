@@ -2402,7 +2402,7 @@ Since those two callbacks are the one exception that runs render-side (see [Thre
 | Resource | Purpose |
 |----------|---------|
 | `SignalSnapshot` | Read-only, one-tick-stale copy of `WorldSignals`. Read it through `SignalsRead` (in the prelude), the getters it shares with `WorldSignals`: `get_scalar`, `get_integer`, `get_string`, `has_flag`, `get_entity`, `get_group_count`. |
-| `SignalIntents` | Queue of pending `WorldSignals` writes. Setter methods mirror `WorldSignals`' own: `.set_flag(key)`, `.set_scalar(key, v)`, `.set_integer(key, v)`, `.set_string(key, v)`, `.remove_flag(key)`. Applied to the live `WorldSignals` at the start of the logic thread's next sim tick. |
+| `SignalIntents` | Queue of pending `WorldSignals` writes and scene/quit requests. Setter methods mirror `WorldSignals`' own: `.set_flag(key)`, `.set_scalar(key, v)`, `.set_integer(key, v)`, `.set_string(key, v)`, `.remove_flag(key)`; `.request_scene(name)` / `.request_quit()` reach `NextScene` / `NextGameState`. Applied at the start of the logic thread's next sim tick. |
 | `TextureStore` | Read-only access to loaded textures by key, e.g. for previews. |
 | `FontStore` | Read-only access to loaded fonts by key, e.g. for text measurement. |
 | `AppState` | The same read-only, generation-gated snapshot copy described in the AppState API section below — write typed Rust state from a logic-thread system/observer instead. |
