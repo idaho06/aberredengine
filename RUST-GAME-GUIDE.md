@@ -384,9 +384,9 @@ There are two ways to switch scenes:
 - **From a system or observer:** call `WorldSignals::request_scene(name)`. It sets the target scene name (`signal_keys::SCENE`) and the `signal_keys::SWITCH_SCENE` flag. The engine's `scene_switch_poll` system (registered automatically for every Rust game) picks up the flag in `SimSet::Drain`, late in the tick after your systems, and runs the switch; a flag set after that point is picked up on the next tick.
 
 ```rust
-fn update(mut signals: ResMut<WorldSignals>) {
+fn update(mut next_scene: ResMut<NextScene>) {
     if player_reached_exit() {
-        signals.request_scene("level02");
+        next_scene.set("level02");
     }
 }
 ```
@@ -1830,9 +1830,13 @@ commands.spawn((menu, actions));
 ```rust
 use aberredengine::prelude::*;
 
-fn on_menu_select(ev: On<MenuSelected>, mut signals: ResMut<WorldSignals>) {
+fn on_menu_select(
+    ev: On<MenuSelected>,
+    mut next_scene: ResMut<NextScene>,
+    mut signals: ResMut<WorldSignals>,
+) {
     match ev.item_id.as_str() {
-        "start" => signals.request_scene("level01"),
+        "start" => next_scene.set("level01"),
         "quit" => signals.request_quit(),
         _ => {}
     }

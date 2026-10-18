@@ -202,9 +202,9 @@ mod triggering_scene_transitions {
     use aberredengine::prelude::*; // GLUE
     fn player_reached_exit() -> bool { false } // GLUE
 
-    fn update(mut signals: ResMut<WorldSignals>) {
+    fn update(mut next_scene: ResMut<NextScene>) {
         if player_reached_exit() {
-            signals.request_scene("level02");
+            next_scene.set("level02");
         }
     }
 }

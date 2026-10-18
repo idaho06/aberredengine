@@ -7,8 +7,8 @@
 //!
 //! # Use Cases
 //!
-//! - Storing the current scene name (`"scene"`)
-//! - Global flags like `"game_paused"` or `"switch_scene"`
+//! - Publishing the active scene name (`"scene"`, written by the scene switch)
+//! - Global flags like `"game_paused"`
 //! - Game state values (score, lives, high score)
 //! - Entity references for quick lookup (`"player"`, `"ball"`)
 //! - Group entity counts (published by [`update_group_counts_system`](crate::systems::group::update_group_counts_system))
@@ -23,7 +23,6 @@
 //!
 //! ```ignore
 //! // In game setup
-//! world_signals.set_string("scene", "menu");
 //! world_signals.set_integer("score", 0);
 //! world_signals.set_integer("lives", 3);
 //!
@@ -400,16 +399,6 @@ impl WorldSignals {
         self.flags_dirty = true;
     }
 
-    /// Request a switch to the scene `name`: sets [`sk::SCENE`] and the
-    /// [`sk::SWITCH_SCENE`] flag.
-    ///
-    /// The switch happens when the active scene driver polls the flag
-    /// ([`scene_switch_poll`](crate::systems::scene_dispatch::scene_switch_poll)
-    /// for `add_scene()` games, the Lua plugin's update for Lua games).
-    pub fn request_scene(&mut self, name: impl Into<String>) {
-        self.set_string(sk::SCENE, name);
-        self.set_flag(sk::SWITCH_SCENE);
-    }
     /// Request a switch to the scene `name`, deferred: records the target as
     /// the pending scene and sets the [`sk::SWITCH_SCENE`] flag, but leaves
     /// [`sk::SCENE`] untouched until the `switch_scene` system applies it.
@@ -761,14 +750,6 @@ mod tests {
     }
 
     // --- Scene / quit requests ---
-
-    #[test]
-    fn request_scene_sets_the_target_and_the_switch_flag() {
-        let mut ws = WorldSignals::default();
-        ws.request_scene("lvl");
-        assert_eq!(ws.get_string(sk::SCENE), Some("lvl"));
-        assert!(ws.has_flag(sk::SWITCH_SCENE));
-    }
 
     /// The deferred form leaves the scene string alone until the switch
     /// system applies the recorded target.

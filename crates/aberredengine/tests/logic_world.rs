@@ -44,6 +44,7 @@ use aberredengine::core::resources::gamestate::{GameState, GameStates, NextGameS
 use aberredengine::core::resources::input::InputState;
 use aberredengine::core::resources::input_bindings::MouseButton;
 use aberredengine::core::resources::loaded_assets::LoadedAssets;
+use aberredengine::core::resources::next_scene::NextScene;
 use aberredengine::core::resources::pending_assets::PendingAssets;
 use aberredengine::core::resources::scenemanager::SceneManager;
 use aberredengine::core::resources::screensize::ScreenSize;
@@ -317,7 +318,7 @@ fn scene_switch_clears_collision_contacts_without_ending_them() {
     tw.tick(1, DT);
     take_contacts(&mut tw);
 
-    tw.world.resource_mut::<WorldSignals>().request_scene("two");
+    tw.world.resource_mut::<NextScene>().set("two");
     tw.tick(2, DT);
 
     let kinds: Vec<_> = take_contacts(&mut tw)
@@ -850,7 +851,7 @@ fn scene_switch_keeps_observers_of_persistent_entities() {
     let observer_count = |world: &mut World| world.query::<&Observer>().iter(world).count();
     let observers_before = observer_count(&mut tw.world);
 
-    tw.world.resource_mut::<WorldSignals>().request_scene("b");
+    tw.world.resource_mut::<NextScene>().set("b");
     tw.tick(2, DT);
 
     assert_eq!(
@@ -883,7 +884,7 @@ fn track_group_survives_a_scene_switch() {
     };
     assert_eq!(count(&tw), Some(1));
 
-    tw.world.resource_mut::<WorldSignals>().request_scene("b");
+    tw.world.resource_mut::<NextScene>().set("b");
     tw.tick(2, DT);
 
     assert_eq!(
@@ -925,7 +926,7 @@ fn scene_switches_trigger_scene_events() {
     tw.world.init_resource::<SceneLog>();
     tw.tick_to_play(DT, 8);
 
-    tw.world.resource_mut::<WorldSignals>().request_scene("b");
+    tw.world.resource_mut::<NextScene>().set("b");
     tw.tick(2, DT);
 
     assert_eq!(
@@ -945,11 +946,10 @@ fn count_scene_ticks(mut ticks: ResMut<SceneTicks>) {
     ticks.0 += 1;
 }
 
-/// Counts `count_scene_ticks` runs before and after switching from `a` to
-/// `b`; `register` adds the system under test to a two-scene builder.
-fn scene_ticks_before_and_after_switching_to_b(
-    register: impl FnOnce(TestWorldBuilder) -> TestWorldBuilder,
-) -> (u32, u32) {
+/// A game with scenes `a` (initial) and `b`, ticked to Playing, with
+/// `SceneTicks` ready for `count_scene_ticks`; `register` adds the systems
+/// under test.
+fn two_scene_world(register: impl FnOnce(TestWorldBuilder) -> TestWorldBuilder) -> TestWorld {
     let builder = TestWorld::builder()
         .add_scene("a")
         .add_scene("b")
@@ -957,10 +957,31 @@ fn scene_ticks_before_and_after_switching_to_b(
     let mut tw = register(builder).build().expect("build should succeed");
     tw.world.init_resource::<SceneTicks>();
     tw.tick_to_play(DT, 8);
+    tw
+}
+
+/// After the tick that switched to `b`: `b` is active, and its
+/// `count_scene_ticks` system first runs on the next tick.
+fn assert_b_systems_start_next_tick(tw: &mut TestWorld) {
+    assert_eq!(
+        tw.world.resource::<SceneManager>().active_scene.as_deref(),
+        Some("b")
+    );
+    assert_eq!(tw.world.resource::<SceneTicks>().0, 0, "not in that tick");
+    tw.tick(1, DT);
+    assert_eq!(tw.world.resource::<SceneTicks>().0, 1);
+}
+
+/// Counts `count_scene_ticks` runs before and after switching from `a` to
+/// `b`; `register` adds the system under test to a two-scene builder.
+fn scene_ticks_before_and_after_switching_to_b(
+    register: impl FnOnce(TestWorldBuilder) -> TestWorldBuilder,
+) -> (u32, u32) {
+    let mut tw = two_scene_world(register);
     tw.tick(3, DT);
     let before = tw.world.resource::<SceneTicks>().0;
 
-    tw.world.resource_mut::<WorldSignals>().request_scene("b");
+    tw.world.resource_mut::<NextScene>().set("b");
     tw.tick(1, DT); // the switch lands at the end of this tick
     tw.tick(3, DT);
     (before, tw.world.resource::<SceneTicks>().0)
@@ -1043,9 +1064,7 @@ fn scene_enter_and_exit_observers_fire_only_for_their_scene() {
     tw.tick_to_play(DT, 8);
 
     for target in ["b", "a", "b"] {
-        tw.world
-            .resource_mut::<WorldSignals>()
-            .request_scene(target);
+        tw.world.resource_mut::<NextScene>().set(target);
         tw.tick(2, DT);
     }
 
@@ -1167,8 +1186,8 @@ fn loading_scene_is_active_while_setup_waits_for_assets() {
 #[test]
 fn a_switch_requested_during_loading_does_not_repeat_after_it() {
     let mut tw = loading_scene_world(|builder| {
-        builder.add_scene_system("loading", |mut signals: ResMut<WorldSignals>| {
-            signals.request_scene("game");
+        builder.add_scene_system("loading", |mut next: ResMut<NextScene>| {
+            next.set("game");
         })
     });
 
@@ -1191,12 +1210,11 @@ fn a_switch_requested_during_loading_does_not_repeat_after_it() {
 #[test]
 fn a_switch_to_another_scene_during_loading_is_ignored() {
     let mut tw = loading_scene_world(|builder| {
-        builder.add_scene("other").add_scene_system(
-            "loading",
-            |mut signals: ResMut<WorldSignals>| {
-                signals.request_scene("other");
-            },
-        )
+        builder
+            .add_scene("other")
+            .add_scene_system("loading", |mut next: ResMut<NextScene>| {
+                next.set("other");
+            })
     });
 
     tw.tick(2, DT);
@@ -1480,17 +1498,12 @@ fn hooks_and_systems_may_return_result() {
 }
 
 /// Confirming a `MenuActions::SetScene` item in a Rust-only game (no
-/// `.with_lua()`, whatever the `lua` feature) switches scenes in the tick
-/// that resolves the press.
+/// `.with_lua()`, whatever the `lua` feature) requests the scene: the switch
+/// lands at the end of the confirming tick, and the new scene's systems start
+/// the next tick.
 #[test]
-fn menu_set_scene_switches_in_the_confirming_tick_without_lua() {
-    let mut tw = TestWorld::builder()
-        .add_scene("a")
-        .add_scene("b")
-        .initial_scene("a")
-        .build()
-        .expect("build should succeed");
-    tw.tick_to_play(DT, 8);
+fn menu_set_scene_starts_the_new_scene_systems_next_tick() {
+    let mut tw = two_scene_world(|builder| builder.add_scene_system("b", count_scene_ticks));
     tw.world.spawn((
         Menu::new(&[("go", "Go")], Vec2::ZERO, "f", 12.0, 10.0, true),
         Signals::default(),
@@ -1501,10 +1514,21 @@ fn menu_set_scene_switches_in_the_confirming_tick_without_lua() {
     press_space(&mut tw);
     tw.tick(1, DT);
 
-    assert_eq!(
-        tw.world.resource::<SceneManager>().active_scene.as_deref(),
-        Some("b")
-    );
+    assert_b_systems_start_next_tick(&mut tw);
+}
+
+/// A `NextScene` request from a system switches at the end of that tick;
+/// the new scene's systems start the next tick.
+#[test]
+fn a_next_scene_request_from_a_system_switches_at_the_end_of_the_tick() {
+    let mut tw = two_scene_world(|builder| {
+        builder
+            .add_scene_system("a", |mut next: ResMut<NextScene>| next.set("b"))
+            .add_scene_system("b", count_scene_ticks)
+    });
+
+    tw.tick(1, DT);
+    assert_b_systems_start_next_tick(&mut tw);
 }
 
 #[derive(Resource, Default)]

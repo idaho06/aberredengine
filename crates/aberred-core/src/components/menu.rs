@@ -134,7 +134,8 @@ impl Menu {
 /// Action to perform when a menu item is selected.
 #[derive(Clone, Debug)]
 pub enum MenuAction {
-    /// Switch to a different scene by name.
+    /// Request a switch to a different scene by name, through
+    /// [`NextScene`](crate::resources::next_scene::NextScene).
     SetScene(String),
     /// Quit the game.
     QuitGame,

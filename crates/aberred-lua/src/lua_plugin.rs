@@ -487,8 +487,8 @@ pub fn switch_scene(
 
     // Apply the request (NextScene, else a pending engine.change_scene target;
     // both consumed) here, so a mid-tick observer drain cannot flip the scene
-    // before this tick's on_update_<scene> runs. Direct writers (enter_play,
-    // MenuAction::SetScene) have no request — no-op.
+    // before this tick's on_update_<scene> runs. A direct writer (enter_play)
+    // has no request — no-op.
     let pending = scene_state.world_signals.take_pending_scene();
     if let Some(target) = scene_state.next_scene.take().or(pending) {
         scene_state.world_signals.set_string(sk::SCENE, target);

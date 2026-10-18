@@ -38,7 +38,7 @@ mod tests {
     use aberred_core::components::menu::{Menu, MenuAction, MenuActions};
     use aberred_core::math::Vec2;
     use aberred_core::resources::gamestate::NextGameState;
-    use aberred_core::resources::signal_keys as sk;
+    use aberred_core::resources::next_scene::NextScene;
     use aberred_core::resources::worldsignals::WorldSignals;
     use aberred_core::systems::menu::menu_selection_observer;
 
@@ -46,6 +46,7 @@ mod tests {
     fn setup_world() -> World {
         let mut world = World::new();
         world.init_resource::<NextGameState>();
+        world.init_resource::<NextScene>();
         init_dispatch_resources(&mut world);
         let lua = LuaRuntime::new().expect("LuaRuntime::new");
         lua.lua()
@@ -101,9 +102,11 @@ mod tests {
         world.entity_mut(menu).observe(record_observed);
         select_play(&mut world, menu);
         assert_eq!(lua_selected_item(&world).as_deref(), Some("play:0"));
-        let ws = world.resource::<WorldSignals>();
-        assert_eq!(ws.get_string(sk::SCENE), None, "no MenuActions ran");
-        assert!(ws.has_flag("observed"));
+        assert!(
+            !world.resource::<NextScene>().is_pending(),
+            "no MenuActions ran"
+        );
+        assert!(world.resource::<WorldSignals>().has_flag("observed"));
     }
 
     #[test]
@@ -112,9 +115,6 @@ mod tests {
         let menu = spawn_play_menu(&mut world, false);
         select_play(&mut world, menu);
         assert_eq!(lua_selected_item(&world), None);
-        assert_eq!(
-            world.resource::<WorldSignals>().get_string(sk::SCENE),
-            Some("level01")
-        );
+        assert_eq!(world.resource::<NextScene>().get(), Some("level01"));
     }
 }

@@ -7,7 +7,6 @@
 use aberredengine::core::events::scene::{SceneEntered, SceneExited};
 use aberredengine::core::resources::next_scene::NextScene;
 use aberredengine::core::resources::scenemanager::SceneManager;
-use aberredengine::core::resources::signal_keys as sk;
 use aberredengine::core::resources::systemsstore::{self as hook_keys, SystemsStore};
 use aberredengine::core::resources::worldsignals::WorldSignals;
 use aberredengine::core::systems::scene_dispatch::{
@@ -80,9 +79,7 @@ fn enter_play(world: &mut World) {
 
 /// Switches straight to `target` through `scene_switch_system`.
 fn switch_to(world: &mut World, target: &str) {
-    world
-        .resource_mut::<WorldSignals>()
-        .set_string(sk::SCENE, target);
+    world.resource_mut::<NextScene>().set(target);
     world.run_system_once(scene_switch_system).unwrap();
     world.flush();
 }
@@ -194,24 +191,8 @@ fn active_scene_tracked_through_multiple_switches() {
 }
 
 // ---------------------------------------------------------------------------
-// Test 6: scene_switch_poll triggers the transition when the flag is set
+// Test 6: scene_switch_poll triggers the transition for a NextScene request
 // ---------------------------------------------------------------------------
-
-#[test]
-fn scene_switch_poll_triggers_transition() {
-    let mut world = scene_world(&["menu", "level1"]);
-    enter_play(&mut world);
-    SceneLog::take(&mut world);
-
-    // What a scene system does: request the switch
-    world.resource_mut::<WorldSignals>().request_scene("level1");
-    world.run_system_once(scene_switch_poll).unwrap();
-    world.flush();
-
-    assert!(!world.resource::<WorldSignals>().has_flag(sk::SWITCH_SCENE));
-    assert_eq!(active_scene(&world), Some("level1"));
-    assert_eq!(SceneLog::take(&mut world), ["exit menu", "enter level1"]);
-}
 
 #[test]
 fn scene_switch_poll_runs_the_switch_for_a_next_scene_request() {
@@ -229,11 +210,11 @@ fn scene_switch_poll_runs_the_switch_for_a_next_scene_request() {
 }
 
 // ---------------------------------------------------------------------------
-// Test 7: scene_switch_poll is a no-op when the flag is absent
+// Test 7: scene_switch_poll is a no-op without a request
 // ---------------------------------------------------------------------------
 
 #[test]
-fn scene_switch_poll_noop_without_flag() {
+fn scene_switch_poll_noop_without_a_request() {
     let mut world = scene_world(&["menu"]);
     enter_play(&mut world);
     SceneLog::take(&mut world);

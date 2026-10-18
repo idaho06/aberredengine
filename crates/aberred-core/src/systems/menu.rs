@@ -27,11 +27,8 @@ use crate::protocol::render_assets::RenderAssetCmd;
 use crate::resources::fontmetrics::{FontMetricsStore, FontMetricsWarnCache};
 use crate::resources::gamestate::GameStates::Quitting;
 use crate::resources::gamestate::NextGameState;
-use crate::resources::signal_keys as sk;
-use crate::resources::systemsstore as hook_keys;
-use crate::resources::systemsstore::SystemsStore;
+use crate::resources::next_scene::NextScene;
 use crate::resources::texturedims::TextureDimsStore;
-use crate::resources::worldsignals::WorldSignals;
 use bevy_ecs::prelude::*;
 use log::{debug, warn};
 
@@ -536,8 +533,8 @@ fn reposition_menu_items(commands: &mut Commands, menu: &Menu) {
 
 /// Executes the [`MenuAction`] associated with a selected menu item.
 ///
-/// - [`MenuAction::SetScene`] – switches scene in the same tick, by running
-///   the registered `switch_scene` system directly
+/// - [`MenuAction::SetScene`] – requests the scene through [`NextScene`]; the
+///   switch lands at the next scene switch poll, at the end of the tick
 /// - [`MenuAction::QuitGame`] – transitions to quitting state
 /// - [`MenuAction::Noop`] – does nothing
 ///
@@ -546,10 +543,8 @@ fn reposition_menu_items(commands: &mut Commands, menu: &Menu) {
 pub fn menu_selection_observer(
     trigger: On<MenuSelected>,
     menus: Query<Option<&MenuActions>, With<Menu>>,
-    mut world_signals: ResMut<WorldSignals>,
+    mut next_scene: ResMut<NextScene>,
     mut next_game_state: ResMut<NextGameState>,
-    systems_store: Res<SystemsStore>,
-    mut commands: Commands,
 ) {
     let event = trigger.event();
     let Ok(menu_actions) = menus.get(event.entity) else {
@@ -569,18 +564,7 @@ pub fn menu_selection_observer(
         event.item_id, event.entity
     );
     match menu_actions.get(&event.item_id) {
-        MenuAction::SetScene(scene_name) => {
-            world_signals.set_string(sk::SCENE, scene_name.clone());
-            // Every engine-built game registers switch_scene (the scene manager's or Lua's);
-            // a bare world without one logs instead of panicking.
-            match systems_store.get(hook_keys::SWITCH_SCENE) {
-                Some(switch_scene) => commands.run_system(*switch_scene),
-                None => log::error!(
-                    "menu action SetScene('{scene_name}'): no switch_scene system is registered \
-                     (the scene manager and Lua both register one); ignoring"
-                ),
-            }
-        }
+        MenuAction::SetScene(scene_name) => next_scene.set(scene_name),
         MenuAction::QuitGame => {
             next_game_state.set(Quitting);
         }
@@ -593,6 +577,7 @@ mod tests {
     use super::*;
     use crate::math::{Color, Vec2};
     use crate::resources::gamestate::{GameStates, NextGameStates};
+    use crate::resources::worldsignals::WorldSignals;
     use bevy_ecs::message::Messages;
     use bevy_ecs::system::RunSystemOnce;
 
@@ -972,21 +957,12 @@ mod tests {
         ws.set_string("observed", format!("{}:{}", e.item_id, e.index));
     }
 
-    fn mark_switch_scene(mut ws: ResMut<WorldSignals>) {
-        ws.set_flag("switch_hook_ran");
-    }
-
-    /// World wired for `menu_selection_observer`, with a registered switch_scene hook.
+    /// World wired for `menu_selection_observer`.
     fn selection_world() -> World {
         let mut world = World::new();
         world.init_resource::<WorldSignals>();
         world.init_resource::<NextGameState>();
-        let mut store = SystemsStore::default();
-        store.insert(
-            hook_keys::SWITCH_SCENE,
-            world.register_system(mark_switch_scene),
-        );
-        world.insert_resource(store);
+        world.init_resource::<NextScene>();
         world.add_observer(menu_selection_observer);
         world
     }
@@ -1033,7 +1009,7 @@ mod tests {
         select(&mut world, menu, "play");
         let ws = world.resource::<WorldSignals>();
         assert_eq!(ws.get_string("observed"), Some("play:0"));
-        assert_eq!(ws.get_string(sk::SCENE), Some("level01"));
+        assert_eq!(world.resource::<NextScene>().get(), Some("level01"));
     }
 
     #[test]
@@ -1042,9 +1018,7 @@ mod tests {
         let menu = world.spawn((three_items(), actions())).id();
 
         select(&mut world, menu, "play");
-        let ws = world.resource::<WorldSignals>();
-        assert_eq!(ws.get_string(sk::SCENE), Some("level01"));
-        assert!(ws.has_flag("switch_hook_ran"), "switch_scene hook was run");
+        assert_eq!(world.resource::<NextScene>().get(), Some("level01"));
 
         assert_eq!(
             world.resource::<NextGameState>().get(),
@@ -1064,30 +1038,10 @@ mod tests {
         let without = world.spawn(three_items()).id();
         select(&mut world, with_actions, "play");
         select(&mut world, without, "play");
-        let ws = world.resource::<WorldSignals>();
-        assert!(ws.get_string(sk::SCENE).is_none() && !ws.has_flag("switch_hook_ran"));
+        assert!(!world.resource::<NextScene>().is_pending());
         assert_eq!(
             world.resource::<NextGameState>().get(),
             &NextGameStates::Unchanged
-        );
-    }
-
-    #[test]
-    fn set_scene_without_a_switch_scene_hook_logs_instead_of_panicking() {
-        // A Rust-only game with no Lua, no scene manager and no custom switch hook.
-        let mut world = World::new();
-        world.init_resource::<WorldSignals>();
-        world.init_resource::<NextGameState>();
-        world.insert_resource(SystemsStore::default());
-        world.add_observer(menu_selection_observer);
-        let menu = world.spawn((three_items(), actions())).id();
-
-        select(&mut world, menu, "play");
-
-        assert_eq!(
-            world.resource::<WorldSignals>().get_string(sk::SCENE),
-            Some("level01"),
-            "the requested scene is still recorded"
         );
     }
 
