@@ -285,7 +285,7 @@ pub fn insert_on_demand_scene_manager(world: &mut World) {
 
 /// Run condition: true while `name` is the active [`SceneManager`] scene.
 ///
-/// False when no [`SceneManager`] exists (no `.add_scene()`, or a Lua game).
+/// False when no [`SceneManager`] exists or no scene is active yet.
 ///
 /// ```ignore
 /// builder.add_system_if(hud, in_scene("level01"))

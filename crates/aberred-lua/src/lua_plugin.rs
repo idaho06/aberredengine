@@ -32,6 +32,7 @@ use aberred_core::resources::input::InputState;
 use aberred_core::resources::input_bindings::InputBindings;
 use aberred_core::resources::next_scene::NextScene;
 use aberred_core::resources::postprocessshader::PostProcessShader;
+use aberred_core::resources::scenemanager::SceneManager;
 use aberred_core::resources::screensize::ScreenSize;
 use aberred_core::resources::systemsstore as hook_keys;
 use aberred_core::resources::systemsstore::SystemsStore;
@@ -339,9 +340,10 @@ fn resolve_input_table(
 }
 
 /// Per-sim-tick update system for scene gameplay logic: refreshes Lua caches,
-/// calls `on_update_<scene>` of the [`LuaActiveScene`] once per sim tick,
-/// drains common command queues, then runs the scene switch for a pending
-/// scene request (unless a quit is pending).
+/// calls `on_update_<scene>` of the [`SceneManager`]'s active scene once per
+/// sim tick (none before the first scene), drains common command queues, then
+/// runs the scene switch for a pending scene request (unless a quit is
+/// pending).
 ///
 /// Runs in `SimSet::Bookkeeping` -- last among the engine's own groups each
 /// tick, i.e. *after* `Movement`/`Transforms` (so `camera_follow_system` has
@@ -382,6 +384,7 @@ pub fn update(
     mut commands: Commands,
     mut scripting: ScriptingContext,
     mut scene_state: GameSceneState,
+    scene_manager: Res<SceneManager>,
     mut bindings: ResMut<InputBindings>,
     mut tracked_groups: ResMut<TrackedGroups>,
     mut common_bufs: Local<CommonCmdBufs>,
@@ -394,9 +397,6 @@ pub fn update(
     let lua_runtime = &scripting.lua_runtime;
     let delta_sec = time.delta;
 
-    // The scene switch_scene entered, not the `scene` string a script can write.
-    refresh_cached_callback_name(&mut cached_callback, &scene_state.active_scene.0);
-
     // Update signal cache for Lua to read current values
     lua_runtime.sync_signals(&mut scene_state.world_signals);
     lua_runtime.update_gameconfig_cache(&scene_state.config);
@@ -405,7 +405,11 @@ pub fn update(
         lua_runtime.update_bindings_cache(&bindings);
     }
 
-    if let Some(input_table) = resolve_input_table(lua_runtime, &input, time.frame_count) {
+    // The scene the engine entered, not the `scene` string a script can write.
+    if let Some(scene) = scene_manager.active_scene.as_deref()
+        && let Some(input_table) = resolve_input_table(lua_runtime, &input, time.frame_count)
+    {
+        refresh_cached_callback_name(&mut cached_callback, scene);
         match lua_runtime.get_function_cached(cached_callback.as_str()) {
             Ok(Some(func)) => {
                 missing_callback_warned.clear();
@@ -471,6 +475,7 @@ pub fn switch_scene(
     gui_theme_store: Res<GuiThemeStore>,
     mut gui_theme_warn_cache: ResMut<GuiThemeWarnCache>,
     mut contacts: ResMut<CollisionContacts>,
+    mut scene_manager: ResMut<SceneManager>,
     mut entered_a_scene: Local<bool>,
 ) {
     let lua_runtime = &scripting.lua_runtime;
@@ -511,6 +516,7 @@ pub fn switch_scene(
     }
     scene_state.world_signals.set_string(sk::SCENE, &scene);
     scene_state.active_scene.0.clone_from(&scene);
+    scene_manager.active_scene = Some(scene.clone());
 
     // Refresh the Lua signal cache so on_switch_scene sees the post-clear state
     // (cleared entity registry and group counts), not the previous scene's snapshot.
@@ -585,6 +591,7 @@ pub(crate) fn new_drain_test_world() -> World {
     world.insert_resource(bevy_ecs::message::Messages::<AudioCmd>::default());
     world.insert_resource(GuiThemeStore::default());
     world.insert_resource(GuiThemeWarnCache::default());
+    aberred_core::systems::scene_dispatch::insert_on_demand_scene_manager(&mut world);
     world.insert_non_send(LuaRuntime::new().expect("LuaRuntime::new"));
     world
 }
@@ -999,6 +1006,7 @@ mod tests {
     /// scene `update` dispatches to, and its published `scene` string.
     fn set_active_scene(world: &mut World, scene: &str) {
         world.resource_mut::<LuaActiveScene>().0 = scene.to_owned();
+        world.resource_mut::<SceneManager>().active_scene = Some(scene.to_owned());
         world
             .resource_mut::<WorldSignals>()
             .set_string(sk::SCENE, scene);
@@ -1088,6 +1096,30 @@ mod tests {
             "entity_signal_set_flag queued in on_update_<scene> should be drained immediately, \
              same tick"
         );
+    }
+
+    /// `update` calls `on_update_<scene>` of the [`SceneManager`]'s active scene.
+    #[test]
+    fn update_calls_on_update_of_the_scene_manager_active_scene() {
+        let mut world = new_update_test_world();
+        world.resource_mut::<SceneManager>().active_scene = Some("level2".to_owned());
+        define_level1_and_level2_lua_callbacks(&world, "");
+
+        world.run_system_once(update).unwrap();
+
+        assert_eq!(level_calls(&world), (None, Some(1)));
+    }
+
+    /// Before the first scene, `update` calls no scene callback.
+    #[test]
+    fn update_calls_no_scene_callback_without_an_active_scene() {
+        let mut world = new_update_test_world();
+        world.resource_mut::<LuaActiveScene>().0 = "level1".to_owned();
+        define_level1_and_level2_lua_callbacks(&world, "");
+
+        world.run_system_once(update).unwrap();
+
+        assert_eq!(level_calls(&world), (None, None));
     }
 
     #[test]

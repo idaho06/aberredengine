@@ -222,8 +222,9 @@ impl EngineBuilder {
 
     /// Register the hook/scene one-shot systems into the LOGIC world (runs on
     /// the logic thread; consumes the setup hook and scenes out of `init`). A
-    /// Lua game gets `lua_plugin`'s setup/enter_play/switch_scene and no
-    /// scenes; every other game has at least `"main"`.
+    /// Lua game gets `lua_plugin`'s setup/enter_play/switch_scene and an
+    /// on-demand `SceneManager` (each scene registers on its first request);
+    /// every other game has at least `"main"`.
     pub(crate) fn register_logic_systems(
         init: &mut LogicInit,
         world: &mut World,
@@ -232,7 +233,9 @@ impl EngineBuilder {
 
         #[cfg(feature = "lua")]
         if init.lua_script.is_some() {
+            use aberred_core::systems::scene_dispatch::insert_on_demand_scene_manager;
             use aberred_lua::lua_plugin;
+            insert_on_demand_scene_manager(world);
             register_persistent_system(
                 world,
                 &mut systems_store,

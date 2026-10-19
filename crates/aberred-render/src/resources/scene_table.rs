@@ -87,8 +87,8 @@ pub struct SceneRender {
 /// [`SceneManager`](aberred_core::resources::scenemanager::SceneManager) (with its
 /// mutable `active_scene` tracking) is logic-world-only. `SceneRender` is
 /// all fn pointers, so the clone is cheap and the table is immutable after
-/// startup. Only inserted when the game uses `.add_scene()` — mirror of
-/// `SceneManager`'s own conditional insertion.
+/// startup. Only inserted when the game uses `.add_scene()`; a Lua game has a
+/// `SceneManager` but registers no scene render callbacks.
 #[derive(Resource, Default)]
 pub struct RenderSceneTable(pub FxHashMap<String, SceneRender>);
 
