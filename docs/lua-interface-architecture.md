@@ -121,7 +121,7 @@ crates/aberred-lua/src/systems/lua_commands/
 └── parse.rs             # Animation condition parsing helpers
 ```
 
-`crates/aberred-lua/src/systems/` also holds the Bevy systems/observers that call into `lua_commands/` (`lua_phase.rs`, `lua_timer_fired.rs`, `lua_setup_entity.rs`, `lua_animation_finished.rs`, `lua_tween_finished.rs`, `lua_collision.rs`, `lua_menu.rs`, `lua_mapspawn.rs`, `lua_gui_interactable_click.rs`) and `lua_plugin.rs` (scene setup/switch, `on_update_<scene>` dispatch) at the crate root.
+`crates/aberred-lua/src/systems/` also holds the Bevy systems/observers that call into `lua_commands/` (`lua_phase.rs`, `lua_timer_fired.rs`, `lua_setup_entity.rs`, `lua_animation_finished.rs`, `lua_tween_finished.rs`, `lua_collision.rs`, `lua_menu.rs`, `lua_mapspawn.rs`, `lua_gui_interactable_click.rs`, `lua_scene.rs`) and `lua_plugin.rs` (setup, first scene entry, `on_update_<scene>` dispatch) at the crate root.
 
 ### Key Components
 
@@ -155,7 +155,7 @@ Defines the `lua_queues!` macro, the **single authoritative source** for all 23 
 - `lua_queues!{clear_body data}` — the body of `clear_all_commands`, which clears every queue whose row is tagged `clear` and leaves `preserve`-tagged queues untouched
 - `lua_queues!{app_data_struct { ... }}` — `LuaAppData`'s full field list: one `RefCell<Vec<T>>` per queue row, spliced together with the caller-supplied non-queue cache fields (`runtime.rs`)
 
-To add a new queue you need exactly **one** edit: add a `(field_name, CmdType, clear_policy)` row to the `@master` arm in `queue_registry.rs`. `clear_policy` is `clear` (the default — for queues whose commands may reference entities about to be despawned on scene switch) or `preserve` (for scene-agnostic queues whose only drain site runs after `switch_scene`, e.g. `map_commands`/`asset_commands`/`gui_theme_commands`). Drain methods, `clear_all_commands`'s body, and `LuaAppData`'s queue fields are all generated automatically from that one row.
+To add a new queue you need exactly **one** edit: add a `(field_name, CmdType, clear_policy)` row to the `@master` arm in `queue_registry.rs`. `clear_policy` is `clear` (the default — for queues whose commands may reference entities about to be despawned on scene switch) or `preserve` (for scene-agnostic queues that keep their commands across a scene switch, e.g. `map_commands`/`asset_commands`/`gui_theme_commands`). Drain methods, `clear_all_commands`'s body, and `LuaAppData`'s queue fields are all generated automatically from that one row.
 
 #### `command_queues.rs`
 
@@ -261,7 +261,7 @@ pub(crate) fn drain_and_process_effect_commands(
 ) { ... }
 ```
 
-`lua_plugin.rs`'s `update()`/`switch_scene()` call this same helper (via their own `CommonCmdBufs`/`EffectCmdBufs` locals) for the queues that aren't tied to a single dispatched entity callback (`on_update_<scene>`, `on_switch_scene`, etc.).
+`lua_plugin.rs`'s `update()` and `lua_scene.rs`'s `lua_scene_entered_observer` call this same helper (through `DrainCtx::drain`, whose `Local` buffers keep their capacity) for the queues that aren't tied to a single dispatched entity callback (`on_update_<scene>`, `on_switch_scene`).
 
 ### Step 4: Commands are Processed
 
@@ -277,7 +277,7 @@ pub fn process_entity_commands(
 ) { ... }
 ```
 
-Every handler queues its work as one deferred `EntityWorldMut` command — `queue_on_entity(commands, entity_id, |e| ...)`, or `queue_on_component::<C>(commands, entity_id, |c| ...)` for a write to one existing component — so a drained batch applies **in exactly the order the script made the calls**: `entity_set_shader` followed by `entity_shader_set_float`, or `release_stuckto` followed by `entity_set_velocity`, both land. Anything a handler depends on (an existing component, the `AnimationStore`) is read when the command applies, so it sees the earlier commands of the same batch. The commands land at the next command flush: right after the observer for observer callbacks (collision, timer, tween, animation end, menu, GUI click), and at the next sync point after the system for system callbacks (`update`, `switch_scene`, `lua_phase_update_system`, `lua_setup_entity_system`). Lua reads ctx snapshots, never the live world, so a script can't observe the difference inside one callback. An entity despawned in an earlier frame is warned about and skipped; one despawned earlier in the same batch is skipped silently. The one immediate effect is `Despawn`'s removal of the entity's `WorldSignals` registrations, so a later command in the same batch can't resolve a stale key.
+Every handler queues its work as one deferred `EntityWorldMut` command — `queue_on_entity(commands, entity_id, |e| ...)`, or `queue_on_component::<C>(commands, entity_id, |c| ...)` for a write to one existing component — so a drained batch applies **in exactly the order the script made the calls**: `entity_set_shader` followed by `entity_shader_set_float`, or `release_stuckto` followed by `entity_set_velocity`, both land. Anything a handler depends on (an existing component, the `AnimationStore`) is read when the command applies, so it sees the earlier commands of the same batch. The commands land at the next command flush: right after the observer for observer callbacks (collision, timer, tween, animation end, menu, GUI click, `on_switch_scene`), and at the next sync point after the system for system callbacks (`update`, `lua_phase_update_system`, `lua_setup_entity_system`). Lua reads ctx snapshots, never the live world, so a script can't observe the difference inside one callback. An entity despawned in an earlier frame is warned about and skipped; one despawned earlier in the same batch is skipped silently. The one immediate effect is `Despawn`'s removal of the entity's `WorldSignals` registrations, so a later command in the same batch can't resolve a stale key.
 
 `Commands` declare no component access, so the scheduler can't see these writes: an engine system that reads a Lua-written component must be ordered after the Lua drain (any ordering edge is a sync point). An unordered system in the same set reads pre-flush state, and `assert_no_ambiguities` doesn't flag it.
 
@@ -291,16 +291,20 @@ The previous section covers how Lua calls *into* Rust. This section covers the o
 
 ### Scene Lifecycle
 
-`lua_plugin.rs` drives four lifecycle points, each its own Bevy system:
+A Lua game has a `SceneManager` that registers each scene on its first request, and switches scenes through the same core `scene_switch_system` as a Rust game. Four lifecycle points:
 
 1. **`setup()`** — runs once at startup. Calls `on_setup()` if defined, drains `asset_commands` (translating each into an `AudioCmd` or a `RenderAssetCmd`), drains `animation_commands` into a fresh `AnimationStore` resource, then transitions `GameState` to `Playing`.
-2. **`enter_play()`** — runs once, immediately after `setup()`. Calls `on_enter_play()` if defined, drains `signal_commands`/`group_commands` (world signals aren't touched by `setup()` — Lua is expected to seed them here), updates the tracked-groups cache, then runs the `switch_scene` system hook to spawn the initial scene.
-3. **`switch_scene()`** — runs from `enter_play()`'s initial call and from `update()` whenever a scene request is pending in `NextScene` (`engine.change_scene()`, a menu's `SetScene`, a GUI intent, a Rust system). It: clears every `clear`-policy command queue and the cached-function-handle table (`clear_all_commands()`/`clear_function_cache()` — callbacks are re-injected per scene, so stale closures must not survive the switch), despawns every non-`Persistent` `CleanableEntity`, clears non-persistent `WorldSignals` entity registrations and group counts, takes the `NextScene` target (no request: `sk::DEFAULT_SCENE`) and publishes it as `LuaActiveScene` and the `scene` string (after the first switch, the scene it left becomes `previous_scene`), refreshes the signal cache so `on_switch_scene` observes the post-clear state (not a stale pre-clear snapshot), calls `on_switch_scene(scene_name)`, then drains the same "common" queue set `update()` does (`drain_common_commands`, below).
-4. **`update()`** — runs once per sim tick. Refreshes the signal/gameconfig/camera/bindings caches, resolves the pooled input table, calls `on_update_<scene>(input, dt)` for the `LuaActiveScene` (the callback name is cached as `"on_update_" .. scene` and only rebuilt when the active scene changes; a script write to the `scene` string redirects nothing), drains the common queues, then runs `switch_scene()` if `NextScene::switch_due` holds (a scene request is pending and no quit is; a quit wins). `update()` queues `switch_scene()` with `commands.run_system`, so the switch itself runs when `update()`'s commands apply, at the end of the requesting tick. A request made earlier in the tick (menu/GUI-click/timer/phase callback) still lets this tick's `on_update_<old_scene>` run first; the new scene's update starts the next tick.
+2. **`enter_play()`** — runs once, immediately after `setup()`. Calls `on_enter_play()` if defined, drains `signal_commands`/`group_commands` (world signals aren't touched by `setup()` — Lua is expected to seed them here), updates the tracked-groups cache, then enters the first scene through core `switch_to` (`scene_dispatch.rs`): the scene `on_setup`/`on_enter_play` requested with `engine.change_scene`, else `sk::DEFAULT_SCENE`. The first entry despawns nothing, so what `on_setup`/`on_enter_play` queued applies in the first scene (drained by `lua_scene_entered_observer`, step 3).
+3. **Scene switch** — core `scene_switch_poll` (`SimSet::Drain`) runs `scene_switch_system` when a scene request is pending in `NextScene` (`engine.change_scene()`, a menu's `SetScene`, a GUI intent, a Rust system) and no quit is. Two observers in `systems/lua_scene.rs`, registered only when a Lua script is set, add the Lua side:
+   - `lua_scene_exited_observer` (`On<SceneExited>`, before the old scene's entities are despawned) calls `clear_all_commands()`: `clear`-policy queues may reference entities about to be despawned.
+   - `lua_scene_entered_observer` (`On<SceneEntered>`, after the teardown) calls `clear_function_cache()` (callbacks are re-injected per scene, so stale closures must not survive the switch), refreshes the tracked-groups and signal caches so `on_switch_scene` observes the post-teardown state, calls `on_switch_scene(scene_name)`, drains the common queues (`DrainCtx::drain`, below), refreshes the gameconfig cache and stamps `LuaSceneEnteredAt` with the tick's `frame_count`.
 
-`update()` and `switch_scene()` share `drain_common_commands()`, which drains, in order: `animation_commands` first (so a same-batch `entity_set_animation`/`entity_restart_animation` can resolve a texture key registered earlier in the same batch), the 7 regular effect queues (via `drain_and_process_effect_commands`: signal/entity/spawn/clone in call order, then audio, camera, phase), `render_commands` + `gui_theme_commands` (merged into one `GuiThemeStore` clone-and-write-back, only performed when at least one was non-empty — this avoids marking `GuiThemeStore` "changed" on frames with no theme edits — and re-validated afterward for every staged theme's missing `normal`/`fill` skin), `gameconfig_commands`, `camera_follow_commands`, `input_commands`, and `group_commands`.
+   Their order relative to other global observers of the same event (a Rust `add_observer`) is undefined.
+4. **`update()`** — runs once per sim tick in `SimSet::Bookkeeping`, after the scene poll. Refreshes the signal/gameconfig/camera/bindings caches, resolves the pooled input table, calls `on_update_<scene>(input, dt)` for `SceneManager.active_scene` (the callback name is cached as `"on_update_" .. scene` and only rebuilt when the active scene changes; a script write to the `scene` string redirects nothing), then drains the common queues. It skips the callback before the first scene and on the tick stamped in `LuaSceneEnteredAt`, so a scene starts updating the tick after its entry, like a Rust scene system. `update()` does not poll `NextScene`: a request made in `on_update_<scene>` switches at the next tick's Drain, a request made before Drain (menu, GUI, phase callback) switches in the same tick, whose `on_update_<old_scene>` then does not run, and a request from a collision or timer callback switches in the same tick or the next (collision callbacks drain only the `collision_` queues, and `update_timers` has no ordering edge to the poll).
 
-`process_lua_asset_commands` is the always-live drain site for `engine.load_*` calls made *after* `setup()` — `on_update_<scene>`, `on_switch_scene`, and every phase/timer/collision callback all queue into the same `asset_commands` queue; this system (registered on the sim schedule) is what actually translates and forwards them once `setup()`'s own one-shot local buffer is no longer in the picture.
+`update()` and `lua_scene_entered_observer` share `DrainCtx::drain`, which drains, in order: `animation_commands` first (so a same-batch `entity_set_animation`/`entity_restart_animation` can resolve a texture key registered earlier in the same batch), the 7 regular effect queues (via `drain_and_process_effect_commands`: signal/entity/spawn/clone in call order, then audio, camera, phase), `render_commands` + `gui_theme_commands` (merged into one `GuiThemeStore` clone-and-write-back, only performed when at least one was non-empty — this avoids marking `GuiThemeStore` "changed" on frames with no theme edits — and re-validated afterward for every staged theme's missing `normal`/`fill` skin), `gameconfig_commands`, `camera_follow_commands`, `input_commands`, and `group_commands`.
+
+`process_lua_asset_commands` is the always-live drain site for `engine.load_*` calls made *after* `setup()` — `on_update_<scene>`, `on_switch_scene`, and every phase/timer/collision callback all queue into the same `asset_commands` queue; this system (registered on the sim schedule) is what actually translates and forwards them since `setup()`'s one-shot local buffer drains only during setup.
 
 ### Phase System
 
@@ -374,7 +378,7 @@ This distinction matters because collision callbacks need immediate processing t
 
 In addition to the regular queues, most write APIs have a collision-scoped variant (prefixed with `collision_` or `collision_entity_`) that queues into collision-specific buffers.
 
-`render_commands` (clear policy) and `gui_theme_commands` (preserve policy) both carry `RenderCmd` values but are drained separately — `gui_theme_commands` survives `clear_all_commands` (called at the start of `switch_scene`) so `engine.set_gui_theme_*` calls queued from `on_setup()` aren't lost before their first drain.
+`render_commands` (clear policy) and `gui_theme_commands` (preserve policy) both carry `RenderCmd` values but are drained separately — `gui_theme_commands` survives `clear_all_commands` (called by `lua_scene_exited_observer` when a scene is left), so a scene switch never drops an `engine.set_gui_theme_*` call before its first drain.
 
 ---
 
@@ -415,7 +419,7 @@ This section is meant to stay in sync with the actual implementation.
 
 - `change_scene`, `quit`
 
-Both are registered in `engine_api/signal.rs`: `change_scene(scene_name)` queues `SignalCmd::ChangeScene`, which sets `NextScene` when it drains; the scene switch runs at the tail of `update()` (see [Scene Lifecycle](#scene-lifecycle) step 4). `quit()` queues `SignalCmd::Quit`, which sets `NextGameState` to `Quitting`. Both reach their targets through `SignalTargets` (`processors.rs`).
+Both are registered in `engine_api/signal.rs`: `change_scene(scene_name)` queues `SignalCmd::ChangeScene`, which sets `NextScene` when it drains; the scene switch runs at `scene_switch_poll` in `SimSet::Drain` (see [Scene Lifecycle](#scene-lifecycle) step 3). `quit()` queues `SignalCmd::Quit`, which sets `NextGameState` to `Quitting`. Both reach their targets through `SignalTargets` (`processors.rs`).
 
 #### Global Signals (read)
 

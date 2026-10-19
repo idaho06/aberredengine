@@ -272,6 +272,11 @@ Shared assets (fonts, cursor, shaders) are loaded without prefix in `load_common
 
 Request scenes with `engine.change_scene(name)` and quit with `engine.quit()`.
 
+Entering the first scene despawns nothing: spawns and other commands queued in `on_setup`/`on_enter_play` apply
+when the first scene is entered. Each later switch despawns the scene it leaves (every entity not built with
+`:with_persistent()`). The engine's Rust scene events (`SceneEntered`/`SceneExited`) fire in Lua games too, so Rust
+observers of them run alongside the script.
+
 ### 3. Callback Command Processing
 
 Different callbacks process different types of engine commands. Here's what commands are processed after each callback type:
@@ -1486,7 +1491,7 @@ Play sound when selection changes (requires `:with_menu()`).
 #### `:with_menu_action_set_scene(item_id, scene)`
 
 Define scene switch action (requires `:with_menu()`). Confirming the item requests the scene like
-`engine.change_scene`: the switch runs at the end of the tick.
+`engine.change_scene`: the switch runs later in the same tick, and that tick runs no `on_update_<scene>`.
 
 ```lua
 :with_menu_action_set_scene("start", "level01")
@@ -2891,7 +2896,7 @@ engine.remove_entity("special_enemy")
 
 #### `engine.change_scene(scene_name)`
 
-Requests a switch to a new scene. The engine performs the switch at the end of the current tick, after this tick's `on_update_<scene>` has run, updating the `scene` and `previous_scene` strings and calling `on_switch_scene`. The new scene's `on_update_<scene>` starts on the next tick. The last request in a tick wins, and during play a quit requested in the same tick wins over it.
+Requests a switch to a new scene. The engine switches at its scene poll, which runs every tick after collisions and before `on_update_<scene>`, updating the `scene` and `previous_scene` strings and calling `on_switch_scene`. A request from `on_update_<scene>` switches on the next tick; a request from a menu item, a GUI widget or a phase callback switches in the same tick; a request from a collision or timer callback switches in the same tick or the next. The tick that switches runs no `on_update_<scene>`: the new scene's starts on the following tick. A request from `on_switch_scene` switches again on the next tick, so the scene it leaves runs no `on_update_<scene>` at all. The last request before the poll wins, and during play a quit pending at the poll wins over it.
 
 Called from `on_enter_play`, it picks the first scene; without a request the first scene is `"menu"`. The first scene is always entered after `on_enter_play`, even if it also calls `engine.quit()`.
 
