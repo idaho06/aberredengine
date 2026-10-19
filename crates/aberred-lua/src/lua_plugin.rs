@@ -387,8 +387,8 @@ fn resolve_input_table(
 /// flags, so "before this tick's detection" and "after this tick's
 /// consumption, before next tick's detection" describe the same window.
 ///
-/// `dt` is the real elapsed time since the previous sim tick (clamped,
-/// scaled by `time_scale`), not a constant, and "continuous while held"
+/// `dt` is the fixed `1.0 / sim_hz` scaled by `time_scale`, not the real
+/// elapsed time (a stall dilates game time), and "continuous while held"
 /// logic fires once per sim tick. `bunnymark/{screen,map}_loop.lua`'s
 /// held-spawn loops spawn as fast as `sim_hz` allows while the mouse button
 /// is held -- a deliberate/disclosed tradeoff for a stress-test scene, not
