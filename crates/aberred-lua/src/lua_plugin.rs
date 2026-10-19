@@ -72,10 +72,10 @@ pub struct GameSceneState<'w> {
     pub anim_store: ResMut<'w, AnimationStore>,
 }
 
-/// Persistent per-frame buffers for the command queues drained by `drain_common_commands`.
+/// Persistent per-frame buffers for the command queues drained by [`DrainCtx`].
 ///
-/// Hold one of these in a `Local<CommonCmdBufs>` on each Bevy system that calls
-/// `drain_common_commands`. The Vecs retain heap capacity across frames.
+/// [`DrainCtx`] holds one in a `Local`, so the Vecs retain heap capacity
+/// across frames.
 #[derive(Default)]
 pub struct CommonCmdBufs {
     effects: EffectCmdBufs,
@@ -199,109 +199,130 @@ pub fn enter_play(
     switch_to(commands, next_scene, &systems_store, scene);
 }
 
-/// Drains and processes the command queues that are common to [`update`]
-/// and the scene-entered observer
-/// ([`lua_scene_entered_observer`](crate::systems::lua_scene::lua_scene_entered_observer)).
-/// Each queues the same command types after its Lua callback returns; this
-/// helper eliminates the duplicated drain loops.
-#[allow(clippy::too_many_arguments)]
-pub(crate) fn drain_common_commands(
-    lua_runtime: &LuaRuntime,
-    commands: &mut Commands,
-    scene_state: &mut GameSceneState,
-    audio_cmd_writer: &mut MessageWriter<AudioCmd>,
-    bindings: &mut InputBindings,
-    tracked_groups: &mut TrackedGroups,
-    bufs: &mut CommonCmdBufs,
-    gui_theme_store: &GuiThemeStore,
-    gui_theme_warn_cache: &mut GuiThemeWarnCache,
-) {
-    // Animation registrations write AnimationStore immediately, so a same-batch
-    // SetAnimation (which reads the store when it applies, at the flush) sees them.
-    lua_runtime.drain_animation_commands_into(&mut bufs.animation);
-    for cmd in bufs.animation.drain(..) {
-        process_animation_command(&mut scene_state.anim_store, cmd);
-    }
+/// The resources Lua's common command queues apply to, plus reusable drain
+/// buffers: the drain [`update`] and the scene-entered observer
+/// ([`lua_scene_entered_observer`](crate::systems::lua_scene::lua_scene_entered_observer))
+/// run after their Lua callbacks return.
+#[derive(SystemParam)]
+pub struct DrainCtx<'w, 's> {
+    pub commands: Commands<'w, 's>,
+    pub scripting: ScriptingContext<'w>,
+    pub scene_state: GameSceneState<'w>,
+    pub bindings: ResMut<'w, InputBindings>,
+    pub tracked_groups: ResMut<'w, TrackedGroups>,
+    pub gui_theme_store: Res<'w, GuiThemeStore>,
+    pub gui_theme_warn_cache: ResMut<'w, GuiThemeWarnCache>,
+    bufs: Local<'s, CommonCmdBufs>,
+}
 
-    drain_and_process_effect_commands(
-        lua_runtime,
-        DrainScope::Regular,
-        &mut bufs.effects,
-        commands,
-        &mut SignalTargets {
-            world_signals: &mut scene_state.world_signals,
-            next_scene: &mut scene_state.next_scene,
-            next_game_state: &mut scene_state.next_game_state,
-        },
-        audio_cmd_writer,
-        &scene_state.systems_store,
-    );
+impl DrainCtx<'_, '_> {
+    /// Drains and processes the common command queues.
+    pub(crate) fn drain(&mut self) {
+        let Self {
+            commands,
+            scripting,
+            scene_state,
+            bindings,
+            tracked_groups,
+            gui_theme_store,
+            gui_theme_warn_cache,
+            bufs,
+        } = self;
+        let lua_runtime: &LuaRuntime = &scripting.lua_runtime;
+        let audio_cmd_writer = &mut scripting.audio_cmd_writer;
+        let bufs: &mut CommonCmdBufs = bufs;
+        let bindings: &mut InputBindings = bindings;
+        let tracked_groups: &mut TrackedGroups = tracked_groups;
+        let gui_theme_store: &GuiThemeStore = gui_theme_store;
+        let gui_theme_warn_cache: &mut GuiThemeWarnCache = gui_theme_warn_cache;
 
-    lua_runtime.drain_render_commands_into(&mut bufs.render);
-    // gui_theme_commands is a separate, `preserve`-policy queue (see
-    // queue_registry.rs) so a pending `set_gui_theme_*` call survives the
-    // clear_all_commands() of a scene switch — unlike render_commands
-    // (post-process, `clear` policy), which is wiped every scene switch since
-    // post-process commands may reference a scene's about-to-be-despawned
-    // state.
-    lua_runtime.drain_gui_theme_commands_into(&mut bufs.gui_theme);
-    if !bufs.render.is_empty() || !bufs.gui_theme.is_empty() {
-        // Seed/write-back only when there's actually a render command to apply —
-        // avoids cloning the whole GuiThemeStore and re-inserting it (marking it
-        // "changed" for any Changed<GuiThemeStore> consumer) on every frame when
-        // nothing was queued. Seeding from the current store (not a blank one)
-        // means a SetGuiTheme* command for one key never disturbs any other
-        // key already persisted in the resource.
-        let mut gui_theme_staging = gui_theme_store.clone();
-        for cmd in bufs.render.drain(..).chain(bufs.gui_theme.drain(..)) {
-            process_render_command(cmd, &mut scene_state.post_process, &mut gui_theme_staging);
+        // Animation registrations write AnimationStore immediately, so a same-batch
+        // SetAnimation (which reads the store when it applies, at the flush) sees them.
+        lua_runtime.drain_animation_commands_into(&mut bufs.animation);
+        for cmd in bufs.animation.drain(..) {
+            process_animation_command(&mut scene_state.anim_store, cmd);
         }
-        // Re-validate every staged theme's button skin (not just the ones a
-        // command touched this batch) -- cheap (a handful of themes, one
-        // bool check each) and avoids re-deriving "which keys changed" via a
-        // second match over the just-drained commands.
-        for (key, theme) in gui_theme_staging.themes.iter_mut() {
-            if !theme.drop_invalid_button_skin()
-                && gui_theme_warn_cache.warn_once_invalid_button_skin(key)
-            {
-                error!(
-                    "GuiTheme '{key}' has button set but its 'normal' nine-patch was never set via \
-                     engine.set_gui_theme_button(\"{key}\", \"normal\", ...) — button theme dropped, buttons render with no background"
-                );
+
+        drain_and_process_effect_commands(
+            lua_runtime,
+            DrainScope::Regular,
+            &mut bufs.effects,
+            commands,
+            &mut SignalTargets {
+                world_signals: &mut scene_state.world_signals,
+                next_scene: &mut scene_state.next_scene,
+                next_game_state: &mut scene_state.next_game_state,
+            },
+            audio_cmd_writer,
+            &scene_state.systems_store,
+        );
+
+        lua_runtime.drain_render_commands_into(&mut bufs.render);
+        // gui_theme_commands is a separate, `preserve`-policy queue (see
+        // queue_registry.rs) so a pending `set_gui_theme_*` call survives the
+        // clear_all_commands() of a scene switch — unlike render_commands
+        // (post-process, `clear` policy), which is wiped every scene switch since
+        // post-process commands may reference a scene's about-to-be-despawned
+        // state.
+        lua_runtime.drain_gui_theme_commands_into(&mut bufs.gui_theme);
+        if !bufs.render.is_empty() || !bufs.gui_theme.is_empty() {
+            // Seed/write-back only when there's actually a render command to apply —
+            // avoids cloning the whole GuiThemeStore and re-inserting it (marking it
+            // "changed" for any Changed<GuiThemeStore> consumer) on every frame when
+            // nothing was queued. Seeding from the current store (not a blank one)
+            // means a SetGuiTheme* command for one key never disturbs any other
+            // key already persisted in the resource.
+            let mut gui_theme_staging = gui_theme_store.clone();
+            for cmd in bufs.render.drain(..).chain(bufs.gui_theme.drain(..)) {
+                process_render_command(cmd, &mut scene_state.post_process, &mut gui_theme_staging);
             }
-            if !theme.drop_invalid_progress_bar_skin()
-                && gui_theme_warn_cache.warn_once_invalid_progress_bar_skin(key)
-            {
-                error!(
-                    "GuiTheme '{key}' has progress_bar set but its 'fill' nine-patch was never set via \
-                     engine.set_gui_theme_progress_bar(\"{key}\", \"fill\", ...) — progress bar theme dropped, bars render with no fill"
-                );
+            // Re-validate every staged theme's button skin (not just the ones a
+            // command touched this batch) -- cheap (a handful of themes, one
+            // bool check each) and avoids re-deriving "which keys changed" via a
+            // second match over the just-drained commands.
+            for (key, theme) in gui_theme_staging.themes.iter_mut() {
+                if !theme.drop_invalid_button_skin()
+                    && gui_theme_warn_cache.warn_once_invalid_button_skin(key)
+                {
+                    error!(
+                        "GuiTheme '{key}' has button set but its 'normal' nine-patch was never set via \
+                         engine.set_gui_theme_button(\"{key}\", \"normal\", ...) — button theme dropped, buttons render with no background"
+                    );
+                }
+                if !theme.drop_invalid_progress_bar_skin()
+                    && gui_theme_warn_cache.warn_once_invalid_progress_bar_skin(key)
+                {
+                    error!(
+                        "GuiTheme '{key}' has progress_bar set but its 'fill' nine-patch was never set via \
+                         engine.set_gui_theme_progress_bar(\"{key}\", \"fill\", ...) — progress bar theme dropped, bars render with no fill"
+                    );
+                }
             }
+            commands.insert_resource(gui_theme_staging);
         }
-        commands.insert_resource(gui_theme_staging);
-    }
 
-    lua_runtime.drain_gameconfig_commands_into(&mut bufs.gameconfig);
-    for cmd in bufs.gameconfig.drain(..) {
-        process_gameconfig_command(cmd, &mut scene_state.config);
-    }
-
-    lua_runtime.drain_camera_follow_commands_into(&mut bufs.camera_follow);
-    for cmd in bufs.camera_follow.drain(..) {
-        process_camera_follow_command(cmd, &mut scene_state.camera_follow);
-    }
-
-    lua_runtime.drain_input_commands_into(&mut bufs.input);
-    for cmd in bufs.input.drain(..) {
-        process_input_command(cmd, bindings);
-    }
-
-    lua_runtime.drain_group_commands_into(&mut bufs.group);
-    if !bufs.group.is_empty() {
-        for cmd in bufs.group.drain(..) {
-            process_group_command(tracked_groups, cmd);
+        lua_runtime.drain_gameconfig_commands_into(&mut bufs.gameconfig);
+        for cmd in bufs.gameconfig.drain(..) {
+            process_gameconfig_command(cmd, &mut scene_state.config);
         }
-        lua_runtime.update_tracked_groups_cache(&tracked_groups.groups);
+
+        lua_runtime.drain_camera_follow_commands_into(&mut bufs.camera_follow);
+        for cmd in bufs.camera_follow.drain(..) {
+            process_camera_follow_command(cmd, &mut scene_state.camera_follow);
+        }
+
+        lua_runtime.drain_input_commands_into(&mut bufs.input);
+        for cmd in bufs.input.drain(..) {
+            process_input_command(cmd, bindings);
+        }
+
+        lua_runtime.drain_group_commands_into(&mut bufs.group);
+        if !bufs.group.is_empty() {
+            for cmd in bufs.group.drain(..) {
+                process_group_command(tracked_groups, cmd);
+            }
+            lua_runtime.update_tracked_groups_cache(&tracked_groups.groups);
+        }
     }
 }
 
@@ -375,35 +396,29 @@ fn resolve_input_table(
 /// since forgetting `on_update_<scene>` entirely is an authoring error
 /// worth flagging -- deduped by name so a genuinely-missing callback logs
 /// once, not every tick.
-#[allow(clippy::too_many_arguments, private_interfaces)]
+#[allow(clippy::too_many_arguments)]
 pub fn update(
     time: Res<WorldTime>,
     input: Res<InputState>,
     camera: Res<Camera2DRes>,
     screen: Res<ScreenSize>,
-    mut commands: Commands,
-    mut scripting: ScriptingContext,
-    mut scene_state: GameSceneState,
+    mut ctx: DrainCtx,
     scene_manager: Res<SceneManager>,
-    mut bindings: ResMut<InputBindings>,
-    mut tracked_groups: ResMut<TrackedGroups>,
-    mut common_bufs: Local<CommonCmdBufs>,
     mut cached_callback: Local<String>,
     mut missing_callback_warned: Local<String>,
-    gui_theme_store: Res<GuiThemeStore>,
-    mut gui_theme_warn_cache: ResMut<GuiThemeWarnCache>,
     entered_at: Res<LuaSceneEnteredAt>,
 ) {
     aberred_core::tracy::tracy_span!("lua_update");
-    let lua_runtime = &scripting.lua_runtime;
+    let lua_runtime = &ctx.scripting.lua_runtime;
     let delta_sec = time.delta;
+    let scene_state = &mut ctx.scene_state;
 
     // Update signal cache for Lua to read current values
     lua_runtime.sync_signals(&mut scene_state.world_signals);
     lua_runtime.update_gameconfig_cache(&scene_state.config);
     lua_runtime.update_camera_cache(&camera, &screen, scene_state.config.pixel_snap_camera);
-    if bindings.take_dirty() {
-        lua_runtime.update_bindings_cache(&bindings);
+    if ctx.bindings.take_dirty() {
+        lua_runtime.update_bindings_cache(&ctx.bindings);
     }
 
     // The scene the engine entered, not the `scene` string a script can write.
@@ -432,17 +447,7 @@ pub fn update(
         }
     }
 
-    drain_common_commands(
-        lua_runtime,
-        &mut commands,
-        &mut scene_state,
-        &mut scripting.audio_cmd_writer,
-        &mut bindings,
-        &mut tracked_groups,
-        &mut common_bufs,
-        &gui_theme_store,
-        &mut gui_theme_warn_cache,
-    );
+    ctx.drain();
 }
 
 /// Drains `asset_commands` queued from gameplay (`on_update_*`, `on_switch_scene`, phase/timer/
@@ -472,7 +477,7 @@ pub fn process_lua_asset_commands(
     }
 }
 
-/// Builds a [`World`] with all resources [`drain_common_commands`] depends on.
+/// Builds a [`World`] with all resources [`DrainCtx`] depends on.
 #[cfg(test)]
 pub(crate) fn new_drain_test_world() -> World {
     let mut world = World::new();
@@ -504,48 +509,14 @@ mod tests {
     use bevy_ecs::message::Messages;
     use bevy_ecs::system::{RunSystemOnce, SystemState};
 
-    /// Runs [`drain_common_commands`] once against `world`, using a fresh
-    /// [`CommonCmdBufs`] (mirrors a single frame's drain in `update`).
-    /// Reads the existing `GuiThemeStore` resource, mirroring the real call sites.
+    /// Runs [`DrainCtx::drain`] once against `world` (mirrors a single
+    /// frame's drain in `update`).
     fn run_drain_common_commands(world: &mut World) {
-        let mut system_state = SystemState::<(
-            Commands,
-            NonSend<LuaRuntime>,
-            GameSceneState,
-            MessageWriter<AudioCmd>,
-            ResMut<InputBindings>,
-            ResMut<TrackedGroups>,
-            Res<GuiThemeStore>,
-            ResMut<GuiThemeWarnCache>,
-        )>::new(world);
-
-        let mut bufs = CommonCmdBufs::default();
-        {
-            let (
-                mut commands,
-                lua_runtime,
-                mut scene_state,
-                mut audio_cmd_writer,
-                mut bindings,
-                mut tracked_groups,
-                gui_theme_store,
-                mut gui_theme_warn_cache,
-            ) = system_state
-                .get_mut(world)
-                .expect("drain_common_commands test params should fetch");
-
-            drain_common_commands(
-                &lua_runtime,
-                &mut commands,
-                &mut scene_state,
-                &mut audio_cmd_writer,
-                &mut bindings,
-                &mut tracked_groups,
-                &mut bufs,
-                &gui_theme_store,
-                &mut gui_theme_warn_cache,
-            );
-        }
+        let mut system_state = SystemState::<DrainCtx>::new(world);
+        system_state
+            .get_mut(world)
+            .expect("DrainCtx test params should fetch")
+            .drain();
         system_state.apply(world);
     }
 
@@ -567,7 +538,7 @@ mod tests {
         assert!(world.resource::<TrackedGroups>().groups.contains("enemies"));
     }
 
-    /// Runs `script` through real Lua, then one [`drain_common_commands`] pass.
+    /// Runs `script` through real Lua, then one [`DrainCtx::drain`] pass.
     fn exec_and_drain(world: &mut World, script: &str) {
         world
             .get_non_send::<LuaRuntime>()
@@ -730,7 +701,7 @@ mod tests {
         run_drain_common_commands(&mut world);
 
         // No RenderCmd was queued this frame, so the gated seed/write-back in
-        // drain_common_commands must not have cloned-and-reinserted GuiThemeStore —
+        // DrainCtx::drain must not have cloned-and-reinserted GuiThemeStore —
         // otherwise every consumer using Changed<GuiThemeStore> would see a spurious
         // change every frame regardless of whether a theme command ever fired.
         assert!(

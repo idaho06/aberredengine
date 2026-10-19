@@ -7,13 +7,10 @@
 //! them only when a Lua script is set. Their order relative to other global
 //! observers of the same event is undefined.
 
-use crate::lua_plugin::{CommonCmdBufs, GameSceneState, ScriptingContext, drain_common_commands};
+use crate::lua_plugin::DrainCtx;
 use crate::resources::lua_runtime::LuaRuntime;
 use crate::resources::lua_scene_entered_at::LuaSceneEnteredAt;
 use aberred_core::events::scene::{SceneEntered, SceneExited};
-use aberred_core::resources::group::TrackedGroups;
-use aberred_core::resources::guitheme::{GuiThemeStore, GuiThemeWarnCache};
-use aberred_core::resources::input_bindings::InputBindings;
 use aberred_core::resources::worldtime::WorldTime;
 use bevy_ecs::prelude::*;
 use log::error;
@@ -30,23 +27,16 @@ pub fn lua_scene_exited_observer(_: On<SceneExited>, lua_runtime: NonSend<LuaRun
 /// callbacks are re-injected), refreshes the tracked-group and signal caches so
 /// the callback sees the post-teardown state, drains the commands it queued,
 /// refreshes the config cache and stamps [`LuaSceneEnteredAt`] with this tick.
-#[allow(clippy::too_many_arguments)]
 pub fn lua_scene_entered_observer(
     trigger: On<SceneEntered>,
-    mut commands: Commands,
-    mut scripting: ScriptingContext,
-    mut scene_state: GameSceneState,
-    mut tracked_groups: ResMut<TrackedGroups>,
-    mut bindings: ResMut<InputBindings>,
-    gui_theme_store: Res<GuiThemeStore>,
-    mut gui_theme_warn_cache: ResMut<GuiThemeWarnCache>,
+    mut ctx: DrainCtx,
     world_time: Res<WorldTime>,
     mut entered_at: ResMut<LuaSceneEnteredAt>,
 ) {
-    let lua_runtime = &scripting.lua_runtime;
+    let lua_runtime = &ctx.scripting.lua_runtime;
     lua_runtime.clear_function_cache();
-    lua_runtime.update_tracked_groups_cache(&tracked_groups.groups);
-    lua_runtime.sync_signals(&mut scene_state.world_signals);
+    lua_runtime.update_tracked_groups_cache(&ctx.tracked_groups.groups);
+    lua_runtime.sync_signals(&mut ctx.scene_state.world_signals);
 
     let name = &*trigger.event().name;
     if lua_runtime.has_function("on_switch_scene")
@@ -55,18 +45,10 @@ pub fn lua_scene_entered_observer(
         error!("Error calling on_switch_scene: {}", e);
     }
 
-    drain_common_commands(
-        lua_runtime,
-        &mut commands,
-        &mut scene_state,
-        &mut scripting.audio_cmd_writer,
-        &mut bindings,
-        &mut tracked_groups,
-        &mut CommonCmdBufs::default(),
-        &gui_theme_store,
-        &mut gui_theme_warn_cache,
-    );
-    lua_runtime.update_gameconfig_cache(&scene_state.config);
+    ctx.drain();
+    ctx.scripting
+        .lua_runtime
+        .update_gameconfig_cache(&ctx.scene_state.config);
     entered_at.0 = Some(world_time.frame_count);
 }
 
