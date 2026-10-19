@@ -222,7 +222,7 @@ The engine owns the main loop. You configure it through `EngineBuilder`: registe
 | `.try_run()` | Start the engine; a startup failure is returned as `Err(EngineError)`. See [Startup error handling](#startup-error-handling). |
 | `.run()` | Like `.try_run()`, but exits the process with status 1 on startup failure. |
 
-**Conflict rules:** `.add_scene()` cannot be combined with `.with_lua()` — a Lua game drives scenes from `main.lua`'s scene registry instead. `.add_scene()` requires `.initial_scene(...)`, and that name must match a registered scene — a missing or misspelled `.initial_scene(...)` is a startup error, and so is calling `.initial_scene(...)` with no `.add_scene()` calls at all. `.with_lua()` also conflicts with an explicit `.on_setup()` call, in either order — it installs its own setup hook, and mixing in yours is ambiguous. `.add_system()` combines with `.with_lua()` freely. Every rule here is checked at startup; see [Startup error handling](#startup-error-handling).
+**Conflict rules:** `.add_scene()` cannot be combined with `.with_lua()` — a Lua game's scenes come from `main.lua`, each registered on its first request. `.add_scene()` requires `.initial_scene(...)`, and that name must match a registered scene — a missing or misspelled `.initial_scene(...)` is a startup error, and so is calling `.initial_scene(...)` with no `.add_scene()` calls at all. `.with_lua()` also conflicts with an explicit `.on_setup()` call, in either order — it installs its own setup hook, and mixing in yours is ambiguous. `.add_system()` combines with `.with_lua()` freely. Every rule here is checked at startup; see [Startup error handling](#startup-error-handling).
 
 ### Multi-scene games
 
@@ -288,10 +288,12 @@ Add scenes with `.add_scene()` later and the same observers and systems move to 
 
 ### Scene-scoped systems and observers
 
-With `.add_scene()`, every scene has a persistent scene entity. These methods also accept the implicit `"main"` scene of a [single-scene game](#single-scene-games) (`signal_keys::MAIN_SCENE`). Each scene switch triggers `SceneExited` for the old scene, then `SceneEntered` for the new one, both targeted at that entity:
+Every scene has a persistent scene entity. These methods also accept the implicit `"main"` scene of a [single-scene game](#single-scene-games) (`signal_keys::MAIN_SCENE`). Each scene switch triggers `SceneExited` for the old scene, then `SceneEntered` for the new one, both targeted at that entity:
 
 - `SceneExited { scene, name, next }` fires before the old scene is torn down: its entities are still alive.
 - `SceneEntered { scene, name, previous }` fires after the teardown, so entities its observers spawn belong to the new scene. It also fires for the initial scene, with `previous: None`.
+
+Global observers of the same scene event (`.add_observer()`) run in no guaranteed order relative to each other. **Lua builds only:** both events fire in a `.with_lua()` game too, so its `.add_observer()` observers run alongside the engine's own Lua scene observers, also in no guaranteed order. No scene is registered at startup in such a game, so `.add_observer()` is the way to react to its scenes: the scene-named methods below fail with `EngineError::SceneNotRegistered`.
 
 `.on_scene_enter(scene, ..)`/`.on_scene_exit(scene, ..)` attach an observer to one scene's entity; `.add_observer()` sees every scene and reads `name` from the event. `.add_scene_system(scene, ..)` and `.add_system_if(.., in_scene(..))` run a system only while a scene is active. Every scene these methods name, and every scene given to `.add_scene_gui()`/`.add_scene_world_draw()`, must be registered with `.add_scene()` (the implicit `"main"` counts), or startup fails with `EngineError::SceneNotRegistered`.
 
@@ -384,7 +386,7 @@ Every scene switch is a request through the `NextScene` resource (in the prelude
 - **From a menu:** a `MenuAction::SetScene("level01")` item sets `NextScene` when it is confirmed.
 - **From a GUI callback:** `ctx.intents.request_scene(name)`; it reaches `NextScene` at the start of the next sim tick.
 
-The engine's `scene_switch_poll` system (registered automatically for every Rust game) checks `NextScene` in `SimSet::Drain`, late in the tick after your systems, and runs `scene_switch_system`, a one-shot system registered in `SystemsStore` under the key `"switch_scene"`; a request made after that point is picked up on the next tick. The last request before the poll wins. A quit requested in the same tick wins over a scene request: the game quits without switching.
+The engine's `scene_switch_poll` system (registered automatically for every game) checks `NextScene` in `SimSet::Drain`, late in the tick after your systems, and runs `scene_switch_system`, a one-shot system registered in `SystemsStore` under the key `"switch_scene"`; a request made after that point is picked up on the next tick. The last request before the poll wins. A quit requested in the same tick wins over a scene request: the game quits without switching.
 
 ```rust
 fn update(mut next_scene: ResMut<NextScene>) {
@@ -396,13 +398,13 @@ fn update(mut next_scene: ResMut<NextScene>) {
 
 The new scene's `.add_scene_system()` systems start on the next sim tick.
 
-> **Note:** a mistyped scene name only logs an error ("No scene registered for '…'", followed by the list of registered scenes), so it is easy to miss. Prefer constants over repeated string literals.
+> **Note:** a mistyped scene name only logs an error ("No scene registered for '…'", followed by the list of registered scenes), so it is easy to miss. Prefer constants over repeated string literals. **Lua builds only:** in a `.with_lua()` game a mistyped name is registered as a new, empty scene and entered, with no error.
 
 ### What happens during a scene switch
 
 When the `scene_switch_system` runs, it performs these steps in order:
 
-1. **Take and check the target scene** — takes the requested name from `NextScene`. If no scene is registered under that name, the system logs "No scene registered" and returns: nothing below runs, and the current scene keeps running untouched. The request is consumed either way; it is not retried
+1. **Take and check the target scene** — takes the requested name from `NextScene`. If no scene is registered under that name, the system logs "No scene registered" and returns: nothing below runs, and the current scene keeps running untouched. The request is consumed either way; it is not retried. In a `.with_lua()` game an unknown name is registered instead, and the switch goes ahead
 2. **Forget collision contacts, then trigger `SceneExited`** — if a scene was active, the touching pairs are forgotten without a `CollisionEnded` (see [Contact events](#contact-events)), then its exit observers run while its entities, `WorldSignals` entity registrations and group counts are all still in place
 3. **Despawn non-persistent entities** — every entity *without* the `Persistent` component is despawned
 4. **Clear entity registrations** — non-persistent entity refs stored in `WorldSignals` are removed
@@ -2375,7 +2377,7 @@ All resources are accessed as Bevy ECS system parameters. Use `Res<T>` / `ResMut
 | `CameraFollowConfig` | `ResMut` | Camera-follow behavior (mode, easing, zoom speed, bounds, offsets); see [Following an entity](#following-an-entity) |
 | `DebugOverlayConfig` | `ResMut` | F11 debug overlay toggles for colliders, signals, bounds, and crosshairs |
 | `SystemsStore` | `Res` | Named system registry for `commands.run_system()` |
-| `SceneManager` | `Res` | Scene registry (only present with `.add_scene()`) |
+| `SceneManager` | `Res` | Scene registry: the `.add_scene()` scenes or the implicit `"main"` (a Lua game registers its scenes on demand) |
 | `Camera2DRes` | `ResMut` | 2D camera (target, offset, zoom, rotation) |
 | `AnimationStore` | `Res` / `ResMut` | Animation definitions |
 | `GuiThemeStore` | `ResMut` | Named GUI theme registry (`FxHashMap<Arc<str>, GuiTheme>`); each theme holds panel/button/label/progress_bar nine-patches, font settings, and optional shadows; see [GUI widgets](#gui-widgets) |
