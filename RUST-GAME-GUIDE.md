@@ -186,7 +186,7 @@ Setup ──→ Playing ──→ Quitting
 
 1. **Setup** — The engine calls the `setup` hook once, on the logic thread. Load assets here (textures, fonts, sounds, shaders, animations; see [Section 6](#6-loading-assets)). Omit `.on_setup()` if you have nothing to load. With `.loading_scene(name)`, that scene is entered right after the hook and stays active until Setup ends. Once the hook has run, the engine moves to `Playing` on its own, as soon as every load queued so far has been answered (see [Waiting for loads](#waiting-for-loads)); a failed load counts as answered. A hook that requests `Playing` itself waits the same way. A hook that requests another state through `ResMut<NextGameState>` (e.g. `GameStates::Quitting`) gets it at once.
 2. **Playing** — The engine enters the initial scene (triggering `SceneEntered`) and runs your systems every sim tick.
-3. **Scene switches** — A request through `NextScene::set(name)`, a `MenuAction::SetScene` menu item or a GUI callback's `intents.request_scene(name)` runs the exit→enter sequence at the end of the tick; see [Triggering scene transitions](#triggering-scene-transitions).
+3. **Scene switches** — A request through `NextScene::set(name)`, a `MenuAction::SetScene` menu item or a GUI callback's `intents.request_scene(name)` runs the exit→enter sequence late in the tick (`SimSet::Drain`); see [Triggering scene transitions](#triggering-scene-transitions).
 4. **Quitting** — When the game state becomes `GameStates::Quitting` (via `NextGameState::set(GameStates::Quitting)`, a `MenuAction::QuitGame` menu item or a GUI callback's `intents.request_quit()`) or the window is closed, the engine shuts down. Request it from any system or observer through `ResMut<NextGameState>`.
 
 ---
@@ -293,7 +293,7 @@ Every scene has a persistent scene entity. These methods also accept the implici
 - `SceneExited { scene, name, next }` fires before the old scene is torn down: its entities are still alive.
 - `SceneEntered { scene, name, previous }` fires after the teardown, so entities its observers spawn belong to the new scene. It also fires for the initial scene, with `previous: None`.
 
-Global observers of the same scene event (`.add_observer()`) run in no guaranteed order relative to each other. **Lua builds only:** both events fire in a `.with_lua()` game too, so its `.add_observer()` observers run alongside the engine's own Lua scene observers, also in no guaranteed order. No scene is registered at startup in such a game, so `.add_observer()` is the way to react to its scenes: the scene-named methods below fail with `EngineError::SceneNotRegistered`.
+Global observers of the same scene event (`.add_observer()`) run in no guaranteed order relative to each other. **Lua builds only:** both events fire in a `.with_lua()` game too, so its `.add_observer()` observers run alongside the engine's own Lua scene observers, also in no guaranteed order. No scene is registered at startup in such a game, so `.add_observer()` is the way to react to its scenes.
 
 `.on_scene_enter(scene, ..)`/`.on_scene_exit(scene, ..)` attach an observer to one scene's entity; `.add_observer()` sees every scene and reads `name` from the event. `.add_scene_system(scene, ..)` and `.add_system_if(.., in_scene(..))` run a system only while a scene is active. Every scene these methods name, and every scene given to `.add_scene_gui()`/`.add_scene_world_draw()`, must be registered with `.add_scene()` (the implicit `"main"` counts), or startup fails with `EngineError::SceneNotRegistered`.
 
@@ -1827,7 +1827,7 @@ commands.spawn((menu, actions));
 
 | Variant | Effect |
 |---------|--------|
-| `SetScene(String)` | Requests the scene through `NextScene`; the switch runs at the end of the tick |
+| `SetScene(String)` | Requests the scene through `NextScene`; the switch runs late in the tick (`SimSet::Drain`) |
 | `QuitGame` | Transitions to quitting state |
 | `Noop` | Does nothing |
 
@@ -2372,12 +2372,12 @@ All resources are accessed as Bevy ECS system parameters. Use `Res<T>` / `ResMut
 | `InputBindings` | `ResMut` | Runtime key/mouse binding map (`InputAction` → `Vec<InputBinding>`). Modify to rebind actions at runtime — takes effect the very next sim tick. |
 | `GameState` | `Res` | Current state: `None → Setup → Playing → Quitting` |
 | `NextGameState` | `ResMut` | Request state transitions, e.g. `.set(GameStates::Quitting)` |
-| `NextScene` | `ResMut` | Request a scene switch with `.set(name)`; `scene_switch_poll` takes it at the end of the tick |
+| `NextScene` | `ResMut` | Request a scene switch with `.set(name)`; `scene_switch_poll` takes it late in the tick (`SimSet::Drain`) |
 | `PostProcessShader` | `ResMut` | Shader chain + uniforms (reserved: `uTime`, `uDeltaTime`, `uResolution`, `uFrame`, `uWindowResolution`, `uLetterbox`) |
 | `CameraFollowConfig` | `ResMut` | Camera-follow behavior (mode, easing, zoom speed, bounds, offsets); see [Following an entity](#following-an-entity) |
 | `DebugOverlayConfig` | `ResMut` | F11 debug overlay toggles for colliders, signals, bounds, and crosshairs |
 | `SystemsStore` | `Res` | Named system registry for `commands.run_system()` |
-| `SceneManager` | `Res` | Scene registry: the `.add_scene()` scenes or the implicit `"main"` (a Lua game registers its scenes on demand) |
+| `SceneManager` | `Res` | Scene registry: the `.add_scene()` scenes or the implicit `"main"` (a Lua game registers each scene on its first request) |
 | `Camera2DRes` | `ResMut` | 2D camera (target, offset, zoom, rotation) |
 | `AnimationStore` | `Res` / `ResMut` | Animation definitions |
 | `GuiThemeStore` | `ResMut` | Named GUI theme registry (`FxHashMap<Arc<str>, GuiTheme>`); each theme holds panel/button/label/progress_bar nine-patches, font settings, and optional shadows; see [GUI widgets](#gui-widgets) |
