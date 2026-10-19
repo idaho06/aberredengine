@@ -23,7 +23,7 @@
 //! - [`input`] – per-frame keyboard state of keys relevant to the game
 //! - [`next_scene`] – pending scene switch request
 //! - [`screensize`] – game's internal render resolution in pixels
-//! - [`scenemanager`] – scene registry for `SceneManager`-based Rust games
+//! - [`scenemanager`] – scene registry and active-scene tracking
 //! - [`signal_intents`] – deferred `WorldSignals` writes queued by render-side scene callbacks
 //! - [`sim_rng`] – shared, deterministic RNG for sim-schedule systems and observers
 //! - [`systemsstore`] – registry of dynamically-lookup-able systems by name

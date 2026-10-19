@@ -14,8 +14,8 @@ pub enum EngineError {
 
     #[error(
         "EngineBuilder conflict: .with_lua() and .add_scene() are mutually exclusive. \
-         Lua games drive scenes from main.lua's scene registry; SceneManager games use \
-         .add_scene() -- not both."
+         A Lua game's scenes come from main.lua (each registers on its first request); \
+         a Rust game declares them with .add_scene() -- not both."
     )]
     LuaConflictsWithSceneManager,
 
