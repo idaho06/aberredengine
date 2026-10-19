@@ -159,13 +159,15 @@ type SceneTeardown = (
 ///
 /// Takes the target from [`NextScene`] (no request: logs and returns);
 /// entering a scene writes its name to [`sk::SCENE`]. A refused or unknown
-/// request is consumed. During `Setup` the only
-/// allowed target is the loading scene (the engine entering it); any other
-/// switch is logged and ignored. An unregistered name logs an error and leaves
-/// the current scene untouched. Otherwise, when a scene is active, it tears that scene down: it triggers
-/// [`SceneExited`] while the scene's entities are still alive, despawns
-/// non-[`Persistent`] entities, resets tracked groups to the persistent ones and
-/// records the old scene's name under [`sk::PREVIOUS_SCENE`]. Entering the first
+/// request is consumed. During `Setup` the only allowed target is the loading
+/// scene (the engine entering it); any other switch is logged and ignored. An
+/// unregistered name is registered when the manager
+/// [registers on demand](SceneManager::registers_on_demand); otherwise it logs
+/// an error and leaves the current scene untouched. Otherwise, when a scene is
+/// active, it tears that scene down: it triggers [`SceneExited`] while the
+/// scene's entities are still alive, despawns non-[`Persistent`] entities,
+/// resets tracked groups to the persistent ones and records the old scene's
+/// name under [`sk::PREVIOUS_SCENE`]. Entering the first
 /// scene tears nothing down, so what was spawned before it (during `Setup`)
 /// survives. Then it makes the new scene active and triggers [`SceneEntered`], so
 /// entities its observers spawn belong to the new scene.
@@ -188,18 +190,28 @@ pub fn scene_switch_system(world: &mut World, state: &mut SystemState<SceneTeard
         );
         return;
     }
-    let Some(entered) = scene_manager.scene_entity(&scene_name) else {
-        error!(
-            "scene_switch_system: No scene registered for '{}'; staying in the current scene. Registered scenes: {:?}",
-            scene_name,
-            scene_manager.scene_names()
-        );
-        return;
-    };
     let exited = scene_manager
         .active_scene
         .as_deref()
         .and_then(|prev| Some((Arc::<str>::from(prev), scene_manager.scene_entity(prev)?)));
+    let entered = match scene_manager.scene_entity(&scene_name) {
+        Some(entered) => entered,
+        None if scene_manager.registers_on_demand() => {
+            let entity = spawn_scene_entity(world, &scene_name);
+            world
+                .resource_mut::<SceneManager>()
+                .insert(&*scene_name, entity);
+            entity
+        }
+        None => {
+            error!(
+                "scene_switch_system: No scene registered for '{}'; staying in the current scene. Registered scenes: {:?}",
+                scene_name,
+                scene_manager.scene_names()
+            );
+            return;
+        }
+    };
 
     if let Some((prev, scene)) = &exited {
         // The old scene's pairs are despawned: forget them without ending them.
@@ -252,12 +264,23 @@ pub fn insert_scene_manager(
     scene_manager.initial_scene = initial_scene;
     scene_manager.loading_scene = loading_scene;
     for name in scenes {
-        let entity = world
-            .spawn((SceneName(Arc::from(name.as_str())), Persistent))
-            .id();
+        let entity = spawn_scene_entity(world, &name);
         scene_manager.insert(name, entity);
     }
     world.insert_resource(scene_manager);
+}
+
+/// Spawns the [`Persistent`] entity standing for the scene `name`.
+fn spawn_scene_entity(world: &mut World, name: &str) -> Entity {
+    world.spawn((SceneName(Arc::from(name)), Persistent)).id()
+}
+
+/// Inserts a [`SceneManager`] with no scenes that registers each scene on its
+/// first request: [`scene_switch_system`] spawns the [`Persistent`]
+/// [`SceneName`] entity for an unknown name instead of refusing it. Lua games,
+/// which declare no scenes, use it.
+pub fn insert_on_demand_scene_manager(world: &mut World) {
+    world.insert_resource(SceneManager::on_demand());
 }
 
 /// Run condition: true while `name` is the active [`SceneManager`] scene.
@@ -626,5 +649,76 @@ mod tests {
             world.resource::<SceneManager>().active_scene.as_deref(),
             Some("menu")
         );
+    }
+
+    /// World with an on-demand [`SceneManager`] (no scenes registered) and a
+    /// [`NextScene`] request for `target`.
+    fn on_demand_world_switching_to(target: &str) -> World {
+        let mut world = World::new();
+        insert_scene_switch_resources(&mut world);
+        insert_on_demand_scene_manager(&mut world);
+        world.resource_mut::<NextScene>().set(target);
+        world
+    }
+
+    /// An on-demand manager registers an unknown target as a persistent scene
+    /// entity and enters it.
+    #[test]
+    fn on_demand_switch_registers_and_enters_an_unknown_scene() {
+        let mut world = on_demand_world_switching_to("level");
+        world.init_resource::<SeenEvents>();
+        add_global_observer(
+            &mut world,
+            |ev: On<SceneEntered>, mut seen: ResMut<SeenEvents>| {
+                seen.0.push(format!("enter {} at {:?}", ev.name, ev.scene));
+            },
+        );
+
+        world.run_system_once(scene_switch_system).unwrap();
+
+        let scenes = world.resource::<SceneManager>();
+        let level = scenes.scene_entity("level").expect("level is registered");
+        assert_eq!(scenes.active_scene.as_deref(), Some("level"));
+        assert_eq!(world.get::<SceneName>(level).map(|n| &*n.0), Some("level"));
+        assert!(world.get::<Persistent>(level).is_some());
+        assert_eq!(
+            world.resource::<SeenEvents>().0,
+            [format!("enter level at {level:?}")]
+        );
+    }
+
+    /// A second request for an on-demand scene reuses its entity.
+    #[test]
+    fn on_demand_switch_reuses_a_registered_scene() {
+        let mut world = on_demand_world_switching_to("level");
+        world.run_system_once(scene_switch_system).unwrap();
+        let level = world.resource::<SceneManager>().scene_entity("level");
+
+        world.resource_mut::<NextScene>().set("menu");
+        world.run_system_once(scene_switch_system).unwrap();
+        world.resource_mut::<NextScene>().set("level");
+        world.run_system_once(scene_switch_system).unwrap();
+
+        let scenes = world.resource::<SceneManager>();
+        assert_eq!(scenes.scene_entity("level"), level);
+        assert_eq!(scenes.scene_names(), ["level", "menu"]);
+        assert_eq!(scenes.active_scene.as_deref(), Some("level"));
+    }
+
+    /// The `Setup` refusal comes first: a refused on-demand request registers
+    /// nothing and is consumed.
+    #[test]
+    fn on_demand_switch_during_setup_registers_nothing() {
+        let mut world = on_demand_world_switching_to("level");
+        let mut state = GameState::new();
+        state.set(GameStates::Setup);
+        world.insert_resource(state);
+
+        world.run_system_once(scene_switch_system).unwrap();
+
+        let scenes = world.resource::<SceneManager>();
+        assert!(scenes.is_empty());
+        assert_eq!(scenes.active_scene, None);
+        assert!(!world.resource::<NextScene>().is_pending());
     }
 }

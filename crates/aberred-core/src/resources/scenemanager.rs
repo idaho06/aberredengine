@@ -18,6 +18,9 @@ use rustc_hash::FxHashMap;
 ///
 /// Inserted as an ECS resource. Systems in [`scene_dispatch`](crate::systems::scene_dispatch)
 /// read/write this to validate switch targets and track which scene is active.
+/// A Rust game registers its scenes up front and refuses any other name; a Lua
+/// game registers each scene on its first request (see
+/// [`insert_on_demand_scene_manager`](crate::systems::scene_dispatch::insert_on_demand_scene_manager)).
 #[derive(Resource, Default)]
 pub struct SceneManager {
     /// Registered scene names, each with its persistent scene entity (see
@@ -30,12 +33,23 @@ pub struct SceneManager {
     /// Scene active during `Setup` while assets load (`EngineBuilder::loading_scene`).
     /// During `Setup` it is the only switch target.
     pub loading_scene: Option<String>,
+    /// Whether a switch to an unregistered name registers it instead of
+    /// refusing it.
+    on_demand: bool,
 }
 
 impl SceneManager {
     /// Create an empty scene manager.
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// An empty scene manager that registers each scene on its first request.
+    pub(crate) fn on_demand() -> Self {
+        Self {
+            on_demand: true,
+            ..Self::default()
+        }
     }
 
     /// Register a scene under the given name, standing for `entity`.
@@ -65,6 +79,12 @@ impl SceneManager {
     /// Returns true if no scenes are registered.
     pub fn is_empty(&self) -> bool {
         self.scenes.is_empty()
+    }
+
+    /// Whether a switch to an unregistered name registers that scene instead
+    /// of refusing it.
+    pub fn registers_on_demand(&self) -> bool {
+        self.on_demand
     }
 }
 
