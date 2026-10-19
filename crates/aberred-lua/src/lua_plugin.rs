@@ -14,7 +14,6 @@
 //! - [`ScriptingContext`] – `LuaRuntime` + audio command writer
 //! - [`GameSceneState`] – world signals, post-process, config, camera follow, stores
 
-use crate::resources::lua_active_scene::LuaActiveScene;
 use crate::resources::lua_runtime::{
     AnimationCmd, AssetCmd, CameraFollowCmd, GameConfigCmd, GroupCmd, InputCmd, LuaRuntime,
     Ordered, RenderCmd,
@@ -66,7 +65,6 @@ pub struct GameSceneState<'w> {
     pub world_signals: ResMut<'w, WorldSignals>,
     pub next_scene: ResMut<'w, NextScene>,
     pub next_game_state: ResMut<'w, NextGameState>,
-    pub active_scene: ResMut<'w, LuaActiveScene>,
     pub post_process: ResMut<'w, PostProcessShader>,
     pub config: ResMut<'w, GameConfig>,
     pub camera_follow: ResMut<'w, CameraFollowConfig>,
@@ -481,7 +479,6 @@ pub(crate) fn new_drain_test_world() -> World {
     world.insert_resource(WorldSignals::default());
     world.insert_resource(NextScene::default());
     world.insert_resource(NextGameState::default());
-    world.init_resource::<LuaActiveScene>();
     world.insert_resource(PostProcessShader::default());
     world.insert_resource(GameConfig::default());
     world.insert_resource(CameraFollowConfig::default());
@@ -788,16 +785,6 @@ mod tests {
         world
     }
 
-    /// Puts the game in `scene` as a scene switch leaves it: the active
-    /// scene `update` dispatches to, and its published `scene` string.
-    fn set_active_scene(world: &mut World, scene: &str) {
-        world.resource_mut::<LuaActiveScene>().0 = scene.to_owned();
-        world.resource_mut::<SceneManager>().active_scene = Some(scene.to_owned());
-        world
-            .resource_mut::<WorldSignals>()
-            .set_string(sk::SCENE, scene);
-    }
-
     /// Defines `on_update_level1`/`on_update_level2` Lua globals that count
     /// their calls in `level1_called`/`level2_called`.
     fn define_level1_and_level2_lua_callbacks(world: &World) {
@@ -828,7 +815,7 @@ mod tests {
     #[test]
     fn update_calls_scene_callback_and_drains_its_commands() {
         let mut world = new_update_test_world();
-        set_active_scene(&mut world, "level1");
+        world.resource_mut::<SceneManager>().active_scene = Some("level1".to_owned());
 
         let player = world
             .spawn(aberred_core::components::signals::Signals::default())
@@ -889,7 +876,6 @@ mod tests {
     #[test]
     fn update_calls_no_scene_callback_without_an_active_scene() {
         let mut world = new_update_test_world();
-        world.resource_mut::<LuaActiveScene>().0 = "level1".to_owned();
         define_level1_and_level2_lua_callbacks(&world);
 
         world.run_system_once(update).unwrap();
@@ -917,7 +903,7 @@ mod tests {
     #[test]
     fn update_warns_when_scene_callback_is_not_defined() {
         let mut world = new_update_test_world();
-        set_active_scene(&mut world, "no_update_here");
+        world.resource_mut::<SceneManager>().active_scene = Some("no_update_here".to_owned());
 
         // on_update_<scene> is the only (required) scene callback -- a
         // missing one warns via LuaRuntime::call_named rather than skipping
