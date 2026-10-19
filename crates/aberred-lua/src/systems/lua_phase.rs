@@ -212,6 +212,7 @@ fn phase_from_return(result: LuaValue, current_phase: &str, fn_name: &str) -> Op
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::lua_plugin::{lua_exec, lua_global};
     use crate::resources::lua_runtime::LuaRuntime;
     use crate::systems::lua_commands::init_dispatch_resources;
     use aberred_core::resources::worldtime::WorldTime;
@@ -226,22 +227,8 @@ mod tests {
         world.spawn(Observer::new(lua_phase_entered_observer));
         world.spawn(Observer::new(lua_phase_exited_observer));
         world.flush();
+        lua_exec(&world, script);
         world
-            .non_send::<LuaRuntime>()
-            .lua()
-            .load(script)
-            .exec()
-            .expect("lua load");
-        world
-    }
-
-    fn global<T: mlua::FromLua>(world: &World, name: &str) -> T {
-        world
-            .non_send::<LuaRuntime>()
-            .lua()
-            .globals()
-            .get(name)
-            .expect(name)
     }
 
     /// Spawns a phase entity whose core `Phase` is already in `current`, as
@@ -275,9 +262,9 @@ mod tests {
 
         enter(&mut world, entity, "idle", None);
 
-        assert_eq!(global::<i64>(&world, "calls"), 1);
-        assert_eq!(global::<String>(&world, "seen"), "idle");
-        assert!(global::<bool>(&world, "has_input"));
+        assert_eq!(lua_global::<i64>(&world, "calls"), 1);
+        assert_eq!(lua_global::<String>(&world, "seen"), "idle");
+        assert!(lua_global::<bool>(&world, "has_input"));
     }
 
     #[test]
@@ -287,7 +274,7 @@ mod tests {
 
         enter(&mut world, entity, "idle", None);
 
-        assert_eq!(global::<i64>(&world, "calls"), 0);
+        assert_eq!(lua_global::<i64>(&world, "calls"), 0);
     }
 
     #[test]
@@ -368,7 +355,7 @@ mod tests {
 
         run_phase_system(&mut world);
 
-        assert_eq!(global::<String>(&world, "seen"), "idle,run,");
+        assert_eq!(lua_global::<String>(&world, "seen"), "idle,run,");
     }
 
     #[test]
@@ -391,7 +378,7 @@ mod tests {
 
         enter(&mut world, entity, "run", Some("idle"));
 
-        assert_eq!(global::<String>(&world, "prev"), "idle");
+        assert_eq!(lua_global::<String>(&world, "prev"), "idle");
     }
 
     /// An entity already in `current` (phase_system swaps before triggering
@@ -421,9 +408,13 @@ mod tests {
 
         exit(&mut world, entity, "idle", "run");
 
-        assert_eq!(global::<i64>(&world, "argc"), 1, "called with (ctx) only");
-        assert_eq!(global::<String>(&world, "phase"), "run");
-        assert_eq!(global::<String>(&world, "prev"), "idle");
+        assert_eq!(
+            lua_global::<i64>(&world, "argc"),
+            1,
+            "called with (ctx) only"
+        );
+        assert_eq!(lua_global::<String>(&world, "phase"), "run");
+        assert_eq!(lua_global::<String>(&world, "prev"), "idle");
     }
 
     #[test]
@@ -461,10 +452,10 @@ mod tests {
         run_update(&mut world);
         run_update(&mut world);
 
-        assert_eq!(global::<i64>(&world, "calls"), 2);
-        assert_eq!(global::<f32>(&world, "seen_dt"), 0.25);
-        assert_eq!(global::<String>(&world, "phase"), "idle");
-        assert!(global::<bool>(&world, "has_input"));
+        assert_eq!(lua_global::<i64>(&world, "calls"), 2);
+        assert_eq!(lua_global::<f32>(&world, "seen_dt"), 0.25);
+        assert_eq!(lua_global::<String>(&world, "phase"), "idle");
+        assert!(lua_global::<bool>(&world, "has_input"));
     }
 
     #[test]
@@ -520,7 +511,7 @@ mod tests {
         run_phase_system(&mut world);
 
         assert_eq!(
-            global::<String>(&world, "seen"),
+            lua_global::<String>(&world, "seen"),
             "enter:0,update:0,update:0.25,"
         );
     }
@@ -539,7 +530,7 @@ mod tests {
 
         run_update(&mut world);
 
-        assert_eq!(global::<i64>(&world, "calls"), 0);
+        assert_eq!(lua_global::<i64>(&world, "calls"), 0);
     }
 
     #[test]

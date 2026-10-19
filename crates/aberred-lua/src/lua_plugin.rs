@@ -499,6 +499,28 @@ pub(crate) fn new_drain_test_world() -> World {
     world
 }
 
+/// Runs the Lua chunk `code` in `world`'s [`LuaRuntime`].
+#[cfg(test)]
+pub(crate) fn lua_exec(world: &World, code: &str) {
+    world
+        .non_send::<LuaRuntime>()
+        .lua()
+        .load(code)
+        .exec()
+        .expect("lua chunk");
+}
+
+/// Reads the Lua global `name` from `world`'s [`LuaRuntime`].
+#[cfg(test)]
+pub(crate) fn lua_global<T: mlua::FromLua>(world: &World, name: &str) -> T {
+    world
+        .non_send::<LuaRuntime>()
+        .lua()
+        .globals()
+        .get(name)
+        .expect(name)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

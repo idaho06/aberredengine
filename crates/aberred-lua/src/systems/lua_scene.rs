@@ -55,7 +55,7 @@ pub fn lua_scene_entered_observer(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::lua_plugin::new_drain_test_world;
+    use crate::lua_plugin::{lua_exec, lua_global, new_drain_test_world};
     use aberred_core::resources::worldsignals::WorldSignals;
     use std::sync::Arc;
 
@@ -67,24 +67,6 @@ mod tests {
         world.add_observer(lua_scene_exited_observer);
         world.add_observer(lua_scene_entered_observer);
         world
-    }
-
-    fn exec(world: &World, code: &str) {
-        world
-            .non_send::<LuaRuntime>()
-            .lua()
-            .load(code)
-            .exec()
-            .unwrap();
-    }
-
-    fn global<T: mlua::FromLua>(world: &World, name: &str) -> T {
-        world
-            .non_send::<LuaRuntime>()
-            .lua()
-            .globals()
-            .get(name)
-            .expect(name)
     }
 
     /// Triggers [`SceneEntered`] for `name`, then applies the observer's
@@ -104,7 +86,7 @@ mod tests {
     #[test]
     fn exited_clears_scene_queues_and_keeps_preserved_ones() {
         let mut world = scene_observer_world();
-        exec(
+        lua_exec(
             &world,
             "engine.load_map('maps/dummy.json')\n\
              engine.load_texture('boss', 'assets/boss.png')\n\
@@ -143,7 +125,7 @@ mod tests {
         world
             .non_send::<LuaRuntime>()
             .update_signal_cache(stale.snapshot());
-        exec(
+        lua_exec(
             &world,
             "function on_switch_scene(scene)\n\
                  switched_to = scene\n\
@@ -153,15 +135,15 @@ mod tests {
 
         enter(&mut world, "level");
 
-        assert_eq!(global::<String>(&world, "switched_to"), "level");
-        assert_eq!(global::<Option<u64>>(&world, "player_seen"), None);
+        assert_eq!(lua_global::<String>(&world, "switched_to"), "level");
+        assert_eq!(lua_global::<Option<u64>>(&world, "player_seen"), None);
     }
 
     /// A spawn queued in `on_switch_scene` is drained by the observer.
     #[test]
     fn entered_drains_commands_queued_by_on_switch_scene() {
         let mut world = scene_observer_world();
-        exec(
+        lua_exec(
             &world,
             "function on_switch_scene(scene) engine.spawn():register_as('hero'):build() end",
         );
@@ -177,12 +159,12 @@ mod tests {
     #[test]
     fn entered_clears_the_function_cache() {
         let mut world = scene_observer_world();
-        exec(&world, "function on_update_level() return 1 end");
+        lua_exec(&world, "function on_update_level() return 1 end");
         world
             .non_send::<LuaRuntime>()
             .get_function_cached("on_update_level")
             .unwrap();
-        exec(&world, "function on_update_level() return 2 end");
+        lua_exec(&world, "function on_update_level() return 2 end");
 
         enter(&mut world, "level");
 
