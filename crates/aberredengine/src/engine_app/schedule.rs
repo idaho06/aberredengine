@@ -499,8 +499,14 @@ impl EngineBuilder {
         Self::add_animation_system(sim, has_lua);
         // `.before(animation)`: a timer firing this tick sees the animation
         // frame from before this tick's advance (Rust `TimerFired` observers and
-        // Lua timer callbacks alike).
-        sim.add_systems(update_timers.before(animation).in_set(SimSet::Drain));
+        // Lua timer callbacks alike). `.before(scene_switch_poll)`: a scene
+        // request from a timer switches in the same tick.
+        sim.add_systems(
+            update_timers
+                .before(animation)
+                .before(scene_switch_poll)
+                .in_set(SimSet::Drain),
+        );
         sim.add_systems(update_world_signals_binding_system.in_set(SimSet::Bookkeeping));
         sim.add_systems(detect_window_resize.in_set(SimSet::Bookkeeping));
         sim.add_systems(

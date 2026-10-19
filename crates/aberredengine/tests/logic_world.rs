@@ -2214,6 +2214,41 @@ function on_update_b(input, dt) table.insert(LOG, "update:b") end
     );
 }
 
+/// A timer callback's `engine.change_scene` switches at Drain of the same
+/// tick (timers fire before `scene_switch_poll`), with no `on_update` that tick.
+#[cfg(feature = "lua")]
+#[test]
+fn lua_timer_change_scene_switches_in_the_same_tick() {
+    use aberredengine::core::components::timer::TimerMode;
+    use aberredengine::lua::components::lua_on_timer_fired::LuaOnTimerFired;
+
+    let mut tw = lua_script_world(
+        "timer_switch_timing",
+        r#"
+function on_enter_play()
+    engine.change_scene("a")
+    return ""
+end
+function on_switch_scene(scene) table.insert(LOG, "switch:" .. scene) end
+function on_update_a(input, dt) table.insert(LOG, "update:a") end
+function on_update_b(input, dt) table.insert(LOG, "update:b") end
+function on_timer(ctx) engine.change_scene("b") end
+"#,
+    );
+    tw.tick(1, DT);
+    take_lua_log(&mut tw);
+
+    tw.world.spawn(LuaOnTimerFired::timer(
+        DT * 0.5,
+        "on_timer",
+        TimerMode::Once,
+    ));
+    tw.tick(1, DT);
+    assert_eq!(take_lua_log(&mut tw), ["switch:b"]);
+    tw.tick(1, DT);
+    assert_eq!(take_lua_log(&mut tw), ["update:b"]);
+}
+
 /// A menu confirm switches at Drain of the same tick, with no `on_update`
 /// that tick; the new scene's first `on_update` sees no `just_pressed`.
 #[cfg(feature = "lua")]
