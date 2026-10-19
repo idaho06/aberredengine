@@ -4,8 +4,8 @@
 /// the `@master` arm below. `clear_policy` is `clear` (wiped by
 /// `clear_all_commands` on scene switch — the default for queues whose
 /// commands may reference about-to-be-despawned entities) or `preserve`
-/// (left untouched — for scene-agnostic queues whose only drain site runs
-/// after `switch_scene`, e.g. `map_commands`/`asset_commands`).
+/// (left untouched — for scene-agnostic queues, e.g.
+/// `map_commands`/`asset_commands`).
 ///
 /// A row typed `Ordered<T>` is stamped on push (`LuaAppData::push`) and must
 /// also be a `Kind` merged by `drain_and_process_effect_commands`

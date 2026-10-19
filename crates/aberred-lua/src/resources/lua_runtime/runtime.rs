@@ -858,7 +858,7 @@ mod tests {
             theme_buf.len(),
             1,
             "gui_theme_commands (preserve policy) must survive clear_all_commands, \
-             so engine.set_gui_theme_* calls queued from on_setup() aren't lost"
+             so pending engine.set_gui_theme_* calls survive a scene switch"
         );
     }
 

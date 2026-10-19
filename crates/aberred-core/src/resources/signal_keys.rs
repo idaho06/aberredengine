@@ -29,8 +29,8 @@ pub const SPEED_SQ: &str = "speed_sq";
 /// Unrelated to [`DEFAULT_SCENE`], the scene a Lua game enters when nothing was requested.
 pub const MAIN_SCENE: &str = "main";
 
-/// The scene a Lua game's `switch_scene` enters when no scene was requested
-/// (an `on_enter_play` that never calls `engine.change_scene`).
+/// The first scene a Lua game enters when none was requested (an
+/// `on_enter_play` that never calls `engine.change_scene`).
 pub const DEFAULT_SCENE: &str = "menu";
 
 /// Prefix for integer signals that track live entity counts per group.

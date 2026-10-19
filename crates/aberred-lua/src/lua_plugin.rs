@@ -239,11 +239,11 @@ pub(crate) fn drain_common_commands(
 
     lua_runtime.drain_render_commands_into(&mut bufs.render);
     // gui_theme_commands is a separate, `preserve`-policy queue (see
-    // queue_registry.rs) so a `set_gui_theme_*` call queued from on_setup()
-    // survives the first switch_scene's clear_all_commands() — unlike
-    // render_commands (post-process, `clear` policy), which is wiped every
-    // scene switch since post-process commands may reference a scene's
-    // about-to-be-despawned state.
+    // queue_registry.rs) so a pending `set_gui_theme_*` call survives the
+    // clear_all_commands() of a scene switch — unlike render_commands
+    // (post-process, `clear` policy), which is wiped every scene switch since
+    // post-process commands may reference a scene's about-to-be-despawned
+    // state.
     lua_runtime.drain_gui_theme_commands_into(&mut bufs.gui_theme);
     if !bufs.render.is_empty() || !bufs.gui_theme.is_empty() {
         // Seed/write-back only when there's actually a render command to apply —

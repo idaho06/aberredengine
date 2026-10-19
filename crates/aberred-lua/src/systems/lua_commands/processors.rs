@@ -1161,7 +1161,7 @@ mod tests {
 
     /// `engine.change_scene` requests the scene through `NextScene` and never
     /// writes the `scene` string: observer drains run mid-tick, and
-    /// `switch_scene` (not this processor) applies the request.
+    /// the scene switch (not this processor) applies the request.
     #[test]
     fn signal_cmd_change_scene_requests_next_scene() {
         use aberred_core::resources::next_scene::NextScene;
