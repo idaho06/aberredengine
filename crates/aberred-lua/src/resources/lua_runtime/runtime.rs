@@ -841,9 +841,8 @@ mod tests {
                 .push(RenderCmd::ClearPostProcessUniforms);
         }
 
-        // Mirrors switch_scene's clear_all_commands() call, which runs
-        // before commands queued during on_setup() (or earlier this frame)
-        // are ever drained.
+        // Mirrors the scene-exit observer's clear_all_commands() call, which
+        // runs before commands queued earlier in the tick are drained.
         runtime.clear_all_commands();
 
         let mut render_buf = Vec::new();

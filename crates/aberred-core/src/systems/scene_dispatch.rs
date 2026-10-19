@@ -152,10 +152,9 @@ type SceneTeardown = (
     ResMut<'static, SceneManager>,
 );
 
-/// Handles scene transitions for [`SceneManager`]-based games.
+/// Handles scene transitions for every game.
 ///
-/// This system is registered into [`SystemsStore`] under `"switch_scene"` when
-/// the developer uses `aberredengine::EngineBuilder::add_scene`.
+/// This system is registered into [`SystemsStore`] under `"switch_scene"`.
 ///
 /// Takes the target from [`NextScene`] (no request: logs and returns);
 /// entering a scene writes its name to [`sk::SCENE`]. A refused or unknown
@@ -303,8 +302,7 @@ pub fn in_scene(name: &str) -> impl FnMut(Option<Res<SceneManager>>) -> bool + C
 /// during the tick switches at its end and the new scene's systems start the
 /// next tick.
 ///
-/// Added to the sim schedule for every game without Lua (all of them have
-/// scenes: their own, or the implicit `"main"`).
+/// Added to the sim schedule of every game.
 pub fn scene_switch_poll(
     mut commands: Commands,
     next_scene: Res<NextScene>,
@@ -355,7 +353,7 @@ pub fn scene_enter_loading(
 }
 
 /// Requests `scene` through [`NextScene`] and runs the `switch_scene` system.
-fn switch_to(
+pub fn switch_to(
     mut commands: Commands,
     mut next_scene: ResMut<NextScene>,
     systems_store: &SystemsStore,

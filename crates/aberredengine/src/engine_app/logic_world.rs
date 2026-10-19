@@ -71,6 +71,8 @@ use aberred_lua::resources::lua_phase_events::LuaPhaseEvents;
 #[cfg(feature = "lua")]
 use aberred_lua::resources::lua_runtime::LuaRuntime;
 #[cfg(feature = "lua")]
+use aberred_lua::resources::lua_scene_entered_at::LuaSceneEnteredAt;
+#[cfg(feature = "lua")]
 use aberred_lua::systems::lua_animation_finished::lua_animation_finished_observer;
 #[cfg(feature = "lua")]
 use aberred_lua::systems::lua_collision::lua_collision_rule_added_observer;
@@ -82,6 +84,8 @@ use aberred_lua::systems::lua_mapspawn::lua_map_spawned_observer;
 use aberred_lua::systems::lua_menu::lua_menu_selection_observer;
 #[cfg(feature = "lua")]
 use aberred_lua::systems::lua_phase::{lua_phase_entered_observer, lua_phase_exited_observer};
+#[cfg(feature = "lua")]
+use aberred_lua::systems::lua_scene::{lua_scene_entered_observer, lua_scene_exited_observer};
 #[cfg(feature = "lua")]
 use aberred_lua::systems::lua_timer_fired::{lua_timer_fired_observer, lua_timer_removed_observer};
 #[cfg(feature = "lua")]
@@ -222,9 +226,10 @@ impl EngineBuilder {
 
     /// Register the hook/scene one-shot systems into the LOGIC world (runs on
     /// the logic thread; consumes the setup hook and scenes out of `init`). A
-    /// Lua game gets `lua_plugin`'s setup/enter_play/switch_scene and an
-    /// on-demand `SceneManager` (each scene registers on its first request);
-    /// every other game has at least `"main"`.
+    /// Lua game gets `lua_plugin`'s setup/enter_play, core's
+    /// `scene_switch_system` and an on-demand `SceneManager` (each scene
+    /// registers on its first request); every other game has at least
+    /// `"main"`.
     pub(crate) fn register_logic_systems(
         init: &mut LogicInit,
         world: &mut World,
@@ -252,7 +257,7 @@ impl EngineBuilder {
                 world,
                 &mut systems_store,
                 hook_keys::SWITCH_SCENE,
-                lua_plugin::switch_scene,
+                scene_switch_system,
             );
         }
         if let Some(hook) = init.setup_hook.take() {
@@ -352,6 +357,9 @@ impl EngineBuilder {
             world.spawn((Observer::new(lua_timer_removed_observer), Persistent));
             world.init_resource::<LuaPhaseEvents>();
             world.init_resource::<LuaActiveScene>();
+            world.init_resource::<LuaSceneEnteredAt>();
+            world.spawn((Observer::new(lua_scene_exited_observer), Persistent));
+            world.spawn((Observer::new(lua_scene_entered_observer), Persistent));
             world.spawn((Observer::new(lua_phase_entered_observer), Persistent));
             world.spawn((Observer::new(lua_phase_exited_observer), Persistent));
             world.spawn((Observer::new(lua_menu_selection_observer), Persistent));

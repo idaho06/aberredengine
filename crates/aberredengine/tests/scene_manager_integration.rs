@@ -212,7 +212,7 @@ fn scene_switch_poll_runs_the_switch_for_a_next_scene_request() {
 }
 
 /// A quit requested the same tick wins: the poll does not switch scenes on
-/// the way out (the Lua poll behaves the same).
+/// the way out.
 #[test]
 fn scene_switch_poll_yields_to_a_pending_quit() {
     let mut world = scene_world(&["menu", "level1"]);

@@ -1000,11 +1000,16 @@ fn assert_b_systems_start_next_tick(tw: &mut TestWorld) {
 fn scene_ticks_before_and_after_switching_to_b(
     register: impl FnOnce(TestWorldBuilder) -> TestWorldBuilder,
 ) -> (u32, u32) {
-    let mut tw = two_scene_world(register);
+    scene_ticks_before_and_after_switching(&mut two_scene_world(register), "b")
+}
+
+/// Counts `count_scene_ticks` runs over 3 ticks, then after switching to
+/// `scene` (the switch tick included) and 3 more ticks.
+fn scene_ticks_before_and_after_switching(tw: &mut TestWorld, scene: &str) -> (u32, u32) {
     tw.tick(3, DT);
     let before = tw.world.resource::<SceneTicks>().0;
 
-    tw.world.resource_mut::<NextScene>().set("b");
+    tw.world.resource_mut::<NextScene>().set(scene);
     tw.tick(1, DT); // the switch lands at the end of this tick
     tw.tick(3, DT);
     (before, tw.world.resource::<SceneTicks>().0)
@@ -1813,8 +1818,8 @@ function on_switch_scene(scene) table.insert(LOG, "switch:" .. scene) end
     );
 }
 
-/// A GUI `request_scene` intent switches a Lua game's scene on its delivery
-/// tick, through the Lua poll at the end of `update`.
+/// A GUI `request_scene` intent switches a Lua game's scene at Drain of its
+/// delivery tick.
 #[cfg(feature = "lua")]
 #[test]
 fn gui_scene_request_switches_a_lua_game() {
@@ -1867,14 +1872,10 @@ function on_update_menu(input, dt) engine.quit() end
     assert_eq!(render_quits(&tw), 1, "quit_game runs exactly once");
 }
 
-/// Confirming a Lua menu item built with `:with_menu_action_set_scene`
-/// switches to that scene through the real schedule.
+/// Lua callbacks that log each scene switch and give `menu` one item, `go`,
+/// whose confirm switches to `b` (`:with_menu_action_set_scene`).
 #[cfg(feature = "lua")]
-#[test]
-fn lua_menu_action_set_scene_switches_the_scene() {
-    let mut tw = lua_script_world(
-        "menu_action_set_scene",
-        r#"
+const LUA_MENU_GO_TO_B: &str = r#"
 function on_enter_play() return "" end
 function on_switch_scene(scene)
     table.insert(LOG, "switch:" .. scene)
@@ -1885,8 +1886,14 @@ function on_switch_scene(scene)
             :build()
     end
 end
-"#,
-    );
+"#;
+
+/// Confirming a Lua menu item built with `:with_menu_action_set_scene`
+/// switches to that scene through the real schedule.
+#[cfg(feature = "lua")]
+#[test]
+fn lua_menu_action_set_scene_switches_the_scene() {
+    let mut tw = lua_script_world("menu_action_set_scene", LUA_MENU_GO_TO_B);
     tw.tick(1, DT);
 
     press_space(&mut tw);
@@ -2095,6 +2102,143 @@ end
         tw.world.resource::<WorldSignals>().get_string(sk::SCENE),
         Some("menu")
     );
+}
+
+/// Rust `SceneEntered`/`SceneExited` observers see a Lua game's scenes.
+#[cfg(feature = "lua")]
+#[test]
+fn lua_game_triggers_rust_scene_events() {
+    let mut tw = lua_script_world_unplayed_with(
+        "rust_scene_events",
+        "function on_enter_play() return '' end\n",
+        |builder| {
+            builder
+                .add_observer(log_scene_entered)
+                .add_observer(log_scene_exited)
+        },
+    );
+    tw.world.init_resource::<SceneLog>();
+    tw.tick_to_play(DT, 8);
+
+    tw.world.resource_mut::<NextScene>().set("a");
+    tw.tick(2, DT);
+
+    assert_eq!(
+        tw.world.resource::<SceneLog>().0,
+        [
+            "enter menu (entity menu) from None",
+            "exit menu -> a",
+            "enter a (entity a) from Some(\"menu\")",
+        ]
+    );
+}
+
+/// A system gated on `in_scene("menu")` runs only while a Lua game is in
+/// `menu`.
+#[cfg(feature = "lua")]
+#[test]
+fn in_scene_gates_a_system_in_a_lua_game() {
+    let mut tw = lua_script_world_unplayed_with(
+        "in_scene",
+        "function on_enter_play() return '' end\n",
+        |builder| builder.add_system_if(count_scene_ticks, in_scene("menu")),
+    );
+    tw.world.init_resource::<SceneTicks>();
+    tw.tick_to_play(DT, 8);
+
+    let (before, after) = scene_ticks_before_and_after_switching(&mut tw, "a");
+
+    assert!(before >= 3, "runs in menu: {before}");
+    assert_eq!(after - before, 1, "only on the switch tick");
+}
+
+/// An entity spawned in `on_enter_play` survives the first scene entry.
+#[cfg(feature = "lua")]
+#[test]
+fn lua_on_enter_play_spawn_survives_the_first_scene_entry() {
+    let mut tw = lua_script_world(
+        "enter_play_spawn",
+        r#"
+function on_enter_play()
+    engine.spawn():register_as("keeper"):build()
+    return ""
+end
+function on_update_menu(input, dt)
+    table.insert(LOG, "keeper:" .. tostring(engine.get_entity("keeper") ~= nil))
+end
+"#,
+    );
+    tw.tick(2, DT);
+
+    assert_eq!(
+        take_lua_log(&mut tw).last().map(String::as_str),
+        Some("keeper:true")
+    );
+}
+
+/// `engine.change_scene` from `on_update` switches at the next tick's Drain,
+/// where no `on_update` runs; the new scene updates from the tick after.
+/// The first scene updates from the first `Playing` tick.
+#[cfg(feature = "lua")]
+#[test]
+fn lua_change_scene_from_on_update_switches_next_tick_and_updates_after() {
+    let mut tw = lua_script_world(
+        "update_switch_timing",
+        r#"
+function on_enter_play()
+    engine.change_scene("a")
+    return ""
+end
+function on_switch_scene(scene) table.insert(LOG, "switch:" .. scene) end
+function on_update_a(input, dt)
+    table.insert(LOG, "update:a")
+    if not REQUESTED then
+        REQUESTED = true
+        engine.change_scene("b")
+    end
+end
+function on_update_b(input, dt) table.insert(LOG, "update:b") end
+"#,
+    );
+    assert_eq!(take_lua_log(&mut tw), ["switch:a"]);
+
+    let mut ticks = Vec::new();
+    for _ in 0..3 {
+        tw.tick(1, DT);
+        ticks.push(take_lua_log(&mut tw));
+    }
+
+    assert_eq!(
+        ticks,
+        [vec!["update:a"], vec!["switch:b"], vec!["update:b"]]
+    );
+}
+
+/// A menu confirm switches at Drain of the same tick, with no `on_update`
+/// that tick; the new scene's first `on_update` sees no `just_pressed`.
+#[cfg(feature = "lua")]
+#[test]
+fn lua_menu_confirm_switches_at_drain_without_an_update_that_tick() {
+    let mut tw = lua_script_world(
+        "menu_confirm_timing",
+        &format!(
+            r#"{LUA_MENU_GO_TO_B}
+function on_update_menu(input, dt) table.insert(LOG, "update:menu") end
+function on_update_b(input, dt)
+    table.insert(LOG, "update:b:" .. tostring(input.digital.action_1.just_pressed))
+end
+"#
+        ),
+    );
+    tw.tick(1, DT);
+    take_lua_log(&mut tw);
+
+    press_space(&mut tw);
+    tw.tick(1, DT);
+    assert_eq!(take_lua_log(&mut tw), ["switch:b"]);
+    tw.tick(1, DT);
+
+    assert_eq!(take_lua_log(&mut tw), ["update:b:false"]);
 }
 
 /// Lua game running `script_body`, after `LOG = {}` (a global table its

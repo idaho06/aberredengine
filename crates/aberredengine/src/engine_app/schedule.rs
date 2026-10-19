@@ -236,9 +236,7 @@ impl EngineBuilder {
         for extra in extra_systems {
             extra(&mut sim);
         }
-        if !has_lua {
-            Self::add_scene_manager_systems(&mut sim);
-        }
+        Self::add_scene_manager_systems(&mut sim);
 
         let mut present = Self::build_present_schedule();
         present.set_executor(SingleThreadedExecutor::new());
@@ -570,7 +568,8 @@ impl EngineBuilder {
     /// (last among the engine's own groups) -- this is also where
     /// `on_update_<scene>` itself is dispatched, after
     /// `camera_follow_system` (see `lua_plugin::update`'s own doc comment for
-    /// the full rationale and the mid-tick scene-switch consequence).
+    /// the full rationale). It runs after `scene_switch_poll` (`SimSet::Drain`),
+    /// and skips the scene callback on a scene's entry tick.
     #[cfg(feature = "lua")]
     fn add_lua_update(sim: &mut Schedule) {
         sim.add_systems(
@@ -580,16 +579,13 @@ impl EngineBuilder {
         );
     }
 
-    /// Registers the SceneManager's own `sim`-schedule systems: every game
-    /// without Lua has scenes (its own, or the implicit `"main"`).
+    /// Registers the SceneManager's own `sim`-schedule systems. Every game
+    /// has scenes: a Lua game's register on demand, every other game has its
+    /// own or the implicit `"main"`.
     /// Accepted consequence: a scene switch resolved mid-tick runs the rest
     /// of that tick's pipeline against the newly-spawned scene, so the
     /// snapshot published at the end of that tick may show it partially
-    /// constructed -- same accepted tradeoff as the Lua-direct switch path
-    /// (see `lua_plugin::update`'s doc comment and [`Self::add_lua_update`]).
-    /// `.add_scene()` and Lua's `.with_lua()`
-    /// are mutually exclusive (`validate_builder`), so this and the
-    /// Lua-direct path never run together.
+    /// constructed.
     fn add_scene_manager_systems(sim: &mut Schedule) {
         sim.add_systems(
             scene_switch_poll
