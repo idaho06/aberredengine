@@ -200,11 +200,13 @@ pub fn enter_play(
     );
 }
 
-/// Drains and processes the command queues that are common to both [`update`] and
-/// [`switch_scene`]. Both contexts queue the same command types after their Lua callback
-/// returns; this helper eliminates the duplicated drain loops.
+/// Drains and processes the command queues that are common to [`update`],
+/// [`switch_scene`] and the scene-entered observer
+/// ([`lua_scene_entered_observer`](crate::systems::lua_scene::lua_scene_entered_observer)).
+/// Each queues the same command types after its Lua callback returns; this
+/// helper eliminates the duplicated drain loops.
 #[allow(clippy::too_many_arguments)]
-fn drain_common_commands(
+pub(crate) fn drain_common_commands(
     lua_runtime: &LuaRuntime,
     commands: &mut Commands,
     scene_state: &mut GameSceneState,
@@ -564,6 +566,29 @@ pub fn process_lua_asset_commands(
     }
 }
 
+/// Builds a [`World`] with all resources [`drain_common_commands`] depends on.
+#[cfg(test)]
+pub(crate) fn new_drain_test_world() -> World {
+    let mut world = World::new();
+    world.insert_resource(WorldSignals::default());
+    world.insert_resource(NextScene::default());
+    world.insert_resource(NextGameState::default());
+    world.init_resource::<LuaActiveScene>();
+    world.insert_resource(PostProcessShader::default());
+    world.insert_resource(GameConfig::default());
+    world.insert_resource(CameraFollowConfig::default());
+    world.insert_resource(SystemsStore::default());
+    world.insert_resource(AnimationStore::default());
+    world.insert_resource(InputBindings::default());
+    world.insert_resource(TrackedGroups::default());
+    world.insert_resource(CollisionContacts::default());
+    world.insert_resource(bevy_ecs::message::Messages::<AudioCmd>::default());
+    world.insert_resource(GuiThemeStore::default());
+    world.insert_resource(GuiThemeWarnCache::default());
+    world.insert_non_send(LuaRuntime::new().expect("LuaRuntime::new"));
+    world
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -573,28 +598,6 @@ mod tests {
     use aberred_core::math::Vec2;
     use bevy_ecs::message::Messages;
     use bevy_ecs::system::{RunSystemOnce, SystemState};
-
-    /// Builds a [`World`] with all resources [`drain_common_commands`] depends on.
-    fn new_drain_test_world() -> World {
-        let mut world = World::new();
-        world.insert_resource(WorldSignals::default());
-        world.insert_resource(NextScene::default());
-        world.insert_resource(NextGameState::default());
-        world.init_resource::<LuaActiveScene>();
-        world.insert_resource(PostProcessShader::default());
-        world.insert_resource(GameConfig::default());
-        world.insert_resource(CameraFollowConfig::default());
-        world.insert_resource(SystemsStore::default());
-        world.insert_resource(AnimationStore::default());
-        world.insert_resource(InputBindings::default());
-        world.insert_resource(TrackedGroups::default());
-        world.insert_resource(CollisionContacts::default());
-        world.insert_resource(Messages::<AudioCmd>::default());
-        world.insert_resource(GuiThemeStore::default());
-        world.insert_resource(GuiThemeWarnCache::default());
-        world.insert_non_send(LuaRuntime::new().expect("LuaRuntime::new"));
-        world
-    }
 
     /// Runs [`drain_common_commands`] once against `world`, using a fresh
     /// [`CommonCmdBufs`] (mirrors a single frame's drain in `update`/`switch_scene`).

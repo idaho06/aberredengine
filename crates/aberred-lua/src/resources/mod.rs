@@ -6,3 +6,4 @@
 pub mod lua_active_scene;
 pub mod lua_phase_events;
 pub mod lua_runtime;
+pub mod lua_scene_entered_at;
