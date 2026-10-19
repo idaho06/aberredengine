@@ -1899,11 +1899,219 @@ end
     );
 }
 
+/// With no request in `on_enter_play`, a Lua game enters `"menu"` first.
+#[cfg(feature = "lua")]
+#[test]
+fn lua_game_without_a_request_enters_the_menu_scene() {
+    let mut tw = lua_script_world(
+        "default_scene",
+        r#"
+function on_enter_play() return "" end
+function on_switch_scene(scene) table.insert(LOG, "switch:" .. scene) end
+"#,
+    );
+    tw.tick(1, DT);
+
+    assert_eq!(take_lua_log(&mut tw), ["switch:menu"]);
+    assert_eq!(
+        tw.world.resource::<WorldSignals>().get_string(sk::SCENE),
+        Some("menu")
+    );
+}
+
+/// Writing the `scene` string and the `switch_scene` flag from `on_update`
+/// switches nothing: the same `on_update_<scene>` keeps running.
+#[cfg(feature = "lua")]
+#[test]
+fn lua_raw_scene_signals_switch_nothing() {
+    let mut tw = lua_script_world(
+        "raw_scene_signals",
+        r#"
+function on_enter_play() return "" end
+function on_switch_scene(scene) table.insert(LOG, "switch:" .. scene) end
+function on_update_menu(input, dt)
+    table.insert(LOG, "update:menu")
+    engine.set_string("scene", "x")
+    engine.set_flag("switch_scene")
+end
+"#,
+    );
+    tw.tick(3, DT);
+
+    let log = take_lua_log(&mut tw);
+    let others: Vec<_> = log.iter().filter(|l| *l != "update:menu").collect();
+    assert_eq!(others, ["switch:menu"]);
+    assert_eq!(log.last().map(String::as_str), Some("update:menu"));
+}
+
+/// The first scene entry publishes no `previous_scene`; a switch publishes
+/// the scene it left.
+#[cfg(feature = "lua")]
+#[test]
+fn lua_scene_switch_publishes_the_scene_it_left() {
+    let mut tw = lua_script_world(
+        "previous_scene",
+        r#"
+function on_enter_play()
+    engine.change_scene("a")
+    return ""
+end
+"#,
+    );
+    tw.tick(1, DT);
+    let previous = |tw: &TestWorld| {
+        tw.world
+            .resource::<WorldSignals>()
+            .get_string(sk::PREVIOUS_SCENE)
+            .map(str::to_owned)
+    };
+    assert_eq!(previous(&tw), None);
+
+    tw.world.resource_mut::<NextScene>().set("b");
+    tw.tick(2, DT);
+
+    assert_eq!(previous(&tw).as_deref(), Some("a"));
+    assert_eq!(
+        tw.world.resource::<WorldSignals>().get_string(sk::SCENE),
+        Some("b")
+    );
+}
+
+/// A scene switch forgets collision contacts without ending them: a
+/// persistent pair that separates after the switch gets no `on_exit`.
+#[cfg(feature = "lua")]
+#[test]
+fn lua_scene_switch_forgets_collision_contacts() {
+    use aberredengine::core::components::persistent::Persistent;
+
+    let mut tw = lua_script_world(
+        "switch_contacts",
+        "function on_enter(ctx) LOG[#LOG + 1] = 'enter' end\n\
+         function on_exit(ctx) LOG[#LOG + 1] = 'exit' end\n",
+    );
+    spawn_lua_rule(&mut tw, None, &format!("{ENTER_EXIT}:with_persistent()"));
+    spawn_box(&mut tw, "a", 0.0, Persistent);
+    let b = spawn_box(&mut tw, "b", 5.0, Persistent);
+    tw.tick(1, DT);
+    assert_eq!(take_lua_log(&mut tw), ["enter"]);
+
+    // The switch runs after this tick's collision detection, so the pair
+    // still touches when its contacts are forgotten.
+    tw.world.resource_mut::<NextScene>().set("b");
+    tw.tick(1, DT);
+    move_to(&mut tw, b, 100.0);
+    tw.tick(1, DT);
+
+    assert!(!take_lua_log(&mut tw).iter().any(|l| l == "exit"));
+}
+
+/// A scene switch keeps the builder's `.track_group` groups and drops the
+/// groups the scene tracked through `engine.track_group`.
+#[cfg(feature = "lua")]
+#[test]
+fn lua_scene_switch_keeps_only_persistent_tracked_groups() {
+    use aberredengine::core::resources::group::TrackedGroups;
+
+    let mut tw = lua_script_world_with(
+        "switch_tracked_groups",
+        r#"
+function on_enter_play() return "" end
+function on_switch_scene(scene)
+    if scene == "menu" then engine.track_group("bullets") end
+end
+"#,
+        |builder| builder.track_group("enemies"),
+    );
+    tw.tick(1, DT);
+    let tracked =
+        |tw: &TestWorld, group: &str| tw.world.resource::<TrackedGroups>().has_group(group);
+    assert!(tracked(&tw, "enemies"));
+    assert!(tracked(&tw, "bullets"));
+
+    tw.world.resource_mut::<NextScene>().set("b");
+    tw.tick(2, DT);
+
+    assert!(tracked(&tw, "enemies"), "persistent group survives");
+    assert!(!tracked(&tw, "bullets"), "scene group is dropped");
+}
+
+/// `on_switch_scene` of the new scene no longer sees a non-persistent entity
+/// registered in the scene it left.
+#[cfg(feature = "lua")]
+#[test]
+fn lua_on_switch_scene_does_not_see_the_old_scene_registrations() {
+    let mut tw = lua_script_world(
+        "switch_registrations",
+        r#"
+function on_enter_play()
+    engine.change_scene("a")
+    return ""
+end
+function on_switch_scene(scene)
+    if scene == "a" then
+        engine.spawn():register_as("player"):build()
+    else
+        table.insert(LOG, scene .. ":" .. tostring(engine.get_entity("player")))
+    end
+end
+function on_update_a(input, dt)
+    if engine.get_entity("player") then table.insert(LOG, "a:has_player") end
+end
+"#,
+    );
+    tw.tick(2, DT);
+    assert!(take_lua_log(&mut tw).iter().any(|l| l == "a:has_player"));
+
+    tw.world.resource_mut::<NextScene>().set("b");
+    tw.tick(2, DT);
+
+    let log = take_lua_log(&mut tw);
+    let entered_b: Vec<_> = log.iter().filter(|l| l.starts_with("b:")).collect();
+    assert_eq!(entered_b, ["b:nil"]);
+}
+
+/// A scene request and a quit made in the same `on_update` quit without
+/// switching scenes.
+#[cfg(feature = "lua")]
+#[test]
+fn lua_quit_wins_over_a_scene_request_in_the_same_update() {
+    let mut tw = lua_script_world(
+        "quit_over_scene",
+        r#"
+function on_enter_play() return "" end
+function on_switch_scene(scene) table.insert(LOG, "switch:" .. scene) end
+function on_update_menu(input, dt)
+    engine.change_scene("b")
+    engine.quit()
+end
+"#,
+    );
+    tw.tick(5, DT);
+
+    assert_eq!(state(&tw), GameStates::Quitting);
+    assert_eq!(render_quits(&tw), 1, "quit_game runs exactly once");
+    assert!(!take_lua_log(&mut tw).iter().any(|l| l == "switch:b"));
+    assert_eq!(
+        tw.world.resource::<WorldSignals>().get_string(sk::SCENE),
+        Some("menu")
+    );
+}
+
 /// Lua game running `script_body`, after `LOG = {}` (a global table its
 /// callbacks can append to; see `take_lua_log`), ticked to Playing.
 #[cfg(feature = "lua")]
 fn lua_script_world(name: &str, script_body: &str) -> TestWorld {
-    let mut tw = lua_script_world_unplayed(name, script_body);
+    lua_script_world_with(name, script_body, |builder| builder)
+}
+
+/// [`lua_script_world`] with extra builder settings from `configure`.
+#[cfg(feature = "lua")]
+fn lua_script_world_with(
+    name: &str,
+    script_body: &str,
+    configure: impl FnOnce(TestWorldBuilder) -> TestWorldBuilder,
+) -> TestWorld {
+    let mut tw = lua_script_world_unplayed_with(name, script_body, configure);
     tw.tick_to_play(DT, 8);
     tw
 }
@@ -1911,13 +2119,22 @@ fn lua_script_world(name: &str, script_body: &str) -> TestWorld {
 /// [`lua_script_world`] before its first tick, still in Setup.
 #[cfg(feature = "lua")]
 fn lua_script_world_unplayed(name: &str, script_body: &str) -> TestWorld {
+    lua_script_world_unplayed_with(name, script_body, |builder| builder)
+}
+
+/// [`lua_script_world_with`] before its first tick, still in Setup.
+#[cfg(feature = "lua")]
+fn lua_script_world_unplayed_with(
+    name: &str,
+    script_body: &str,
+    configure: impl FnOnce(TestWorldBuilder) -> TestWorldBuilder,
+) -> TestWorld {
     let script = std::env::temp_dir().join(format!(
         "aberred_lua_script_{name}_{}.lua",
         std::process::id()
     ));
     std::fs::write(&script, format!("LOG = {{}}\n{script_body}")).unwrap();
-    let tw = TestWorld::builder()
-        .with_lua(&script)
+    let tw = configure(TestWorld::builder().with_lua(&script))
         .build()
         .expect("build should succeed");
     std::fs::remove_file(&script).ok();
