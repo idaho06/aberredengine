@@ -1915,7 +1915,7 @@ EngineBuilder::new()
     // …
 ```
 
-**Lua consumers (Lua builds only):** attach `LuaOnAnimationEnd::new("fn_name")` to the entity (or use `:with_on_animation_end("fn_name")` in the Lua spawn builder). The Lua callback signature is `fn(ctx, input)` — the same as timer and phase callbacks.
+**Lua consumers (Lua builds only):** attach `LuaOnAnimationFinished::new("on_done")` to the entity (or use `:with_lua_animation_finished("on_done")` in the Lua spawn builder). The Lua callback signature is `fn(ctx, input)` — the same as timer and phase callbacks.
 
 ### Tween finished event
 

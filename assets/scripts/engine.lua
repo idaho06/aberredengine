@@ -1813,6 +1813,11 @@ function EntityBuilder:with_gui_theme_key(key) end
 ---@return EntityBuilder
 function EntityBuilder:with_gui_window(width, height) end
 
+---Attach a callback fired exactly once when the entity's non-looped animation first reaches its last frame. Signature: fn(ctx, input). Looped animations never trigger it.
+---@param callback string
+---@return EntityBuilder
+function EntityBuilder:with_lua_animation_finished(callback) end
+
 ---Set the Lua collision rule's callback for when the groups stop touching (requires with_lua_collision_rule first)
 ---@param callback string
 ---@return EntityBuilder
@@ -1931,11 +1936,6 @@ function EntityBuilder:with_menu_visible_count(count) end
 ---@param follow_y boolean
 ---@return EntityBuilder
 function EntityBuilder:with_mouse_controlled(follow_x, follow_y) end
-
----Attach a callback fired exactly once when the entity's non-looped animation first reaches its last frame. Signature: fn(ctx, input). Looped animations never trigger it.
----@param fn_name string
----@return EntityBuilder
-function EntityBuilder:with_on_animation_end(fn_name) end
 
 ---Set parent entity for transform hierarchy
 ---@param parent_id integer
@@ -2405,6 +2405,11 @@ function CollisionEntityBuilder:with_gui_theme_key(key) end
 ---@return CollisionEntityBuilder
 function CollisionEntityBuilder:with_gui_window(width, height) end
 
+---Attach a callback fired exactly once when the entity's non-looped animation first reaches its last frame. Signature: fn(ctx, input). Looped animations never trigger it.
+---@param callback string
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_lua_animation_finished(callback) end
+
 ---Set the Lua collision rule's callback for when the groups stop touching (requires with_lua_collision_rule first)
 ---@param callback string
 ---@return CollisionEntityBuilder
@@ -2523,11 +2528,6 @@ function CollisionEntityBuilder:with_menu_visible_count(count) end
 ---@param follow_y boolean
 ---@return CollisionEntityBuilder
 function CollisionEntityBuilder:with_mouse_controlled(follow_x, follow_y) end
-
----Attach a callback fired exactly once when the entity's non-looped animation first reaches its last frame. Signature: fn(ctx, input). Looped animations never trigger it.
----@param fn_name string
----@return CollisionEntityBuilder
-function CollisionEntityBuilder:with_on_animation_end(fn_name) end
 
 ---Set parent entity for transform hierarchy
 ---@param parent_id integer

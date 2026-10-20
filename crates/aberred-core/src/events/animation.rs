@@ -4,8 +4,9 @@
 //! system on the frame a non-looped animation first reaches its last frame.
 //!
 //! Rust consumers can observe it via `aberredengine::EngineBuilder::add_observer`.
-//! Lua consumers attach a `LuaOnAnimationEnd` (`aberred_lua::components::lua_on_animation_end`)
-//! component to the entity in a game that runs Lua.
+//! Lua consumers attach a `LuaOnAnimationFinished`
+//! (`aberred_lua::components::lua_on_animation_finished`) component to the
+//! entity in a game that runs Lua.
 
 use bevy_ecs::prelude::*;
 

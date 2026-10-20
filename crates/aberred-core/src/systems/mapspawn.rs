@@ -49,9 +49,9 @@ use crate::resources::worldsignals::WorldSignals;
 /// Returns exactly one entity per `map.entities` entry, in the same order
 /// (never skipped, never reordered), and `MapSpawned::spawned` carries the
 /// same list: observers zip it 1:1 against `map.entities` by index (e.g.
-/// `aberred-lua`'s, which attaches `LuaSetup`/`LuaOnAnimationEnd`). Skipping
-/// a malformed `EntityDef` instead of spawning one entity for it would break
-/// that zip; `spawn_map_queues_render_asset_cmds_and_spawns_entities` asserts
+/// `aberred-lua`'s, which attaches `LuaSetup`/`LuaOnAnimationFinished`).
+/// Skipping a malformed `EntityDef` instead of spawning one entity for it
+/// would break that zip; `spawn_map_queues_render_asset_cmds_and_spawns_entities` asserts
 /// the length invariant.
 #[allow(clippy::too_many_arguments)]
 pub fn spawn_map(
@@ -212,7 +212,7 @@ fn spawn_entity(commands: &mut Commands, def: &EntityDef) -> Entity {
     if let Some([r, g, b, a]) = def.tint {
         ec.insert(Tint::new(r, g, b, a));
     }
-    // `def.lua_setup`/`def.on_animation_end` name Lua functions: in a Lua
+    // `def.lua_setup`/`def.on_animation_finished` name Lua functions: in a Lua
     // game, `aberred-lua`'s `MapSpawned` observer attaches them.
     if let Some(ref key) = def.animation_key {
         ec.insert(Animation {

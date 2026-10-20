@@ -3,7 +3,7 @@
 //! See the crate root doc comment for the sim/logic-world boundary this
 //! crate sits at.
 
-pub mod lua_on_animation_end;
+pub mod lua_on_animation_finished;
 pub mod lua_on_collision;
 pub mod lua_on_gui_clicked;
 pub mod lua_on_menu_selected;

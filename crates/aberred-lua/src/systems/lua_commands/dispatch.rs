@@ -122,7 +122,7 @@ pub fn call_entity_callback(
 /// Refresh the signal cache, call the named entity callback with
 /// `(ctx, input)`, and drain its queued commands if the call happened.
 /// Covers the shape shared by every single-entity-per-invocation observer
-/// (timer, on_animation_end, on_tween_finished) — `lua_setup_entity_system`
+/// (timer, on_animation_finished, on_tween_finished) — `lua_setup_entity_system`
 /// still calls `refresh_signal_cache`/`call_entity_callback`/
 /// `drain_dispatch_commands` directly, since it batches one refresh and one
 /// drain across many entities per invocation instead of one each.

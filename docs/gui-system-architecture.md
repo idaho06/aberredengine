@@ -570,7 +570,7 @@ no `ScreenPosition` component is not rendered and not hit-tested.
 | Move | `entity_set_screen_position(id, x, y)` | mutate `ScreenPosition` |
 | Hide (instant) | `entity_remove_screen_position(id)` | remove `ScreenPosition` |
 | Slide in | `entity_insert_tween_screen_position(id, from_x, from_y, to_x, to_y, dur, easing, "once", false, "")` | insert `Tween<ScreenPosition>` |
-| Slide out then hide | tween with `on_finished` callback → call `entity_remove_screen_position` | observe `TweenFinishedEvent<ScreenPosition>` → remove |
+| Slide out then hide | tween with `on_finished` callback → call `entity_remove_screen_position` | observe `TweenFinished<ScreenPosition>` → remove |
 
 `entity_set_screen_position` only mutates an existing `ScreenPosition` — it is a no-op if the
 entity has none. Use `entity_insert_tween_screen_position` with zero duration to both insert and

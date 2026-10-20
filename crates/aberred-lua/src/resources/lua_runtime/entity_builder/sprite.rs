@@ -312,11 +312,11 @@ pub(super) fn register<M: LuaUserDataMethods<LuaEntityBuilder>>(
     builder_method!(
         methods,
         meta,
-        "with_on_animation_end",
+        "with_lua_animation_finished",
         "Attach a callback fired exactly once when the entity's non-looped animation first reaches its last frame. Signature: fn(ctx, input). Looped animations never trigger it.",
-        [("fn_name", "string")],
+        [("callback", "string")],
         |_, this: &mut LuaEntityBuilder, callback: String| {
-            this.cmd.lua_on_animation_end = Some(callback);
+            this.cmd.lua_on_animation_finished = Some(callback);
             Ok(())
         }
     );
@@ -585,9 +585,12 @@ mod tests {
     }
 
     #[test]
-    fn with_animation_and_on_animation_end_store_keys() {
-        let cmd = built(":with_animation('walk'):with_on_animation_end('on_walk_done')");
+    fn with_animation_and_lua_animation_finished_store_keys() {
+        let cmd = built(":with_animation('walk'):with_lua_animation_finished('on_walk_done')");
         assert_eq!(cmd.animation.unwrap().animation_key, "walk");
-        assert_eq!(cmd.lua_on_animation_end.as_deref(), Some("on_walk_done"));
+        assert_eq!(
+            cmd.lua_on_animation_finished.as_deref(),
+            Some("on_walk_done")
+        );
     }
 }

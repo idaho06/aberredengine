@@ -36,7 +36,7 @@ use aberred_core::systems::collision_detector::collision_detector;
 use aberred_core::systems::collision_rule::collision_rule_observer;
 use aberred_core::systems::collision_rule_index::rebuild_rule_index;
 use aberred_core::systems::timer::update_timers;
-use aberred_lua::components::lua_on_animation_end::LuaOnAnimationEnd;
+use aberred_lua::components::lua_on_animation_finished::LuaOnAnimationFinished;
 use aberred_lua::components::lua_on_collision::LuaOnCollision;
 use aberred_lua::components::lua_on_gui_clicked::LuaOnGuiClicked;
 use aberred_lua::components::lua_on_menu_selected::LuaOnMenuSelected;
@@ -731,11 +731,11 @@ fn assert_entity_callback_ran(world: &World, entity: Entity) {
 }
 
 #[test]
-fn animation_end_callback_gets_ctx_and_input_and_drains_its_commands() {
+fn animation_finished_callback_gets_ctx_and_input_and_drains_its_commands() {
     let mut world = make_lua_callback_world(0.0);
     world.add_observer(lua_animation_finished_observer);
     load_lua(&world, ENTITY_CALLBACK_SRC);
-    let entity = world.spawn(LuaOnAnimationEnd::new("on_done")).id();
+    let entity = world.spawn(LuaOnAnimationFinished::new("on_done")).id();
 
     world.trigger(AnimationFinished { entity });
     world.flush();

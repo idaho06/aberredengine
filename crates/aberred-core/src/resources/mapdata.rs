@@ -137,9 +137,14 @@ pub struct EntityDef {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub lua_setup: Option<String>,
     /// In a game that runs Lua: Lua function to call once when the entity's non-looped animation first finishes
-    /// (maps to `aberred_lua::components::lua_on_animation_end::LuaOnAnimationEnd`).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub on_animation_end: Option<String>,
+    /// (maps to `aberred_lua::components::lua_on_animation_finished::LuaOnAnimationFinished`).
+    /// Also reads the legacy key `on_animation_end`.
+    #[serde(
+        default,
+        alias = "on_animation_end",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub on_animation_finished: Option<String>,
     /// Text rendering data (maps to [`crate::components::dynamictext::DynamicText`]).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub dynamic_text: Option<DynamicTextEntry>,
@@ -372,5 +377,13 @@ mod tests {
         let entity: EntityDef = serde_json::from_str(json).unwrap();
         assert_eq!(entity.position, Some([10.0, 20.0]));
         assert!(entity.collider.is_none());
+    }
+
+    /// `EntityDef` ignores unknown keys, so a map file written with the
+    /// legacy `on_animation_end` key must still load its callback.
+    #[test]
+    fn entity_def_reads_legacy_on_animation_end_key() {
+        let entity: EntityDef = serde_json::from_str(r#"{"on_animation_end": "cb"}"#).unwrap();
+        assert_eq!(entity.on_animation_finished.as_deref(), Some("cb"));
     }
 }

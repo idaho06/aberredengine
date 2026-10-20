@@ -73,11 +73,11 @@ crates/aberred-lua/src/resources/lua_runtime/
 │   ├── mod.rs           # LuaEntityBuilder struct, builder_method!/DummyMethods, register_methods() dispatch, register_as/build
 │   ├── transform.rs     # with_position, with_screen_position, with_rotation, with_scale, with_parent, with_stuckto*, with_camera_target, ...
 │   ├── physics.rs       # with_velocity, with_accel, with_friction, with_max_speed, with_frozen, with_collider*
-│   ├── sprite.rs        # with_sprite*, with_tint, with_shadow, with_animation*, with_zindex
+│   ├── sprite.rs        # with_sprite*, with_tint, with_shadow, with_animation*, with_lua_animation_finished, with_zindex
 │   ├── gui.rs            # with_gui_window/button/label/image/progress_bar/offset/theme_key and their per-state offset variants
 │   ├── menu.rs           # with_menu and its with_menu_* configuration methods
 │   ├── tween.rs          # with_tween_position/rotation/scale/screen_position and their *_easing/*_loop/*_backwards/*_on_finished variants
-│   └── behavior.rs       # with_phase, with_lua_phase_entered, with_lua_phase_exited, with_lua_phase_update, with_lua_timer, with_lua_timer_once, with_lua_collision_rule, with_lua_collision_started, with_lua_collision_ended, with_lua_setup, with_on_animation_end, with_signal*, with_group, with_persistent, with_grid_layout, with_tilemap, with_particle_emitter, with_mouse_controlled, with_text
+│   └── behavior.rs       # with_phase, with_lua_phase_entered, with_lua_phase_exited, with_lua_phase_update, with_lua_timer, with_lua_timer_once, with_lua_collision_rule, with_lua_collision_started, with_lua_collision_ended, with_lua_setup, with_signal*, with_group, with_persistent, with_grid_layout, with_tilemap, with_particle_emitter, with_mouse_controlled, with_text
 ├── engine_api/          # engine.* API registration, split by category
 │   ├── mod.rs          # Re-exports, module declarations
 │   ├── macros.rs       # register_cmd!, register_getter!, define_cmd_twins! (+ its define_*_cmd_twins!/define_entity_cmds! specializations), push_fn_meta()
@@ -114,7 +114,7 @@ Command processing lives in a separate submodule:
 crates/aberred-lua/src/systems/lua_commands/
 ├── mod.rs              # Re-exports; ContextQueries SystemParam (read-only ctx queries); EffectCmdBufs/DrainScope; drain_and_process_effect_commands; build_tween/tween_finished_callback helpers
 ├── context.rs          # build_entity_context: gathers ECS data → pooled Lua ctx table
-├── dispatch.rs          # LuaDispatch SystemParam bundle + call_entity_callback/dispatch_and_drain/dispatch_custom_and_drain/drain_dispatch_commands: shared callback dispatch flow used by the timer/on_animation_end/on_tween_finished/menu/GUI click/collision observers
+├── dispatch.rs          # LuaDispatch SystemParam bundle + call_entity_callback/dispatch_and_drain/dispatch_custom_and_drain/drain_dispatch_commands: shared callback dispatch flow used by the timer/on_animation_finished/on_tween_finished/menu/GUI click/collision observers
 ├── entity_cmd.rs        # process_entity_commands: runtime entity manipulation (physics, signals, tweens, shaders, hierarchy, GUI), every handler a deferred queue_on_entity/queue_on_component command
 ├── processors.rs        # small per-command-domain process_* functions (signal, camera, camera_follow, audio, phase, gameconfig, input, group, render, animation) and asset-command translation helpers
 ├── spawn_cmd.rs         # process_spawn_command, process_clone_command: entity creation via apply_components()
@@ -244,7 +244,7 @@ A few functions with irregular shapes (`set_target_fps`, `set_render_size`, `set
 
 ### Step 3: Rust Drains Commands
 
-Every Lua callback except the phase update callback (timer, `on_animation_end`, `on_tween_finished`, setup, menu selection, GUI click, collision, phase enter/exit) goes through the shared `LuaDispatch` flow in `systems/lua_commands/dispatch.rs`: `refresh_signal_cache` syncs the signal cache from `WorldSignals`, `call_entity_callback` builds the entity context (and input table, if the call shape wants one) and invokes the named Lua function, then `drain_dispatch_commands` drains and processes its queued commands from the regular queues, or from the collision-scoped ones (`DrainScope::Collision`) for collision callbacks, which build their own pooled collision ctx. Menu selection and GUI click callbacks take a small custom context table instead of an entity context: `dispatch_custom_and_drain` refreshes the signal cache, calls the function with that table, and drains. `lua_phase_update_system` (`systems/lua_phase.rs`) takes a `LuaDispatch` too but does not call through a `CallShape`: it builds one input table for every phase entity per run and passes `dt`, so it builds each ctx with `build_ctx_or_log`, calls the Lua function itself, and drains once per run.
+Every Lua callback except the phase update callback (timer, `on_animation_finished`, `on_tween_finished`, setup, menu selection, GUI click, collision, phase enter/exit) goes through the shared `LuaDispatch` flow in `systems/lua_commands/dispatch.rs`: `refresh_signal_cache` syncs the signal cache from `WorldSignals`, `call_entity_callback` builds the entity context (and input table, if the call shape wants one) and invokes the named Lua function, then `drain_dispatch_commands` drains and processes its queued commands from the regular queues, or from the collision-scoped ones (`DrainScope::Collision`) for collision callbacks, which build their own pooled collision ctx. Menu selection and GUI click callbacks take a small custom context table instead of an entity context: `dispatch_custom_and_drain` refreshes the signal cache, calls the function with that table, and drains. `lua_phase_update_system` (`systems/lua_phase.rs`) takes a `LuaDispatch` too but does not call through a `CallShape`: it builds one input table for every phase entity per run and passes `dt`, so it builds each ctx with `build_ctx_or_log`, calls the Lua function itself, and drains once per run.
 
 The actual draining happens in `drain_and_process_effect_commands()` (`systems/lua_commands/mod.rs`), which drains the 7 effect queues from either the regular or collision-scoped queue set (`DrainScope::Regular`/`DrainScope::Collision`), into a caller-owned `EffectCmdBufs` (a `Local<EffectCmdBufs>` on the calling system, so its `Vec`s retain heap capacity across frames). The four stamped buffers (signal, entity, spawn, clone) are merged by `seq`, and each maximal run of one kind goes to its processor (`process_signal_command`, `process_entity_commands`, `process_spawn_command`, `process_clone_command`); audio, camera and phase follow. Clone-source and spawn template/cursor lookups read `WorldSignals`, and `Despawn` removes registrations from it, when processed, so the merge gives each spawn or clone exactly the keys set before it, and a clone copies its template as it was at the call:
 
@@ -327,7 +327,7 @@ A Lua collision rule is a plain core `CollisionRule` plus a `LuaOnCollision { st
 
 ### Animation-Finished / Tween-Finished Callbacks
 
-`lua_animation_finished_observer` reacts to `AnimationFinishedEvent` (raised once, when a non-looped `Animation` first reaches its last frame) for entities carrying `LuaOnAnimationEnd`. `lua_tween_finished_observer::<T>` — one monomorphized instance registered per tweened type (`MapPosition`, `Rotation`, `Scale`, `ScreenPosition`) — reacts to `TweenFinishedEvent<T>` for entities carrying the matching `LuaOnTweenFinished<T>`. Both call the named callback as `(ctx, input)` via `LuaDispatch::dispatch_and_drain`, and both are silently skipped for entities that don't carry the matching component.
+`lua_animation_finished_observer` reacts to `AnimationFinished` (raised once, when a non-looped `Animation` first reaches its last frame) for entities carrying `LuaOnAnimationFinished`. `lua_tween_finished_observer::<T>` — one monomorphized instance registered per tweened type (`MapPosition`, `Rotation`, `Scale`, `ScreenPosition`) — reacts to `TweenFinished<T>` for entities carrying the matching `LuaOnTweenFinished<T>`. Both call the named callback as `(ctx, input)` via `LuaDispatch::dispatch_and_drain`, and both are silently skipped for entities that don't carry the matching component.
 
 ### Entity Setup Callback
 
@@ -517,7 +517,7 @@ All are registered in `engine_api/render.rs` and queue into `gui_theme_commands`
 - `entity_set_gui_disabled` — enable/disable a `GuiButton`/`GuiImage` (cosmetic: `gui_hit_test_system` stops promoting it and skips its click callback)
 - `entity_set_gui_progress`, `entity_set_gui_progress_max` — set/re-clamp a `GuiProgressBar`'s value
 
-The four `entity_insert_tween_*` commands (`position`/`rotation`/`scale`/`screen_position`) all accept a trailing `on_finished` callback-name string (empty string = no callback); when non-empty, the handler inserts a `LuaOnTweenFinished<T>` component (`T` being the tweened `MapPosition`/`Rotation`/`Scale`/`ScreenPosition`) on the entity, fired once by the corresponding `lua_tween_finished_observer::<T>` when `TweenFinishedEvent<T>` triggers.
+The four `entity_insert_tween_*` commands (`position`/`rotation`/`scale`/`screen_position`) all accept a trailing `on_finished` callback-name string (empty string = no callback); when non-empty, the handler inserts a `LuaOnTweenFinished<T>` component (`T` being the tweened `MapPosition`/`Rotation`/`Scale`/`ScreenPosition`) on the entity, fired once by the corresponding `lua_tween_finished_observer::<T>` when `TweenFinished<T>` triggers.
 
 #### Collision Context Functions
 
@@ -658,7 +658,7 @@ with_lua_collision_rule
 with_lua_collision_started
 with_lua_collision_ended
 with_lua_setup
-with_on_animation_end
+with_lua_animation_finished
 with_signal_binding
 with_signal_binding_format
 with_signal_flag
@@ -790,7 +790,7 @@ Spawn and clone commands are processed via `process_spawn_command()` and `proces
 - `apply_render_components()` — sprite, zindex, shader, tint, shadow
 - `apply_animation_components()` — animation, animation controller, tweens
 - `apply_signal_components()` — signals, signal bindings
-- `apply_behavior_components()` — phase, lua timer, lua collision rule, lua setup, on_animation_end
+- `apply_behavior_components()` — phase, lua timer, lua collision rule, lua setup, on_animation_finished
 - `apply_ui_components()` — text, menu, GUI widgets, grid layout, tilemap, mouse controlled
 - `apply_particle_emitter()` — particle emitter setup with template resolution
 

@@ -461,8 +461,8 @@ pub struct SpawnCmd {
     pub gui_offset: Option<(f32, f32)>,
     /// LuaSetup callback name — calls the named Lua function once on `Added<LuaSetup>`
     pub lua_setup: Option<String>,
-    /// LuaOnAnimationEnd callback name — called once when the non-looped animation first finishes
-    pub lua_on_animation_end: Option<String>,
+    /// LuaOnAnimationFinished callback name — called once when the non-looped animation first finishes
+    pub lua_on_animation_finished: Option<String>,
     /// LuaOnGuiClicked callback name — called on each `GuiClicked` of the entity's
     /// GuiButton/GuiImage; set by their builders when the name is non-empty
     pub lua_on_gui_clicked: Option<String>,

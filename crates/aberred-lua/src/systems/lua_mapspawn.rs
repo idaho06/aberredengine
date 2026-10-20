@@ -1,12 +1,12 @@
 //! Lua-only map-spawning glue.
 //!
-//! [`lua_map_spawned_observer`] attaches `LuaSetup`/`LuaOnAnimationEnd` to
-//! the entities core's `spawn_map` spawned, from each entity
-//! definition's `lua_setup`/`on_animation_end`. It is registered only when the
-//! game runs a Lua script. `process_lua_map_commands` drains
+//! [`lua_map_spawned_observer`] attaches `LuaSetup`/`LuaOnAnimationFinished`
+//! to the entities core's `spawn_map` spawned, from each entity definition's
+//! `lua_setup`/`on_animation_finished`. It is registered only when the game
+//! runs a Lua script. `process_lua_map_commands` drains
 //! `engine.load_map()` queue entries into `SpawnMapRequested` triggers.
 
-use crate::components::lua_on_animation_end::LuaOnAnimationEnd;
+use crate::components::lua_on_animation_finished::LuaOnAnimationFinished;
 use crate::components::luasetup::LuaSetup;
 use crate::resources::lua_runtime::{LuaRuntime, MapLuaCmd};
 use aberred_core::events::spawnmap::{MapSpawned, SpawnMapRequested};
@@ -22,8 +22,8 @@ pub fn lua_map_spawned_observer(trigger: On<MapSpawned>, mut commands: Commands)
         if let Some(callback) = &def.lua_setup {
             ec.insert(LuaSetup::new(callback.as_str()));
         }
-        if let Some(callback) = &def.on_animation_end {
-            ec.insert(LuaOnAnimationEnd::new(callback.as_str()));
+        if let Some(callback) = &def.on_animation_finished {
+            ec.insert(LuaOnAnimationFinished::new(callback.as_str()));
         }
     }
 }
@@ -69,7 +69,7 @@ mod tests {
                 entities: vec![
                     EntityDef {
                         lua_setup: Some("setup_fn".into()),
-                        on_animation_end: Some("anim_done".into()),
+                        on_animation_finished: Some("anim_done".into()),
                         ..Default::default()
                     },
                     EntityDef::default(),
@@ -86,12 +86,12 @@ mod tests {
         );
         assert_eq!(
             &*world
-                .get::<LuaOnAnimationEnd>(with_callbacks)
+                .get::<LuaOnAnimationFinished>(with_callbacks)
                 .unwrap()
                 .callback,
             "anim_done"
         );
         assert!(world.get::<LuaSetup>(plain).is_none());
-        assert!(world.get::<LuaOnAnimationEnd>(plain).is_none());
+        assert!(world.get::<LuaOnAnimationFinished>(plain).is_none());
     }
 }

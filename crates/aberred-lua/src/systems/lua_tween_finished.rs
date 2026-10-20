@@ -3,7 +3,7 @@
 //! When a [`TweenFinished<T>`] fires and the entity has a matching
 //! [`LuaOnTweenFinished<T>`] component, this observer calls the named Lua
 //! function with `(ctx, input)` — the same signature as timer, phase, and
-//! `on_animation_end` callbacks.
+//! `on_animation_finished` callbacks.
 //!
 //! Entities without `LuaOnTweenFinished<T>` are silently skipped. Register
 //! one monomorphized instance of this observer per tweened type

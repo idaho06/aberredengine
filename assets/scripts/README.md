@@ -18,7 +18,7 @@ Complete reference for game developers using Lua scripting in Aberred Engine.
   - [Text Components](#text-components)
   - [Menu Components](#menu-components)
   - [Animation Components](#animation-components)
-  - [OnAnimationEnd Component](#onanimationend-component)
+  - [LuaOnAnimationFinished Component](#luaonanimationfinished-component)
   - [Phase Component](#phase-component)
   - [LuaSetup Component](#luasetup-component)
   - [Attachment Components](#attachment-components)
@@ -221,7 +221,7 @@ return M
    - Timer callbacks (names in `:with_lua_timer()` / `:with_lua_timer_once()`)
    - Menu callbacks (names in `:with_menu_callback()`)
    - LuaSetup callbacks (names in `:with_lua_setup()` or map file `"lua_setup"` field)
-   - OnAnimationEnd callbacks (names in `:with_on_animation_end()` or map file `"on_animation_end"` field)
+   - Animation finished callbacks (names in `:with_lua_animation_finished()` or map file `"on_animation_finished"` field)
 
 2. **The KEY must exactly match the string passed to the engine.**
    If you register `:with_lua_collision_rule("ball", "brick", "on_ball_brick")`,
@@ -293,7 +293,7 @@ Different callbacks process different types of engine commands. Here's what comm
 | Phase callbacks | Phase, Audio, Signal, Spawn, Clone, Entity, Camera | Transition phases; play sounds; spawn/clone/modify entities; camera effects |
 | Timer callbacks | Phase, Audio, Signal, Spawn, Clone, Entity, Camera | Same command surface as phase callbacks |
 | LuaSetup callbacks | Signal, Entity, Spawn, Clone, Audio, Camera | One-shot entity initialisation — add phases, animations, collision rules, etc. |
-| `on_animation_end` callbacks | Phase, Audio, Signal, Spawn, Clone, Entity, Camera | Fired once when a non-looped animation first reaches its last frame |
+| `on_animation_finished` callbacks | Phase, Audio, Signal, Spawn, Clone, Entity, Camera | Fired once when a non-looped animation first reaches its last frame |
 | Collision callbacks | Entity, Signal, Audio, Spawn, Clone, Phase, Camera | Collision-safe entity changes, effects, and camera reactions |
 
 **Processing Order by Callback**:
@@ -304,7 +304,7 @@ Different callbacks process different types of engine commands. Here's what comm
 | `on_enter_play()` | Signal → Group |
 | `on_scene_enter(name)` | Animation → (Signal, Entity, Spawn, Clone in call order) → Audio → Camera → Phase → Render → GameConfig → CameraFollow → InputBinding → Group |
 | `on_update_<scene>(input, dt)` | Animation → (Signal, Entity, Spawn, Clone in call order) → Audio → Camera → Phase → Render → GameConfig → CameraFollow → InputBinding → Group |
-| Phase/Timer/`on_animation_end`/LuaSetup/menu/GUI click callbacks | (Signal, Entity, Spawn, Clone in call order) → Audio → Camera → Phase |
+| Phase/Timer/`on_animation_finished`/LuaSetup/menu/GUI click callbacks | (Signal, Entity, Spawn, Clone in call order) → Audio → Camera → Phase |
 | Collision callbacks | the same, from the collision queues |
 
 **Signal, entity, spawn and clone commands apply in call order.** Within one callback, every `engine.entity_*`, `engine.spawn()`/`engine.clone()` `:build()` and world-signal call (`set_flag`, `set_entity`, `remove_entity`, …) lands in the order you made it, so an insert followed by a write of the same component works: `engine.entity_set_shader(id, "wave")` then `engine.entity_shader_set_float(id, "u", 1.0)` keeps the uniform, and `engine.release_stuckto(id)` then `engine.entity_set_velocity(id, 5, 0)` keeps the velocity. They apply right after the callback's drain (for system callbacks such as `on_update_<scene>`, at the end of that step of the tick), and a callback's `ctx` is a snapshot taken before the call, so a script never sees its own writes inside the same callback.
@@ -612,7 +612,7 @@ end
 | Phase update | ✓ | `callback(ctx, input, dt)` |
 | Phase exited | ✗ | `callback(ctx)` |
 | Timer | ✓ | `callback(ctx, input)` |
-| OnAnimationEnd | ✓ | `callback(ctx, input)` |
+| Animation finished | ✓ | `callback(ctx, input)` |
 | Collision | ✗ | `callback(ctx)` |
 
 **Note:** Phase and timer callbacks receive an `EntityContext` (`ctx`) object with all entity component data. See [Phase Component](#phase-component) for details. Phase exit callbacks do not receive input because they are meant for housekeeping tasks only. Collision callbacks do not receive input as they are triggered by physics events, not player actions
@@ -905,7 +905,7 @@ behaves identically to queuing it from any other callback.
 | `registered_as` | string | Register entity in WorldSignals under this key |
 | `tint` | `[r, g, b, a]` | Color tint (0–255 per channel) |
 | `lua_setup` | string | One-shot Lua setup callback (see [LuaSetup Component](#luasetup-component)) |
-| `on_animation_end` | string | Lua callback fired once when non-looped animation finishes (see [OnAnimationEnd Component](#onanimationend-component)) |
+| `on_animation_finished` | string | Lua callback fired once when non-looped animation finishes (see [LuaOnAnimationFinished Component](#luaonanimationfinished-component)) |
 | `dynamic_text` | object | `{ text, font_key, font_size, color: [r,g,b,a] }` |
 | `animation_key` | string | Initial animation key |
 
@@ -919,7 +919,7 @@ behaves identically to queuing it from any other callback.
       "group": "enemy",
       "animation_key": "enemy_death",
       "collider": { "size": [32, 48] },
-      "on_animation_end": "on_enemy_death_done"
+      "on_animation_finished": "on_enemy_death_done"
     }
   ]
 }
@@ -1684,15 +1684,15 @@ Add rule to AnimationController (requires `:with_animation_controller()`).
 
 ---
 
-### OnAnimationEnd Component
+### LuaOnAnimationFinished Component
 
-#### `:with_on_animation_end(fn_name)`
+#### `:with_lua_animation_finished(callback)`
 
 Attach a Lua callback to be called **once** when the entity's non-looped animation first reaches its last frame. Looped animations never trigger it.
 
 **Parameters:**
 
-- `fn_name` - Name of the Lua function to call
+- `callback` - Name of the Lua function to call
 
 **Callback Signature:**
 
@@ -1711,7 +1711,7 @@ engine.spawn()
     :with_group("enemy")
     :with_position(200, 300)
     :with_animation("enemy_death")   -- non-looped animation
-    :with_on_animation_end("on_enemy_death_done")
+    :with_lua_animation_finished("on_enemy_death_done")
     :build()
 
 local function on_enemy_death_done(ctx, input)
@@ -1724,7 +1724,7 @@ end
 - Only fires for **non-looped** animations. If the animation loops, the callback is never called.
 - Fires exactly once — not on every frame the entity remains on the last frame.
 - The callback must be in `M._callbacks` like any other engine-resolved function.
-- Also settable via the map file `"on_animation_end"` field (see [Map Loading](#map-loading)).
+- Also settable via the map file `"on_animation_finished"` field (see [Map Loading](#map-loading)).
 
 ---
 

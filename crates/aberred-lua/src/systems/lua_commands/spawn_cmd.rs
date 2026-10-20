@@ -159,7 +159,7 @@ pub(super) fn apply_components(
             lua_timer: cmd.lua_timer,
             lua_collision_rule: cmd.lua_collision_rule,
             lua_setup: cmd.lua_setup,
-            lua_on_animation_end: cmd.lua_on_animation_end,
+            lua_on_animation_finished: cmd.lua_on_animation_finished,
         },
     );
     apply_ui_components(
@@ -429,7 +429,7 @@ struct BehaviorComponents {
     lua_timer: Option<LuaTimerSpawn>,
     lua_collision_rule: Option<LuaCollisionRuleData>,
     lua_setup: Option<String>,
-    lua_on_animation_end: Option<String>,
+    lua_on_animation_finished: Option<String>,
 }
 
 fn apply_behavior_components(entity_commands: &mut EntityCommands, b: BehaviorComponents) {
@@ -439,7 +439,7 @@ fn apply_behavior_components(entity_commands: &mut EntityCommands, b: BehaviorCo
         lua_timer,
         lua_collision_rule,
         lua_setup,
-        lua_on_animation_end,
+        lua_on_animation_finished,
     } = b;
     if let Some(initial) = phase {
         entity_commands.insert(Phase::new(initial));
@@ -471,9 +471,9 @@ fn apply_behavior_components(entity_commands: &mut EntityCommands, b: BehaviorCo
     if let Some(callback) = lua_setup {
         entity_commands.insert(LuaSetup::new(callback));
     }
-    if let Some(callback) = lua_on_animation_end {
-        use crate::components::lua_on_animation_end::LuaOnAnimationEnd;
-        entity_commands.insert(LuaOnAnimationEnd::new(callback));
+    if let Some(callback) = lua_on_animation_finished {
+        use crate::components::lua_on_animation_finished::LuaOnAnimationFinished;
+        entity_commands.insert(LuaOnAnimationFinished::new(callback));
     }
 }
 
@@ -1334,7 +1334,7 @@ mod tests {
 
     #[test]
     fn lua_spawn_applies_behavior_components() {
-        use crate::components::lua_on_animation_end::LuaOnAnimationEnd;
+        use crate::components::lua_on_animation_finished::LuaOnAnimationFinished;
         use crate::components::lua_on_collision::LuaOnCollision;
         use aberred_core::components::collision::CollisionRule;
         let mut world = World::new();
@@ -1344,7 +1344,7 @@ mod tests {
             &mut signals,
             "engine.spawn()\
              :with_lua_timer(0.5, 'tick'):with_lua_collision_rule('player', 'enemy', 'on_hit')\
-             :with_lua_setup('setup_fn'):with_on_animation_end('anim_done'):build()",
+             :with_lua_setup('setup_fn'):with_lua_animation_finished('anim_done'):build()",
         );
 
         let timer = world.get::<Timer>(e).unwrap();
@@ -1360,7 +1360,7 @@ mod tests {
         assert_eq!(callbacks.ongoing.as_deref(), Some("on_hit"));
         assert_eq!(&*world.get::<LuaSetup>(e).unwrap().callback, "setup_fn");
         assert_eq!(
-            &*world.get::<LuaOnAnimationEnd>(e).unwrap().callback,
+            &*world.get::<LuaOnAnimationFinished>(e).unwrap().callback,
             "anim_done"
         );
     }
