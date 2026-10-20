@@ -2,8 +2,9 @@
 //!
 //! [`CollisionRule`] names two entity groups. When an entity of one group
 //! overlaps an entity of the other, the engine triggers
-//! [`Collided`](crate::events::collision::Collided) on the rule entity, so
-//! gameplay reacts with an observer on that rule (or a global observer).
+//! [`CollisionOngoing`](crate::events::collision::CollisionOngoing) on the
+//! rule entity, so gameplay reacts with an observer on that rule (or a global
+//! observer).
 //!
 //! # Group-Based Collision
 //!
@@ -16,9 +17,9 @@
 //! ```
 //! # use bevy_ecs::prelude::*;
 //! use aberred_core::components::collision::CollisionRule;
-//! use aberred_core::events::collision::Collided;
+//! use aberred_core::events::collision::CollisionOngoing;
 //!
-//! fn ball_brick(hit: On<Collided>, mut commands: Commands) {
+//! fn ball_brick(hit: On<CollisionOngoing>, mut commands: Commands) {
 //!     // `hit.a` is the ball, `hit.b` the brick (rule order).
 //!     commands.entity(hit.b).despawn();
 //! }
@@ -30,7 +31,7 @@
 //! # Related
 //!
 //! - [`crate::systems::collision_detector`] – collision detection system
-//! - [`crate::systems::collision_rule`] – triggers `Collided` for matched rules
+//! - [`crate::systems::collision_rule`] – triggers `CollisionOngoing` for matched rules
 //! - `aberred_lua::systems::lua_collision` – Lua callbacks on core collision events
 //! - [`crate::events::collision::Overlapping`] – raw overlap event
 //! - [`super::group::Group`] – group tag used for rule matching
@@ -44,8 +45,8 @@ use crate::math::Rect;
 ///
 /// When entities with groups matching `group_a` and `group_b` overlap,
 /// [`collision_rule_observer`](crate::systems::collision_rule::collision_rule_observer)
-/// triggers [`Collided`](crate::events::collision::Collided) on this rule's
-/// entity, every tick while they overlap.
+/// triggers [`CollisionOngoing`](crate::events::collision::CollisionOngoing)
+/// on this rule's entity, every tick while they overlap.
 #[derive(Component, Clone, Debug)]
 pub struct CollisionRule {
     /// First group name to match.

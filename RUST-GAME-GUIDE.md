@@ -26,7 +26,7 @@ Built-in systems:
 
 - **Rendering** — sprites, text, per-entity shaders, post-process shader chains, camera, letterboxing
 - **Physics** — velocity, friction, max speed, named acceleration forces, freeze/unfreeze
-- **Collision** — AABB detection with group-based rules that trigger `Collided` every tick, plus `CollisionStarted`/`CollisionEnded` contact events
+- **Collision** — AABB detection with group-based rules that trigger `CollisionOngoing` every tick, plus `CollisionStarted`/`CollisionEnded` contact events
 - **Audio** — music and sound playback via a background thread bridge
 - **Input** — rebindable actions over keyboard, mouse and gamepad, with `just_pressed`/`just_released` tracking
 - **Menus** — scrollable interactive menus with built-in `MenuActions` and a `MenuSelected` event
@@ -159,7 +159,7 @@ This section covers where your code runs, how often it runs, and the states a ga
 
 The engine runs **three separate ECS worlds on three threads**: render (the main thread — owns the raylib window and GPU resources), logic/sim (a spawned thread — this is where **all your game code runs**), and audio (a spawned thread, talked to via message queues you already use for sound/music).
 
-- **All your game logic runs on the LOGIC thread**: the `.on_setup()` hook, scene observers and systems (`.on_scene_enter()`/`.on_scene_exit()`/`.add_scene_system()`/`.add_late_scene_system()`), systems added via `.add_system()`/`.add_late_system()`/`.configure_schedule()`, and observers (`.add_observer()`, `.observe()`, e.g. on `TimerFired` or `Collided`). `.on_setup()` runs once, observers run when their event fires, and systems run on the **sim tick**.
+- **All your game logic runs on the LOGIC thread**: the `.on_setup()` hook, scene observers and systems (`.on_scene_enter()`/`.on_scene_exit()`/`.add_scene_system()`/`.add_late_scene_system()`), systems added via `.add_system()`/`.add_late_system()`/`.configure_schedule()`, and observers (`.add_observer()`, `.observe()`, e.g. on `TimerFired` or `CollisionOngoing`). `.on_setup()` runs once, observers run when their event fires, and systems run on the **sim tick**.
 - **Scene GUI and world-draw callbacks (`.add_scene_gui()`/`.add_scene_world_draw()`) are the one exception** — they run on the RENDER thread, inside the render pass itself. They read snapshots, not live game state — see [Section 9](#9-render-side-callbacks).
 - **A direct consequence**: logic-thread code can **never** take `RaylibAccess`, `NonSend<FontStore>`, `NonSend<ShaderStore>`, or `Res<TextureStore>` as a system parameter — those resources only exist in the render world. A logic-side system that requests one panics the first time it runs: Bevy checks a system's resources when the system runs, not when the schedule is built. There is no escape hatch to register a custom system on the render thread. This is why asset loading ([Section 6](#6-loading-assets)) goes through a message queue instead of calling `rl.load_texture(...)` directly inside `setup()`.
 
@@ -1395,7 +1395,7 @@ When `WorldSignals` has a value for key `"score"`, the text automatically update
 | `MouseControlled` | `MouseControlled { follow_x: true, follow_y: true }` |
 | `Timer` | `Timer::new(duration_secs)` (repeating) or `Timer::once(duration_secs)` — triggers `TimerFired` on its entity; see [Timers](#timers) |
 | `Phase` | `Phase::new("initial_phase")` — set `next` to transition; triggers `PhaseEntered`/`PhaseExited`; see [Phase state machines](#phase-state-machines) |
-| `CollisionRule` | `CollisionRule::new("group_a", "group_b")` — observe `Collided` (every tick) or `CollisionStarted`/`CollisionEnded` on it; see [Collision rules](#collision-rules) |
+| `CollisionRule` | `CollisionRule::new("group_a", "group_b")` — observe `CollisionOngoing` (every tick) or `CollisionStarted`/`CollisionEnded` on it; see [Collision rules](#collision-rules) |
 | `Tween<MapPosition>` | `Tween::position(from: Vec2, to: Vec2, duration)` |
 | `Tween<Rotation>` | `Tween::rotation(from_degrees, to_degrees, duration)` |
 | `Tween<Scale>` | `Tween::scale(from: Vec2, to: Vec2, duration)` |
@@ -1661,9 +1661,9 @@ Lua phase callbacks (`:with_lua_phase_entered/exited/update`) run on this same `
 
 **Source:** `aberred-core/src/components/collision.rs`, `aberred-core/src/systems/collision_rule.rs`, `aberred-core/src/systems/collision_detector.rs`
 
-`CollisionRule` names two entity groups. Rules are spawned as their own entities. When an entity of one group overlaps an entity of the other, the engine triggers a `Collided` event on the rule entity. React with an observer on the rule (`.observe(handler)`), or with a global observer (`.add_observer(handler)`) that sees every rule's collisions.
+`CollisionRule` names two entity groups. Rules are spawned as their own entities. When an entity of one group overlaps an entity of the other, the engine triggers a `CollisionOngoing` event on the rule entity. React with an observer on the rule (`.observe(handler)`), or with a global observer (`.add_observer(handler)`) that sees every rule's collisions.
 
-**The event:** `Collided { rule, a, b, sides_a, sides_b }`
+**The event:** `CollisionOngoing { rule, a, b, sides_a, sides_b }`
 
 - `rule` — the matched rule entity (the event target)
 - `a`, `b` — the two colliding entities, ordered to match `group_a` and `group_b`
@@ -1675,14 +1675,14 @@ Lua phase callbacks (`:with_lua_phase_entered/exited/update`) run on this same `
 1. `collision_detector` system iterates all entity pairs with `MapPosition` + `BoxCollider`
 2. Uses AABB overlap via `BoxCollider::as_rectangle()` + `Rect::overlaps()`
 3. On overlap, triggers an `Overlapping { a, b }` (observe it directly for "any overlap" logic)
-4. `collision_rule_observer` receives the event, looks up `Group` names, finds a matching `CollisionRule`, computes collision sides, and triggers `Collided` on the rule entity (preceded by `CollisionStarted` when the pair just started touching)
+4. `collision_rule_observer` receives the event, looks up `Group` names, finds a matching `CollisionRule`, computes collision sides, and triggers `CollisionOngoing` on the rule entity (preceded by `CollisionStarted` when the pair just started touching)
 5. After detection, `collision_ended_system` triggers `CollisionEnded` for each pair that stopped touching
 
-**Bidirectional matching:** A rule for `("ball", "brick")` matches regardless of which entity is `ball` vs `brick`. `Collided.a` is always the `group_a` entity and `Collided.b` the `group_b` entity.
+**Bidirectional matching:** A rule for `("ball", "brick")` matches regardless of which entity is `ball` vs `brick`. `CollisionOngoing.a` is always the `group_a` entity and `CollisionOngoing.b` the `group_b` entity.
 
 **Timing and cost:**
 
-- `Collided` fires **every sim tick** while the two boxes overlap (240 times a second at the default `[simulation] hz`). To react once per touch, observe the [contact events](#contact-events) instead.
+- `CollisionOngoing` fires **every sim tick** while the two boxes overlap (240 times a second at the default `[simulation] hz`). To react once per touch, observe the [contact events](#contact-events) instead.
 - Only **one rule** fires per overlapping pair. If several rules cover the same two groups, the one on the lowest `Entity` wins and the others never fire for that pair.
 - `collision_detector` tests **every pair** of entities with `MapPosition` + `BoxCollider` (O(n²)), whether or not any rule names their groups. Keep the number of colliders small; give a `BoxCollider` only to entities that need one.
 
@@ -1707,7 +1707,7 @@ commands
 use aberredengine::prelude::*;
 
 fn ball_brick_collision(
-    hit: On<Collided>,
+    hit: On<CollisionOngoing>,
     mut commands: Commands,
     mut rigid_bodies: Query<&mut RigidBody>,
     mut audio: MessageWriter<AudioCmd>,
@@ -1730,12 +1730,12 @@ fn ball_brick_collision(
 
 #### Contact events
 
-For one-shot reactions (a pickup, damage, a sound), observe a rule's contact events instead of `Collided`:
+For one-shot reactions (a pickup, damage, a sound), observe a rule's contact events instead of `CollisionOngoing`:
 
-- `CollisionStarted { rule, a, b, sides_a, sides_b }` — the first tick a pair touches, triggered just before that tick's `Collided`
+- `CollisionStarted { rule, a, b, sides_a, sides_b }` — the first tick a pair touches, triggered just before that tick's `CollisionOngoing`
 - `CollisionEnded { rule, a, b }` — the first tick the pair no longer overlaps (or no longer matches the rule)
 
-Both target the rule entity, like `Collided`. A pair that separates and touches again starts again.
+Both target the rule entity, like `CollisionOngoing`. A pair that separates and touches again starts again.
 
 **Caveats:**
 

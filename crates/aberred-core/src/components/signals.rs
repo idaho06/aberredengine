@@ -24,7 +24,7 @@
 //!
 //! - [`AnimationController`](super::animation::AnimationController) – reads signals for animation rule conditions
 //! - [`Phase`](super::phase::Phase) – [`PhaseEntered`](crate::events::phase::PhaseEntered)/[`PhaseExited`](crate::events::phase::PhaseExited) observers read/write signals through a `Query<&mut Signals>`
-//! - [`CollisionRule`](super::collision::CollisionRule) – [`Collided`](crate::events::collision::Collided) observers read/write signals the same way
+//! - [`CollisionRule`](super::collision::CollisionRule) – [`CollisionOngoing`](crate::events::collision::CollisionOngoing) observers read/write signals the same way
 //!
 //! # Example
 //!

@@ -7,12 +7,12 @@
 //! them), call the Lua functions the [`LuaOnCollision`] names:
 //!
 //! - `lua_collision_enter_observer` – on `CollisionStarted`, calls `enter`
-//! - `lua_collision_stay_observer` – on `Collided`, calls `stay`
+//! - `lua_collision_stay_observer` – on `CollisionOngoing`, calls `stay`
 //! - `lua_collision_exit_observer` – on `CollisionEnded`, calls `exit`
 //!
 //! Each callback gets a fresh pooled ctx and its `engine.collision_*`
 //! commands are applied right after it. Core triggers `CollisionStarted`
-//! just before the pair's first `Collided`, so `enter` runs before that
+//! just before the pair's first `CollisionOngoing`, so `enter` runs before that
 //! tick's `stay`; `CollisionEnded` comes from `collision_ended_system`, after
 //! detection.
 //!
@@ -57,7 +57,7 @@ use crate::systems::lua_commands::{
 };
 use aberred_core::components::collision::{BoxSide, CollisionRule};
 use aberred_core::components::signals::Signals;
-use aberred_core::events::collision::{Collided, CollisionEnded, CollisionStarted};
+use aberred_core::events::collision::{CollisionEnded, CollisionOngoing, CollisionStarted};
 use aberred_core::math::Rect;
 use aberred_core::systems::collision::{compute_sides, resolve_collider_rect, resolve_world_pos};
 use log::error;
@@ -219,8 +219,8 @@ pub fn lua_collision_rule_added_observer(
 /// Observes core `CollisionStarted` on a Lua rule entity and calls its
 /// `enter` callback.
 ///
-/// Core triggers `CollisionStarted` just before the pair's first `Collided`,
-/// so `enter` runs before that tick's `stay`.
+/// Core triggers `CollisionStarted` just before the pair's first
+/// `CollisionOngoing`, so `enter` runs before that tick's `stay`.
 fn lua_collision_enter_observer(trigger: On<CollisionStarted>, mut dispatch: LuaRuleDispatch) {
     aberred_core::tracy::tracy_span!("lua_collision_enter");
     let ev = trigger.event();
@@ -229,9 +229,9 @@ fn lua_collision_enter_observer(trigger: On<CollisionStarted>, mut dispatch: Lua
     });
 }
 
-/// Observes core `Collided` on a Lua rule entity and calls its `stay`
+/// Observes core `CollisionOngoing` on a Lua rule entity and calls its `stay`
 /// callback, every tick the pair touches.
-fn lua_collision_stay_observer(trigger: On<Collided>, mut dispatch: LuaRuleDispatch) {
+fn lua_collision_stay_observer(trigger: On<CollisionOngoing>, mut dispatch: LuaRuleDispatch) {
     aberred_core::tracy::tracy_span!("lua_collision_stay");
     let ev = trigger.event();
     dispatch.call_touching((ev.rule, ev.a, ev.b), |callbacks| callbacks.stay.as_deref());

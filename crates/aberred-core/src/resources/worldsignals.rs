@@ -15,7 +15,7 @@
 //!
 //! # Integration with Other Systems
 //!
-//! - Systems and observers (e.g. of [`Collided`](crate::events::collision::Collided)) take it as `Res<WorldSignals>`/`ResMut<WorldSignals>`
+//! - Systems and observers (e.g. of [`CollisionOngoing`](crate::events::collision::CollisionOngoing)) take it as `Res<WorldSignals>`/`ResMut<WorldSignals>`
 //! - [`SignalBinding`](crate::components::signalbinding::SignalBinding) binds UI text to world signal values
 //! - [`TrackedGroups`](crate::resources::group::TrackedGroups) + group system publish entity counts here
 //!

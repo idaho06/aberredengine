@@ -26,7 +26,7 @@ use aberredengine::core::components::sprite::Sprite;
 use aberredengine::core::components::timer::Timer;
 use aberredengine::core::components::zindex::ZIndex;
 use aberredengine::core::events::asset::{AssetLoadFailed, AssetLoaded};
-use aberredengine::core::events::collision::{Collided, CollisionEnded, CollisionStarted};
+use aberredengine::core::events::collision::{CollisionEnded, CollisionOngoing, CollisionStarted};
 use aberredengine::core::events::gui_interactable::GuiClicked;
 use aberredengine::core::events::input::InputAction;
 use aberredengine::core::events::phase::{PhaseEntered, PhaseExited};
@@ -108,15 +108,15 @@ fn input_edge_fires_exactly_once_and_clears() {
     assert!(input.action(InputAction::Action1).active, "still held");
 }
 
-fn collision_bump_flag(_: On<Collided>, mut signals: ResMut<WorldSignals>) {
+fn collision_bump_flag(_: On<CollisionOngoing>, mut signals: ResMut<WorldSignals>) {
     signals.set_flag("collided");
 }
 
 /// (b) Spawn two overlapping entities in matching groups with a
-/// `CollisionRule`; tick until overlap is detected and the rule's `Collided`
-/// observer's `WorldSignals` side-effect lands.
+/// `CollisionRule`; tick until overlap is detected and the rule's
+/// `CollisionOngoing` observer's `WorldSignals` side-effect lands.
 #[test]
-fn spawn_and_collide_triggers_collided_on_the_rule() {
+fn spawn_and_collide_triggers_collision_ongoing_on_the_rule() {
     let mut tw = TestWorld::new();
     tw.tick_to_play(DT, 8);
 
@@ -130,7 +130,7 @@ fn spawn_and_collide_triggers_collided_on_the_rule() {
 
     assert!(
         tw.world.resource::<WorldSignals>().has_flag("collided"),
-        "overlapping colliders in matching groups must trigger Collided on the rule"
+        "overlapping colliders in matching groups must trigger CollisionOngoing on the rule"
     );
 }
 
@@ -145,9 +145,9 @@ fn log_started(ev: On<CollisionStarted>, mut log: ResMut<ContactLog>) {
         .push(("started", ev.rule, ev.a, ev.b, Some(ev.sides_a.clone())));
 }
 
-fn log_collided(ev: On<Collided>, mut log: ResMut<ContactLog>) {
+fn log_ongoing(ev: On<CollisionOngoing>, mut log: ResMut<ContactLog>) {
     log.0
-        .push(("collided", ev.rule, ev.a, ev.b, Some(ev.sides_a.clone())));
+        .push(("ongoing", ev.rule, ev.a, ev.b, Some(ev.sides_a.clone())));
 }
 
 fn log_ended(ev: On<CollisionEnded>, mut log: ResMut<ContactLog>) {
@@ -157,7 +157,7 @@ fn log_ended(ev: On<CollisionEnded>, mut log: ResMut<ContactLog>) {
 fn contact_world(builder: TestWorldBuilder) -> TestWorld {
     let mut tw = builder
         .add_observer(log_started)
-        .add_observer(log_collided)
+        .add_observer(log_ongoing)
         .add_observer(log_ended)
         .build()
         .expect("build should succeed");
@@ -185,9 +185,9 @@ fn move_to(tw: &mut TestWorld, e: Entity, x: f32) {
     tw.world.get_mut::<MapPosition>(e).unwrap().pos.x = x;
 }
 
-/// A contact starts once (before that tick's `Collided`, with the same
-/// sides), stays with `Collided` every tick, ends once, and starts again on
-/// re-entry.
+/// A contact starts once (before that tick's `CollisionOngoing`, with the same
+/// sides), stays with `CollisionOngoing` every tick, ends once, and starts
+/// again on re-entry.
 #[test]
 fn collision_contact_starts_stays_ends_and_restarts() {
     let mut tw = contact_world(TestWorld::builder());
@@ -203,15 +203,12 @@ fn collision_contact_starts_stays_ends_and_restarts() {
         first,
         vec![
             ("started", rule, a, b, sides.clone()),
-            ("collided", rule, a, b, sides.clone()),
+            ("ongoing", rule, a, b, sides.clone()),
         ]
     );
 
     tw.tick(1, DT);
-    assert_eq!(
-        take_contacts(&mut tw),
-        vec![("collided", rule, a, b, sides)]
-    );
+    assert_eq!(take_contacts(&mut tw), vec![("ongoing", rule, a, b, sides)]);
 
     move_to(&mut tw, b, 100.0);
     tw.tick(1, DT);
@@ -222,15 +219,15 @@ fn collision_contact_starts_stays_ends_and_restarts() {
     move_to(&mut tw, b, 5.0);
     tw.tick(1, DT);
     let kinds: Vec<_> = take_contacts(&mut tw).iter().map(|e| e.0).collect();
-    assert_eq!(kinds, ["started", "collided"]);
+    assert_eq!(kinds, ["started", "ongoing"]);
 }
 
-fn despawn_b(ev: On<Collided>, mut commands: Commands) {
+fn despawn_b(ev: On<CollisionOngoing>, mut commands: Commands) {
     commands.entity(ev.b).despawn();
 }
 
-/// An entity despawned by a `Collided` observer ends its contact on the next
-/// tick, with the dead entity's id.
+/// An entity despawned by a `CollisionOngoing` observer ends its contact on
+/// the next tick, with the dead entity's id.
 #[test]
 fn collision_contact_ends_next_tick_when_an_entity_is_despawned() {
     let mut tw = contact_world(TestWorld::builder());
@@ -326,7 +323,7 @@ fn scene_switch_clears_collision_contacts_without_ending_them() {
         .filter(|e| (e.1, e.2, e.3) == (rule, a, b) || e.0 == "ended")
         .map(|e| e.0)
         .collect();
-    assert_eq!(kinds, ["collided", "started", "collided"]);
+    assert_eq!(kinds, ["ongoing", "started", "ongoing"]);
 }
 
 /// A `Timer` ticked by the real sim schedule triggers `TimerFired` on its
@@ -2685,7 +2682,7 @@ fn lua_collision_stay_only_rule_runs_every_touching_tick() {
 }
 
 #[cfg(feature = "lua")]
-fn count_collided(_: On<Collided>, mut counter: ResMut<Counter>) {
+fn count_ongoing(_: On<CollisionOngoing>, mut counter: ResMut<Counter>) {
     counter.0 += 1;
 }
 
@@ -2702,7 +2699,7 @@ fn lua_and_rust_rules_on_one_pair_fire_once_per_tick() {
     spawn_lua_rule(&mut tw, Some("on_stay"), "");
     tw.world
         .spawn(CollisionRule::new("a", "b"))
-        .observe(count_collided);
+        .observe(count_ongoing);
     spawn_box(&mut tw, "a", 0.0, ());
     spawn_box(&mut tw, "b", 5.0, ());
 

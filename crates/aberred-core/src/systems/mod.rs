@@ -11,7 +11,7 @@
 //! - [`asset_tracking`] – settle `PendingAssets` on load replies and trigger `AssetLoaded`/`AssetLoadFailed`
 //! - [`audio_bridge`] – logic-thread systems that shuttle `AudioCmd`/`AudioMessage` with the audio thread
 //! - [`collision_detector`] – broad/simple overlap checks and event emission
-//! - [`collision_rule`] – matches overlaps against `CollisionRule`s and triggers `Collided`
+//! - [`collision_rule`] – matches overlaps against `CollisionRule`s and triggers `CollisionOngoing`
 //! - [`collision_rule_index`] – rebuilds `CollisionRuleIndex` from rule entities on change
 //! - [`gamestate`] – check for pending state transitions and trigger events
 //! - [`gridlayout`] – spawn entities from JSON-defined grid layouts

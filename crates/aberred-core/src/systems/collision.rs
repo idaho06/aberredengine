@@ -7,7 +7,7 @@
 //! # Related
 //!
 //! - [`crate::systems::collision_detector`] – AABB detection system
-//! - [`crate::systems::collision_rule`] – triggers `Collided` for matched rules
+//! - [`crate::systems::collision_rule`] – triggers `CollisionOngoing` for matched rules
 //! - `aberred_lua::systems::lua_collision` – Lua collision observer
 //! - [`crate::components::collision`] – collision types and side detection
 

@@ -5,7 +5,7 @@
 //! triggers it for every overlapping pair, every tick. Observe it for
 //! "any overlap" logic.
 //!
-//! [`Collided`] is the rule-matched event:
+//! [`CollisionOngoing`] is the rule-matched, every-tick event:
 //! [`collision_rule_observer`](crate::systems::collision_rule::collision_rule_observer)
 //! triggers it on the [`CollisionRule`](crate::components::collision::CollisionRule)
 //! entity whose groups match the pair. Observe it per rule
@@ -13,7 +13,7 @@
 //!
 //! [`CollisionStarted`] and [`CollisionEnded`] are the rule-matched contact
 //! events: a pair's first touching tick triggers `CollisionStarted` (before
-//! that tick's `Collided`), and its first tick apart triggers
+//! that tick's `CollisionOngoing`), and its first tick apart triggers
 //! `CollisionEnded`.
 //!
 //! # Related
@@ -27,7 +27,7 @@ use bevy_ecs::prelude::*;
 use crate::components::collision::BoxSides;
 
 /// The raw, unruled overlap: triggered for every pair of overlapping
-/// `BoxCollider` entities, every tick they overlap. [`Collided`] is the
+/// `BoxCollider` entities, every tick they overlap. [`CollisionOngoing`] is the
 /// rule-matched event.
 ///
 /// The two fields, [`Overlapping::a`] and [`Overlapping::b`], are the
@@ -41,12 +41,14 @@ pub struct Overlapping {
 }
 
 /// Triggered on a [`CollisionRule`](crate::components::collision::CollisionRule)
-/// entity when entities of its two groups overlap, every tick while they do.
+/// entity every tick while entities of its two groups overlap. For one-shot
+/// reactions, observe [`CollisionStarted`] (just before it, on a pair's first
+/// touching tick).
 ///
 /// `a`/`b` and `sides_a`/`sides_b` follow the rule's `group_a`/`group_b`
 /// order, whatever order the pair was detected in.
 #[derive(EntityEvent, Clone, Debug)]
-pub struct Collided {
+pub struct CollisionOngoing {
     /// The matched rule entity, the event's target. Named `rule` rather than
     /// `entity` because a collision involves three entities.
     #[event_target]
@@ -63,11 +65,11 @@ pub struct Collided {
 
 /// Triggered on a [`CollisionRule`](crate::components::collision::CollisionRule)
 /// entity when entities of its two groups start touching: on the first tick
-/// they overlap, before that tick's [`Collided`].
+/// they overlap, before that tick's [`CollisionOngoing`].
 ///
-/// Fields match [`Collided`]. A pair that stops touching and touches again
-/// starts again. A scene switch forgets every contact, so a `Persistent`
-/// pair still touching after a switch starts again too.
+/// Fields match [`CollisionOngoing`]. A pair that stops touching and touches
+/// again starts again. A scene switch forgets every contact, so a
+/// `Persistent` pair still touching after a switch starts again too.
 #[derive(EntityEvent, Clone, Debug)]
 pub struct CollisionStarted {
     /// The matched rule entity, the event's target.

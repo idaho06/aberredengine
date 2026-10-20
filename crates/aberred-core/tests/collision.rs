@@ -2,9 +2,10 @@
 //!
 //! Runs the collision pipeline end to end in an ECS world:
 //! `rebuild_rule_index` -> `collision_detector` ->
-//! `collision_rule_observer`, then checks which `Collided` events reached
-//! observers and with which fields (group matching, entity ordering, contact
-//! sides, and lowest-entity-wins when several rules cover the same pair).
+//! `collision_rule_observer`, then checks which `CollisionOngoing` events
+//! reached observers and with which fields (group matching, entity ordering,
+//! contact sides, and lowest-entity-wins when several rules cover the same
+//! pair).
 
 use bevy_ecs::prelude::*;
 
@@ -12,18 +13,18 @@ use aberred_core::components::boxcollider::BoxCollider;
 use aberred_core::components::collision::{BoxSide, CollisionRule};
 use aberred_core::components::group::Group;
 use aberred_core::components::mapposition::MapPosition;
-use aberred_core::events::collision::Collided;
+use aberred_core::events::collision::CollisionOngoing;
 use aberred_core::resources::collision_contacts::CollisionContacts;
 use aberred_core::resources::collision_rule_index::CollisionRuleIndex;
 use aberred_core::systems::collision_detector::collision_detector;
 use aberred_core::systems::collision_rule::collision_rule_observer;
 use aberred_core::systems::collision_rule_index::rebuild_rule_index;
 
-/// Every `Collided` an observer received, in trigger order.
+/// Every `CollisionOngoing` an observer received, in trigger order.
 #[derive(Resource, Default)]
-struct Hits(Vec<Collided>);
+struct Hits(Vec<CollisionOngoing>);
 
-fn record(trigger: On<Collided>, mut hits: ResMut<Hits>) {
+fn record(trigger: On<CollisionOngoing>, mut hits: ResMut<Hits>) {
     hits.0.push(trigger.event().clone());
 }
 
@@ -54,7 +55,7 @@ fn spawn_collider(world: &mut World, group: &str, x: f32) -> Entity {
 }
 
 #[test]
-fn rule_observer_gets_collided_with_entities_in_group_order() {
+fn rule_observer_gets_collision_ongoing_with_entities_in_group_order() {
     let mut world = make_world();
     // Spawn "brick" first so the detector may report (brick, ball); the rule
     // names "ball" first, so the event must reorder them.
@@ -73,7 +74,7 @@ fn rule_observer_gets_collided_with_entities_in_group_order() {
 }
 
 #[test]
-fn collided_carries_the_touching_sides() {
+fn collision_ongoing_carries_the_touching_sides() {
     let mut world = make_world();
     // a at x=0, b at x=8, both 10 wide: a's right side meets b's left side.
     spawn_collider(&mut world, "ball", 0.0);
@@ -109,7 +110,7 @@ fn only_the_lowest_entity_rule_fires_for_a_pair() {
 }
 
 #[test]
-fn collided_fires_every_tick_while_overlapping() {
+fn collision_ongoing_fires_every_tick_while_overlapping() {
     let mut world = make_world();
     spawn_collider(&mut world, "ball", 0.0);
     spawn_collider(&mut world, "brick", 5.0);
@@ -124,7 +125,7 @@ fn collided_fires_every_tick_while_overlapping() {
 }
 
 #[test]
-fn no_collided_for_a_pair_without_a_rule() {
+fn no_collision_ongoing_for_a_pair_without_a_rule() {
     let mut world = make_world();
     spawn_collider(&mut world, "player", 0.0);
     spawn_collider(&mut world, "enemy", 5.0);
@@ -137,7 +138,7 @@ fn no_collided_for_a_pair_without_a_rule() {
 }
 
 #[test]
-fn global_and_rule_observers_both_get_collided() {
+fn global_and_rule_observers_both_get_collision_ongoing() {
     let mut world = make_world();
     spawn_collider(&mut world, "ball", 0.0);
     spawn_collider(&mut world, "brick", 5.0);

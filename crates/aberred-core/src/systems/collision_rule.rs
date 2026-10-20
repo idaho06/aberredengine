@@ -1,10 +1,10 @@
 //! Rule-matched collision events.
 //!
 //! [`collision_rule_observer`] receives each [`Overlapping`], finds the
-//! [`CollisionRule`] covering the pair's groups, and triggers [`Collided`] on
-//! that rule's entity, preceded by [`CollisionStarted`] when the contact is
-//! new. [`collision_ended_system`] triggers [`CollisionEnded`] for the
-//! contacts that stopped this tick.
+//! [`CollisionRule`] covering the pair's groups, and triggers
+//! [`CollisionOngoing`] on that rule's entity, preceded by
+//! [`CollisionStarted`] when the contact is new. [`collision_ended_system`]
+//! triggers [`CollisionEnded`] for the contacts that stopped this tick.
 //!
 //! # Collision Flow
 //!
@@ -14,7 +14,7 @@
 //!    [`Group`] names
 //! 3. It computes the contact sides, records the contact in
 //!    [`CollisionContacts`], and triggers `CollisionStarted` (new contacts
-//!    only) and `Collided` on the rule entity
+//!    only) and `CollisionOngoing` on the rule entity
 //! 4. After detection, `collision_ended_system` triggers `CollisionEnded` for
 //!    each contact that did not touch this tick
 //!
@@ -23,18 +23,18 @@
 //! - [`crate::systems::collision_detector`] – collision detection
 //! - [`crate::components::collision::CollisionRule`] – group-pair rule
 //! - [`crate::components::boxcollider::BoxCollider`] – axis-aligned collider
-//! - [`crate::events::collision`] – `Overlapping`, `Collided` and the contact events
+//! - [`crate::events::collision`] – `Overlapping`, `CollisionOngoing` and the contact events
 
 use bevy_ecs::prelude::*;
 
 use crate::components::collision::CollisionRule;
 use crate::components::group::Group;
-use crate::events::collision::{Collided, CollisionEnded, CollisionStarted, Overlapping};
+use crate::events::collision::{CollisionEnded, CollisionOngoing, CollisionStarted, Overlapping};
 use crate::resources::collision_contacts::CollisionContacts;
 use crate::resources::collision_rule_index::CollisionRuleIndex;
 use crate::systems::collision::{ColliderRects, compute_sides, resolve_groups};
 
-/// Observer that turns an [`Overlapping`] into a [`Collided`] on the
+/// Observer that turns an [`Overlapping`] into a [`CollisionOngoing`] on the
 /// matching [`CollisionRule`] entity.
 ///
 /// 1. Looks up [`Group`] names for both entities (returns early if missing)
@@ -44,7 +44,7 @@ use crate::systems::collision::{ColliderRects, compute_sides, resolve_groups};
 /// 3. Computes contact sides via [`compute_sides`]
 /// 4. Records the contact in [`CollisionContacts`]; a new one triggers
 ///    [`CollisionStarted`] first
-/// 5. Triggers `Collided` with `a`/`b` in the rule's group order
+/// 5. Triggers `CollisionOngoing` with `a`/`b` in the rule's group order
 pub fn collision_rule_observer(
     trigger: On<Overlapping>,
     rules: Query<&CollisionRule>,
@@ -79,7 +79,7 @@ pub fn collision_rule_observer(
             sides_b: sides_b.clone(),
         });
     }
-    commands.trigger(Collided {
+    commands.trigger(CollisionOngoing {
         rule,
         a: ent_a,
         b: ent_b,

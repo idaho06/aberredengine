@@ -24,7 +24,7 @@ use aberredengine::core::components::boxcollider::BoxCollider;
 use aberredengine::core::components::collision::CollisionRule;
 use aberredengine::core::components::group::Group;
 use aberredengine::core::components::mapposition::MapPosition;
-use aberredengine::core::events::collision::Collided;
+use aberredengine::core::events::collision::CollisionOngoing;
 use aberredengine::core::events::input::InputAction;
 use aberredengine::core::events::scene::SceneEntered;
 use aberredengine::core::protocol::raw_input::RawDeviceSnapshot;
@@ -40,7 +40,7 @@ use aberredengine::test_support::{TestWorld, TestWorldBuilder};
 mod common;
 use common::DT;
 
-fn collision_bump_flag(_: On<Collided>, mut signals: ResMut<WorldSignals>) {
+fn collision_bump_flag(_: On<CollisionOngoing>, mut signals: ResMut<WorldSignals>) {
     signals.set_flag("determinism_test_collided");
 }
 

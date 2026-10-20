@@ -533,8 +533,8 @@ fn collision_callback_phase_plus_signal_all_processed() {
 /// A collision enter callback despawning one entity prevents the stay callback
 /// from running on it, avoiding nil access errors in Lua.
 ///
-/// If an enter callback despawning entity A or B, and a Collided event for the
-/// same pair was already queued, the stay callback should not run because
+/// If an enter callback despawns entity A or B, and a `CollisionOngoing` event
+/// for the same pair was already queued, the stay callback should not run because
 /// live_side would return nil for the despawned entity's components, causing
 /// Lua errors when accessing ctx.a.pos.x or ctx.b.pos.x.
 #[test]

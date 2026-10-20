@@ -4,8 +4,8 @@
 //! contact-tracked by core like any Rust rule) plus a [`LuaOnCollision`] on
 //! the same entity naming the Lua functions to call. The observers in
 //! [`crate::systems::lua_collision`] call them from core's events:
-//! `CollisionStarted` -> `enter`, `Collided` -> `stay`, `CollisionEnded` ->
-//! `exit`. Rules without a [`LuaOnCollision`] are Rust rules and are ignored.
+//! `CollisionStarted` -> `enter`, `CollisionOngoing` -> `stay`,
+//! `CollisionEnded` -> `exit`. Rules without a [`LuaOnCollision`] are Rust rules and are ignored.
 //!
 //! An entity has one `CollisionRule`, and one rule fires per overlapping pair
 //! per tick (the lowest-`Entity` match), whether it is a Lua or a Rust rule.

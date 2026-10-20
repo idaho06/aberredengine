@@ -124,7 +124,7 @@ mod collision_rules {
     use aberredengine::prelude::*;
 
     fn ball_brick_collision(
-        hit: On<Collided>,
+        hit: On<CollisionOngoing>,
         mut commands: Commands,
         mut rigid_bodies: Query<&mut RigidBody>,
         mut audio: MessageWriter<AudioCmd>,
