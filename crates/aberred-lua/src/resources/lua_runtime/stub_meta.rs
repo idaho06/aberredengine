@@ -691,9 +691,9 @@ impl LuaRuntime {
                 note: None,
             },
             CbDef {
-                name: "on_switch_scene",
-                description: "Called when switching scenes",
-                params: &[("scene", "string")],
+                name: "on_scene_enter",
+                description: "Called each time a scene becomes active, after the previous scene is torn down",
+                params: &[("name", "string")],
                 returns: None,
                 context: Some("play"),
                 note: None,

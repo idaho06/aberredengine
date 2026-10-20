@@ -17,7 +17,7 @@ use std::sync::Arc;
 /// Cached camera state snapshot for Lua to read via `engine.get_camera()` / `engine.get_camera_view_rect()`.
 ///
 /// Updated before calling Lua callbacks via `update_camera_cache()`.
-/// Only populated during `lua_plugin::update`; during `on_setup` and `on_switch_scene`
+/// Only populated during `lua_plugin::update`; during `on_setup` and `on_scene_enter`
 /// the snapshot holds `Default` values (zoom=1.0, everything else 0).
 pub(super) struct CameraSnapshot {
     pub target_x: f32,

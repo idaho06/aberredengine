@@ -108,7 +108,7 @@ The engine loads `main.lua` first. It defines the engine callbacks and manages t
 - **`scene_registry`** — maps scene names to their `require` paths
 - **`clear_callbacks()`** — removes the previous scene's functions from `_G`
 - **`inject_callbacks()`** — writes a scene's `_callbacks` table into `_G`
-- **`on_switch_scene()`** — orchestrates clear → inject → spawn
+- **`on_scene_enter()`** — orchestrates clear → inject → spawn
 
 ```lua
 -- Called during Setup game state to load all assets
@@ -122,8 +122,8 @@ function on_enter_play()
     return "Hello from Lua!"
 end
 
--- Called when switching scenes (manages callback lifecycle)
-function on_switch_scene(scene_name)
+-- Called each time a scene becomes active (manages callback lifecycle)
+function on_scene_enter(scene_name)
     clear_callbacks()                  -- 1. Remove previous scene's globals
     local scene = get_scene(scene_name)
     if scene then
@@ -150,7 +150,7 @@ If two scene files both define a global function with the same name, the last on
 wins — causing bugs.
 
 To prevent naming conflicts between examples, each scene module stores its callbacks as
-**local** functions and lists them in `M._callbacks`. When switching scenes, `main.lua`:
+**local** functions and lists them in `M._callbacks`. When a scene is entered, `main.lua`:
 
 1. Removes the previous scene's callbacks from `_G`
 2. Injects the new scene's callbacks into `_G`
@@ -286,7 +286,7 @@ Different callbacks process different types of engine commands. Here's what comm
 |----------|-------------------|-----------|
 | `on_setup()` | Asset, Animation | Load textures, fonts, audio, shaders; register animations |
 | `on_enter_play()` | Signal, Group | Initialize world signals; configure group tracking |
-| `on_switch_scene(scene)` | Signal, Entity, Phase, Audio, Spawn, Clone, Group, Camera, Render, GameConfig, CameraFollow, InputBinding | **Most complete** - spawn/clone entities; set signals; play audio; set camera; set post-process shader; configure fullscreen/vsync/fps; rebind keys |
+| `on_scene_enter(name)` | Signal, Entity, Phase, Audio, Spawn, Clone, Group, Camera, Render, GameConfig, CameraFollow, InputBinding | **Most complete** - spawn/clone entities; set signals; play audio; set camera; set post-process shader; configure fullscreen/vsync/fps; rebind keys |
 | `on_update_<scene>(input, dt)` | Signal, Entity, Spawn, Clone, Phase, Audio, Camera, Render, GameConfig, CameraFollow, InputBinding | Per-frame logic - camera effects, post-process control, game config changes, key rebinding; but avoid spawning/cloning in hot loops unless you really mean to |
 | Phase callbacks | Phase, Audio, Signal, Spawn, Clone, Entity, Camera | Transition phases; play sounds; spawn/clone/modify entities; camera effects |
 | Timer callbacks | Phase, Audio, Signal, Spawn, Clone, Entity, Camera | Same command surface as phase callbacks |
@@ -300,7 +300,7 @@ Different callbacks process different types of engine commands. Here's what comm
 |----------|-------|
 | `on_setup()` | Asset → Animation |
 | `on_enter_play()` | Signal → Group |
-| `on_switch_scene(scene)` | Animation → (Signal, Entity, Spawn, Clone in call order) → Audio → Camera → Phase → Render → GameConfig → CameraFollow → InputBinding → Group |
+| `on_scene_enter(name)` | Animation → (Signal, Entity, Spawn, Clone in call order) → Audio → Camera → Phase → Render → GameConfig → CameraFollow → InputBinding → Group |
 | `on_update_<scene>(input, dt)` | Animation → (Signal, Entity, Spawn, Clone in call order) → Audio → Camera → Phase → Render → GameConfig → CameraFollow → InputBinding → Group |
 | Phase/Timer/`on_animation_end`/LuaSetup/menu/GUI click callbacks | (Signal, Entity, Spawn, Clone in call order) → Audio → Camera → Phase |
 | Collision callbacks | the same, from the collision queues |
@@ -389,7 +389,7 @@ Collision callbacks process commands from their own dedicated queues, which are 
 
 - `on_update_<scene>` runs every frame (60 FPS)
 - Entity/Spawn commands work but can cause performance issues
-- **Avoid spawning entities in update loops** - prefer `on_switch_scene`, phase callbacks, or collision callbacks
+- **Avoid spawning entities in update loops** - prefer `on_scene_enter`, phase callbacks, or collision callbacks
 - Use `on_update` primarily for input handling and signal updates
 
 ---
@@ -927,7 +927,7 @@ behaves identically to queuing it from any other callback.
 `engine.load_map()` call itself), an error is logged and nothing is spawned.
 
 **Calling from `M.spawn()`** (the typical pattern) is equivalent to calling it from inside
-`on_switch_scene()` — the request is queued during that same sim tick and drained on a later one,
+`on_scene_enter()` — the request is queued during that same sim tick and drained on a later one,
 so entities are ready by the first `on_update_<scene>` tick that runs after the drain.
 
 ---
@@ -2897,7 +2897,7 @@ engine.remove_entity("special_enemy")
 
 #### `engine.request_scene(name)`
 
-Requests a switch to a new scene. The engine switches at its scene poll, which runs every tick after collisions and before `on_update_<scene>`, updating the `scene` and `previous_scene` strings and calling `on_switch_scene`. A request from `on_update_<scene>` switches on the next tick; a request from a menu item, a GUI widget, a phase or a timer callback switches in the same tick; a request from a collision callback switches in the same tick or the next. The tick that switches runs no `on_update_<scene>`: the new scene's starts on the following tick. A request from `on_switch_scene` switches again on the next tick, so the scene it leaves runs no `on_update_<scene>` at all. The last request before the poll wins, and during play a quit pending at the poll wins over it.
+Requests a switch to a new scene. The engine switches at its scene poll, which runs every tick after collisions and before `on_update_<scene>`, updating the `scene` and `previous_scene` strings and calling `on_scene_enter`. A request from `on_update_<scene>` switches on the next tick; a request from a menu item, a GUI widget, a phase or a timer callback switches in the same tick; a request from a collision callback switches in the same tick or the next. The tick that switches runs no `on_update_<scene>`: the new scene's starts on the following tick. A request from `on_scene_enter` switches again on the next tick, so the scene it leaves runs no `on_update_<scene>` at all. The last request before the poll wins, and during play a quit pending at the poll wins over it.
 
 Called from `on_enter_play`, it picks the first scene; without a request the first scene is `"menu"`. The first scene is always entered after `on_enter_play`, even if it also calls `engine.request_quit()`.
 
@@ -4793,7 +4793,7 @@ engine.log("camera at: " .. cam.target_x .. ", " .. cam.target_y .. "  zoom: " .
 ```
 
 **Limitations:**
-- Only populated during `on_update_<scene>` callbacks. Returns defaults (`zoom=1.0`, all else `0`) when called from `on_setup` or `on_switch_scene`.
+- Only populated during `on_update_<scene>` callbacks. Returns defaults (`zoom=1.0`, all else `0`) when called from `on_setup` or `on_scene_enter`.
 - If you call both `get_camera()` and `set_camera()` in the same callback, `get_camera()` returns the pre-override value because camera write commands are applied after Lua has run.
 
 **Performance note:** Each call allocates a new Lua table. Store the result in a local variable rather than calling the function multiple times within one callback.
@@ -4809,7 +4809,7 @@ Returns the visible world-space rectangle for the current camera state. This is 
 **Assumes zero camera rotation.** Under non-zero rotation the result is an axis-aligned approximation only.
 
 **Limitations:**
-- Only populated during `on_update_<scene>` callbacks. Returns `{ x=0, y=0, w=0, h=0 }` when called from `on_setup` or `on_switch_scene`. Unlike `get_camera()` where `zoom=1` hints at a stale snapshot, all four fields defaulting to zero is a silent failure — position and size calculations using `w`/`h` will produce incorrect results.
+- Only populated during `on_update_<scene>` callbacks. Returns `{ x=0, y=0, w=0, h=0 }` when called from `on_setup` or `on_scene_enter`. Unlike `get_camera()` where `zoom=1` hints at a stale snapshot, all four fields defaulting to zero is a silent failure — position and size calculations using `w`/`h` will produce incorrect results.
 
 **Performance note:** Each call allocates a new Lua table. Store the result in a local variable rather than calling the function multiple times within one callback.
 
@@ -5382,7 +5382,7 @@ void main() {
 
 ```lua
 -- In Lua
-function on_switch_scene(scene)
+function on_scene_enter(scene)
     if scene == "level01" then
         engine.post_process_shader({"wave"})
     else
@@ -6281,7 +6281,7 @@ end
 
 7. **Load assets in `on_setup()`** - Assets must be queued before entering Playing state.
 
-8. **Scene scripts are lazy-loaded** - Only loaded when `on_switch_scene()` requires them.
+8. **Scene scripts are lazy-loaded** - Only loaded when `on_scene_enter()` requires them.
 
 9. **Use `:with_lua_setup()` for map-driven entity initialisation** - Attach timers, phases and collision rules inside a setup callback instead of branching on entity group in `on_update`. The callback fires once per entity (including clones), keeping scene update logic clean.
 

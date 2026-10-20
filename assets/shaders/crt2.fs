@@ -11,7 +11,7 @@
 // 1. Load the shader in on_setup:
 //    engine.load_shader("crt", nil, "shaders/crt2.fs")
 //
-// 2. Activate in on_switch_scene or on_update:
+// 2. Activate in on_scene_enter or on_update:
 //    engine.post_process_shader({"crt"})
 //
 // 3. Configure uniforms (optional - defaults are sensible):

@@ -1806,7 +1806,7 @@ function on_enter_play()
     engine.request_scene("a")
     return ""
 end
-function on_switch_scene(scene) table.insert(LOG, "switch:" .. scene) end
+function on_scene_enter(scene) table.insert(LOG, "switch:" .. scene) end
 "#,
     );
     tw.tick(1, DT);
@@ -1830,7 +1830,7 @@ function on_enter_play()
     engine.request_scene("a")
     return ""
 end
-function on_switch_scene(scene) table.insert(LOG, "switch:" .. scene) end
+function on_scene_enter(scene) table.insert(LOG, "switch:" .. scene) end
 "#,
     );
     tw.tick(1, DT);
@@ -1877,7 +1877,7 @@ function on_update_menu(input, dt) engine.request_quit() end
 #[cfg(feature = "lua")]
 const LUA_MENU_GO_TO_B: &str = r#"
 function on_enter_play() return "" end
-function on_switch_scene(scene)
+function on_scene_enter(scene)
     table.insert(LOG, "switch:" .. scene)
     if scene == "menu" then
         engine.spawn()
@@ -1914,7 +1914,7 @@ fn lua_game_without_a_request_enters_the_menu_scene() {
         "default_scene",
         r#"
 function on_enter_play() return "" end
-function on_switch_scene(scene) table.insert(LOG, "switch:" .. scene) end
+function on_scene_enter(scene) table.insert(LOG, "switch:" .. scene) end
 "#,
     );
     tw.tick(1, DT);
@@ -1935,7 +1935,7 @@ fn lua_raw_scene_signals_switch_nothing() {
         "raw_scene_signals",
         r#"
 function on_enter_play() return "" end
-function on_switch_scene(scene) table.insert(LOG, "switch:" .. scene) end
+function on_scene_enter(scene) table.insert(LOG, "switch:" .. scene) end
 function on_update_menu(input, dt)
     table.insert(LOG, "update:menu")
     engine.set_string("scene", "x")
@@ -2023,7 +2023,7 @@ fn lua_scene_switch_keeps_only_persistent_tracked_groups() {
         "switch_tracked_groups",
         r#"
 function on_enter_play() return "" end
-function on_switch_scene(scene)
+function on_scene_enter(scene)
     if scene == "menu" then engine.track_group("bullets") end
 end
 "#,
@@ -2042,11 +2042,11 @@ end
     assert!(!tracked(&tw, "bullets"), "scene group is dropped");
 }
 
-/// `on_switch_scene` of the new scene no longer sees a non-persistent entity
+/// `on_scene_enter` of the new scene no longer sees a non-persistent entity
 /// registered in the scene it left.
 #[cfg(feature = "lua")]
 #[test]
-fn lua_on_switch_scene_does_not_see_the_old_scene_registrations() {
+fn lua_on_scene_enter_does_not_see_the_old_scene_registrations() {
     let mut tw = lua_script_world(
         "switch_registrations",
         r#"
@@ -2054,7 +2054,7 @@ function on_enter_play()
     engine.request_scene("a")
     return ""
 end
-function on_switch_scene(scene)
+function on_scene_enter(scene)
     if scene == "a" then
         engine.spawn():register_as("player"):build()
     else
@@ -2086,7 +2086,7 @@ fn lua_quit_wins_over_a_scene_request_in_the_same_update() {
         "quit_over_scene",
         r#"
 function on_enter_play() return "" end
-function on_switch_scene(scene) table.insert(LOG, "switch:" .. scene) end
+function on_scene_enter(scene) table.insert(LOG, "switch:" .. scene) end
 function on_update_menu(input, dt)
     engine.request_scene("b")
     engine.request_quit()
@@ -2189,7 +2189,7 @@ function on_enter_play()
     engine.request_scene("a")
     return ""
 end
-function on_switch_scene(scene) table.insert(LOG, "switch:" .. scene) end
+function on_scene_enter(scene) table.insert(LOG, "switch:" .. scene) end
 function on_update_a(input, dt)
     table.insert(LOG, "update:a")
     if not REQUESTED then
@@ -2229,7 +2229,7 @@ function on_enter_play()
     engine.request_scene("a")
     return ""
 end
-function on_switch_scene(scene) table.insert(LOG, "switch:" .. scene) end
+function on_scene_enter(scene) table.insert(LOG, "switch:" .. scene) end
 function on_update_a(input, dt) table.insert(LOG, "update:a") end
 function on_update_b(input, dt) table.insert(LOG, "update:b") end
 function on_timer(ctx) engine.request_scene("b") end

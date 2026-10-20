@@ -5,7 +5,7 @@
 //     engine.load_shader("crt", nil, "./assets/shaders/crt.fs")
 // end
 // 
-// function on_switch_scene(scene)
+// function on_scene_enter(scene)
 //     engine.post_process_shader("crt")
 //     engine.post_process_set_float("uCurvature", 0.8)
 //     engine.post_process_set_float("uScanline", 0.9)

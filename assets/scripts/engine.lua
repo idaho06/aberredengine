@@ -224,10 +224,10 @@ function on_setup() end
 ---Context: play
 function on_enter_play() end
 
----Called when switching scenes
+---Called each time a scene becomes active, after the previous scene is torn down
 ---Context: play
----@param scene string
-function on_switch_scene(scene) end
+---@param name string
+function on_scene_enter(name) end
 
 ---Called each frame during a scene
 ---NOTE: Function name is dynamic: on_update_ + scene name
@@ -1324,11 +1324,11 @@ function engine.camera_follow_set_spring(stiffness, damping) end
 ---@param speed number
 function engine.camera_follow_set_zoom_speed(speed) end
 
----Get the current 2D camera state (target, offset, rotation, zoom). Returns values from the start of this frame after camera_follow_system has run. If called in the same callback as set_camera(), returns pre-override values. Only available during on_update callbacks; returns defaults (zoom=1) from on_setup / on_switch_scene. Each call returns a new table; cache locally if reading multiple fields.
+---Get the current 2D camera state (target, offset, rotation, zoom). Returns values from the start of this frame after camera_follow_system has run. If called in the same callback as set_camera(), returns pre-override values. Only available during on_update callbacks; returns defaults (zoom=1) from on_setup / on_scene_enter. Each call returns a new table; cache locally if reading multiple fields.
 ---@return table
 function engine.get_camera() end
 
----Get the visible world-space rectangle for the current camera: top-left corner (x, y) plus visible dimensions (w, h) in world units. Assumes zero camera rotation — under non-zero rotation the result is an axis-aligned approximation only. Only available during on_update callbacks; returns {{ x=0, y=0, w=0, h=0 }} from on_setup / on_switch_scene. Each call returns a new table; cache locally if reading multiple fields.
+---Get the visible world-space rectangle for the current camera: top-left corner (x, y) plus visible dimensions (w, h) in world units. Assumes zero camera rotation — under non-zero rotation the result is an axis-aligned approximation only. Only available during on_update callbacks; returns {{ x=0, y=0, w=0, h=0 }} from on_setup / on_scene_enter. Each call returns a new table; cache locally if reading multiple fields.
 ---@return table
 function engine.get_camera_view_rect() end
 

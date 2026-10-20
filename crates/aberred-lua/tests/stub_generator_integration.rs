@@ -421,7 +421,7 @@ fn meta_callbacks_table_is_populated() {
         assert(cbs, "__meta.callbacks missing")
 
         -- Key callbacks must exist
-        local required = {"on_setup", "on_enter_play", "on_switch_scene",
+        local required = {"on_setup", "on_enter_play", "on_scene_enter",
                           "on_update_<scene>", "phase_entered", "phase_update",
                           "phase_exited", "timer_callback", "collision_callback",
                           "menu_callback"}

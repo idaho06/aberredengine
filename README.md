@@ -30,7 +30,7 @@ Main Lua entrypoints:
 
 - `on_setup()`
 - `on_enter_play()`
-- `on_switch_scene(scene_name)`
+- `on_scene_enter(name)`
 - `on_update_<scene>(input, dt)`
 
 Useful Lua docs:

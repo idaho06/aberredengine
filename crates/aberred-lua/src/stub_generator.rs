@@ -369,7 +369,7 @@ fn extract_callbacks(meta: &LuaTable) -> Result<Vec<CallbackMeta>, LuaError> {
     let cb_order = [
         "on_setup",
         "on_enter_play",
-        "on_switch_scene",
+        "on_scene_enter",
         "on_update_<scene>",
         "phase_entered",
         "phase_update",

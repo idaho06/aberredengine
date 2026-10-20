@@ -159,10 +159,10 @@ function on_enter_play()
     return "Hello from Lua! Ready to play."
 end
 
---- Called when switching scenes.
+--- Called each time a scene becomes active, after the previous scene is torn down.
 --- Clears previous callbacks, injects new ones, then spawns the scene.
---- @param scene_name string The name of the scene to switch to
-function on_switch_scene(scene_name)
+--- @param scene_name string The name of the entered scene
+function on_scene_enter(scene_name)
     engine.log_info("Switching to scene: " .. scene_name)
 
     -- 1. Remove previous scene's callbacks from _G

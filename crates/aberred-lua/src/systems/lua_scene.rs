@@ -3,7 +3,7 @@
 //! Core `scene_switch_system` switches scenes; these observers add the Lua
 //! side. [`lua_scene_exited_observer`] drops the commands queued for the scene
 //! being left, before its entities are despawned. [`lua_scene_entered_observer`]
-//! calls `on_switch_scene` once the old scene is gone. The engine registers
+//! calls `on_scene_enter` once the old scene is gone. The engine registers
 //! them only when a Lua script is set. Their order relative to other global
 //! observers of the same event is undefined.
 
@@ -21,7 +21,7 @@ pub fn lua_scene_exited_observer(_: On<SceneExited>, lua_runtime: NonSend<LuaRun
 }
 
 /// Prepares the Lua runtime for the entered scene and calls
-/// `on_switch_scene(name)`: drops cached function handles (the scene's
+/// `on_scene_enter(name)`: drops cached function handles (the scene's
 /// callbacks are re-injected), refreshes the tracked-group and signal caches so
 /// the callback sees the post-teardown state, drains the commands it queued,
 /// and refreshes the config cache.
@@ -32,10 +32,10 @@ pub fn lua_scene_entered_observer(trigger: On<SceneEntered>, mut ctx: DrainCtx) 
     lua_runtime.sync_signals(&mut ctx.scene_state.world_signals);
 
     let name = &*trigger.event().name;
-    if lua_runtime.has_function("on_switch_scene")
-        && let Err(e) = lua_runtime.call_function::<_, ()>("on_switch_scene", name)
+    if lua_runtime.has_function("on_scene_enter")
+        && let Err(e) = lua_runtime.call_function::<_, ()>("on_scene_enter", name)
     {
-        error!("Error calling on_switch_scene: {}", e);
+        error!("Error calling on_scene_enter: {}", e);
     }
 
     ctx.drain();
@@ -105,10 +105,10 @@ mod tests {
         );
     }
 
-    /// `on_switch_scene` gets the entered scene's name and sees the current
+    /// `on_scene_enter` gets the entered scene's name and sees the current
     /// signals, not a stale cached snapshot.
     #[test]
-    fn entered_refreshes_the_signal_cache_before_on_switch_scene() {
+    fn entered_refreshes_the_signal_cache_before_on_scene_enter() {
         let mut world = scene_observer_world();
         let mut stale = WorldSignals::default();
         stale.set_entity("player", world.spawn_empty().id());
@@ -117,7 +117,7 @@ mod tests {
             .update_signal_cache(stale.snapshot());
         lua_exec(
             &world,
-            "function on_switch_scene(scene)\n\
+            "function on_scene_enter(scene)\n\
                  switched_to = scene\n\
                  player_seen = engine.get_entity('player')\n\
              end",
@@ -129,13 +129,13 @@ mod tests {
         assert_eq!(lua_global::<Option<u64>>(&world, "player_seen"), None);
     }
 
-    /// A spawn queued in `on_switch_scene` is drained by the observer.
+    /// A spawn queued in `on_scene_enter` is drained by the observer.
     #[test]
-    fn entered_drains_commands_queued_by_on_switch_scene() {
+    fn entered_drains_commands_queued_by_on_scene_enter() {
         let mut world = scene_observer_world();
         lua_exec(
             &world,
-            "function on_switch_scene(scene) engine.spawn():register_as('hero'):build() end",
+            "function on_scene_enter(scene) engine.spawn():register_as('hero'):build() end",
         );
 
         enter(&mut world, "level");
