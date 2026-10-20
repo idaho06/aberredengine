@@ -198,9 +198,9 @@ mod menus {
     );
 
     let actions = MenuActions::new()
-        .with("start", MenuAction::SetScene("level01".to_string()))
-        .with("options", MenuAction::SetScene("options_menu".to_string()))
-        .with("quit", MenuAction::QuitGame);
+        .with("start", MenuAction::RequestScene("level01".to_string()))
+        .with("options", MenuAction::RequestScene("options_menu".to_string()))
+        .with("quit", MenuAction::RequestQuit);
 
     commands.spawn((menu, actions));
     } // GLUE
@@ -238,8 +238,8 @@ mod menus {
         .with_selection_sound("menu_move");
 
         let actions = MenuActions::new()
-            .with("play", MenuAction::SetScene("level01".to_string()))
-            .with("quit", MenuAction::QuitGame);
+            .with("play", MenuAction::RequestScene("level01".to_string()))
+            .with("quit", MenuAction::RequestQuit);
 
         commands.spawn((menu, actions));
     }

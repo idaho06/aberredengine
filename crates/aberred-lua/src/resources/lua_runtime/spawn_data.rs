@@ -270,8 +270,8 @@ pub struct ColorData {
 /// Menu action data from Lua.
 #[derive(Debug, Clone)]
 pub enum MenuActionData {
-    SetScene { scene: String },
-    QuitGame,
+    RequestScene { name: String },
+    RequestQuit,
 }
 
 /// Data for spawning a Menu + MenuActions ensemble.

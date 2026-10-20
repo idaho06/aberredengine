@@ -186,8 +186,8 @@ Setup ──→ Playing ──→ Quitting
 
 1. **Setup** — The engine calls the `setup` hook once, on the logic thread. Load assets here (textures, fonts, sounds, shaders, animations; see [Section 6](#6-loading-assets)). Omit `.on_setup()` if you have nothing to load. With `.loading_scene(name)`, that scene is entered right after the hook and stays active until Setup ends. Once the hook has run, the engine moves to `Playing` on its own, as soon as every load queued so far has been answered (see [Waiting for loads](#waiting-for-loads)); a failed load counts as answered. A hook that requests `Playing` itself waits the same way. A hook that requests another state through `ResMut<NextGameState>` (e.g. `GameStates::Quitting`) gets it at once.
 2. **Playing** — The engine enters the initial scene (triggering `SceneEntered`) and runs your systems every sim tick.
-3. **Scene switches** — A request through `NextScene::set(name)`, a `MenuAction::SetScene` menu item or a GUI callback's `intents.request_scene(name)` runs the exit→enter sequence late in the tick (`SimSet::Lifecycle`); see [Triggering scene transitions](#triggering-scene-transitions).
-4. **Quitting** — When the game state becomes `GameStates::Quitting` (via `NextGameState::set(GameStates::Quitting)`, a `MenuAction::QuitGame` menu item or a GUI callback's `intents.request_quit()`) or the window is closed, the engine shuts down. Request it from any system or observer through `ResMut<NextGameState>`.
+3. **Scene switches** — A request through `NextScene::set(name)`, a `MenuAction::RequestScene` menu item or a GUI callback's `intents.request_scene(name)` runs the exit→enter sequence late in the tick (`SimSet::Lifecycle`); see [Triggering scene transitions](#triggering-scene-transitions).
+4. **Quitting** — When the game state becomes `GameStates::Quitting` (via `NextGameState::set(GameStates::Quitting)`, a `MenuAction::RequestQuit` menu item or a GUI callback's `intents.request_quit()`) or the window is closed, the engine shuts down. Request it from any system or observer through `ResMut<NextGameState>`.
 
 ---
 
@@ -381,7 +381,7 @@ fn on_tile_selected(trigger: On<TileSelectedEvent>, /* params */) {
 Every scene switch is a request through the `NextScene` resource (in the prelude):
 
 - **From a system or observer:** take `ResMut<NextScene>` and call `.set(name)`.
-- **From a menu:** a `MenuAction::SetScene("level01")` item sets `NextScene` when it is confirmed.
+- **From a menu:** a `MenuAction::RequestScene("level01")` item sets `NextScene` when it is confirmed.
 - **From a GUI callback:** `ctx.intents.request_scene(name)`; it reaches `NextScene` at the start of the next sim tick.
 
 The engine's `scene_switch_poll` system (registered automatically for every game) checks `NextScene` in `SimSet::Lifecycle`, late in the tick after your `.add_system()`/`.add_scene_system()` systems and before your late ones, and runs `scene_switch_system`, a one-shot system registered in `SystemsStore` under the key `"switch_scene"`; a request made after that point (from a late system, for example) is picked up on the next tick. The last request before the poll wins. A quit requested in the same tick wins over a scene request: the game quits without switching.
@@ -839,7 +839,7 @@ fn main() -> Result<(), EngineError> {
 - `WorldTime` doesn't advance during Setup, so a loading scene shows progress, not time-based animation (tweens, sprite animations).
 - Its text appears once its font has loaded; until then it simply doesn't draw.
 - Leaving it tears it down along with everything spawned during Setup, the setup hook's spawns included. Mark what must survive `Persistent`, or spawn it in the initial scene.
-- During Setup the loading scene is the only scene: any other scene request (`NextScene::set`, a menu's `SetScene`) is ignored with a warning, with or without a loading scene, and the engine always moves on to the initial scene. A quit requested during Setup takes effect without waiting for loads.
+- During Setup the loading scene is the only scene: any other scene request (`NextScene::set`, a menu's `RequestScene`) is ignored with a warning, with or without a loading scene, and the engine always moves on to the initial scene. A quit requested during Setup takes effect without waiting for loads.
 - In a deterministic game, spawn only from the loading scene's `SceneEntered` observer, never from its per-tick systems: the number of Setup ticks depends on load times, and entity ids must not.
 - The loading scene must differ from the initial scene.
 
@@ -1814,9 +1814,9 @@ let menu = Menu::new(
 
 ```rust
 let actions = MenuActions::new()
-    .with("start", MenuAction::SetScene("level01".to_string()))
-    .with("options", MenuAction::SetScene("options_menu".to_string()))
-    .with("quit", MenuAction::QuitGame);
+    .with("start", MenuAction::RequestScene("level01".to_string()))
+    .with("options", MenuAction::RequestScene("options_menu".to_string()))
+    .with("quit", MenuAction::RequestQuit);
 
 commands.spawn((menu, actions));
 ```
@@ -1825,8 +1825,8 @@ commands.spawn((menu, actions));
 
 | Variant | Effect |
 |---------|--------|
-| `SetScene(String)` | Requests the scene through `NextScene`; the switch runs late in the tick (`SimSet::Lifecycle`) |
-| `QuitGame` | Transitions to quitting state |
+| `RequestScene(String)` | Requests the scene through `NextScene`; the switch runs late in the tick (`SimSet::Lifecycle`) |
+| `RequestQuit` | Requests the quitting state through `NextGameState` |
 | `Noop` | Does nothing |
 
 **2. Observe `MenuSelected`:** For custom logic, observe `MenuSelected` on the menu entity. It carries the menu `entity`, the selected `item_id` and its `index` in `Menu::items`:
@@ -1873,8 +1873,8 @@ fn enter(_: On<SceneEntered>, mut commands: Commands) {
     .with_selection_sound("menu_move");
 
     let actions = MenuActions::new()
-        .with("play", MenuAction::SetScene("level01".to_string()))
-        .with("quit", MenuAction::QuitGame);
+        .with("play", MenuAction::RequestScene("level01".to_string()))
+        .with("quit", MenuAction::RequestQuit);
 
     commands.spawn((menu, actions));
 }

@@ -136,9 +136,10 @@ impl Menu {
 pub enum MenuAction {
     /// Request a switch to a different scene by name, through
     /// [`NextScene`](crate::resources::next_scene::NextScene).
-    SetScene(String),
-    /// Quit the game.
-    QuitGame,
+    RequestScene(String),
+    /// Request quitting the game, through
+    /// [`NextGameState`](crate::resources::gamestate::NextGameState).
+    RequestQuit,
     /// Do nothing (placeholder or disabled item).
     Noop,
 }
@@ -210,8 +211,8 @@ mod tests {
 
     #[test]
     fn menu_actions_get_falls_back_to_noop() {
-        let actions = MenuActions::new().with("quit", MenuAction::QuitGame);
-        assert!(matches!(actions.get("quit"), MenuAction::QuitGame));
+        let actions = MenuActions::new().with("quit", MenuAction::RequestQuit);
+        assert!(matches!(actions.get("quit"), MenuAction::RequestQuit));
         assert!(matches!(actions.get("missing"), MenuAction::Noop));
     }
 }

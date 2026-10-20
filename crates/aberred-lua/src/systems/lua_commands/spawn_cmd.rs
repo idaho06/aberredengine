@@ -548,8 +548,8 @@ fn apply_ui_components(
             let mut actions = MenuActions::new();
             for (item_id, action_data) in menu_data.actions {
                 let action = match action_data {
-                    MenuActionData::SetScene { scene } => MenuAction::SetScene(scene),
-                    MenuActionData::QuitGame => MenuAction::QuitGame,
+                    MenuActionData::RequestScene { name } => MenuAction::RequestScene(name),
+                    MenuActionData::RequestQuit => MenuAction::RequestQuit,
                 };
                 actions = actions.with(item_id, action);
             }
@@ -1437,9 +1437,9 @@ mod tests {
              :with_menu_colors(1, 2, 3, 4, 5, 6, 7, 8):with_menu_cursor('cursor')\
              :with_menu_selection_sound('blip')\
              :with_menu_visible_count(2)\
-             :with_menu_action_set_scene('play', 'level01')\
-             :with_menu_action_set_scene('opts', 'options')\
-             :with_menu_action_quit('quit'):build()",
+             :with_menu_action_request_scene('play', 'level01')\
+             :with_menu_action_request_scene('opts', 'options')\
+             :with_menu_action_request_quit('quit'):build()",
         );
 
         let menu = world.get::<Menu>(e).unwrap();
@@ -1463,9 +1463,9 @@ mod tests {
         assert_eq!(menu.visible_count, Some(2));
 
         let actions = world.get::<MenuActions>(e).unwrap();
-        assert!(matches!(actions.get("play"), MenuAction::SetScene(s) if s == "level01"));
-        assert!(matches!(actions.get("opts"), MenuAction::SetScene(s) if s == "options"));
-        assert!(matches!(actions.get("quit"), MenuAction::QuitGame));
+        assert!(matches!(actions.get("play"), MenuAction::RequestScene(s) if s == "level01"));
+        assert!(matches!(actions.get("opts"), MenuAction::RequestScene(s) if s == "options"));
+        assert!(matches!(actions.get("quit"), MenuAction::RequestQuit));
     }
 
     #[test]
@@ -1506,7 +1506,7 @@ mod tests {
             &mut signals,
             "engine.spawn():with_menu({ {id='play', label='Play'} }, 0, 0, 'arcade', 16, 24, true)\
              :with_menu_callback('on_menu')\
-             :with_menu_action_set_scene('play', 'level01'):build()",
+             :with_menu_action_request_scene('play', 'level01'):build()",
         );
 
         assert_eq!(
@@ -1526,7 +1526,7 @@ mod tests {
             &mut world,
             &mut signals,
             "engine.spawn():with_menu({ {id='play', label='Play'} }, 0, 0, 'arcade', 16, 24, true)\
-             :with_menu_action_set_scene('play', 'level01'):build()",
+             :with_menu_action_request_scene('play', 'level01'):build()",
         );
 
         assert!(world.get::<LuaOnMenuSelect>(e).is_none());

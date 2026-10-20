@@ -1489,21 +1489,21 @@ Play sound when selection changes (requires `:with_menu()`).
 :with_menu_selection_sound("menu_beep")
 ```
 
-#### `:with_menu_action_set_scene(item_id, scene)`
+#### `:with_menu_action_request_scene(item_id, name)`
 
-Define scene switch action (requires `:with_menu()`). Confirming the item requests the scene like
+Define a scene-request action (requires `:with_menu()`). Confirming the item requests the scene like
 `engine.change_scene`: the switch runs later in the same tick, and that tick runs no `on_update_<scene>`.
 
 ```lua
-:with_menu_action_set_scene("start", "level01")
+:with_menu_action_request_scene("start", "level01")
 ```
 
-#### `:with_menu_action_quit(item_id)`
+#### `:with_menu_action_request_quit(item_id)`
 
-Define quit game action (requires `:with_menu()`).
+Define a quit-request action (requires `:with_menu()`).
 
 ```lua
-:with_menu_action_quit("quit")
+:with_menu_action_request_quit("quit")
 ```
 
 #### `:with_menu_callback(callback_name)`

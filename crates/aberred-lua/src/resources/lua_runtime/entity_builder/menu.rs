@@ -143,17 +143,17 @@ pub(super) fn register<M: LuaUserDataMethods<LuaEntityBuilder>>(
     builder_method!(
         methods,
         meta,
-        "with_menu_action_set_scene",
-        "Set scene-switch action for menu item",
-        [("item_id", "string"), ("scene", "string")],
-        |_, this: &mut LuaEntityBuilder, (item_id, scene): (String, String)| {
+        "with_menu_action_request_scene",
+        "Set scene-request action for menu item",
+        [("item_id", "string"), ("name", "string")],
+        |_, this: &mut LuaEntityBuilder, (item_id, name): (String, String)| {
             let Some(ref mut menu) = this.cmd.menu else {
                 return Err(LuaError::runtime(
-                    "with_menu_action_set_scene() requires with_menu() first",
+                    "with_menu_action_request_scene() requires with_menu() first",
                 ));
             };
             menu.actions
-                .push((item_id, MenuActionData::SetScene { scene }));
+                .push((item_id, MenuActionData::RequestScene { name }));
             Ok(())
         }
     );
@@ -161,16 +161,16 @@ pub(super) fn register<M: LuaUserDataMethods<LuaEntityBuilder>>(
     builder_method!(
         methods,
         meta,
-        "with_menu_action_quit",
-        "Set quit action for menu item",
+        "with_menu_action_request_quit",
+        "Set quit-request action for menu item",
         [("item_id", "string")],
         |_, this: &mut LuaEntityBuilder, item_id: String| {
             let Some(ref mut menu) = this.cmd.menu else {
                 return Err(LuaError::runtime(
-                    "with_menu_action_quit() requires with_menu() first",
+                    "with_menu_action_request_quit() requires with_menu() first",
                 ));
             };
-            menu.actions.push((item_id, MenuActionData::QuitGame));
+            menu.actions.push((item_id, MenuActionData::RequestQuit));
             Ok(())
         }
     );
@@ -264,10 +264,13 @@ mod tests {
                 "with_menu_selection_sound",
             ),
             (
-                "with_menu_action_set_scene('i', 's')",
-                "with_menu_action_set_scene",
+                "with_menu_action_request_scene('i', 's')",
+                "with_menu_action_request_scene",
             ),
-            ("with_menu_action_quit('i')", "with_menu_action_quit"),
+            (
+                "with_menu_action_request_quit('i')",
+                "with_menu_action_request_quit",
+            ),
             ("with_menu_callback('cb')", "with_menu_callback"),
             ("with_menu_visible_count(3)", "with_menu_visible_count"),
         ] {
@@ -298,16 +301,16 @@ mod tests {
     #[test]
     fn menu_actions_accumulate_in_call_order() {
         let menu = built_menu(
-            ":with_menu_action_set_scene('play', 'level01')\
-             :with_menu_action_quit('quit')\
-             :with_menu_action_set_scene('options', 'options_scene')",
+            ":with_menu_action_request_scene('play', 'level01')\
+             :with_menu_action_request_quit('quit')\
+             :with_menu_action_request_scene('options', 'options_scene')",
         );
         let actions: Vec<String> = menu
             .actions
             .iter()
             .map(|(id, action)| match action {
-                MenuActionData::SetScene { scene } => format!("{id}:scene:{scene}"),
-                MenuActionData::QuitGame => format!("{id}:quit"),
+                MenuActionData::RequestScene { name } => format!("{id}:scene:{name}"),
+                MenuActionData::RequestQuit => format!("{id}:quit"),
             })
             .collect();
         assert_eq!(

@@ -593,7 +593,7 @@ mod tests {
     }
 
     /// During `Setup` the only scene switch is entering the loading scene:
-    /// once a scene is active, a switch (e.g. a menu's `SetScene`) is refused
+    /// once a scene is active, a switch (e.g. a menu's `RequestScene`) is refused
     /// until the engine leaves it on `Playing`. The refused request is
     /// consumed, not retried.
     #[test]

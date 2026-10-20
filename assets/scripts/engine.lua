@@ -1878,16 +1878,16 @@ function EntityBuilder:with_max_speed(speed) end
 ---@return EntityBuilder
 function EntityBuilder:with_menu(items, origin_x, origin_y, font, font_size, item_spacing, use_screen_space) end
 
----Set quit action for menu item
+---Set quit-request action for menu item
 ---@param item_id string
 ---@return EntityBuilder
-function EntityBuilder:with_menu_action_quit(item_id) end
+function EntityBuilder:with_menu_action_request_quit(item_id) end
 
----Set scene-switch action for menu item
+---Set scene-request action for menu item
 ---@param item_id string
----@param scene string
+---@param name string
 ---@return EntityBuilder
-function EntityBuilder:with_menu_action_set_scene(item_id, scene) end
+function EntityBuilder:with_menu_action_request_scene(item_id, name) end
 
 ---Set Lua callback for menu selection
 ---@param callback string
@@ -2470,16 +2470,16 @@ function CollisionEntityBuilder:with_max_speed(speed) end
 ---@return CollisionEntityBuilder
 function CollisionEntityBuilder:with_menu(items, origin_x, origin_y, font, font_size, item_spacing, use_screen_space) end
 
----Set quit action for menu item
+---Set quit-request action for menu item
 ---@param item_id string
 ---@return CollisionEntityBuilder
-function CollisionEntityBuilder:with_menu_action_quit(item_id) end
+function CollisionEntityBuilder:with_menu_action_request_quit(item_id) end
 
----Set scene-switch action for menu item
+---Set scene-request action for menu item
 ---@param item_id string
----@param scene string
+---@param name string
 ---@return CollisionEntityBuilder
-function CollisionEntityBuilder:with_menu_action_set_scene(item_id, scene) end
+function CollisionEntityBuilder:with_menu_action_request_scene(item_id, name) end
 
 ---Set Lua callback for menu selection
 ---@param callback string

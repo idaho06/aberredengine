@@ -1525,17 +1525,17 @@ fn hooks_and_systems_may_return_result() {
     assert!(signals.has_flag("system_ran"));
 }
 
-/// Confirming a `MenuActions::SetScene` item in a Rust-only game (no
+/// Confirming a `MenuAction::RequestScene` item in a Rust-only game (no
 /// `.with_lua()`, whatever the `lua` feature) requests the scene: the switch
 /// lands at the end of the confirming tick, and the new scene's systems start
 /// the next tick.
 #[test]
-fn menu_set_scene_starts_the_new_scene_systems_next_tick() {
+fn menu_request_scene_starts_the_new_scene_systems_next_tick() {
     let mut tw = two_scene_world(|builder| builder.add_scene_system("b", count_scene_ticks));
     tw.world.spawn((
         Menu::new(&[("go", "Go")], Vec2::ZERO, "f", 12.0, 10.0, true),
         Signals::default(),
-        MenuActions::new().with("go", MenuAction::SetScene("b".into())),
+        MenuActions::new().with("go", MenuAction::RequestScene("b".into())),
     ));
     tw.tick(1, DT);
 
@@ -1873,7 +1873,7 @@ function on_update_menu(input, dt) engine.quit() end
 }
 
 /// Lua callbacks that log each scene switch and give `menu` one item, `go`,
-/// whose confirm switches to `b` (`:with_menu_action_set_scene`).
+/// whose confirm switches to `b` (`:with_menu_action_request_scene`).
 #[cfg(feature = "lua")]
 const LUA_MENU_GO_TO_B: &str = r#"
 function on_enter_play() return "" end
@@ -1882,18 +1882,18 @@ function on_switch_scene(scene)
     if scene == "menu" then
         engine.spawn()
             :with_menu({ {id='go', label='Go'} }, 0, 0, 'f', 12, 10, true)
-            :with_menu_action_set_scene('go', 'b')
+            :with_menu_action_request_scene('go', 'b')
             :build()
     end
 end
 "#;
 
-/// Confirming a Lua menu item built with `:with_menu_action_set_scene`
+/// Confirming a Lua menu item built with `:with_menu_action_request_scene`
 /// switches to that scene through the real schedule.
 #[cfg(feature = "lua")]
 #[test]
-fn lua_menu_action_set_scene_switches_the_scene() {
-    let mut tw = lua_script_world("menu_action_set_scene", LUA_MENU_GO_TO_B);
+fn lua_menu_action_request_scene_switches_the_scene() {
+    let mut tw = lua_script_world("menu_action_request_scene", LUA_MENU_GO_TO_B);
     tw.tick(1, DT);
 
     press_space(&mut tw);

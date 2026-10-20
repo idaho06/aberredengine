@@ -295,7 +295,7 @@ A Lua game has a `SceneManager` that registers each scene on its first request, 
 
 1. **`setup()`** — runs once at startup. Calls `on_setup()` if defined, drains `asset_commands` (translating each into an `AudioCmd` or a `RenderAssetCmd`), drains `animation_commands` into a fresh `AnimationStore` resource, then transitions `GameState` to `Playing`.
 2. **`enter_play()`** — runs once, immediately after `setup()`. Calls `on_enter_play()` if defined, drains `signal_commands`/`group_commands` (world signals aren't touched by `setup()` — Lua is expected to seed them here), updates the tracked-groups cache, then enters the first scene through core `switch_to` (`scene_dispatch.rs`): the scene `on_setup`/`on_enter_play` requested with `engine.change_scene`, else `sk::DEFAULT_SCENE`. The first entry despawns nothing, so what `on_setup`/`on_enter_play` queued applies in the first scene (drained by `lua_scene_entered_observer`, step 3).
-3. **Scene switch** — core `scene_switch_poll` (`SimSet::Lifecycle`) runs `scene_switch_system` when a scene request is pending in `NextScene` (`engine.change_scene()`, a menu's `SetScene`, a GUI intent, a Rust system) and no quit is. Two observers in `systems/lua_scene.rs`, registered only when a Lua script is set, add the Lua side:
+3. **Scene switch** — core `scene_switch_poll` (`SimSet::Lifecycle`) runs `scene_switch_system` when a scene request is pending in `NextScene` (`engine.change_scene()`, a menu's `RequestScene`, a GUI intent, a Rust system) and no quit is. Two observers in `systems/lua_scene.rs`, registered only when a Lua script is set, add the Lua side:
    - `lua_scene_exited_observer` (`On<SceneExited>`, before the old scene's entities are despawned) calls `clear_all_commands()`: `clear`-policy queues may reference entities about to be despawned.
    - `lua_scene_entered_observer` (`On<SceneEntered>`, after the teardown) calls `clear_function_cache()` (callbacks are re-injected per scene, so stale closures must not survive the switch), refreshes the tracked-groups and signal caches so `on_switch_scene` observes the post-teardown state, calls `on_switch_scene(scene_name)`, drains the common queues (`DrainCtx::drain`, below), and refreshes the gameconfig cache. `scene_switch_system` itself stamps the tick's `frame_count` in `SceneManager.entered_at`.
 
@@ -610,8 +610,8 @@ with_gui_progress_bar_signal_binding
 
 ```text
 with_menu
-with_menu_action_quit
-with_menu_action_set_scene
+with_menu_action_request_quit
+with_menu_action_request_scene
 with_menu_action_show_submenu
 with_menu_callback
 with_menu_colors

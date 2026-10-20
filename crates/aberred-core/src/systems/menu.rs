@@ -533,9 +533,9 @@ fn reposition_menu_items(commands: &mut Commands, menu: &Menu) {
 
 /// Executes the [`MenuAction`] associated with a selected menu item.
 ///
-/// - [`MenuAction::SetScene`] – requests the scene through [`NextScene`]; the
+/// - [`MenuAction::RequestScene`] – requests the scene through [`NextScene`]; the
 ///   switch lands at the next scene switch poll, at the end of the tick
-/// - [`MenuAction::QuitGame`] – transitions to quitting state
+/// - [`MenuAction::RequestQuit`] – requests the quitting state through [`NextGameState`]
 /// - [`MenuAction::Noop`] – does nothing
 ///
 /// Observers of [`MenuSelected`] run in addition; don't combine
@@ -564,8 +564,8 @@ pub fn menu_selection_observer(
         event.item_id, event.entity
     );
     match menu_actions.get(&event.item_id) {
-        MenuAction::SetScene(scene_name) => next_scene.set(scene_name),
-        MenuAction::QuitGame => {
+        MenuAction::RequestScene(name) => next_scene.set(name),
+        MenuAction::RequestQuit => {
             next_game_state.set(Quitting);
         }
         MenuAction::Noop => {}
@@ -985,9 +985,9 @@ mod tests {
 
     fn actions() -> MenuActions {
         MenuActions::new()
-            .with("play", MenuAction::SetScene("level01".into()))
+            .with("play", MenuAction::RequestScene("level01".into()))
             .with("options", MenuAction::Noop)
-            .with("quit", MenuAction::QuitGame)
+            .with("quit", MenuAction::RequestQuit)
     }
 
     fn three_items() -> Menu {

@@ -68,7 +68,8 @@ mod tests {
                 .spawn((menu, LuaOnMenuSelect::new("on_menu_select")))
                 .id()
         } else {
-            let actions = MenuActions::new().with("play", MenuAction::SetScene("level01".into()));
+            let actions =
+                MenuActions::new().with("play", MenuAction::RequestScene("level01".into()));
             world.spawn((menu, actions)).id()
         }
     }
