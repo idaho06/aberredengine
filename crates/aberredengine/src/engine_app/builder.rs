@@ -4,9 +4,9 @@ use bevy_ecs::prelude::*;
 use bevy_ecs::system::IntoObserverSystem;
 
 use super::registrar::{
-    HookRegistrar, ObserverRegistrar, UpdateRegistrar, hook_registrar, observer_registrar,
-    playing_late_system, playing_late_system_if, playing_system, playing_system_if,
-    scene_observer_registrar, scene_system,
+    HookRegistrar, ObserverRegistrar, UpdateRegistrar, hook_registrar, late_scene_system,
+    observer_registrar, playing_late_system, playing_late_system_if, playing_system,
+    playing_system_if, scene_observer_registrar, scene_system,
 };
 #[cfg(doc)] // doc links
 use super::schedule::SimSet;
@@ -233,6 +233,35 @@ impl EngineBuilder {
     ) -> Self {
         let scene = self.scene_ref("add_scene_system", scene);
         self.extra_systems.push(scene_system(scene, system));
+        self
+    }
+
+    /// Add a late system that runs only while the scene `scene` is active.
+    ///
+    /// Like [`add_scene_system`](Self::add_scene_system) (during `Playing`,
+    /// and during `Setup` for a loading scene), but in [`SimSet::LateUpdate`]:
+    /// after this tick's movement, collision and camera follow, and after
+    /// Lua's `on_update_<scene>`. It skips the tick `scene` is entered, so it
+    /// starts the tick after, like `add_scene_system`. Can be called multiple
+    /// times, also for the same scene.
+    ///
+    /// ```rust,ignore
+    /// EngineBuilder::new()
+    ///     .add_scene("level01")
+    ///     .add_late_scene_system("level01", camera_shake)
+    /// ```
+    ///
+    /// # Errors (at `.run()`/`.try_run()`)
+    ///
+    /// [`EngineError::SceneNotRegistered`](aberred_core::error::EngineError::SceneNotRegistered)
+    /// if `scene` was never registered with [`add_scene`](Self::add_scene).
+    pub fn add_late_scene_system<M>(
+        mut self,
+        scene: impl Into<String>,
+        system: impl IntoSystem<(), (), M> + Send + 'static,
+    ) -> Self {
+        let scene = self.scene_ref("add_late_scene_system", scene);
+        self.extra_systems.push(late_scene_system(scene, system));
         self
     }
 

@@ -7,7 +7,7 @@ use aberred_core::components::persistent::Persistent;
 use aberred_core::resources::scenemanager::SceneManager;
 use aberred_core::resources::systemsstore::SystemsStore;
 use aberred_core::systems::gamestate::{state_is_playing, state_runs_scenes};
-use aberred_core::systems::scene_dispatch::in_scene;
+use aberred_core::systems::scene_dispatch::{in_scene, past_scene_entry};
 
 /// Closure that registers a system into the world and inserts its ID into
 /// [`SystemsStore`]. Deferred until `run()` when the [`World`] exists.
@@ -90,6 +90,21 @@ pub(crate) fn scene_system<M>(
         SimSet::Update,
         system,
         state_runs_scenes.and_then(in_scene(&scene)),
+    )
+}
+
+/// `add_late_scene_system`: runs while `scene` is active, in `Setup` (a
+/// loading scene) as well as `Playing`, except on the tick it was entered.
+pub(crate) fn late_scene_system<M>(
+    scene: String,
+    system: impl IntoSystem<(), (), M> + Send + 'static,
+) -> UpdateRegistrar {
+    system_registrar(
+        LateUserSystems,
+        system,
+        state_runs_scenes
+            .and_then(in_scene(&scene))
+            .and_then(past_scene_entry),
     )
 }
 

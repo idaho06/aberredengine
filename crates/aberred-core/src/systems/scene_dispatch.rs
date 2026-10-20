@@ -301,6 +301,24 @@ pub fn in_scene(name: &str) -> impl FnMut(Option<Res<SceneManager>>) -> bool + C
     }
 }
 
+/// Run condition: false during `Playing` on the tick the active scene was
+/// entered ([`SceneManager::entered_at`]), true otherwise. With [`in_scene`],
+/// a scene's late per-tick systems start the tick after its entry, like Lua's
+/// `on_update_<scene>`. The sim clock is frozen during `Setup`, where the only
+/// scene that can be entered is the loading scene, so nothing is skipped there.
+pub fn past_scene_entry(
+    scene_manager: Option<Res<SceneManager>>,
+    state: Option<Res<GameState>>,
+    time: Option<Res<WorldTime>>,
+) -> bool {
+    let playing = state.is_some_and(|state| *state.get() == GameStates::Playing);
+    let entry_tick = matches!(
+        (scene_manager, time),
+        (Some(scenes), Some(time)) if scenes.entered_on(time.frame_count)
+    );
+    !(playing && entry_tick)
+}
+
 /// Runs the scene switch system when a [`NextScene`] request is pending and
 /// no quit is ([`NextGameState::quit_requested`]).
 /// Registered in `SimSet::Lifecycle`, after the tick's systems, so a request made
@@ -630,6 +648,28 @@ mod tests {
         world.run_system_once(scene_switch_system).unwrap();
         assert!(!check(&mut world, "menu"));
         assert!(check(&mut world, "level"));
+    }
+
+    /// `past_scene_entry` is false only during `Playing`, on the tick the
+    /// active scene was entered.
+    #[test]
+    fn past_scene_entry_is_false_on_the_entry_tick() {
+        let (mut world, _) = world_in_menu_switching_to("level");
+        let mut state = GameState::new();
+        state.set(GameStates::Playing);
+        world.insert_resource(state);
+        world.insert_resource(WorldTime {
+            frame_count: 7,
+            ..Default::default()
+        });
+        world.run_system_once(scene_switch_system).unwrap();
+        assert!(
+            !world.run_system_once(past_scene_entry).unwrap(),
+            "entry tick"
+        );
+
+        world.resource_mut::<WorldTime>().frame_count = 8;
+        assert!(world.run_system_once(past_scene_entry).unwrap());
     }
 
     #[test]

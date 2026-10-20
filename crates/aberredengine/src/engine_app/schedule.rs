@@ -681,6 +681,15 @@ mod ambiguity_audit {
         });
         EngineBuilder::configure_sim_sets(&mut sim);
         EngineBuilder::add_engine_sim_systems(&mut sim, has_lua);
+        #[cfg(feature = "lua")]
+        if has_lua {
+            EngineBuilder::add_lua_update(&mut sim);
+        }
+        // A user late system writing what Lua's update writes: only the
+        // `LateUserSystems` edge orders the two.
+        crate::engine_app::registrar::playing_late_system(
+            |_: ResMut<aberred_core::resources::worldsignals::WorldSignals>| {},
+        )(&mut sim);
 
         let metadata = sim
             .initialize(&mut world)

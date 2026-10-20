@@ -420,7 +420,7 @@ pub fn update(
     }
 
     // The scene the engine entered, not the `scene` string a script can write.
-    if scene_manager.entered_at != Some(time.frame_count)
+    if !scene_manager.entered_on(time.frame_count)
         && let Some(scene) = scene_manager.active_scene.as_deref()
         && let Some(input_table) = resolve_input_table(lua_runtime, &input, time.frame_count)
     {

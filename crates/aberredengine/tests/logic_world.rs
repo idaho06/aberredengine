@@ -2829,3 +2829,82 @@ fn late_system_sees_this_ticks_movement() {
         );
     }
 }
+
+/// Like [`add_scene_system_runs_only_in_its_scene`]: a late scene system runs
+/// only while its scene is active, and skips the switch tick (its scene's
+/// entry tick) even though `LateUpdate` runs after the switch.
+#[test]
+fn late_scene_system_runs_only_in_its_scene() {
+    let ticks = scene_ticks_before_and_after_switching_to_b(|builder| {
+        builder.add_late_scene_system("b", count_scene_ticks)
+    });
+    assert_eq!(ticks, (0, 3));
+}
+
+/// Ticks counted by `count_late_ticks`.
+#[derive(Resource, Default)]
+struct LateTicks(u32);
+
+fn count_late_ticks(mut ticks: ResMut<LateTicks>) {
+    ticks.0 += 1;
+}
+
+/// A late scene system runs during `Setup` for a loading scene, on the same
+/// ticks as an `add_scene_system` one.
+#[test]
+fn late_scene_system_runs_in_the_loading_scene_during_setup() {
+    let mut tw =
+        loading_scene_world(|builder| builder.add_late_scene_system("loading", count_late_ticks));
+    tw.world.init_resource::<LateTicks>();
+
+    tw.tick(3, DT);
+
+    assert_eq!(*tw.world.resource::<GameState>().get(), GameStates::Setup);
+    assert_eq!(tw.world.resource::<LateTicks>().0, 3);
+    assert_eq!(tw.world.resource::<SceneTicks>().0, 3);
+}
+
+/// The integer signal `n` as a late system saw it.
+#[cfg(feature = "lua")]
+#[derive(Resource, Default)]
+struct SeenN(Option<i32>);
+
+#[cfg(feature = "lua")]
+fn record_n(signals: Res<WorldSignals>, mut seen: ResMut<SeenN>) {
+    seen.0 = signals.get_integer("n");
+}
+
+/// A Rust late system runs after Lua's `on_update_<scene>`, so it sees the
+/// signal Lua wrote in the same tick.
+#[cfg(feature = "lua")]
+#[test]
+fn rust_late_system_sees_lua_update_signal_same_tick() {
+    let mut tw = lua_script_world_with(
+        "late_after_lua_update",
+        r#"
+N = 0
+function on_enter_play()
+    engine.change_scene("s")
+    return ""
+end
+function on_update_s(input, dt)
+    N = N + 1
+    engine.set_integer("n", N)
+    table.insert(LOG, tostring(N))
+end
+"#,
+        |builder| builder.add_late_system(record_n),
+    );
+    tw.world.init_resource::<SeenN>();
+    take_lua_log(&mut tw);
+
+    for _ in 0..3 {
+        tw.tick(1, DT);
+        let lua_n: Vec<i32> = take_lua_log(&mut tw)
+            .iter()
+            .map(|n| n.parse().unwrap())
+            .collect();
+        assert_eq!(lua_n.len(), 1, "on_update_s runs once per tick");
+        assert_eq!(tw.world.resource::<SeenN>().0, Some(lua_n[0]));
+    }
+}
