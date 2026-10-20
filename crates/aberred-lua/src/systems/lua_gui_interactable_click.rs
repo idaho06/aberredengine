@@ -1,19 +1,19 @@
 //! Lua GUI interactable click dispatch.
 //!
 //! [`lua_gui_interactable_click_observer`] is spawned only in games that run
-//! a Lua script. It calls the clicked widget's [`LuaOnClick`] callback; Rust
-//! code observes the same `GuiClicked` event directly.
+//! a Lua script. It calls the clicked widget's [`LuaOnGuiClicked`] callback;
+//! Rust code observes the same `GuiClicked` event directly.
 
-use crate::components::lua_on_click::LuaOnClick;
+use crate::components::lua_on_gui_clicked::LuaOnGuiClicked;
 use crate::systems::lua_commands::{LuaDispatch, dispatch_custom_and_drain};
 use aberred_core::events::gui_interactable::GuiClicked;
 use bevy_ecs::prelude::*;
 
-/// Reacts to `GuiClicked` by calling the widget's [`LuaOnClick`] callback
+/// Reacts to `GuiClicked` by calling the widget's [`LuaOnGuiClicked`] callback
 /// with a `{ entity_id }` table. A widget without one is skipped.
 pub fn lua_gui_interactable_click_observer(
     trigger: On<GuiClicked>,
-    on_clicks: Query<&LuaOnClick>,
+    on_clicks: Query<&LuaOnGuiClicked>,
     mut p: LuaDispatch,
 ) {
     let entity = trigger.event().entity;
@@ -56,7 +56,7 @@ mod tests {
         let button = world
             .spawn((
                 GuiInteractable::new(80.0, 24.0),
-                LuaOnClick::new("on_gui_button_clicked"),
+                LuaOnGuiClicked::new("on_gui_button_clicked"),
             ))
             .id();
         world.trigger(GuiClicked { entity: button });

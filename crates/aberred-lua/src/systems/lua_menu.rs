@@ -1,20 +1,20 @@
 //! Lua menu selection callbacks.
 //!
-//! [`lua_menu_selection_observer`] calls a menu's [`LuaOnMenuSelect`] callback
-//! (a Lua function name) when one of its items is confirmed. A Lua menu with a
+//! [`lua_menu_selection_observer`] calls a menu's [`LuaOnMenuSelected`]
+//! callback (a Lua function name) when one of its items is confirmed. A Lua menu with a
 //! callback is spawned without `MenuActions`. The engine registers this
 //! observer only when a Lua script is set.
 
-use crate::components::lua_on_menu_select::LuaOnMenuSelect;
+use crate::components::lua_on_menu_selected::LuaOnMenuSelected;
 use crate::systems::lua_commands::{LuaDispatch, dispatch_custom_and_drain};
 use aberred_core::events::menu::MenuSelected;
 use bevy_ecs::prelude::*;
 
-/// Calls the selected menu's [`LuaOnMenuSelect`] callback with a ctx table of
+/// Calls the selected menu's [`LuaOnMenuSelected`] callback with a ctx table of
 /// `menu_id`, `item_id` and `item_index`.
 pub fn lua_menu_selection_observer(
     trigger: On<MenuSelected>,
-    menus: Query<&LuaOnMenuSelect>,
+    menus: Query<&LuaOnMenuSelected>,
     mut p: LuaDispatch,
 ) {
     let event = trigger.event();
@@ -60,12 +60,12 @@ mod tests {
     }
 
     /// A one-item menu, spawned as Lua's `spawn_cmd` does: with a callback it
-    /// gets [`LuaOnMenuSelect`] and no `MenuActions`.
+    /// gets [`LuaOnMenuSelected`] and no `MenuActions`.
     fn spawn_play_menu(world: &mut World, lua_callback: bool) -> Entity {
         let menu = Menu::new(&[("play", "Play")], Vec2::ZERO, "f", 12.0, 10.0, true);
         if lua_callback {
             world
-                .spawn((menu, LuaOnMenuSelect::new("on_menu_select")))
+                .spawn((menu, LuaOnMenuSelected::new("on_menu_select")))
                 .id()
         } else {
             let actions =

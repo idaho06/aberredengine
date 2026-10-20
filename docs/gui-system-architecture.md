@@ -611,17 +611,14 @@ colors. Removing `ScreenPosition` is separate from and not implied by `Tint`.
 `GuiInteractable` is the shared hit-test and click runtime for all clickable widgets.
 
 ```
-GuiInteractable { size: Vec2, state: GuiWidgetState,
-                  on_click_callback: Option<String> }
+GuiInteractable { size: Vec2, state: GuiWidgetState }
 
 GuiWidgetState: Normal | Hovered | Pressed | Disabled
 ```
 
 `gui_button_spawn_system` and `gui_image_spawn_system` insert `GuiInteractable` automatically (via
 `insert_if_new`), so one you pre-spawn alongside the widget component (for example, with a different
-hit area) is left intact. `.with_on_click_callback(name)`
-sets a Lua function name from Rust-only code (the Rust equivalent of `GuiButton`/`GuiImage`'s
-`callback_name` constructor argument, for a hand-built `GuiInteractable`), and `.with_disabled()`
+hit area) is left intact. `.with_disabled()`
 starts the widget in `Disabled` state at spawn time — the same role as `GuiButton::with_disabled()`
 for widgets not built through `GuiButton`/`GuiImage`.
 
@@ -652,7 +649,7 @@ described below.
 `.observe(handler)` on the widget entity or globally with `EngineBuilder::add_observer`.
 
 In a game that runs a Lua script, `lua_gui_interactable_click_observer` (`aberred-lua`) also
-reacts to it and calls the widget's `on_click_callback` (a Lua function name), if set. A missing
+reacts to it and calls the function named by the widget's `LuaOnGuiClicked` component, if it has one. A missing
 Lua function only warns. Rust observers run either way.
 
 **Lua click callback:** receives a table with `evt.entity_id` (u64 entity ID).

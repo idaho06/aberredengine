@@ -37,9 +37,9 @@ use aberred_core::systems::collision_rule::collision_rule_observer;
 use aberred_core::systems::collision_rule_index::rebuild_rule_index;
 use aberred_core::systems::timer::update_timers;
 use aberred_lua::components::lua_on_animation_end::LuaOnAnimationEnd;
-use aberred_lua::components::lua_on_click::LuaOnClick;
 use aberred_lua::components::lua_on_collision::LuaOnCollision;
-use aberred_lua::components::lua_on_menu_select::LuaOnMenuSelect;
+use aberred_lua::components::lua_on_gui_clicked::LuaOnGuiClicked;
+use aberred_lua::components::lua_on_menu_selected::LuaOnMenuSelected;
 use aberred_lua::components::lua_on_timer_fired::LuaOnTimerFired;
 use aberred_lua::components::lua_on_tween_finished::LuaOnTweenFinished;
 use aberred_lua::resources::lua_runtime::LuaRuntime;
@@ -652,7 +652,7 @@ fn click_callback_reads_signals_written_since_the_last_dispatch() {
     let button = world
         .spawn((
             GuiInteractable::new(80.0, 24.0),
-            LuaOnClick::new("on_click"),
+            LuaOnGuiClicked::new("on_click"),
         ))
         .id();
     world
@@ -676,7 +676,7 @@ fn click_callback_queued_commands_apply_in_the_same_dispatch() {
     let button = world
         .spawn((
             GuiInteractable::new(80.0, 24.0),
-            LuaOnClick::new("on_click"),
+            LuaOnGuiClicked::new("on_click"),
         ))
         .id();
 
@@ -694,7 +694,7 @@ fn menu_callback_reads_signals_and_applies_queued_commands_in_the_same_dispatch(
         &world,
         "function on_select(ctx) seen_score = engine.get_scalar('score'); engine.set_flag('selected') end",
     );
-    let menu = world.spawn(LuaOnMenuSelect::new("on_select")).id();
+    let menu = world.spawn(LuaOnMenuSelected::new("on_select")).id();
     world
         .resource_mut::<WorldSignals>()
         .set_scalar("score", 7.0);

@@ -7,8 +7,8 @@
 use aberred_core::math::Vec2;
 use bevy_ecs::prelude::*;
 
-use crate::components::lua_on_click::LuaOnClick;
-use crate::components::lua_on_menu_select::LuaOnMenuSelect;
+use crate::components::lua_on_gui_clicked::LuaOnGuiClicked;
+use crate::components::lua_on_menu_selected::LuaOnMenuSelected;
 use crate::components::lua_on_phase::{LuaOnPhaseEntered, LuaOnPhaseExited, LuaOnPhaseUpdate};
 use crate::components::lua_on_timer_fired::LuaOnTimerFired;
 use crate::components::luasetup::LuaSetup;
@@ -103,8 +103,8 @@ pub(super) fn apply_components(
     if let Some(img) = cmd.gui_image {
         entity_commands.insert(img);
     }
-    if let Some(callback) = cmd.lua_on_click {
-        entity_commands.insert(LuaOnClick::new(callback));
+    if let Some(callback) = cmd.lua_on_gui_clicked {
+        entity_commands.insert(LuaOnGuiClicked::new(callback));
     }
     if let Some(bar) = cmd.gui_progress_bar {
         entity_commands.insert(bar);
@@ -543,7 +543,7 @@ fn apply_ui_components(
                      the callback handles selection and the actions are discarded"
                 );
             }
-            entity_commands.insert((menu_component, LuaOnMenuSelect::new(callback)));
+            entity_commands.insert((menu_component, LuaOnMenuSelected::new(callback)));
         } else {
             let mut actions = MenuActions::new();
             for (item_id, action) in menu_data.actions {
@@ -1465,12 +1465,14 @@ mod tests {
     }
 
     #[test]
-    fn lua_gui_click_callbacks_become_lua_on_click() {
+    fn lua_gui_click_callbacks_become_lua_on_gui_clicked() {
         let mut world = World::new();
         let mut signals = WorldSignals::default();
         let mut on_click = |script: &str| {
             let e = spawn_from_lua(&mut world, &mut signals, script);
-            world.get::<LuaOnClick>(e).map(|c| c.callback.to_string())
+            world
+                .get::<LuaOnGuiClicked>(e)
+                .map(|c| c.callback.to_string())
         };
 
         assert_eq!(
@@ -1506,7 +1508,7 @@ mod tests {
         );
 
         assert_eq!(
-            world.get::<LuaOnMenuSelect>(e).map(|c| &*c.callback),
+            world.get::<LuaOnMenuSelected>(e).map(|c| &*c.callback),
             Some("on_menu")
         );
         assert!(world.get::<MenuActions>(e).is_none());
@@ -1525,7 +1527,7 @@ mod tests {
              :with_menu_action_request_scene('play', 'level01'):build()",
         );
 
-        assert!(world.get::<LuaOnMenuSelect>(e).is_none());
+        assert!(world.get::<LuaOnMenuSelected>(e).is_none());
         assert!(world.get::<MenuActions>(e).is_some());
     }
 

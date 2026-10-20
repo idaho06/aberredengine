@@ -27,12 +27,12 @@ use bevy_ecs::prelude::Component;
 
 /// Attaches a Lua callback to be called when one of the menu's items is confirmed.
 #[derive(Component, Clone, Debug)]
-pub struct LuaOnMenuSelect {
+pub struct LuaOnMenuSelected {
     /// Name of the Lua function to call.
     pub callback: Arc<str>,
 }
 
-impl LuaOnMenuSelect {
+impl LuaOnMenuSelected {
     pub fn new(callback: impl Into<Arc<str>>) -> Self {
         Self {
             callback: callback.into(),
