@@ -28,6 +28,11 @@ pub struct SceneManager {
     scenes: FxHashMap<String, Entity>,
     /// Currently active scene name (set by `scene_switch_system`).
     pub active_scene: Option<String>,
+    /// The [`WorldTime::frame_count`](crate::resources::worldtime::WorldTime::frame_count)
+    /// of the sim tick that last entered a scene (set by `scene_switch_system`).
+    /// `None` before the first scene. Lua's `on_update_<scene>` skips this
+    /// tick.
+    pub entered_at: Option<u64>,
     /// Initial scene name (set by `EngineBuilder`).
     pub initial_scene: Option<String>,
     /// Scene active during `Setup` while assets load (`EngineBuilder::loading_scene`).

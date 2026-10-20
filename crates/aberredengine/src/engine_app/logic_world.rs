@@ -69,8 +69,6 @@ use aberred_lua::resources::lua_phase_events::LuaPhaseEvents;
 #[cfg(feature = "lua")]
 use aberred_lua::resources::lua_runtime::LuaRuntime;
 #[cfg(feature = "lua")]
-use aberred_lua::resources::lua_scene_entered_at::LuaSceneEnteredAt;
-#[cfg(feature = "lua")]
 use aberred_lua::systems::lua_animation_finished::lua_animation_finished_observer;
 #[cfg(feature = "lua")]
 use aberred_lua::systems::lua_collision::lua_collision_rule_added_observer;
@@ -354,7 +352,6 @@ impl EngineBuilder {
             world.spawn((Observer::new(lua_timer_fired_observer), Persistent));
             world.spawn((Observer::new(lua_timer_removed_observer), Persistent));
             world.init_resource::<LuaPhaseEvents>();
-            world.init_resource::<LuaSceneEnteredAt>();
             world.spawn((Observer::new(lua_scene_exited_observer), Persistent));
             world.spawn((Observer::new(lua_scene_entered_observer), Persistent));
             world.spawn((Observer::new(lua_phase_entered_observer), Persistent));

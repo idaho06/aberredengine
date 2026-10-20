@@ -18,7 +18,6 @@ use crate::resources::lua_runtime::{
     AnimationCmd, AssetCmd, CameraFollowCmd, GameConfigCmd, GroupCmd, InputCmd, LuaRuntime,
     Ordered, RenderCmd,
 };
-use crate::resources::lua_scene_entered_at::LuaSceneEnteredAt;
 use aberred_core::protocol::audio::AudioCmd;
 use aberred_core::protocol::render_assets::RenderAssetCmd;
 use aberred_core::resources::animationstore::AnimationStore;
@@ -361,7 +360,7 @@ fn resolve_input_table(
 /// Per-sim-tick update system for scene gameplay logic: refreshes Lua caches,
 /// calls `on_update_<scene>` of the [`SceneManager`]'s active scene once per
 /// sim tick, then drains common command queues. No callback runs before the
-/// first scene, nor on the tick a scene is entered ([`LuaSceneEnteredAt`]):
+/// first scene, nor on the tick a scene is entered ([`SceneManager::entered_at`]):
 /// a scene starts updating the tick after its entry, like a Rust scene
 /// system. Scene requests switch at `scene_switch_poll` (`SimSet::Lifecycle`),
 /// so a request made here switches at the next tick's `Lifecycle`.
@@ -406,7 +405,6 @@ pub fn update(
     scene_manager: Res<SceneManager>,
     mut cached_callback: Local<String>,
     mut missing_callback_warned: Local<String>,
-    entered_at: Res<LuaSceneEnteredAt>,
 ) {
     aberred_core::tracy::tracy_span!("lua_update");
     let lua_runtime = &ctx.scripting.lua_runtime;
@@ -422,7 +420,7 @@ pub fn update(
     }
 
     // The scene the engine entered, not the `scene` string a script can write.
-    if entered_at.0 != Some(time.frame_count)
+    if scene_manager.entered_at != Some(time.frame_count)
         && let Some(scene) = scene_manager.active_scene.as_deref()
         && let Some(input_table) = resolve_input_table(lua_runtime, &input, time.frame_count)
     {
@@ -766,10 +764,9 @@ mod tests {
 
     /// Builds a [`World`] with all resources [`update`] depends on
     /// (superset of [`new_drain_test_world`]'s: also needs `WorldTime`/`InputState`/
-    /// `Camera2DRes`/`ScreenSize`/[`LuaSceneEnteredAt`]).
+    /// `Camera2DRes`/`ScreenSize`).
     fn new_update_test_world() -> World {
         let mut world = new_drain_test_world();
-        world.init_resource::<LuaSceneEnteredAt>();
         world.insert_resource(WorldTime::default());
         world.insert_resource(InputState::default());
         let screen = ScreenSize { w: 800, h: 600 };
@@ -882,7 +879,7 @@ mod tests {
         let mut world = new_update_test_world();
         world.resource_mut::<SceneManager>().active_scene = Some("level2".to_owned());
         world.resource_mut::<WorldTime>().frame_count = 7;
-        world.resource_mut::<LuaSceneEnteredAt>().0 = Some(7);
+        world.resource_mut::<SceneManager>().entered_at = Some(7);
         define_level1_and_level2_lua_callbacks(&world);
 
         world.run_system_once(update).unwrap();

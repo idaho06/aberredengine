@@ -9,9 +9,7 @@
 
 use crate::lua_plugin::DrainCtx;
 use crate::resources::lua_runtime::LuaRuntime;
-use crate::resources::lua_scene_entered_at::LuaSceneEnteredAt;
 use aberred_core::events::scene::{SceneEntered, SceneExited};
-use aberred_core::resources::worldtime::WorldTime;
 use bevy_ecs::prelude::*;
 use log::error;
 
@@ -26,13 +24,8 @@ pub fn lua_scene_exited_observer(_: On<SceneExited>, lua_runtime: NonSend<LuaRun
 /// `on_switch_scene(name)`: drops cached function handles (the scene's
 /// callbacks are re-injected), refreshes the tracked-group and signal caches so
 /// the callback sees the post-teardown state, drains the commands it queued,
-/// refreshes the config cache and stamps [`LuaSceneEnteredAt`] with this tick.
-pub fn lua_scene_entered_observer(
-    trigger: On<SceneEntered>,
-    mut ctx: DrainCtx,
-    world_time: Res<WorldTime>,
-    mut entered_at: ResMut<LuaSceneEnteredAt>,
-) {
+/// and refreshes the config cache.
+pub fn lua_scene_entered_observer(trigger: On<SceneEntered>, mut ctx: DrainCtx) {
     let lua_runtime = &ctx.scripting.lua_runtime;
     lua_runtime.clear_function_cache();
     lua_runtime.update_tracked_groups_cache(&ctx.tracked_groups.groups);
@@ -49,7 +42,6 @@ pub fn lua_scene_entered_observer(
     ctx.scripting
         .lua_runtime
         .update_gameconfig_cache(&ctx.scene_state.config);
-    entered_at.0 = Some(world_time.frame_count);
 }
 
 #[cfg(test)]
@@ -62,8 +54,6 @@ mod tests {
     /// A Lua test world with both scene observers.
     fn scene_observer_world() -> World {
         let mut world = new_drain_test_world();
-        world.init_resource::<WorldTime>();
-        world.init_resource::<LuaSceneEnteredAt>();
         world.add_observer(lua_scene_exited_observer);
         world.add_observer(lua_scene_entered_observer);
         world
@@ -174,16 +164,5 @@ mod tests {
             .unwrap()
             .expect("defined");
         assert_eq!(f.call::<i64>(()).unwrap(), 2);
-    }
-
-    /// Entering a scene stamps the current sim tick.
-    #[test]
-    fn entered_stamps_the_entry_tick() {
-        let mut world = scene_observer_world();
-        world.resource_mut::<WorldTime>().frame_count = 7;
-
-        enter(&mut world, "level");
-
-        assert_eq!(world.resource::<LuaSceneEnteredAt>().0, Some(7));
     }
 }

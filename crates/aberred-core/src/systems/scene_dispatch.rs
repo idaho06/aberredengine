@@ -43,6 +43,7 @@ use crate::resources::signal_keys as sk;
 use crate::resources::systemsstore as hook_keys;
 use crate::resources::systemsstore::SystemsStore;
 use crate::resources::worldsignals::{SignalSnapshot, WorldSignals};
+use crate::resources::worldtime::WorldTime;
 
 /// Minimal world-space drawing interface for `WorldDrawCallback`.
 /// Uses concrete types only so the callback stays object-safe.
@@ -222,6 +223,9 @@ pub fn scene_switch_system(world: &mut World, state: &mut SystemState<SceneTeard
         });
     }
     let previous = exited.map(|(prev, _)| prev);
+    let tick = world
+        .get_resource::<WorldTime>()
+        .map(|time| time.frame_count);
 
     let (mut commands, scene_cleanup, mut world_signals, mut tracked_groups, mut scene_manager) =
         state.get_mut(world).expect(
@@ -241,6 +245,7 @@ pub fn scene_switch_system(world: &mut World, state: &mut SystemState<SceneTeard
     info!("scene_switch_system: Entering scene '{}'", scene_name);
     world_signals.set_string(sk::SCENE, &*scene_name);
     scene_manager.active_scene = Some(scene_name.to_string());
+    scene_manager.entered_at = tick;
     state.apply(world);
 
     world.trigger(SceneEntered {
@@ -600,6 +605,19 @@ mod tests {
         world.run_system_once(scene_switch_system).unwrap();
 
         assert!(world.resource::<SeenEvents>().0.is_empty());
+    }
+
+    /// Entering a scene stamps the current sim tick.
+    #[test]
+    fn switch_stamps_the_entry_tick() {
+        let (mut world, _) = world_in_menu_switching_to("level");
+        world.insert_resource(WorldTime {
+            frame_count: 7,
+            ..Default::default()
+        });
+        world.run_system_once(scene_switch_system).unwrap();
+
+        assert_eq!(world.resource::<SceneManager>().entered_at, Some(7));
     }
 
     #[test]
