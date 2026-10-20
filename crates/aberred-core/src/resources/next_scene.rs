@@ -3,6 +3,10 @@
 //! [`NextScene`] is to scenes what
 //! [`NextGameState`] is to game
 //! states: a requester writes the target, and the scene switch takes it.
+//!
+//! Every scene request lands here: Rust `NextScene::set`, a menu's
+//! `MenuAction::RequestScene`, a GUI callback's `intents.request_scene` and
+//! Lua's `engine.request_scene`. The next scene switch poll applies it.
 
 use bevy_ecs::prelude::Resource;
 

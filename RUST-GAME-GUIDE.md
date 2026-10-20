@@ -384,6 +384,8 @@ Every scene switch is a request through the `NextScene` resource (in the prelude
 - **From a menu:** a `MenuAction::RequestScene("level01")` item sets `NextScene` when it is confirmed.
 - **From a GUI callback:** `ctx.intents.request_scene(name)`; it reaches `NextScene` at the start of the next sim tick.
 
+Each of these only records the request (so does a Lua script's `engine.request_scene`); none switches immediately.
+
 The engine's `scene_switch_poll` system (registered automatically for every game) checks `NextScene` in `SimSet::Lifecycle`, late in the tick after your `.add_system()`/`.add_scene_system()` systems and before your late ones, and runs `scene_switch_system`, a one-shot system registered in `SystemsStore` under the key `"switch_scene"`; a request made after that point (from a late system, for example) is picked up on the next tick. The last request before the poll wins. A quit requested in the same tick wins over a scene request: the game quits without switching.
 
 ```rust

@@ -271,7 +271,9 @@ here — prefer `M.spawn()`, phase callbacks, or collision callbacks instead.
 - `"scene"` - The active scene's name.
 - `"previous_scene"` - The scene active before the last switch (unset until the first switch away from a scene).
 
-Request scenes with `engine.request_scene(name)` and quit with `engine.request_quit()`.
+Request scenes with `engine.request_scene(name)` and quit with `engine.request_quit()`. A menu item built with
+`:with_menu_action_request_scene` / `:with_menu_action_request_quit` makes the same request; none of them switches
+immediately: every scene request is applied by the next scene switch poll.
 
 Entering the first scene despawns nothing: spawns and other commands queued in `on_setup`/`on_enter_play` apply
 when the first scene is entered. Each later switch despawns the scene it leaves (every entity not built with
