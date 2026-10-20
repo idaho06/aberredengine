@@ -366,10 +366,10 @@ fn resolve_input_table(
 /// so a request made here switches at the next tick's `Lifecycle`.
 ///
 /// Runs in `SimSet::LateUpdate`, between `SimSet::Lifecycle` and
-/// `SimSet::Bookkeeping`, i.e. *after* `Movement`/`Transforms` (so `camera_follow_system` has
-/// already updated `Camera2DRes` for this tick) and after `Collision`/
-/// `PostCollision` (so `collision_detector`/`lua_phase_update_system` have already
-/// run). This restores the ordering guarantee the pre-thread-split engine
+/// `SimSet::Bookkeeping`, i.e. *after* `Movement`/`Transforms` (so
+/// `camera_follow_system` has already updated `Camera2DRes` for this tick)
+/// and after `Collision`/`PostCollision` (so `collision_detector`/
+/// `lua_phase_update_system` have already run). This restores the ordering guarantee the pre-thread-split engine
 /// had via an explicit `.after(camera_follow_system)` constraint on its
 /// single `lua_plugin::update` ("ensures Lua reads current-frame camera
 /// state") -- scene logic that reads `engine.get_camera()`/

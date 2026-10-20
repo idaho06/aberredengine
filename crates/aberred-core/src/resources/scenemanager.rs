@@ -30,8 +30,8 @@ pub struct SceneManager {
     pub active_scene: Option<String>,
     /// The [`WorldTime::frame_count`](crate::resources::worldtime::WorldTime::frame_count)
     /// of the sim tick that last entered a scene (set by `scene_switch_system`).
-    /// `None` before the first scene. Lua's `on_update_<scene>` and
-    /// `add_late_scene_system` systems skip this tick.
+    /// `None` before the first scene. A scene's per-tick updates skip this
+    /// tick (see [`past_scene_entry`](crate::systems::scene_dispatch::past_scene_entry)).
     pub entered_at: Option<u64>,
     /// Initial scene name (set by `EngineBuilder`).
     pub initial_scene: Option<String>,

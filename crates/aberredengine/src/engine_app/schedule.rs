@@ -527,9 +527,10 @@ impl EngineBuilder {
 
         // Prunes WorldSignals entity registrations of despawned entities, for
         // Rust and Lua despawns alike. Ordered after every system of the tick's
-        // tail that can despawn (Lua's update and `add_late_system` systems, by
-        // set order; the Lua command drains, by explicit edges), so the edges' sync points apply this tick's despawns first and neither
-        // the snapshot nor the next tick sees a registration of a dead entity.
+        // tail that can despawn (Lua's update and the late user systems, by set
+        // order; the Lua command drains, by explicit edges), so the edges' sync
+        // points apply this tick's despawns first and neither the snapshot nor
+        // the next tick sees a registration of a dead entity.
         #[allow(unused_mut)] // only reassigned under #[cfg(feature = "lua")] below
         let mut prune_config = prune_dead_entity_registrations
             .after(update_world_signals_binding_system)
@@ -554,9 +555,8 @@ impl EngineBuilder {
         // relative to menu/tilemap spawning (earlier `SimSet`s, via the
         // `configure_sets((...).chain())` pipeline) is implicit, but the Lua
         // asset/map command drains share this same `SimSet` too and need
-        // their own explicit
-        // `.before(update_bevy_render_asset_cmds)` edge so a same-tick load
-        // still forwards this tick instead of lagging one.
+        // their own explicit `.before(update_bevy_render_asset_cmds)` edge so
+        // a same-tick load still forwards this tick instead of lagging one.
         sim.add_systems(update_bevy_render_asset_cmds.in_set(SimSet::Bookkeeping));
         sim.add_systems(
             forward_render_asset_cmds
