@@ -176,15 +176,15 @@ pub enum AudioLuaCmd {
     UnloadAllSounds,
 }
 
-/// Commands to modify WorldSignals from Lua.
+/// Commands from Lua that modify WorldSignals or request a scene or quit.
 #[derive(Debug, Clone)]
 pub enum SignalCmd {
     SetScalar { key: String, value: f32 },
     SetInteger { key: String, value: i32 },
     SetString { key: String, value: String },
     SetFlag { key: String },
-    ChangeScene { scene: String },
-    Quit,
+    RequestScene { name: String },
+    RequestQuit,
     ClearFlag { key: String },
     ToggleFlag { key: String },
     ClearScalar { key: String },

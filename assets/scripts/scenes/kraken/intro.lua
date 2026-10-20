@@ -10,7 +10,7 @@ local M = {}
 --- @param dt number Delta time in seconds
 local function on_update_kraken_intro(input, dt)
     if input.digital.back.just_pressed then
-        engine.change_scene("menu")
+        engine.request_scene("menu")
     end
 end
 

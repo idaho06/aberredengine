@@ -107,7 +107,7 @@ end
 --- @param dt number Fixed delta time in seconds (constant, 1/240s)
 local function on_update_sidescroller_level01(input, dt)
     if input.digital.back.just_pressed then
-        engine.change_scene("menu")
+        engine.request_scene("menu")
     end
 
     -- Pin background layers to the camera view every substep.

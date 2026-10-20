@@ -375,7 +375,7 @@ local function scene_game_over_update(ctx, input, dt)
         engine.log_debug("Game over - returning to menu")
         engine.log_debug(string.format("Total ball bounces: %d", ball_bounces))
         engine.log_debug(string.format("Total player hits: %d", player_hits))
-        engine.change_scene("menu")
+        engine.request_scene("menu")
     end
 end
 
@@ -399,7 +399,7 @@ local function scene_level_cleared_update(ctx, input, dt)
         engine.log_debug("Level cleared - returning to menu")
         engine.log_debug(string.format("Total ball bounces: %d", ball_bounces))
         engine.log_debug(string.format("Total player hits: %d", player_hits))
-        engine.change_scene("menu")
+        engine.request_scene("menu")
     end
 end
 
@@ -473,7 +473,7 @@ end
 --- @param dt number Delta time in seconds
 local function on_update_arkanoid_level01(input, dt)
     if input.digital.back.just_pressed then
-        engine.change_scene("menu")
+        engine.request_scene("menu")
     end
 end
 

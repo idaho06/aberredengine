@@ -2,8 +2,8 @@
 -- Entry point for the Aberred Engine showcase
 -- This file is loaded when the engine starts
 --
--- Scenes switch through engine.change_scene(name) and the game quits through
--- engine.quit(); the "scene" string signal holds the active scene's name (read
+-- Scenes switch through engine.request_scene(name) and the game quits through
+-- engine.request_quit(); the "scene" string signal holds the active scene's name (read
 -- it, don't write it).
 --
 -- ============================================================================
@@ -62,7 +62,7 @@ Remap = math_helpers.remap
 -- Scene Registry
 -- ============================================================================
 -- Maps scene names to their require paths.
--- The scene name is what you pass to engine.change_scene().
+-- The scene name is what you pass to engine.request_scene().
 -- The require path is the Lua module path for the scene file.
 --
 -- To add a new example, add one entry here and create the scene module.
@@ -154,7 +154,7 @@ function on_enter_play()
     engine.set_integer("high_score", 0)
     engine.set_integer("lives", 3)
     engine.set_integer("level", 1)
-    engine.change_scene("menu") -- Start at menu scene
+    engine.request_scene("menu") -- Start at menu scene
 
     return "Hello from Lua! Ready to play."
 end

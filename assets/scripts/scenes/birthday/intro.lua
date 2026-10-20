@@ -180,14 +180,14 @@ local function scene_fade_out_on_update(ctx, input, dt)
 end
 
 local function scene_fade_out_on_exit(ctx)
-    engine.change_scene("birthday_card")
+    engine.request_scene("birthday_card")
     engine.log_debug("Intro scene fade-out complete. Queued card scene.")
 end
 
 --- Called each frame when birthday_intro scene is active.
 local function on_update_birthday_intro(input, dt)
     if input.digital.back.just_pressed then
-        engine.change_scene("menu")
+        engine.request_scene("menu")
     end
 end
 

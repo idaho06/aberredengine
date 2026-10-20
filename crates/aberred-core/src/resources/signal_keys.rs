@@ -5,7 +5,7 @@
 
 /// String: the name of the active scene, an output written by both scene
 /// switch systems. Writing it switches nothing; request a scene through
-/// `NextScene` (`engine.change_scene` in Lua).
+/// `NextScene` (`engine.request_scene` in Lua).
 pub const SCENE: &str = "scene";
 
 /// String: the scene active before the last scene switch, an output written by
@@ -30,7 +30,7 @@ pub const SPEED_SQ: &str = "speed_sq";
 pub const MAIN_SCENE: &str = "main";
 
 /// The first scene a Lua game enters when none was requested (an
-/// `on_enter_play` that never calls `engine.change_scene`).
+/// `on_enter_play` that never calls `engine.request_scene`).
 pub const DEFAULT_SCENE: &str = "menu";
 
 /// Prefix for integer signals that track live entity counts per group.

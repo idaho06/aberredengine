@@ -448,7 +448,7 @@ local function on_update_asteroids_level01(input, dt)
     if input.digital.back.just_pressed then
         -- Restore default pixel-snapped camera for pixel-art scenes like the menu.
         engine.set_pixel_snap_camera(true)
-        engine.change_scene("menu")
+        engine.request_scene("menu")
     end
 end
 

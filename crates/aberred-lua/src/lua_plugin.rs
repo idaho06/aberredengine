@@ -148,7 +148,7 @@ pub use aberred_core::systems::gamestate::quit_game;
 /// The `enter_play` hook of a Lua game: calls `on_enter_play`, applies the
 /// signal and group commands it queued, then enters the first scene through
 /// the `switch_scene` hook -- the scene `on_enter_play` requested with
-/// `engine.change_scene`, else [`sk::DEFAULT_SCENE`]. The first entry tears
+/// `engine.request_scene`, else [`sk::DEFAULT_SCENE`]. The first entry tears
 /// nothing down, so entities spawned in `on_setup`/`on_enter_play` survive it.
 pub fn enter_play(
     commands: Commands,

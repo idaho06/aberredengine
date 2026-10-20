@@ -845,7 +845,7 @@ local function on_attack_cooldown_done(ctx)
 end
 
 local function on_retreat_clicked()
-    engine.change_scene("menu")
+    engine.request_scene("menu")
 end
 
 function M.spawn()

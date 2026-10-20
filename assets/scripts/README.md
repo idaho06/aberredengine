@@ -118,7 +118,7 @@ end
 
 -- Called when entering Playing game state
 function on_enter_play()
-    engine.change_scene("menu")        -- the first scene (default: "menu")
+    engine.request_scene("menu")        -- the first scene (default: "menu")
     return "Hello from Lua!"
 end
 
@@ -167,7 +167,7 @@ local M = {}
 -- Scene update: engine calls on_update_<scene_name> automatically
 local function on_update_example_level01(input, dt)
     if input.digital.back.just_pressed then
-        engine.change_scene("menu")
+        engine.request_scene("menu")
     end
 end
 
@@ -271,7 +271,7 @@ here — prefer `M.spawn()`, phase callbacks, or collision callbacks instead.
 - `"scene"` - The active scene's name.
 - `"previous_scene"` - The scene active before the last switch (unset until the first switch away from a scene).
 
-Request scenes with `engine.change_scene(name)` and quit with `engine.quit()`.
+Request scenes with `engine.request_scene(name)` and quit with `engine.request_quit()`.
 
 Entering the first scene despawns nothing: spawns and other commands queued in `on_setup`/`on_enter_play` apply
 when the first scene is entered. Each later switch despawns the scene it leaves (every entity not built with
@@ -575,7 +575,7 @@ end
 -- Common pattern: Return to menu on ESC press
 function on_update_level01(input, dt)
     if input.digital.back.just_pressed then
-        engine.change_scene("menu")
+        engine.request_scene("menu")
     end
 end
 
@@ -1492,7 +1492,7 @@ Play sound when selection changes (requires `:with_menu()`).
 #### `:with_menu_action_request_scene(item_id, name)`
 
 Define a scene-request action (requires `:with_menu()`). Confirming the item requests the scene like
-`engine.change_scene`: the switch runs later in the same tick, and that tick runs no `on_update_<scene>`.
+`engine.request_scene`: the switch runs later in the same tick, and that tick runs no `on_update_<scene>`.
 
 ```lua
 :with_menu_action_request_scene("start", "level01")
@@ -1536,9 +1536,9 @@ function on_main_menu_select(ctx)
     engine.log_info("Selected: " .. ctx.item_id .. " (index " .. ctx.item_index .. ")")
 
     if ctx.item_id == "start_game" then
-        engine.change_scene("level01")
+        engine.request_scene("level01")
     elseif ctx.item_id == "exit" then
-        engine.quit()
+        engine.request_quit()
     end
 end
 ```
@@ -2895,22 +2895,22 @@ engine.remove_entity("special_enemy")
 
 ### Scene Management
 
-#### `engine.change_scene(scene_name)`
+#### `engine.request_scene(name)`
 
 Requests a switch to a new scene. The engine switches at its scene poll, which runs every tick after collisions and before `on_update_<scene>`, updating the `scene` and `previous_scene` strings and calling `on_switch_scene`. A request from `on_update_<scene>` switches on the next tick; a request from a menu item, a GUI widget, a phase or a timer callback switches in the same tick; a request from a collision callback switches in the same tick or the next. The tick that switches runs no `on_update_<scene>`: the new scene's starts on the following tick. A request from `on_switch_scene` switches again on the next tick, so the scene it leaves runs no `on_update_<scene>` at all. The last request before the poll wins, and during play a quit pending at the poll wins over it.
 
-Called from `on_enter_play`, it picks the first scene; without a request the first scene is `"menu"`. The first scene is always entered after `on_enter_play`, even if it also calls `engine.quit()`.
+Called from `on_enter_play`, it picks the first scene; without a request the first scene is `"menu"`. The first scene is always entered after `on_enter_play`, even if it also calls `engine.request_quit()`.
 
 ```lua
-engine.change_scene("level01")
+engine.request_scene("level01")
 ```
 
-#### `engine.quit()`
+#### `engine.request_quit()`
 
 Requests a clean shutdown. During play, a scene switch requested in the same tick does not run.
 
 ```lua
-engine.quit()
+engine.request_quit()
 ```
 
 ---
@@ -5896,7 +5896,7 @@ engine.spawn()
 
 function on_start_clicked(ctx)
     -- ctx.entity_id = u64 entity ID of the clicked widget
-    engine.change_scene("level01")
+    engine.request_scene("level01")
 end
 ```
 
@@ -6082,7 +6082,7 @@ function M.spawn()
 end
 
 function on_restart(ctx)
-    engine.change_scene("level01")
+    engine.request_scene("level01")
 end
 ```
 

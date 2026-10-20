@@ -91,7 +91,7 @@ crates/aberred-lua/src/resources/lua_runtime/
 │   ├── input.rs        # register_input_api()
 │   ├── phase_group.rs  # register_phase_api(), register_group_api()
 │   ├── render.rs       # register_render_api() (post-process shaders + GUI theme configuration)
-│   ├── signal.rs       # register_signal_api() (also change_scene/quit — see Signal Keys Vocabulary)
+│   ├── signal.rs       # register_signal_api() (also request_scene/request_quit — see Signal Keys Vocabulary)
 │   └── spawn.rs        # register_spawn_api()
 ├── queue_registry.rs   # lua_queues! macro: authoritative list of all 23 command queues
 ├── command_queues.rs   # drain_*_commands() methods (generated), clear_all_commands (generated), cache updates
@@ -240,7 +240,7 @@ register_getter!(engine, self.lua, meta_fns, "get_scalar",
     params = [("key", "string")], returns = "number?");
 ```
 
-A handful of functions with irregular shapes (`change_scene`, `quit`, `set_target_fps`, `set_render_size`, `set_background_color`) are still registered manually with `engine.set()` + a `push_fn_meta()` call, when neither macro's grammar fits cleanly.
+A handful of functions with irregular shapes (`request_scene`, `request_quit`, `set_target_fps`, `set_render_size`, `set_background_color`) are still registered manually with `engine.set()` + a `push_fn_meta()` call, when neither macro's grammar fits cleanly.
 
 ### Step 3: Rust Drains Commands
 
@@ -294,8 +294,8 @@ The previous section covers how Lua calls *into* Rust. This section covers the o
 A Lua game has a `SceneManager` that registers each scene on its first request, and switches scenes through the same core `scene_switch_system` as a Rust game. Four lifecycle points:
 
 1. **`setup()`** — runs once at startup. Calls `on_setup()` if defined, drains `asset_commands` (translating each into an `AudioCmd` or a `RenderAssetCmd`), drains `animation_commands` into a fresh `AnimationStore` resource, then transitions `GameState` to `Playing`.
-2. **`enter_play()`** — runs once, immediately after `setup()`. Calls `on_enter_play()` if defined, drains `signal_commands`/`group_commands` (world signals aren't touched by `setup()` — Lua is expected to seed them here), updates the tracked-groups cache, then enters the first scene through core `switch_to` (`scene_dispatch.rs`): the scene `on_setup`/`on_enter_play` requested with `engine.change_scene`, else `sk::DEFAULT_SCENE`. The first entry despawns nothing, so what `on_setup`/`on_enter_play` queued applies in the first scene (drained by `lua_scene_entered_observer`, step 3).
-3. **Scene switch** — core `scene_switch_poll` (`SimSet::Lifecycle`) runs `scene_switch_system` when a scene request is pending in `NextScene` (`engine.change_scene()`, a menu's `RequestScene`, a GUI intent, a Rust system) and no quit is. Two observers in `systems/lua_scene.rs`, registered only when a Lua script is set, add the Lua side:
+2. **`enter_play()`** — runs once, immediately after `setup()`. Calls `on_enter_play()` if defined, drains `signal_commands`/`group_commands` (world signals aren't touched by `setup()` — Lua is expected to seed them here), updates the tracked-groups cache, then enters the first scene through core `switch_to` (`scene_dispatch.rs`): the scene `on_setup`/`on_enter_play` requested with `engine.request_scene`, else `sk::DEFAULT_SCENE`. The first entry despawns nothing, so what `on_setup`/`on_enter_play` queued applies in the first scene (drained by `lua_scene_entered_observer`, step 3).
+3. **Scene switch** — core `scene_switch_poll` (`SimSet::Lifecycle`) runs `scene_switch_system` when a scene request is pending in `NextScene` (`engine.request_scene()`, a menu's `RequestScene`, a GUI intent, a Rust system) and no quit is. Two observers in `systems/lua_scene.rs`, registered only when a Lua script is set, add the Lua side:
    - `lua_scene_exited_observer` (`On<SceneExited>`, before the old scene's entities are despawned) calls `clear_all_commands()`: `clear`-policy queues may reference entities about to be despawned.
    - `lua_scene_entered_observer` (`On<SceneEntered>`, after the teardown) calls `clear_function_cache()` (callbacks are re-injected per scene, so stale closures must not survive the switch), refreshes the tracked-groups and signal caches so `on_switch_scene` observes the post-teardown state, calls `on_switch_scene(scene_name)`, drains the common queues (`DrainCtx::drain`, below), and refreshes the gameconfig cache. `scene_switch_system` itself stamps the tick's `frame_count` in `SceneManager.entered_at`.
 
@@ -417,9 +417,9 @@ This section is meant to stay in sync with the actual implementation.
 
 #### Navigation
 
-- `change_scene`, `quit`
+- `request_scene`, `request_quit`
 
-Both are registered in `engine_api/signal.rs`: `change_scene(scene_name)` queues `SignalCmd::ChangeScene`, which sets `NextScene` when it drains; the scene switch runs at `scene_switch_poll` in `SimSet::Lifecycle` (see [Scene Lifecycle](#scene-lifecycle) step 3). `quit()` queues `SignalCmd::Quit`, which sets `NextGameState` to `Quitting`. Both reach their targets through `SignalTargets` (`processors.rs`).
+Both are registered in `engine_api/signal.rs`: `request_scene(name)` queues `SignalCmd::RequestScene`, which sets `NextScene` when it drains; the scene switch runs at `scene_switch_poll` in `SimSet::Lifecycle` (see [Scene Lifecycle](#scene-lifecycle) step 3). `request_quit()` queues `SignalCmd::RequestQuit`, which sets `NextGameState` to `Quitting`. Both reach their targets through `SignalTargets` (`processors.rs`).
 
 #### Global Signals (read)
 
@@ -813,7 +813,7 @@ pub const GROUP_COUNT_PREFIX: &str = "group_count:"; // integer key prefix
 
 All callers import with `use aberred_core::resources::signal_keys as sk;` (or `crate::resources::signal_keys` from within `aberred-core` itself) and reference `sk::SCENE` etc. This gives a single rename point and compile-time typo detection. **Never write these as bare string literals in new code.**
 
-Scene and quit requests are not signals: they go through `NextScene` and `NextGameState` (`engine.change_scene()` / `engine.quit()`).
+Scene and quit requests are not signals: they go through `NextScene` and `NextGameState` (`engine.request_scene()` / `engine.request_quit()`).
 
 ---
 

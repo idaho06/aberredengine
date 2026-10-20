@@ -542,7 +542,7 @@ end
 --- @param dt number Delta time in seconds
 local function on_update_gui_demo(input, dt)
     if input.digital.back.just_pressed then
-        engine.change_scene("menu")
+        engine.request_scene("menu")
     end
 
     if sword_cooldown_secs > 0.0 then

@@ -278,10 +278,6 @@ function menu_callback(menu_id, item_id, item_index) end
 
 -- ==================== Logging Functions ====================
 
----Switch to a new scene by name (applied by the next scene switch poll)
----@param scene_name string
-function engine.change_scene(scene_name) end
-
 ---General purpose logging
 ---@param message string
 function engine.log(message) end
@@ -302,8 +298,12 @@ function engine.log_info(message) end
 ---@param message string
 function engine.log_warn(message) end
 
----Quit the game engine (requests the Quitting state)
-function engine.quit() end
+---Request quitting the game (sets the Quitting state as the next game state)
+function engine.request_quit() end
+
+---Request a switch to scene `name`, applied by the next scene switch poll
+---@param name string
+function engine.request_scene(name) end
 
 -- ==================== Asset Loading ====================
 

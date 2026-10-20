@@ -10,13 +10,13 @@ local M = {}
 local function on_bunnymark_menu_select(ctx)
     engine.log_debug("Bunnymark menu: " .. ctx.item_id)
     if ctx.item_id == "map_loop" then
-        engine.change_scene("bunnymark_map_loop")
+        engine.request_scene("bunnymark_map_loop")
     elseif ctx.item_id == "screen_loop" then
-        engine.change_scene("bunnymark_screen_loop")
+        engine.request_scene("bunnymark_screen_loop")
     elseif ctx.item_id == "map_phase" then
-        engine.change_scene("bunnymark_map_phase")
+        engine.request_scene("bunnymark_map_phase")
     elseif ctx.item_id == "screen_phase" then
-        engine.change_scene("bunnymark_screen_phase")
+        engine.request_scene("bunnymark_screen_phase")
     end
 end
 
@@ -24,7 +24,7 @@ end
 --- @param input InputSnapshot
 local function on_update_bunnymark_menu(input)
     if input.digital.back.just_pressed then
-        engine.change_scene("menu")
+        engine.request_scene("menu")
     end
 end
 

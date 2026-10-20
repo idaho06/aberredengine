@@ -1795,15 +1795,15 @@ end
     assert_eq!(take_lua_log(&mut tw), ["enter:idle"]);
 }
 
-/// `engine.change_scene` from `on_enter_play` picks the first scene, entered once.
+/// `engine.request_scene` from `on_enter_play` picks the first scene, entered once.
 #[cfg(feature = "lua")]
 #[test]
-fn lua_change_scene_in_on_enter_play_enters_that_scene() {
+fn lua_request_scene_in_on_enter_play_enters_that_scene() {
     let mut tw = lua_script_world(
-        "change_scene_enter_play",
+        "request_scene_enter_play",
         r#"
 function on_enter_play()
-    engine.change_scene("a")
+    engine.request_scene("a")
     return ""
 end
 function on_switch_scene(scene) table.insert(LOG, "switch:" .. scene) end
@@ -1827,7 +1827,7 @@ fn gui_scene_request_switches_a_lua_game() {
         "gui_scene_request",
         r#"
 function on_enter_play()
-    engine.change_scene("a")
+    engine.request_scene("a")
     return ""
 end
 function on_switch_scene(scene) table.insert(LOG, "switch:" .. scene) end
@@ -1851,15 +1851,15 @@ function on_switch_scene(scene) table.insert(LOG, "switch:" .. scene) end
     );
 }
 
-/// `engine.quit()` from `on_update_<scene>` quits a Lua game exactly once.
+/// `engine.request_quit()` from `on_update_<scene>` quits a Lua game exactly once.
 #[cfg(feature = "lua")]
 #[test]
-fn lua_engine_quit_quits_exactly_once() {
+fn lua_engine_request_quit_quits_exactly_once() {
     let mut tw = lua_script_world(
-        "engine_quit",
+        "engine_request_quit",
         r#"
 function on_enter_play() return "" end
-function on_update_menu(input, dt) engine.quit() end
+function on_update_menu(input, dt) engine.request_quit() end
 "#,
     );
 
@@ -1960,7 +1960,7 @@ fn lua_scene_switch_publishes_the_scene_it_left() {
         "previous_scene",
         r#"
 function on_enter_play()
-    engine.change_scene("a")
+    engine.request_scene("a")
     return ""
 end
 "#,
@@ -2051,7 +2051,7 @@ fn lua_on_switch_scene_does_not_see_the_old_scene_registrations() {
         "switch_registrations",
         r#"
 function on_enter_play()
-    engine.change_scene("a")
+    engine.request_scene("a")
     return ""
 end
 function on_switch_scene(scene)
@@ -2088,8 +2088,8 @@ fn lua_quit_wins_over_a_scene_request_in_the_same_update() {
 function on_enter_play() return "" end
 function on_switch_scene(scene) table.insert(LOG, "switch:" .. scene) end
 function on_update_menu(input, dt)
-    engine.change_scene("b")
-    engine.quit()
+    engine.request_scene("b")
+    engine.request_quit()
 end
 "#,
     );
@@ -2176,17 +2176,17 @@ end
     );
 }
 
-/// `engine.change_scene` from `on_update` switches at the next tick's `Lifecycle`,
+/// `engine.request_scene` from `on_update` switches at the next tick's `Lifecycle`,
 /// where no `on_update` runs; the new scene updates from the tick after.
 /// The first scene updates from the first `Playing` tick.
 #[cfg(feature = "lua")]
 #[test]
-fn lua_change_scene_from_on_update_switches_next_tick_and_updates_after() {
+fn lua_request_scene_from_on_update_switches_next_tick_and_updates_after() {
     let mut tw = lua_script_world(
         "update_switch_timing",
         r#"
 function on_enter_play()
-    engine.change_scene("a")
+    engine.request_scene("a")
     return ""
 end
 function on_switch_scene(scene) table.insert(LOG, "switch:" .. scene) end
@@ -2194,7 +2194,7 @@ function on_update_a(input, dt)
     table.insert(LOG, "update:a")
     if not REQUESTED then
         REQUESTED = true
-        engine.change_scene("b")
+        engine.request_scene("b")
     end
 end
 function on_update_b(input, dt) table.insert(LOG, "update:b") end
@@ -2214,11 +2214,11 @@ function on_update_b(input, dt) table.insert(LOG, "update:b") end
     );
 }
 
-/// A timer callback's `engine.change_scene` switches in the same tick's
+/// A timer callback's `engine.request_scene` switches in the same tick's
 /// `Lifecycle` (timers fire before `scene_switch_poll`), with no `on_update` that tick.
 #[cfg(feature = "lua")]
 #[test]
-fn lua_timer_change_scene_switches_in_the_same_tick() {
+fn lua_timer_request_scene_switches_in_the_same_tick() {
     use aberredengine::core::components::timer::TimerMode;
     use aberredengine::lua::components::lua_on_timer_fired::LuaOnTimerFired;
 
@@ -2226,13 +2226,13 @@ fn lua_timer_change_scene_switches_in_the_same_tick() {
         "timer_switch_timing",
         r#"
 function on_enter_play()
-    engine.change_scene("a")
+    engine.request_scene("a")
     return ""
 end
 function on_switch_scene(scene) table.insert(LOG, "switch:" .. scene) end
 function on_update_a(input, dt) table.insert(LOG, "update:a") end
 function on_update_b(input, dt) table.insert(LOG, "update:b") end
-function on_timer(ctx) engine.change_scene("b") end
+function on_timer(ctx) engine.request_scene("b") end
 "#,
     );
     tw.tick(1, DT);
@@ -2884,7 +2884,7 @@ fn rust_late_system_sees_lua_update_signal_same_tick() {
         r#"
 N = 0
 function on_enter_play()
-    engine.change_scene("s")
+    engine.request_scene("s")
     return ""
 end
 function on_update_s(input, dt)

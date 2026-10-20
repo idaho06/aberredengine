@@ -12,21 +12,21 @@ local function on_showcase_menu_select(ctx)
     engine.log_debug("Menu selected: " .. ctx.item_id .. " (index " .. ctx.item_index .. ")")
 
     if ctx.item_id == "asteroids" then
-        engine.change_scene("asteroids_level01")
+        engine.request_scene("asteroids_level01")
     elseif ctx.item_id == "arkanoid" then
-        engine.change_scene("arkanoid_level01")
+        engine.request_scene("arkanoid_level01")
     elseif ctx.item_id == "birthday" then
-        engine.change_scene("birthday_intro")
+        engine.request_scene("birthday_intro")
     elseif ctx.item_id == "kraken" then
-        engine.change_scene("kraken_intro")
+        engine.request_scene("kraken_intro")
     elseif ctx.item_id == "sidescroller" then
-        engine.change_scene("sidescroller_level01")
+        engine.request_scene("sidescroller_level01")
     elseif ctx.item_id == "bunnymark" then
-        engine.change_scene("bunnymark_menu")
+        engine.request_scene("bunnymark_menu")
     elseif ctx.item_id == "gui_demo" then
-        engine.change_scene("gui_demo")
+        engine.request_scene("gui_demo")
     elseif ctx.item_id == "exit" then
-        engine.quit()
+        engine.request_quit()
     end
 end
 
@@ -35,7 +35,7 @@ end
 --- @param dt number Delta time in seconds
 local function on_update_menu(input, dt)
     if input.digital.back.just_pressed then
-        engine.quit()
+        engine.request_quit()
     end
 end
 

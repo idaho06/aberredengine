@@ -19,7 +19,7 @@ local function on_update_bunnymark_map_loop(input, dt)
         bunnies           = {}
         pending           = {}
         bunny_key_counter = 0
-        engine.change_scene("bunnymark_menu")
+        engine.request_scene("bunnymark_menu")
         return
     end
 

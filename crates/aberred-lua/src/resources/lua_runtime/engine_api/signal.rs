@@ -208,45 +208,42 @@ impl LuaRuntime {
         );
 
         engine.set(
-            "change_scene",
-            self.lua.create_function(|lua, scene_name: String| {
+            "request_scene",
+            self.lua.create_function(|lua, name: String| {
                 let data = lua
                     .app_data_ref::<LuaAppData>()
                     .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?;
                 // A request (NextScene), applied by the next scene switch poll;
                 // the scene string stays put until then.
-                data.push(
-                    &data.signal_commands,
-                    SignalCmd::ChangeScene { scene: scene_name },
-                );
+                data.push(&data.signal_commands, SignalCmd::RequestScene { name });
                 Ok(())
             })?,
         )?;
         push_fn_meta(
             &self.lua,
             &meta_fns,
-            "change_scene",
-            "Switch to a new scene by name (applied by the next scene switch poll)",
+            "request_scene",
+            "Request a switch to scene `name`, applied by the next scene switch poll",
             "base",
-            &[("scene_name", "string")],
+            &[("name", "string")],
             None,
         )?;
 
         engine.set(
-            "quit",
+            "request_quit",
             self.lua.create_function(|lua, ()| {
                 let data = lua
                     .app_data_ref::<LuaAppData>()
                     .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?;
-                data.push(&data.signal_commands, SignalCmd::Quit);
+                data.push(&data.signal_commands, SignalCmd::RequestQuit);
                 Ok(())
             })?,
         )?;
         push_fn_meta(
             &self.lua,
             &meta_fns,
-            "quit",
-            "Quit the game engine (requests the Quitting state)",
+            "request_quit",
+            "Request quitting the game (sets the Quitting state as the next game state)",
             "base",
             &[],
             None,

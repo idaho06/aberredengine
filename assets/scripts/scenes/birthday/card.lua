@@ -89,14 +89,14 @@ local function card_fade_out_on_update(ctx, input, dt)
 end
 
 local function card_fade_out_on_exit(ctx)
-    engine.change_scene("menu")
+    engine.request_scene("menu")
     engine.log_debug("Card scene fade-out complete. Returning to menu.")
 end
 
 --- Called each frame when birthday_card scene is active.
 local function on_update_birthday_card(input, dt)
     if input.digital.back.just_pressed then
-        engine.change_scene("menu")
+        engine.request_scene("menu")
     end
 end
 

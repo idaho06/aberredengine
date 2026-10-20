@@ -115,8 +115,8 @@ pub fn process_signal_command(targets: &mut SignalTargets, cmd: SignalCmd) {
         }
         // A request, not a write: this drain can run mid-tick, and the scene
         // switch poll applies it at the end of the tick.
-        SignalCmd::ChangeScene { scene } => next_scene.set(scene),
-        SignalCmd::Quit => next_game_state.set(GameStates::Quitting),
+        SignalCmd::RequestScene { name } => next_scene.set(name),
+        SignalCmd::RequestQuit => next_game_state.set(GameStates::Quitting),
         SignalCmd::ClearScalar { key } => {
             world_signals.remove_scalar(&key);
         }
@@ -1159,11 +1159,11 @@ mod tests {
         assert!(ws.get_entity("gone_e").is_none());
     }
 
-    /// `engine.change_scene` requests the scene through `NextScene` and never
+    /// `engine.request_scene` requests the scene through `NextScene` and never
     /// writes the `scene` string: observer drains run mid-tick, and
     /// the scene switch (not this processor) applies the request.
     #[test]
-    fn signal_cmd_change_scene_requests_next_scene() {
+    fn signal_cmd_request_scene_requests_next_scene() {
         use aberred_core::resources::next_scene::NextScene;
         use aberred_core::resources::signal_keys as sk;
         let mut ws = WorldSignals::default();
@@ -1176,8 +1176,8 @@ mod tests {
                 next_scene: &mut next_scene,
                 next_game_state: &mut NextGameState::default(),
             },
-            SignalCmd::ChangeScene {
-                scene: "level2".into(),
+            SignalCmd::RequestScene {
+                name: "level2".into(),
             },
         );
 
@@ -1185,9 +1185,9 @@ mod tests {
         assert_eq!(next_scene.get(), Some("level2"));
     }
 
-    /// `engine.quit` requests `Quitting` through `NextGameState`.
+    /// `engine.request_quit` requests `Quitting` through `NextGameState`.
     #[test]
-    fn signal_cmd_quit_requests_quitting() {
+    fn signal_cmd_request_quit_requests_quitting() {
         use aberred_core::resources::next_scene::NextScene;
         let mut next_game_state = NextGameState::default();
 
@@ -1197,7 +1197,7 @@ mod tests {
                 next_scene: &mut NextScene::default(),
                 next_game_state: &mut next_game_state,
             },
-            SignalCmd::Quit,
+            SignalCmd::RequestQuit,
         );
 
         assert!(next_game_state.quit_requested());
