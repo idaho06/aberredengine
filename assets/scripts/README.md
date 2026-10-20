@@ -262,8 +262,9 @@ Shared assets (fonts, cursor, shaders) are loaded without prefix in `load_common
 
 #### Performance Warning
 
-`on_update_<scene>` runs every frame. Avoid spawning entities here — prefer
-`M.spawn()`, phase callbacks, or collision callbacks instead.
+`on_update_<scene>` runs once per sim tick, late (`SimSet::LateUpdate`), so it
+sees this tick's movement, collision and camera follow. Avoid spawning entities
+here — prefer `M.spawn()`, phase callbacks, or collision callbacks instead.
 
 **Engine signals** (the scene switch writes them; writing them switches nothing):
 

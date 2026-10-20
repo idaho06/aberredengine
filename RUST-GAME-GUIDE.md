@@ -159,13 +159,13 @@ This section covers where your code runs, how often it runs, and the states a ga
 
 The engine runs **three separate ECS worlds on three threads**: render (the main thread — owns the raylib window and GPU resources), logic/sim (a spawned thread — this is where **all your game code runs**), and audio (a spawned thread, talked to via message queues you already use for sound/music).
 
-- **All your game logic runs on the LOGIC thread**: the `.on_setup()` hook, scene observers and systems (`.on_scene_enter()`/`.on_scene_exit()`/`.add_scene_system()`), systems added via `.add_system()`/`.configure_schedule()`, and observers (`.add_observer()`, `.observe()`, e.g. on `TimerFired` or `Collided`). `.on_setup()` runs once, observers run when their event fires, and systems run on the **sim tick**.
+- **All your game logic runs on the LOGIC thread**: the `.on_setup()` hook, scene observers and systems (`.on_scene_enter()`/`.on_scene_exit()`/`.add_scene_system()`/`.add_late_scene_system()`), systems added via `.add_system()`/`.add_late_system()`/`.configure_schedule()`, and observers (`.add_observer()`, `.observe()`, e.g. on `TimerFired` or `Collided`). `.on_setup()` runs once, observers run when their event fires, and systems run on the **sim tick**.
 - **Scene GUI and world-draw callbacks (`.add_scene_gui()`/`.add_scene_world_draw()`) are the one exception** — they run on the RENDER thread, inside the render pass itself. They read snapshots, not live game state — see [Section 9](#9-render-side-callbacks).
 - **A direct consequence**: logic-thread code can **never** take `RaylibAccess`, `NonSend<FontStore>`, `NonSend<ShaderStore>`, or `Res<TextureStore>` as a system parameter — those resources only exist in the render world. A logic-side system that requests one panics the first time it runs: Bevy checks a system's resources when the system runs, not when the schedule is built. There is no escape hatch to register a custom system on the render thread. This is why asset loading ([Section 6](#6-loading-assets)) goes through a message queue instead of calling `rl.load_texture(...)` directly inside `setup()`.
 
 ### The sim tick and `dt`
 
-Sim ticks happen at a configurable rate (`[simulation] hz` in `config.ini`, default 240), **decoupled from your render frame rate**: a sim tick is not a rendered frame. Each sim tick runs your registered systems once: `.add_system()` systems while `Playing`, and a `.add_scene_system(scene, system)` system while `scene` is active (including `Setup`, for a loading scene), and `.configure_schedule()` systems under the run conditions you give them. A system takes whatever system parameters it needs:
+Sim ticks happen at a configurable rate (`[simulation] hz` in `config.ini`, default 240), **decoupled from your render frame rate**: a sim tick is not a rendered frame. Each sim tick runs your registered systems once: `.add_system()` systems while `Playing`, and a `.add_scene_system(scene, system)` system while `scene` is active (including `Setup`, for a loading scene), and `.configure_schedule()` systems under the run conditions you give them. `.add_system()` and `.add_scene_system()` run early in the tick, before movement and collision; their late twins `.add_late_system()` and `.add_late_scene_system()` run after them (see the [builder method reference](#builder-method-reference)). A system takes whatever system parameters it needs:
 
 ```rust
 fn update(time: Res<WorldTime>, input: Res<InputState>) {
@@ -213,6 +213,8 @@ The engine owns the main loop. You configure it through `EngineBuilder`: registe
 | `.configure_schedule(closure)` | Add systems to the same schedule `.add_system()` targets, with full ordering control — no auto-constraints applied. Use this for custom ordering relative to the engine's own systems (via `SimSet` or `.after()`/`.before()`). See [Custom systems and observers](#custom-systems-and-observers). |
 | `.add_system_if(system, condition)` | `.add_system()` plus a run condition, e.g. `in_scene("level01")`. The condition is a separate argument because a `.run_if(..)`-configured system can't be passed to the builder. |
 | `.add_scene_system(scene, system)` | A per-sim-tick system that runs whenever `scene` is active (like `.add_system_if(system, in_scene(scene))`, and also during `Setup` if `scene` is active then). |
+| `.add_late_system(system)` / `.add_late_system_if(system, condition)` | Like `.add_system()` / `.add_system_if()`, but late in the tick ([`SimSet::LateUpdate`](#configure_scheduleclosure--full-ordering-control)): the system sees this tick's movement, collision and camera follow. |
+| `.add_late_scene_system(scene, system)` | Like `.add_scene_system()`, but late in the tick. Both start the tick after `scene` is entered. |
 | `.add_observer(observer_fn)` | Register a persistent observer for a custom or engine event. See [Custom systems and observers](#custom-systems-and-observers). |
 | `.on_scene_enter(scene, observer_fn)` / `.on_scene_exit(scene, observer_fn)` | Observe `SceneEntered`/`SceneExited` for one scene only. See [Scene-scoped systems and observers](#scene-scoped-systems-and-observers). |
 | `.with_lua(path)` | **Lua builds only** (`lua` feature). Run a Lua game from the `main.lua` at `path`; a pure-Rust game never calls it. |
@@ -337,7 +339,7 @@ fn register(builder: EngineBuilder) -> EngineBuilder {
 
 Scene systems run in `SimSet::Update`, before movement and collision, so they see the state the previous tick left.
 
-For a scene system that must see the same tick's movement, collision and GUI results, add it with [`.configure_schedule()`](#configure_scheduleclosure--full-ordering-control) in `SimSet::PostCollision`, gated by `in_scene` and, unless it should also run during `Setup` for a loading scene, `state_is_playing`. `PostCollision` runs before the scene switch is applied:
+For a scene system that must see the same tick's movement, collision and GUI results, add it with `.add_late_scene_system()`, which runs in `SimSet::LateUpdate`:
 
 ```rust
 use aberredengine::prelude::*;
@@ -350,15 +352,11 @@ fn level_late(mut signals: ResMut<WorldSignals>, players: Query<&MapPosition, Wi
 }
 
 fn register_late(builder: EngineBuilder) -> EngineBuilder {
-    builder.configure_schedule(|schedule| {
-        schedule.add_systems(
-            level_late
-                .in_set(SimSet::PostCollision)
-                .run_if(state_is_playing.and_then(in_scene("level01"))),
-        );
-    })
+    builder.add_late_scene_system("level01", level_late)
 }
 ```
+
+For finer placement, use [`.configure_schedule()`](#configure_scheduleclosure--full-ordering-control).
 
 ### Observers that live for one scene
 
@@ -386,7 +384,7 @@ Every scene switch is a request through the `NextScene` resource (in the prelude
 - **From a menu:** a `MenuAction::SetScene("level01")` item sets `NextScene` when it is confirmed.
 - **From a GUI callback:** `ctx.intents.request_scene(name)`; it reaches `NextScene` at the start of the next sim tick.
 
-The engine's `scene_switch_poll` system (registered automatically for every game) checks `NextScene` in `SimSet::Lifecycle`, late in the tick after your systems, and runs `scene_switch_system`, a one-shot system registered in `SystemsStore` under the key `"switch_scene"`; a request made after that point is picked up on the next tick. The last request before the poll wins. A quit requested in the same tick wins over a scene request: the game quits without switching.
+The engine's `scene_switch_poll` system (registered automatically for every game) checks `NextScene` in `SimSet::Lifecycle`, late in the tick after your `.add_system()`/`.add_scene_system()` systems and before your late ones, and runs `scene_switch_system`, a one-shot system registered in `SystemsStore` under the key `"switch_scene"`; a request made after that point (from a late system, for example) is picked up on the next tick. The last request before the poll wins. A quit requested in the same tick wins over a scene request: the game quits without switching.
 
 ```rust
 fn update(mut next_scene: ResMut<NextScene>) {
@@ -583,7 +581,7 @@ EngineBuilder::new()
 
 Engine system functions are `pub` and importable from `aberredengine::core::systems::*`. Use them directly as `.after()` / `.before()` arguments. Only systems on this logic-thread schedule work there: render-thread systems such as `render_system` can't be ordered against. No automatic `run_if` or `after` constraints are applied — you control everything.
 
-The sim schedule runs its `SimSet` groups in this order: `ApplyIntents`, `Phases`, `Spawn`, `AudioPump`, `Update`, `Controllers`, `Movement`, `Transforms`, `Collision`, `Gui`, `PostCollision`, `Lifecycle`, `Bookkeeping`. Place a system relative to a whole group with `.in_set(SimSet::X)`, `.before(SimSet::X)` or `.after(SimSet::X)`.
+The sim schedule runs its `SimSet` groups in this order: `ApplyIntents`, `Phases`, `Spawn`, `AudioPump`, `Update`, `Controllers`, `Movement`, `Transforms`, `Collision`, `Gui`, `PostCollision`, `Lifecycle`, `LateUpdate`, `Bookkeeping`. Place a system relative to a whole group with `.in_set(SimSet::X)`, `.before(SimSet::X)` or `.after(SimSet::X)`.
 
 #### `.add_observer(observer_fn)` — persistent event observers
 
@@ -2387,7 +2385,7 @@ All resources are accessed as Bevy ECS system parameters. Use `Res<T>` / `ResMut
 
 ### Render-thread-only resources — inaccessible from your game code
 
-These exist only in the render world. `RaylibAccess`/`NonSend<FontStore>`/`NonSend<ShaderStore>`/`Res<TextureStore>` as a parameter on any `setup` hook, observer or `.add_system()`/`.configure_schedule()` system panics the first time that system runs — there is no way around this from a custom Rust system. Listed here for completeness (e.g. if you're reading engine source), not because you can request them:
+These exist only in the render world. `RaylibAccess`/`NonSend<FontStore>`/`NonSend<ShaderStore>`/`Res<TextureStore>` as a parameter on any `setup` hook, observer or `.add_system()`/`.add_late_system()`/`.configure_schedule()` system (scene variants included) panics the first time that system runs — there is no way around this from a custom Rust system. Listed here for completeness (e.g. if you're reading engine source), not because you can request them:
 
 | Resource | Access (render-side only) | Purpose |
 |----------|---------------------------|---------|
@@ -2756,7 +2754,7 @@ aberredengine = { path = "../aberredengine/crates/aberredengine", default-featur
 
 Repeat the exact source of your `[dependencies]` entry (the same `path`, or the same `git` plus `branch`/`tag`/`rev`): Cargo rejects a crate whose dependency and dev-dependency point to different sources.
 
-`TestWorld::builder()` takes the same registration calls as `EngineBuilder` (`on_setup`, `add_system`, `add_system_if`, `add_scene_system`, `on_scene_enter`/`on_scene_exit`, `configure_schedule`, `add_observer`, `add_scene`/`initial_scene`, `deterministic`, plus `config(GameConfig)`). Like a real game, it moves from `Setup` to `Playing` on its own. `tick(n, dt)` runs `n` sim ticks with a fixed `dt`, and `tw.world` is a plain Bevy `World` to spawn into and inspect:
+`TestWorld::builder()` takes the same registration calls as `EngineBuilder` (`on_setup`, `add_system`, `add_system_if`, `add_scene_system`, `add_late_system`, `add_late_system_if`, `add_late_scene_system`, `on_scene_enter`/`on_scene_exit`, `configure_schedule`, `add_observer`, `add_scene`/`initial_scene`, `deterministic`, plus `config(GameConfig)`). Like a real game, it moves from `Setup` to `Playing` on its own. `tick(n, dt)` runs `n` sim ticks with a fixed `dt`, and `tw.world` is a plain Bevy `World` to spawn into and inspect:
 
 ```rust
 #[cfg(test)]

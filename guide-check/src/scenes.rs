@@ -169,13 +169,7 @@ mod late_scene_system {
     }
 
     fn register_late(builder: EngineBuilder) -> EngineBuilder {
-        builder.configure_schedule(|schedule| {
-            schedule.add_systems(
-                level_late
-                    .in_set(SimSet::PostCollision)
-                    .run_if(state_is_playing.and_then(in_scene("level01"))),
-            );
-        })
+        builder.add_late_scene_system("level01", level_late)
     }
 }
 
