@@ -2778,3 +2778,54 @@ fn rust_only_game_spawns_map_entities_without_lua_components() {
         .unwrap();
     assert!(tw.world.get::<LuaSetup>(thing).is_none());
 }
+
+/// Marks the entity the early/late position probes record.
+#[derive(Component)]
+struct PositionProbe;
+
+/// `x` of the probed entity, as seen by the early (`add_system`) and late
+/// (`add_late_system`) probes on their most recent run.
+#[derive(Resource, Default)]
+struct ProbedX {
+    early: Option<f32>,
+    late: Option<f32>,
+}
+
+fn record_early_x(q: Query<&MapPosition, With<PositionProbe>>, mut seen: ResMut<ProbedX>) {
+    seen.early = q.single().ok().map(|p| p.pos.x);
+}
+
+fn record_late_x(q: Query<&MapPosition, With<PositionProbe>>, mut seen: ResMut<ProbedX>) {
+    seen.late = q.single().ok().map(|p| p.pos.x);
+}
+
+/// An `add_late_system` system sees the position this tick's movement wrote;
+/// an `add_system` system runs before movement and sees last tick's.
+#[test]
+fn late_system_sees_this_ticks_movement() {
+    let mut tw = TestWorld::builder()
+        .add_system(record_early_x)
+        .add_late_system(record_late_x)
+        .build()
+        .expect("build should succeed");
+    tw.world.init_resource::<ProbedX>();
+    tw.tick_to_play(DT, 8);
+
+    let mut body = RigidBody::new();
+    body.set_velocity(Vec2::new(100.0, 0.0));
+    let mover = tw
+        .world
+        .spawn((PositionProbe, MapPosition::new(0.0, 0.0), body))
+        .id();
+
+    for _ in 0..3 {
+        tw.tick(1, DT);
+        let after_tick = tw.world.get::<MapPosition>(mover).unwrap().pos.x;
+        let seen = tw.world.resource::<ProbedX>();
+        assert_eq!(seen.late, Some(after_tick), "late: this tick's movement");
+        assert!(
+            seen.early.unwrap() < after_tick,
+            "early: the position before this tick's movement"
+        );
+    }
+}

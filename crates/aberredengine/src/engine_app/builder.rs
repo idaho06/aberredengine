@@ -5,7 +5,8 @@ use bevy_ecs::system::IntoObserverSystem;
 
 use super::registrar::{
     HookRegistrar, ObserverRegistrar, UpdateRegistrar, hook_registrar, observer_registrar,
-    playing_system, playing_system_if, scene_observer_registrar, scene_system,
+    playing_late_system, playing_late_system_if, playing_system, playing_system_if,
+    scene_observer_registrar, scene_system,
 };
 #[cfg(doc)] // doc links
 use super::schedule::SimSet;
@@ -173,6 +174,37 @@ impl EngineBuilder {
     ) -> Self {
         self.extra_systems
             .push(playing_system_if(system, condition));
+        self
+    }
+
+    /// Add a per-tick system that runs late in the sim tick.
+    ///
+    /// Like [`add_system`](Self::add_system) (once per sim tick, while
+    /// `Playing`), but in [`SimSet::LateUpdate`]: after this tick's movement,
+    /// collision and camera follow, so the system sees this tick's results
+    /// rather than the previous tick's. In a Lua game it runs after Lua's
+    /// `on_update_<scene>`. Can be called multiple times.
+    pub fn add_late_system<M>(
+        mut self,
+        system: impl IntoSystem<(), (), M> + Send + 'static,
+    ) -> Self {
+        self.extra_systems.push(playing_late_system(system));
+        self
+    }
+
+    /// Add a late system that runs only while `condition` holds.
+    ///
+    /// Like [`add_late_system`](Self::add_late_system) (once per sim tick, in
+    /// [`SimSet::LateUpdate`], while `Playing`), plus `.run_if(condition)`,
+    /// passed separately for the same reason as in
+    /// [`add_system_if`](Self::add_system_if).
+    pub fn add_late_system_if<M, MC>(
+        mut self,
+        system: impl IntoSystem<(), (), M> + Send + 'static,
+        condition: impl SystemCondition<MC> + Send + 'static,
+    ) -> Self {
+        self.extra_systems
+            .push(playing_late_system_if(system, condition));
         self
     }
 

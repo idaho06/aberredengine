@@ -2,7 +2,7 @@ use bevy_ecs::prelude::*;
 use bevy_ecs::system::IntoObserverSystem;
 
 use super::logic_world::register_persistent_system;
-use super::schedule::SimSet;
+use super::schedule::{LateUserSystems, SimSet};
 use aberred_core::components::persistent::Persistent;
 use aberred_core::resources::scenemanager::SceneManager;
 use aberred_core::resources::systemsstore::SystemsStore;
@@ -33,14 +33,16 @@ pub(crate) fn hook_registrar<M>(
     Box::new(move |world, store| register_persistent_system(world, store, name, system))
 }
 
-/// `system` in [`SimSet::Update`], run while `gate` holds. The named
-/// registrars below choose the gate, so both builders share one rule.
+/// `system` in `set` ([`SimSet::Update`] or [`LateUserSystems`]), run while
+/// `gate` holds. The named registrars below choose the set and the gate, so
+/// both builders share one rule.
 fn system_registrar<M, MG>(
+    set: impl SystemSet,
     system: impl IntoSystem<(), (), M> + Send + 'static,
     gate: impl SystemCondition<MG> + Send + 'static,
 ) -> UpdateRegistrar {
     Box::new(move |schedule| {
-        schedule.add_systems(system.run_if(gate).in_set(SimSet::Update));
+        schedule.add_systems(system.run_if(gate).in_set(set));
     })
 }
 
@@ -48,7 +50,7 @@ fn system_registrar<M, MG>(
 pub(crate) fn playing_system<M>(
     system: impl IntoSystem<(), (), M> + Send + 'static,
 ) -> UpdateRegistrar {
-    system_registrar(system, state_is_playing)
+    system_registrar(SimSet::Update, system, state_is_playing)
 }
 
 /// `add_system_if`: runs while `Playing` and `condition` holds.
@@ -56,7 +58,26 @@ pub(crate) fn playing_system_if<M, MC>(
     system: impl IntoSystem<(), (), M> + Send + 'static,
     condition: impl SystemCondition<MC> + Send + 'static,
 ) -> UpdateRegistrar {
-    system_registrar(system, state_is_playing.and_then(condition))
+    system_registrar(SimSet::Update, system, state_is_playing.and_then(condition))
+}
+
+/// `add_late_system`: runs while `Playing`.
+pub(crate) fn playing_late_system<M>(
+    system: impl IntoSystem<(), (), M> + Send + 'static,
+) -> UpdateRegistrar {
+    system_registrar(LateUserSystems, system, state_is_playing)
+}
+
+/// `add_late_system_if`: runs while `Playing` and `condition` holds.
+pub(crate) fn playing_late_system_if<M, MC>(
+    system: impl IntoSystem<(), (), M> + Send + 'static,
+    condition: impl SystemCondition<MC> + Send + 'static,
+) -> UpdateRegistrar {
+    system_registrar(
+        LateUserSystems,
+        system,
+        state_is_playing.and_then(condition),
+    )
 }
 
 /// `add_scene_system`: runs while `scene` is active, in `Setup` (a loading
@@ -65,7 +86,11 @@ pub(crate) fn scene_system<M>(
     scene: String,
     system: impl IntoSystem<(), (), M> + Send + 'static,
 ) -> UpdateRegistrar {
-    system_registrar(system, state_runs_scenes.and_then(in_scene(&scene)))
+    system_registrar(
+        SimSet::Update,
+        system,
+        state_runs_scenes.and_then(in_scene(&scene)),
+    )
 }
 
 /// Build the [`ObserverRegistrar`] behind `add_observer`: a global observer,

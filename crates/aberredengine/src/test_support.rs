@@ -44,8 +44,8 @@ use std::path::PathBuf;
 use crate::engine_app::{
     EngineBuilder, HookRegistrar, LogicInit, ObserverRegistrar, UpdateRegistrar, apply_tick_input,
     drain_logic_messages, ensure_main_scene, hold_back_deterministic_setup_input, hook_registrar,
-    in_envelope, observer_registrar, playing_system, playing_system_if, run_sim_tick,
-    scene_observer_registrar, scene_system,
+    in_envelope, observer_registrar, playing_late_system, playing_late_system_if, playing_system,
+    playing_system_if, run_sim_tick, scene_observer_registrar, scene_system,
 };
 use aberred_core::events::scene::{SceneEntered, SceneExited};
 use aberred_core::protocol::audio::{AudioCmd, AudioMessage};
@@ -158,6 +158,27 @@ impl TestWorldBuilder {
     ) -> Self {
         self.extra_systems
             .push(playing_system_if(system, condition));
+        self
+    }
+
+    /// Add a late system, mirroring `EngineBuilder::add_late_system`:
+    /// `.run_if(state_is_playing)`, in `SimSet::LateUpdate`.
+    pub fn add_late_system<M>(
+        mut self,
+        system: impl IntoSystem<(), (), M> + Send + 'static,
+    ) -> Self {
+        self.extra_systems.push(playing_late_system(system));
+        self
+    }
+
+    /// Add a conditional late system, mirroring `EngineBuilder::add_late_system_if`.
+    pub fn add_late_system_if<M, MC>(
+        mut self,
+        system: impl IntoSystem<(), (), M> + Send + 'static,
+        condition: impl SystemCondition<MC> + Send + 'static,
+    ) -> Self {
+        self.extra_systems
+            .push(playing_late_system_if(system, condition));
         self
     }
 

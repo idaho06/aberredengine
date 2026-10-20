@@ -144,7 +144,8 @@ pub enum SimSet {
     /// scene switch poll.
     Lifecycle,
     /// Per-tick late update: Lua's `on_update_<scene>` (`lua_plugin::update`),
-    /// after this tick's movement, collision and camera follow.
+    /// then `add_late_system` systems, after this tick's movement, collision
+    /// and camera follow.
     LateUpdate,
     /// Tail-of-tick housekeeping: signal bindings, text sizing, input
     /// binding change notification, Lua map/asset command drains, then the
@@ -154,6 +155,11 @@ pub enum SimSet {
     /// late.
     Bookkeeping,
 }
+
+/// The user's `add_late_system` systems, inside [`SimSet::LateUpdate`] and
+/// after Lua's `lua_plugin::update`, so they see what it wrote this tick.
+#[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
+pub(crate) struct LateUserSystems;
 
 impl EngineBuilder {
     /// Registers the systems a game without Lua needs in place of the Lua
@@ -285,6 +291,7 @@ impl EngineBuilder {
             )
                 .chain(),
         );
+        sim.configure_sets(LateUserSystems.in_set(SimSet::LateUpdate));
     }
 
     /// Registers the engine's own `sim`-schedule systems (everything except
@@ -520,8 +527,8 @@ impl EngineBuilder {
 
         // Prunes WorldSignals entity registrations of despawned entities, for
         // Rust and Lua despawns alike. Ordered after every system of the tick's
-        // tail that can despawn (Lua's update, by set order; the Lua command
-        // drains, by explicit edges), so the edges' sync points apply this tick's despawns first and neither
+        // tail that can despawn (Lua's update and `add_late_system` systems, by
+        // set order; the Lua command drains, by explicit edges), so the edges' sync points apply this tick's despawns first and neither
         // the snapshot nor the next tick sees a registration of a dead entity.
         #[allow(unused_mut)] // only reassigned under #[cfg(feature = "lua")] below
         let mut prune_config = prune_dead_entity_registrations
@@ -582,6 +589,7 @@ impl EngineBuilder {
         sim.add_systems(
             aberred_lua::lua_plugin::update
                 .run_if(state_is_playing)
+                .before(LateUserSystems)
                 .in_set(SimSet::LateUpdate),
         );
     }
