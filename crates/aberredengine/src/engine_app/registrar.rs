@@ -33,14 +33,14 @@ pub(crate) fn hook_registrar<M>(
     Box::new(move |world, store| register_persistent_system(world, store, name, system))
 }
 
-/// `system` in [`SimSet::ScriptUpdate`], run while `gate` holds. The named
+/// `system` in [`SimSet::Update`], run while `gate` holds. The named
 /// registrars below choose the gate, so both builders share one rule.
 fn system_registrar<M, MG>(
     system: impl IntoSystem<(), (), M> + Send + 'static,
     gate: impl SystemCondition<MG> + Send + 'static,
 ) -> UpdateRegistrar {
     Box::new(move |schedule| {
-        schedule.add_systems(system.run_if(gate).in_set(SimSet::ScriptUpdate));
+        schedule.add_systems(system.run_if(gate).in_set(SimSet::Update));
     })
 }
 

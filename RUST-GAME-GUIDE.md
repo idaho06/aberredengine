@@ -209,7 +209,7 @@ The engine owns the main loop. You configure it through `EngineBuilder`: registe
 | `.initial_scene(name)` | Which scene starts first (required with `.add_scene()`) |
 | `.loading_scene(name)` | A registered scene shown while Setup waits for assets. See [Loading screen](#loading-screen). |
 | `.track_group(name)` | Count group `name`'s entities for the whole game (published as `"group_count:<name>"`, kept across scene switches). Can be called multiple times. See [Group tracking across scenes](#group-tracking-across-scenes). |
-| `.add_system(system)` | Add a per-sim-tick system, run only while `Playing` (`run_if(state_is_playing)`, in [`SimSet::ScriptUpdate`](#configure_scheduleclosure--full-ordering-control)). Can be called multiple times. See [Custom systems and observers](#custom-systems-and-observers). |
+| `.add_system(system)` | Add a per-sim-tick system, run only while `Playing` (`run_if(state_is_playing)`, in [`SimSet::Update`](#configure_scheduleclosure--full-ordering-control)). Can be called multiple times. See [Custom systems and observers](#custom-systems-and-observers). |
 | `.configure_schedule(closure)` | Add systems to the same schedule `.add_system()` targets, with full ordering control — no auto-constraints applied. Use this for custom ordering relative to the engine's own systems (via `SimSet` or `.after()`/`.before()`). See [Custom systems and observers](#custom-systems-and-observers). |
 | `.add_system_if(system, condition)` | `.add_system()` plus a run condition, e.g. `in_scene("level01")`. The condition is a separate argument because a `.run_if(..)`-configured system can't be passed to the builder. |
 | `.add_scene_system(scene, system)` | A per-sim-tick system that runs whenever `scene` is active (like `.add_system_if(system, in_scene(scene))`, and also during `Setup` if `scene` is active then). |
@@ -335,7 +335,7 @@ fn register(builder: EngineBuilder) -> EngineBuilder {
 }
 ```
 
-Scene systems run in `SimSet::ScriptUpdate`, before movement and collision, so they see the state the previous tick left.
+Scene systems run in `SimSet::Update`, before movement and collision, so they see the state the previous tick left.
 
 For a scene system that must see the same tick's movement, collision and GUI results, add it with [`.configure_schedule()`](#configure_scheduleclosure--full-ordering-control) in `SimSet::PostCollision`, gated by `in_scene` and, unless it should also run during `Setup` for a loading scene, `state_is_playing`. `PostCollision` runs before the scene switch is applied:
 
@@ -583,7 +583,7 @@ EngineBuilder::new()
 
 Engine system functions are `pub` and importable from `aberredengine::core::systems::*`. Use them directly as `.after()` / `.before()` arguments. Only systems on this logic-thread schedule work there: render-thread systems such as `render_system` can't be ordered against. No automatic `run_if` or `after` constraints are applied — you control everything.
 
-The sim schedule runs its `SimSet` groups in this order: `ApplyIntents`, `Phases`, `Spawn`, `AudioPump`, `ScriptUpdate`, `Controllers`, `Movement`, `Transforms`, `Collision`, `Gui`, `PostCollision`, `Drain`, `Bookkeeping`. Place a system relative to a whole group with `.in_set(SimSet::X)`, `.before(SimSet::X)` or `.after(SimSet::X)`.
+The sim schedule runs its `SimSet` groups in this order: `ApplyIntents`, `Phases`, `Spawn`, `AudioPump`, `Update`, `Controllers`, `Movement`, `Transforms`, `Collision`, `Gui`, `PostCollision`, `Drain`, `Bookkeeping`. Place a system relative to a whole group with `.in_set(SimSet::X)`, `.before(SimSet::X)` or `.after(SimSet::X)`.
 
 #### `.add_observer(observer_fn)` — persistent event observers
 
@@ -1021,12 +1021,12 @@ fn on_audio_replies(mut replies: MessageReader<AudioMessage>, mut audio: Message
 
 EngineBuilder::new()
     .configure_schedule(|schedule| {
-        schedule.add_systems(on_audio_replies.in_set(SimSet::ScriptUpdate));
+        schedule.add_systems(on_audio_replies.in_set(SimSet::Update));
     })
     // …
 ```
 
-- A reader in `SimSet::ScriptUpdate` or later sees a reply only during the sim tick it arrives in; after that it's dropped. Register the reader with `.configure_schedule()` as above, so it runs in every game state. An `.add_system()` reader runs only while `Playing` and misses the replies to loads queued during `Setup`.
+- A reader in `SimSet::Update` or later sees a reply only during the sim tick it arrives in; after that it's dropped. Register the reader with `.configure_schedule()` as above, so it runs in every game state. An `.add_system()` reader runs only while `Playing` and misses the replies to loads queued during `Setup`.
 - Replies arrive whenever the audio thread gets to them, not on a fixed tick, and replays don't record them. In a `.deterministic()` game, use them for logging and presentation only; don't let gameplay state depend on them.
 
 ### Shaders

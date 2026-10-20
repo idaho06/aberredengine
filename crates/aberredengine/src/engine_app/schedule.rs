@@ -87,7 +87,7 @@ use aberred_lua::systems::lua_setup_entity::lua_setup_entity_system;
 ///         SimSet::Phases => "phases",
 ///         SimSet::Spawn => "spawn",
 ///         SimSet::AudioPump => "audio pump",
-///         SimSet::ScriptUpdate => "script update",
+///         SimSet::Update => "update",
 ///         SimSet::Controllers => "controllers",
 ///         SimSet::Movement => "movement",
 ///         SimSet::Transforms => "transforms",
@@ -124,7 +124,7 @@ pub enum SimSet {
     /// `on_update_<scene>` is dispatched separately, from
     /// `lua_plugin::update` in `SimSet::Bookkeeping`, so it runs after
     /// camera-follow/collision rather than before.
-    ScriptUpdate,
+    Update,
     /// Input-driven force/velocity controllers.
     Controllers,
     /// Particle emission, movement integration, TTL, and position/rotation/
@@ -268,7 +268,7 @@ impl EngineBuilder {
                 SimSet::Phases,
                 SimSet::Spawn,
                 SimSet::AudioPump,
-                SimSet::ScriptUpdate,
+                SimSet::Update,
                 SimSet::Controllers,
                 SimSet::Movement,
                 SimSet::Transforms,

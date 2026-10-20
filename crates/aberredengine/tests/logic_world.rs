@@ -382,10 +382,10 @@ fn take_phase_log(tw: &mut TestWorld) -> Vec<String> {
     std::mem::take(&mut tw.world.resource_mut::<PhaseLog>().0)
 }
 
-/// A transition requested by a system in `SimSet::ScriptUpdate` at tick N is
+/// A transition requested by a system in `SimSet::Update` at tick N is
 /// applied, and its events fire, at tick N+1, never at N.
 #[test]
-fn phase_transition_requested_in_script_update_applies_next_tick() {
+fn phase_transition_requested_in_update_applies_next_tick() {
     let mut tw = TestWorld::builder()
         .add_system(request_run)
         .add_observer(log_phase_entered)
@@ -720,7 +720,7 @@ fn add_observer_fires_on_triggered_event() {
 
 const INTENT_PROBE_FLAG: &str = "test:intent_probe";
 
-/// What the `ScriptUpdate` probe saw on its most recent run.
+/// What the `SimSet::Update` probe saw on its most recent run.
 #[derive(Resource, Default)]
 struct IntentProbe(Option<bool>);
 
@@ -730,10 +730,10 @@ fn record_intent_flag(signals: Res<WorldSignals>, mut probe: ResMut<IntentProbe>
 
 /// (h) `SignalIntents` timing: intents delivered with a tick's input are
 /// drained by `apply_signal_intents` in `SimSet::ApplyIntents`, the first set
-/// of the sim pipeline, so scene logic in `SimSet::ScriptUpdate` sees them on
+/// of the sim pipeline, so scene logic in `SimSet::Update` sees them on
 /// that same tick -- not one tick later.
 #[test]
-fn signal_intent_is_visible_to_script_update_on_its_delivery_tick() {
+fn signal_intent_is_visible_to_update_on_its_delivery_tick() {
     let mut tw = TestWorld::builder()
         .add_system(record_intent_flag)
         .build()
@@ -758,8 +758,8 @@ fn signal_intent_is_visible_to_script_update_on_its_delivery_tick() {
     assert_eq!(
         tw.world.resource::<IntentProbe>().0,
         Some(true),
-        "ScriptUpdate must see an intent on the tick it is delivered \
-         (ApplyIntents runs before ScriptUpdate)"
+        "SimSet::Update must see an intent on the tick it is delivered \
+         (ApplyIntents runs before SimSet::Update)"
     );
 }
 

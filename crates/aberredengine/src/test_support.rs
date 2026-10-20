@@ -144,7 +144,7 @@ impl TestWorldBuilder {
 
     /// Add a system to the sim schedule, mirroring
     /// `EngineBuilder::add_system`: `.run_if(state_is_playing)`,
-    /// `.in_set(SimSet::ScriptUpdate)`. Can be called multiple times.
+    /// `.in_set(SimSet::Update)`. Can be called multiple times.
     pub fn add_system<M>(mut self, system: impl IntoSystem<(), (), M> + Send + 'static) -> Self {
         self.extra_systems.push(playing_system(system));
         self

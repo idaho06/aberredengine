@@ -126,7 +126,7 @@ impl EngineBuilder {
     /// Add a per-tick system to the sim schedule.
     ///
     /// Runs once per sim tick (`[simulation] hz` in `config.ini`), in
-    /// [`SimSet::ScriptUpdate`], with `.run_if(state_is_playing)`. Treat it as
+    /// [`SimSet::Update`], with `.run_if(state_is_playing)`. Treat it as
     /// idempotent/edge-triggered the same way Lua's `on_update_<scene>` must be:
     /// gate one-shot effects on an edge, not on "runs once per visible frame"
     /// -- the sim ticks faster than the render thread. Can be called multiple
@@ -155,7 +155,7 @@ impl EngineBuilder {
     /// Add a system that runs only while `condition` holds.
     ///
     /// Like [`add_system`](Self::add_system) (once per sim tick, in
-    /// [`SimSet::ScriptUpdate`], while `Playing`), plus `.run_if(condition)`.
+    /// [`SimSet::Update`], while `Playing`), plus `.run_if(condition)`.
     /// The condition is passed separately because a `.run_if(..)`-configured
     /// system can't be carried to the logic thread. It runs only while
     /// `Playing`; for a system tied to a scene, which also runs during `Setup`
@@ -178,9 +178,9 @@ impl EngineBuilder {
 
     /// Add a system that runs only while the scene `scene` is active.
     ///
-    /// Runs once per sim tick, in [`SimSet::ScriptUpdate`], whenever `scene`
+    /// Runs once per sim tick, in [`SimSet::Update`], whenever `scene`
     /// is active ([`in_scene`](aberred_core::systems::scene_dispatch::in_scene)):
-    /// during `Playing`, and during `Setup` for a loading scene. `ScriptUpdate`
+    /// during `Playing`, and during `Setup` for a loading scene. `SimSet::Update`
     /// runs before movement and collision, so the system sees the state the
     /// previous tick left. Can be called multiple times, also for the same scene.
     ///

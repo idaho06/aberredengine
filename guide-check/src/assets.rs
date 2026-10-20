@@ -230,7 +230,7 @@ mod audio_replies {
 
     EngineBuilder::new()
         .configure_schedule(|schedule| {
-            schedule.add_systems(on_audio_replies.in_set(SimSet::ScriptUpdate));
+            schedule.add_systems(on_audio_replies.in_set(SimSet::Update));
         })
         // …
     } // GLUE
