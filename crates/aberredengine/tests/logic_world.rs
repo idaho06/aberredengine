@@ -1818,8 +1818,8 @@ function on_switch_scene(scene) table.insert(LOG, "switch:" .. scene) end
     );
 }
 
-/// A GUI `request_scene` intent switches a Lua game's scene at Drain of its
-/// delivery tick.
+/// A GUI `request_scene` intent switches a Lua game's scene in its delivery
+/// tick's `Lifecycle`.
 #[cfg(feature = "lua")]
 #[test]
 fn gui_scene_request_switches_a_lua_game() {
@@ -2176,7 +2176,7 @@ end
     );
 }
 
-/// `engine.change_scene` from `on_update` switches at the next tick's Drain,
+/// `engine.change_scene` from `on_update` switches at the next tick's `Lifecycle`,
 /// where no `on_update` runs; the new scene updates from the tick after.
 /// The first scene updates from the first `Playing` tick.
 #[cfg(feature = "lua")]
@@ -2214,8 +2214,8 @@ function on_update_b(input, dt) table.insert(LOG, "update:b") end
     );
 }
 
-/// A timer callback's `engine.change_scene` switches at Drain of the same
-/// tick (timers fire before `scene_switch_poll`), with no `on_update` that tick.
+/// A timer callback's `engine.change_scene` switches in the same tick's
+/// `Lifecycle` (timers fire before `scene_switch_poll`), with no `on_update` that tick.
 #[cfg(feature = "lua")]
 #[test]
 fn lua_timer_change_scene_switches_in_the_same_tick() {
@@ -2249,11 +2249,11 @@ function on_timer(ctx) engine.change_scene("b") end
     assert_eq!(take_lua_log(&mut tw), ["update:b"]);
 }
 
-/// A menu confirm switches at Drain of the same tick, with no `on_update`
+/// A menu confirm switches in the same tick's `Lifecycle`, with no `on_update`
 /// that tick; the new scene's first `on_update` sees no `just_pressed`.
 #[cfg(feature = "lua")]
 #[test]
-fn lua_menu_confirm_switches_at_drain_without_an_update_that_tick() {
+fn lua_menu_confirm_switches_at_lifecycle_without_an_update_that_tick() {
     let mut tw = lua_script_world(
         "menu_confirm_timing",
         &format!(
@@ -2712,7 +2712,7 @@ fn lua_and_rust_rules_on_one_pair_fire_once_per_tick() {
     assert_eq!(fired, 1);
 }
 
-/// A Lua timer fires in `SimSet::Drain`, after `animation_controller` and
+/// A Lua timer fires in `SimSet::Lifecycle`, after `animation_controller` and
 /// before `animation`: its callback's `ctx.animation` shows the key the
 /// controller picked this tick, not yet advanced by this tick's `dt`.
 #[cfg(feature = "lua")]

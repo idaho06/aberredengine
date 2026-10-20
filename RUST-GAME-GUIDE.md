@@ -186,7 +186,7 @@ Setup ──→ Playing ──→ Quitting
 
 1. **Setup** — The engine calls the `setup` hook once, on the logic thread. Load assets here (textures, fonts, sounds, shaders, animations; see [Section 6](#6-loading-assets)). Omit `.on_setup()` if you have nothing to load. With `.loading_scene(name)`, that scene is entered right after the hook and stays active until Setup ends. Once the hook has run, the engine moves to `Playing` on its own, as soon as every load queued so far has been answered (see [Waiting for loads](#waiting-for-loads)); a failed load counts as answered. A hook that requests `Playing` itself waits the same way. A hook that requests another state through `ResMut<NextGameState>` (e.g. `GameStates::Quitting`) gets it at once.
 2. **Playing** — The engine enters the initial scene (triggering `SceneEntered`) and runs your systems every sim tick.
-3. **Scene switches** — A request through `NextScene::set(name)`, a `MenuAction::SetScene` menu item or a GUI callback's `intents.request_scene(name)` runs the exit→enter sequence late in the tick (`SimSet::Drain`); see [Triggering scene transitions](#triggering-scene-transitions).
+3. **Scene switches** — A request through `NextScene::set(name)`, a `MenuAction::SetScene` menu item or a GUI callback's `intents.request_scene(name)` runs the exit→enter sequence late in the tick (`SimSet::Lifecycle`); see [Triggering scene transitions](#triggering-scene-transitions).
 4. **Quitting** — When the game state becomes `GameStates::Quitting` (via `NextGameState::set(GameStates::Quitting)`, a `MenuAction::QuitGame` menu item or a GUI callback's `intents.request_quit()`) or the window is closed, the engine shuts down. Request it from any system or observer through `ResMut<NextGameState>`.
 
 ---
@@ -386,7 +386,7 @@ Every scene switch is a request through the `NextScene` resource (in the prelude
 - **From a menu:** a `MenuAction::SetScene("level01")` item sets `NextScene` when it is confirmed.
 - **From a GUI callback:** `ctx.intents.request_scene(name)`; it reaches `NextScene` at the start of the next sim tick.
 
-The engine's `scene_switch_poll` system (registered automatically for every game) checks `NextScene` in `SimSet::Drain`, late in the tick after your systems, and runs `scene_switch_system`, a one-shot system registered in `SystemsStore` under the key `"switch_scene"`; a request made after that point is picked up on the next tick. The last request before the poll wins. A quit requested in the same tick wins over a scene request: the game quits without switching.
+The engine's `scene_switch_poll` system (registered automatically for every game) checks `NextScene` in `SimSet::Lifecycle`, late in the tick after your systems, and runs `scene_switch_system`, a one-shot system registered in `SystemsStore` under the key `"switch_scene"`; a request made after that point is picked up on the next tick. The last request before the poll wins. A quit requested in the same tick wins over a scene request: the game quits without switching.
 
 ```rust
 fn update(mut next_scene: ResMut<NextScene>) {
@@ -583,7 +583,7 @@ EngineBuilder::new()
 
 Engine system functions are `pub` and importable from `aberredengine::core::systems::*`. Use them directly as `.after()` / `.before()` arguments. Only systems on this logic-thread schedule work there: render-thread systems such as `render_system` can't be ordered against. No automatic `run_if` or `after` constraints are applied — you control everything.
 
-The sim schedule runs its `SimSet` groups in this order: `ApplyIntents`, `Phases`, `Spawn`, `AudioPump`, `Update`, `Controllers`, `Movement`, `Transforms`, `Collision`, `Gui`, `PostCollision`, `Drain`, `Bookkeeping`. Place a system relative to a whole group with `.in_set(SimSet::X)`, `.before(SimSet::X)` or `.after(SimSet::X)`.
+The sim schedule runs its `SimSet` groups in this order: `ApplyIntents`, `Phases`, `Spawn`, `AudioPump`, `Update`, `Controllers`, `Movement`, `Transforms`, `Collision`, `Gui`, `PostCollision`, `Lifecycle`, `Bookkeeping`. Place a system relative to a whole group with `.in_set(SimSet::X)`, `.before(SimSet::X)` or `.after(SimSet::X)`.
 
 #### `.add_observer(observer_fn)` — persistent event observers
 
@@ -1827,7 +1827,7 @@ commands.spawn((menu, actions));
 
 | Variant | Effect |
 |---------|--------|
-| `SetScene(String)` | Requests the scene through `NextScene`; the switch runs late in the tick (`SimSet::Drain`) |
+| `SetScene(String)` | Requests the scene through `NextScene`; the switch runs late in the tick (`SimSet::Lifecycle`) |
 | `QuitGame` | Transitions to quitting state |
 | `Noop` | Does nothing |
 
@@ -2372,7 +2372,7 @@ All resources are accessed as Bevy ECS system parameters. Use `Res<T>` / `ResMut
 | `InputBindings` | `ResMut` | Runtime key/mouse binding map (`InputAction` → `Vec<InputBinding>`). Modify to rebind actions at runtime — takes effect the very next sim tick. |
 | `GameState` | `Res` | Current state: `None → Setup → Playing → Quitting` |
 | `NextGameState` | `ResMut` | Request state transitions, e.g. `.set(GameStates::Quitting)` |
-| `NextScene` | `ResMut` | Request a scene switch with `.set(name)`; `scene_switch_poll` takes it late in the tick (`SimSet::Drain`) |
+| `NextScene` | `ResMut` | Request a scene switch with `.set(name)`; `scene_switch_poll` takes it late in the tick (`SimSet::Lifecycle`) |
 | `PostProcessShader` | `ResMut` | Shader chain + uniforms (reserved: `uTime`, `uDeltaTime`, `uResolution`, `uFrame`, `uWindowResolution`, `uLetterbox`) |
 | `CameraFollowConfig` | `ResMut` | Camera-follow behavior (mode, easing, zoom speed, bounds, offsets); see [Following an entity](#following-an-entity) |
 | `DebugOverlayConfig` | `ResMut` | F11 debug overlay toggles for colliders, signals, bounds, and crosshairs |

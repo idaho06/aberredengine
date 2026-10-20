@@ -298,7 +298,7 @@ pub fn in_scene(name: &str) -> impl FnMut(Option<Res<SceneManager>>) -> bool + C
 
 /// Runs the scene switch system when a [`NextScene`] request is pending and
 /// no quit is ([`NextGameState::quit_requested`]).
-/// Registered in `SimSet::Drain`, after the tick's systems, so a request made
+/// Registered in `SimSet::Lifecycle`, after the tick's systems, so a request made
 /// during the tick switches at its end and the new scene's systems start the
 /// next tick.
 ///

@@ -2,7 +2,7 @@
 //!
 //! [`lua_setup_entity_system`] reacts to every entity that gains a
 //! [`LuaSetup`] component and calls the named Lua function once, passing the
-//! standard entity context table. It runs in `SimSet::Drain`, and `animation`
+//! standard entity context table. It runs in `SimSet::Lifecycle`, and `animation`
 //! is ordered after it, so the entity commands a setup callback queues (e.g.
 //! `entity_set_animation`) apply before the entity's first animation tick.
 //!

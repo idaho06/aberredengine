@@ -295,7 +295,7 @@ A Lua game has a `SceneManager` that registers each scene on its first request, 
 
 1. **`setup()`** — runs once at startup. Calls `on_setup()` if defined, drains `asset_commands` (translating each into an `AudioCmd` or a `RenderAssetCmd`), drains `animation_commands` into a fresh `AnimationStore` resource, then transitions `GameState` to `Playing`.
 2. **`enter_play()`** — runs once, immediately after `setup()`. Calls `on_enter_play()` if defined, drains `signal_commands`/`group_commands` (world signals aren't touched by `setup()` — Lua is expected to seed them here), updates the tracked-groups cache, then enters the first scene through core `switch_to` (`scene_dispatch.rs`): the scene `on_setup`/`on_enter_play` requested with `engine.change_scene`, else `sk::DEFAULT_SCENE`. The first entry despawns nothing, so what `on_setup`/`on_enter_play` queued applies in the first scene (drained by `lua_scene_entered_observer`, step 3).
-3. **Scene switch** — core `scene_switch_poll` (`SimSet::Drain`) runs `scene_switch_system` when a scene request is pending in `NextScene` (`engine.change_scene()`, a menu's `SetScene`, a GUI intent, a Rust system) and no quit is. Two observers in `systems/lua_scene.rs`, registered only when a Lua script is set, add the Lua side:
+3. **Scene switch** — core `scene_switch_poll` (`SimSet::Lifecycle`) runs `scene_switch_system` when a scene request is pending in `NextScene` (`engine.change_scene()`, a menu's `SetScene`, a GUI intent, a Rust system) and no quit is. Two observers in `systems/lua_scene.rs`, registered only when a Lua script is set, add the Lua side:
    - `lua_scene_exited_observer` (`On<SceneExited>`, before the old scene's entities are despawned) calls `clear_all_commands()`: `clear`-policy queues may reference entities about to be despawned.
    - `lua_scene_entered_observer` (`On<SceneEntered>`, after the teardown) calls `clear_function_cache()` (callbacks are re-injected per scene, so stale closures must not survive the switch), refreshes the tracked-groups and signal caches so `on_switch_scene` observes the post-teardown state, calls `on_switch_scene(scene_name)`, drains the common queues (`DrainCtx::drain`, below), refreshes the gameconfig cache and stamps `LuaSceneEnteredAt` with the tick's `frame_count`.
 
@@ -319,7 +319,7 @@ One callback per kind serves every phase of the entity, so scripts branch on `ct
 
 ### Timer System
 
-A Lua timer is a core `Timer` plus a `LuaOnTimerFired { callback }` component naming the Lua function (`:with_lua_timer` / `engine.entity_insert_lua_timer` repeat, the `_once` variants fire once). Core `update_timers` (`SimSet::Drain`, after `animation_controller` and before `animation` and `lua_setup_entity_system`) advances it like any Rust timer: when `elapsed >= duration` it triggers `TimerFired`, then a repeating timer resets by subtracting `duration` (not zeroing) and a one-shot removes its `Timer`, keeping any new timer the callback inserted. `lua_timer_fired_observer` reacts to `TimerFired` on entities with a `LuaOnTimerFired` via `LuaDispatch::dispatch_and_drain`, calling the named function as `(ctx, input)`. `lua_timer_removed_observer` removes `LuaOnTimerFired` whenever the entity loses its `Timer`, so a callback never outlives its timer; replacing the `Timer` keeps it. An entity has one `Timer`: a Lua timer replaces a Rust `Timer` on the same entity.
+A Lua timer is a core `Timer` plus a `LuaOnTimerFired { callback }` component naming the Lua function (`:with_lua_timer` / `engine.entity_insert_lua_timer` repeat, the `_once` variants fire once). Core `update_timers` (`SimSet::Lifecycle`, after `animation_controller` and before `animation` and `lua_setup_entity_system`) advances it like any Rust timer: when `elapsed >= duration` it triggers `TimerFired`, then a repeating timer resets by subtracting `duration` (not zeroing) and a one-shot removes its `Timer`, keeping any new timer the callback inserted. `lua_timer_fired_observer` reacts to `TimerFired` on entities with a `LuaOnTimerFired` via `LuaDispatch::dispatch_and_drain`, calling the named function as `(ctx, input)`. `lua_timer_removed_observer` removes `LuaOnTimerFired` whenever the entity loses its `Timer`, so a callback never outlives its timer; replacing the `Timer` keeps it. An entity has one `Timer`: a Lua timer replaces a Rust `Timer` on the same entity.
 
 ### Collision System
 
@@ -331,7 +331,7 @@ A Lua collision rule is a plain core `CollisionRule` plus a `LuaOnCollision { st
 
 ### Entity Setup Callback
 
-`lua_setup_entity_system` reacts to every entity that gains a `LuaSetup` component (`Added<LuaSetup>`) and calls its named function once with `(ctx)` only — no `input` argument (`CallShape::CtxOnly`). It calls `LuaDispatch::call_entity_callback` directly rather than `dispatch_and_drain`, since it refreshes the signal cache once and drains commands once across the whole `Added<LuaSetup>` batch for the tick, instead of once per entity. It runs in the sim schedule's `SimSet::Drain`, after `update_timers` and before `animation`, so an animation a setup callback sets advances in the same tick.
+`lua_setup_entity_system` reacts to every entity that gains a `LuaSetup` component (`Added<LuaSetup>`) and calls its named function once with `(ctx)` only — no `input` argument (`CallShape::CtxOnly`). It calls `LuaDispatch::call_entity_callback` directly rather than `dispatch_and_drain`, since it refreshes the signal cache once and drains commands once across the whole `Added<LuaSetup>` batch for the tick, instead of once per entity. It runs in the sim schedule's `SimSet::Lifecycle`, after `update_timers` and before `animation`, so an animation a setup callback sets advances in the same tick.
 
 ### Menu Selection and GUI Interactable Click Dispatch
 
@@ -419,7 +419,7 @@ This section is meant to stay in sync with the actual implementation.
 
 - `change_scene`, `quit`
 
-Both are registered in `engine_api/signal.rs`: `change_scene(scene_name)` queues `SignalCmd::ChangeScene`, which sets `NextScene` when it drains; the scene switch runs at `scene_switch_poll` in `SimSet::Drain` (see [Scene Lifecycle](#scene-lifecycle) step 3). `quit()` queues `SignalCmd::Quit`, which sets `NextGameState` to `Quitting`. Both reach their targets through `SignalTargets` (`processors.rs`).
+Both are registered in `engine_api/signal.rs`: `change_scene(scene_name)` queues `SignalCmd::ChangeScene`, which sets `NextScene` when it drains; the scene switch runs at `scene_switch_poll` in `SimSet::Lifecycle` (see [Scene Lifecycle](#scene-lifecycle) step 3). `quit()` queues `SignalCmd::Quit`, which sets `NextGameState` to `Quitting`. Both reach their targets through `SignalTargets` (`processors.rs`).
 
 #### Global Signals (read)
 

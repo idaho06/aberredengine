@@ -363,8 +363,8 @@ fn resolve_input_table(
 /// sim tick, then drains common command queues. No callback runs before the
 /// first scene, nor on the tick a scene is entered ([`LuaSceneEnteredAt`]):
 /// a scene starts updating the tick after its entry, like a Rust scene
-/// system. Scene requests switch at `scene_switch_poll` (`SimSet::Drain`),
-/// so a request made here switches at the next tick's Drain.
+/// system. Scene requests switch at `scene_switch_poll` (`SimSet::Lifecycle`),
+/// so a request made here switches at the next tick's `Lifecycle`.
 ///
 /// Runs in `SimSet::Bookkeeping` -- last among the engine's own groups each
 /// tick, i.e. *after* `Movement`/`Transforms` (so `camera_follow_system` has

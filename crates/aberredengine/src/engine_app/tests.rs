@@ -459,7 +459,7 @@ fn test_build_logic_schedules_runs_phase_system_first() {
 }
 
 /// With Lua, `lua_phase_update_system` runs in `SimSet::PostCollision`: after
-/// the collision and GUI sets, before `Drain` and before `lua_plugin::update`.
+/// the collision and GUI sets, before `Lifecycle` and before `lua_plugin::update`.
 #[cfg(feature = "lua")]
 #[test]
 fn test_build_logic_schedules_with_lua_keeps_lua_phase_in_post_collision() {

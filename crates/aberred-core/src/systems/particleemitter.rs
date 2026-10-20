@@ -42,7 +42,7 @@ use crate::resources::worldtime::WorldTime;
 /// -- its draw order relative to other `SimRng`-drawing systems (and the
 /// timer/collision/phase observers) matters for determinism, and is fixed by
 /// the `SimSet` chain (`src/engine_app/schedule.rs`): this system runs in
-/// `SimSet::Movement`, strictly before `SimSet::Collision`/`SimSet::Drain`
+/// `SimSet::Movement`, strictly before `SimSet::Collision`/`SimSet::Lifecycle`
 /// where the other `SimRng` consumers live.
 ///
 /// # Ordering

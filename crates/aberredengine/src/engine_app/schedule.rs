@@ -94,7 +94,7 @@ use aberred_lua::systems::lua_setup_entity::lua_setup_entity_system;
 ///         SimSet::Collision => "collision",
 ///         SimSet::Gui => "gui",
 ///         SimSet::PostCollision => "post collision",
-///         SimSet::Drain => "drain",
+///         SimSet::Lifecycle => "lifecycle",
 ///         SimSet::Bookkeeping => "bookkeeping",
 ///     }
 /// }
@@ -139,9 +139,10 @@ pub enum SimSet {
     /// Group counts, Lua phase callbacks, and animation controller
     /// resolution -- all downstream of this tick's collision results.
     PostCollision,
-    /// Timers (`update_timers`, which also fires Lua timer callbacks), Lua
-    /// entity setup, animation advance and scene lifecycle polling.
-    Drain,
+    /// Things that start or end: timers (`update_timers`, which also fires
+    /// Lua timer callbacks), Lua entity setup, animation advance and the
+    /// scene switch poll.
+    Lifecycle,
     /// Tail-of-tick housekeeping: signal bindings, text sizing, input
     /// binding change notification, (for Lua games) `lua_plugin::update`,
     /// then the render and audio command forwarders and `finish_setup`. A
@@ -162,7 +163,7 @@ impl EngineBuilder {
         sim.add_systems(animation_controller.in_set(SimSet::PostCollision));
     }
 
-    /// Registers `animation` (`SimSet::Drain`) exactly once, regardless of
+    /// Registers `animation` (`SimSet::Lifecycle`) exactly once, regardless of
     /// feature config -- a single call site so the Lua-only ordering edge
     /// below doesn't require duplicating the base registration per branch.
     /// `.after(lua_setup_entity_system)`, when Lua is active: both touch
@@ -177,13 +178,13 @@ impl EngineBuilder {
             sim.add_systems(
                 animation
                     .after(lua_setup_entity_system)
-                    .in_set(SimSet::Drain),
+                    .in_set(SimSet::Lifecycle),
             );
             return;
         }
         #[cfg(not(feature = "lua"))]
         let _ = has_lua;
-        sim.add_systems(animation.in_set(SimSet::Drain));
+        sim.add_systems(animation.in_set(SimSet::Lifecycle));
     }
 
     /// Build the two schedules the logic thread runs: `sim`
@@ -275,7 +276,7 @@ impl EngineBuilder {
                 SimSet::Collision,
                 SimSet::Gui,
                 SimSet::PostCollision,
-                SimSet::Drain,
+                SimSet::Lifecycle,
                 SimSet::Bookkeeping,
             )
                 .chain(),
@@ -482,7 +483,7 @@ impl EngineBuilder {
                 lua_setup_entity_system
                     .run_if(state_is_playing)
                     .after(update_timers)
-                    .in_set(SimSet::Drain),
+                    .in_set(SimSet::Lifecycle),
             );
         } else {
             Self::add_non_lua_systems(sim);
@@ -505,7 +506,7 @@ impl EngineBuilder {
             update_timers
                 .before(animation)
                 .before(scene_switch_poll)
-                .in_set(SimSet::Drain),
+                .in_set(SimSet::Lifecycle),
         );
         sim.add_systems(update_world_signals_binding_system.in_set(SimSet::Bookkeeping));
         sim.add_systems(detect_window_resize.in_set(SimSet::Bookkeeping));
@@ -574,7 +575,7 @@ impl EngineBuilder {
     /// (last among the engine's own groups) -- this is also where
     /// `on_update_<scene>` itself is dispatched, after
     /// `camera_follow_system` (see `lua_plugin::update`'s own doc comment for
-    /// the full rationale). It runs after `scene_switch_poll` (`SimSet::Drain`),
+    /// the full rationale). It runs after `scene_switch_poll` (`SimSet::Lifecycle`),
     /// and skips the scene callback on a scene's entry tick.
     #[cfg(feature = "lua")]
     fn add_lua_update(sim: &mut Schedule) {
@@ -596,7 +597,7 @@ impl EngineBuilder {
         sim.add_systems(
             scene_switch_poll
                 .run_if(state_runs_scenes)
-                .in_set(SimSet::Drain),
+                .in_set(SimSet::Lifecycle),
         );
     }
 
