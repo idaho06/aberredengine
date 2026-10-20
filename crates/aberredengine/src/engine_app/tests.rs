@@ -34,9 +34,23 @@ use aberred_render::resources::scene_table::GuiCtx;
 #[cfg(feature = "lua")]
 use aberred_core::systems::animation::{animation, animation_controller};
 #[cfg(feature = "lua")]
+use aberred_core::systems::dynamictext_size::dynamictext_size_system;
+#[cfg(feature = "lua")]
 use aberred_core::systems::group::update_group_counts_system;
 #[cfg(feature = "lua")]
 use aberred_core::systems::gui_hit_test::gui_hit_test_system;
+#[cfg(feature = "lua")]
+use aberred_core::systems::logic_bridge::forward_render_asset_cmds;
+#[cfg(feature = "lua")]
+use aberred_core::systems::render_assets::update_bevy_render_asset_cmds;
+#[cfg(feature = "lua")]
+use aberred_core::systems::scene_dispatch::scene_switch_poll;
+#[cfg(feature = "lua")]
+use aberred_core::systems::signalbinding::update_world_signals_binding_system;
+#[cfg(feature = "lua")]
+use aberred_core::systems::timer::update_timers;
+#[cfg(feature = "lua")]
+use aberred_core::systems::window::detect_window_resize;
 #[cfg(feature = "lua")]
 use aberred_lua::systems::lua_phase::lua_phase_update_system;
 
@@ -405,6 +419,38 @@ fn test_build_logic_schedules_with_lua_orders_lua_phase_update_in_post_collision
     let index = sim_index(&ids, lua_phase_update_system);
     assert!(sim_index(&ids, update_group_counts_system) < index);
     assert!(index < sim_index(&ids, animation_controller));
+}
+
+/// With Lua, `lua_plugin::update` runs in `SimSet::LateUpdate`: after the
+/// scene switch poll and the rest of `SimSet::Lifecycle`, before every
+/// `SimSet::Bookkeeping` system.
+#[cfg(feature = "lua")]
+#[test]
+fn lua_update_runs_in_late_update_after_lifecycle_before_bookkeeping() {
+    let (ids, _) = logic_schedule_type_ids(true);
+    let lua_update = sim_index(&ids, aberred_lua::lua_plugin::update);
+    for lifecycle in [
+        sim_index(&ids, scene_switch_poll),
+        sim_index(&ids, update_timers),
+        sim_index(&ids, animation),
+    ] {
+        assert!(
+            lifecycle < lua_update,
+            "Lifecycle must run before LateUpdate"
+        );
+    }
+    for bookkeeping in [
+        sim_index(&ids, update_world_signals_binding_system),
+        sim_index(&ids, detect_window_resize),
+        sim_index(&ids, dynamictext_size_system),
+        sim_index(&ids, update_bevy_render_asset_cmds),
+        sim_index(&ids, forward_render_asset_cmds),
+    ] {
+        assert!(
+            lua_update < bookkeeping,
+            "LateUpdate must run before Bookkeeping"
+        );
+    }
 }
 
 #[cfg(feature = "lua")]

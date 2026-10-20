@@ -95,6 +95,7 @@ use aberred_lua::systems::lua_setup_entity::lua_setup_entity_system;
 ///         SimSet::Gui => "gui",
 ///         SimSet::PostCollision => "post collision",
 ///         SimSet::Lifecycle => "lifecycle",
+///         SimSet::LateUpdate => "late update",
 ///         SimSet::Bookkeeping => "bookkeeping",
 ///     }
 /// }
@@ -120,10 +121,9 @@ pub enum SimSet {
     /// `track_audio_asset_replies`, kept as an explicit `.chain()`). Audio commands
     /// are forwarded at the end of `Bookkeeping`.
     AudioPump,
-    /// User `add_system` systems. Lua's
-    /// `on_update_<scene>` is dispatched separately, from
-    /// `lua_plugin::update` in `SimSet::Bookkeeping`, so it runs after
-    /// camera-follow/collision rather than before.
+    /// User `add_system` and `add_scene_system` systems, before this tick's
+    /// movement and collision. Lua's `on_update_<scene>` runs late instead,
+    /// in `SimSet::LateUpdate`.
     Update,
     /// Input-driven force/velocity controllers.
     Controllers,
@@ -143,9 +143,12 @@ pub enum SimSet {
     /// Lua timer callbacks), Lua entity setup, animation advance and the
     /// scene switch poll.
     Lifecycle,
+    /// Per-tick late update: Lua's `on_update_<scene>` (`lua_plugin::update`),
+    /// after this tick's movement, collision and camera follow.
+    LateUpdate,
     /// Tail-of-tick housekeeping: signal bindings, text sizing, input
-    /// binding change notification, (for Lua games) `lua_plugin::update`,
-    /// then the render and audio command forwarders and `finish_setup`. A
+    /// binding change notification, Lua map/asset command drains, then the
+    /// render and audio command forwarders and `finish_setup`. A
     /// custom system placed here that queues asset loads must run
     /// `.before(forward_render_asset_cmds)`, or its loads are counted a tick
     /// late.
@@ -277,6 +280,7 @@ impl EngineBuilder {
                 SimSet::Gui,
                 SimSet::PostCollision,
                 SimSet::Lifecycle,
+                SimSet::LateUpdate,
                 SimSet::Bookkeeping,
             )
                 .chain(),
@@ -291,7 +295,7 @@ impl EngineBuilder {
         // --- SIM: signal intents + state bookkeeping, one-shot spawns ---
         // apply_signal_intents runs first, before everything else this
         // tick (in particular before on_update_<scene>, dispatched from
-        // lua_plugin::update in SimSet::Bookkeeping): intents queued by the
+        // lua_plugin::update in SimSet::LateUpdate): intents queued by the
         // render thread's GuiCallback (inside render_system) each frame must
         // be visible to this tick's scene logic. The ordering is
         // implied by SimSet::ApplyIntents preceding every later group in
@@ -455,23 +459,21 @@ impl EngineBuilder {
                     .after(lua_phase_update_system)
                     .in_set(SimSet::PostCollision),
             );
-            // `.after(lua_plugin::update)` on both systems: a queued
-            // map/asset load is drained after on_update_<scene> has had a
-            // chance to queue it this same tick, not before.
+            // A queued map/asset load is drained after on_update_<scene> has
+            // had a chance to queue it this same tick (`SimSet::LateUpdate`
+            // precedes `SimSet::Bookkeeping`).
             // `.before(update_bevy_render_asset_cmds)` keeps a same-tick map
             // load's RenderAssetCmd forwarded to the render thread this same
             // tick rather than lagging one tick (both share
             // SimSet::Bookkeeping, so this ordering needs an explicit edge).
             sim.add_systems(
                 process_lua_map_commands
-                    .after(aberred_lua::lua_plugin::update)
                     .before(update_bevy_render_asset_cmds)
                     .in_set(SimSet::Bookkeeping),
             );
             sim.add_systems(
                 aberred_lua::lua_plugin::process_lua_asset_commands
                     .run_if(state_is_playing)
-                    .after(aberred_lua::lua_plugin::update)
                     .before(update_bevy_render_asset_cmds)
                     .in_set(SimSet::Bookkeeping),
             );
@@ -517,9 +519,9 @@ impl EngineBuilder {
         );
 
         // Prunes WorldSignals entity registrations of despawned entities, for
-        // Rust and Lua despawns alike. Ordered after every Bookkeeping system
-        // that can despawn (Lua's update/scene switch and command drains), so
-        // the edges' sync points apply this tick's despawns first and neither
+        // Rust and Lua despawns alike. Ordered after every system of the tick's
+        // tail that can despawn (Lua's update, by set order; the Lua command
+        // drains, by explicit edges), so the edges' sync points apply this tick's despawns first and neither
         // the snapshot nor the next tick sees a registration of a dead entity.
         #[allow(unused_mut)] // only reassigned under #[cfg(feature = "lua")] below
         let mut prune_config = prune_dead_entity_registrations
@@ -529,7 +531,6 @@ impl EngineBuilder {
         #[cfg(feature = "lua")]
         if has_lua {
             prune_config = prune_config
-                .after(aberred_lua::lua_plugin::update)
                 .after(process_lua_map_commands)
                 .after(aberred_lua::lua_plugin::process_lua_asset_commands);
         }
@@ -545,8 +546,8 @@ impl EngineBuilder {
         // same-schedule edge (both land in `SimSet::Bookkeeping`); ordering
         // relative to menu/tilemap spawning (earlier `SimSet`s, via the
         // `configure_sets((...).chain())` pipeline) is implicit, but the Lua
-        // asset/map command drains share this same `SimSet` too (running
-        // `.after(lua_plugin::update)`) and need their own explicit
+        // asset/map command drains share this same `SimSet` too and need
+        // their own explicit
         // `.before(update_bevy_render_asset_cmds)` edge so a same-tick load
         // still forwards this tick instead of lagging one.
         sim.add_systems(update_bevy_render_asset_cmds.in_set(SimSet::Bookkeeping));
@@ -571,9 +572,8 @@ impl EngineBuilder {
         );
     }
 
-    /// Adds `lua_plugin::update` once per sim tick, in [`SimSet::Bookkeeping`]
-    /// (last among the engine's own groups) -- this is also where
-    /// `on_update_<scene>` itself is dispatched, after
+    /// Adds `lua_plugin::update` once per sim tick, in [`SimSet::LateUpdate`]
+    /// -- this is where `on_update_<scene>` itself is dispatched, after
     /// `camera_follow_system` (see `lua_plugin::update`'s own doc comment for
     /// the full rationale). It runs after `scene_switch_poll` (`SimSet::Lifecycle`),
     /// and skips the scene callback on a scene's entry tick.
@@ -582,7 +582,7 @@ impl EngineBuilder {
         sim.add_systems(
             aberred_lua::lua_plugin::update
                 .run_if(state_is_playing)
-                .in_set(SimSet::Bookkeeping),
+                .in_set(SimSet::LateUpdate),
         );
     }
 

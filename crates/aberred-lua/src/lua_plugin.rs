@@ -366,8 +366,8 @@ fn resolve_input_table(
 /// system. Scene requests switch at `scene_switch_poll` (`SimSet::Lifecycle`),
 /// so a request made here switches at the next tick's `Lifecycle`.
 ///
-/// Runs in `SimSet::Bookkeeping` -- last among the engine's own groups each
-/// tick, i.e. *after* `Movement`/`Transforms` (so `camera_follow_system` has
+/// Runs in `SimSet::LateUpdate`, between `SimSet::Lifecycle` and
+/// `SimSet::Bookkeeping`, i.e. *after* `Movement`/`Transforms` (so `camera_follow_system` has
 /// already updated `Camera2DRes` for this tick) and after `Collision`/
 /// `PostCollision` (so `collision_detector`/`lua_phase_update_system` have already
 /// run). This restores the ordering guarantee the pre-thread-split engine
