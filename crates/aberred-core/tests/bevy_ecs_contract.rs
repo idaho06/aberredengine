@@ -252,7 +252,7 @@ fn observer_queued_entity_command_applies_before_next_queued_trigger() {
 }
 
 // `collision_rule_observer` queues `CollisionStarted` then `CollisionOngoing`:
-// a Lua `enter` write is visible to the same pair's `stay`, and a write two
+// a Lua `started` write is visible to the same pair's `ongoing`, and a write two
 // observers deep is visible to the next pair.
 #[test]
 fn nested_observer_queued_entity_command_applies_before_sibling_and_next_trigger() {

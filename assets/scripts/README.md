@@ -216,7 +216,7 @@ return M
 
 1. **Every engine callback must be in `M._callbacks`.** This includes:
    - Scene update (`on_update_<scene_name>`)
-   - Collision callbacks (names in `:with_lua_collision_rule()`)
+   - Collision callbacks (names in `:with_lua_collision_rule()` / `:with_lua_collision_started()` / `:with_lua_collision_ended()`)
    - Phase callbacks (names in `:with_lua_phase_entered()` / `:with_lua_phase_exited()` / `:with_lua_phase_update()` or `engine.entity_insert_lua_phase_*()`)
    - Timer callbacks (names in `:with_lua_timer()` / `:with_lua_timer_once()`)
    - Menu callbacks (names in `:with_menu_callback()`)
@@ -2591,17 +2591,28 @@ engine.spawn()
 
 **Note:** Unlike a Lua timer, TTL has no callback - it's a "fire and forget" mechanism for temporary entities like projectiles, particles, or visual effects.
 
-#### `:with_lua_collision_rule(group_a, group_b, callback)`
+#### `:with_lua_collision_rule(group_a, group_b, ongoing)`
 
-Register collision callback between two groups.
+Add a Lua collision rule between two groups.
 
 **Parameters:**
 
 - `group_a`, `group_b` - Entity group names
-- `callback` - Lua function name to call on collision
+- `ongoing` - Lua function name to call every tick the groups touch, or `nil` for none
 
 ```lua
 :with_lua_collision_rule("ball", "player", "on_ball_player")
+```
+
+#### `:with_lua_collision_started(callback)` / `:with_lua_collision_ended(callback)`
+
+Add the rule's one-shot callbacks (see [Collision Handling](#collision-handling)). Both require
+`:with_lua_collision_rule()` first.
+
+```lua
+:with_lua_collision_rule("player", "coin", nil)
+:with_lua_collision_started("on_coin_started")
+:with_lua_collision_ended("on_coin_ended")
 ```
 
 #### `:with_lua_setup(callback)`
@@ -3785,9 +3796,14 @@ engine.spawn()
     :build()
 ```
 
+The rule's `ongoing` callback (the third argument) runs every tick the groups touch. For one-shot reactions, add
+`:with_lua_collision_started(callback)`, which runs on the first tick a pair touches (before that tick's `ongoing`),
+and `:with_lua_collision_ended(callback)`, which runs on the first tick the pair is apart. The `ended` callback's ctx carries only `ctx.a.id`/`ctx.a.group` and `ctx.b.id`/`ctx.b.group`, since either
+entity may already be despawned.
+
 ### Collision Callback Function
 
-Define a global Lua function matching the callback name:
+Define a global Lua function matching the callback name (`started` and `ongoing` callbacks get this full ctx):
 
 ```lua
 function on_ball_player(ctx)

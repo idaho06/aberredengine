@@ -4,8 +4,9 @@
 //! contact-tracked by core like any Rust rule) plus a [`LuaOnCollision`] on
 //! the same entity naming the Lua functions to call. The observers in
 //! [`crate::systems::lua_collision`] call them from core's events:
-//! `CollisionStarted` -> `enter`, `CollisionOngoing` -> `stay`,
-//! `CollisionEnded` -> `exit`. Rules without a [`LuaOnCollision`] are Rust rules and are ignored.
+//! `CollisionStarted` -> `started`, `CollisionOngoing` -> `ongoing`,
+//! `CollisionEnded` -> `ended`. Rules without a [`LuaOnCollision`] are Rust
+//! rules and are ignored.
 //!
 //! An entity has one `CollisionRule`, and one rule fires per overlapping pair
 //! per tick (the lowest-`Entity` match), whether it is a Lua or a Rust rule.
@@ -17,11 +18,11 @@
 //!     :with_lua_collision_rule("ball", "brick", "on_ball_brick")
 //!     :build()
 //!
-//! -- Enter/exit only: the every-tick callback may be nil.
+//! -- Started/ended only: the every-tick `ongoing` callback may be nil.
 //! engine.spawn()
 //!     :with_lua_collision_rule("player", "coin", nil)
-//!     :with_lua_collision_enter("on_coin_enter")
-//!     :with_lua_collision_exit("on_coin_exit")
+//!     :with_lua_collision_started("on_coin_started")
+//!     :with_lua_collision_ended("on_coin_ended")
 //!     :build()
 //! ```
 
@@ -38,20 +39,20 @@ use bevy_ecs::prelude::Component;
 ///     "player",
 ///     "coin",
 ///     LuaOnCollision {
-///         enter: Some("on_coin_enter".into()),
+///         started: Some("on_coin_started".into()),
 ///         ..Default::default()
 ///     },
 /// );
 /// ```
 #[derive(Component, Clone, Debug, Default)]
 pub struct LuaOnCollision {
-    /// Called every tick the groups touch, after `enter` on the first one.
-    pub stay: Option<Arc<str>>,
     /// Called on the first tick the groups touch.
-    pub enter: Option<Arc<str>>,
+    pub started: Option<Arc<str>>,
+    /// Called every tick the groups touch, after `started` on the first one.
+    pub ongoing: Option<Arc<str>>,
     /// Called on the first tick the groups are apart; the ctx carries only
     /// each side's `id` and `group`.
-    pub exit: Option<Arc<str>>,
+    pub ended: Option<Arc<str>>,
 }
 
 impl LuaOnCollision {

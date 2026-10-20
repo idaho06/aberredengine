@@ -744,7 +744,7 @@ impl LuaRuntime {
             },
             CbDef {
                 name: "collision_callback",
-                description: "Called when two colliding groups overlap",
+                description: "Lua collision rule callback (started, ongoing or ended); an ended ctx carries only each side's id and group",
                 params: &[("ctx", "CollisionContext")],
                 returns: None,
                 context: Some("play"),

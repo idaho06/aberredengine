@@ -264,7 +264,7 @@ function phase_exited(ctx) end
 ---@param input InputSnapshot
 function timer_callback(ctx, input) end
 
----Called when two colliding groups overlap
+---Lua collision rule callback (started, ongoing or ended); an ended ctx carries only each side's id and group
 ---Context: play
 ---@param ctx CollisionContext
 function collision_callback(ctx) end
@@ -1813,22 +1813,22 @@ function EntityBuilder:with_gui_theme_key(key) end
 ---@return EntityBuilder
 function EntityBuilder:with_gui_window(width, height) end
 
----Set the Lua collision rule's callback for when the groups start touching (requires with_lua_collision_rule first)
----@param callback string
----@return EntityBuilder
-function EntityBuilder:with_lua_collision_enter(callback) end
-
 ---Set the Lua collision rule's callback for when the groups stop touching (requires with_lua_collision_rule first)
 ---@param callback string
 ---@return EntityBuilder
-function EntityBuilder:with_lua_collision_exit(callback) end
+function EntityBuilder:with_lua_collision_ended(callback) end
 
----Add collision callback between two groups, called every tick they touch (nil for none)
+---Add a Lua collision rule between two groups; `ongoing` is called every tick they touch (nil for none)
 ---@param group_a string
 ---@param group_b string
----@param callback string|nil
+---@param ongoing string|nil
 ---@return EntityBuilder
-function EntityBuilder:with_lua_collision_rule(group_a, group_b, callback) end
+function EntityBuilder:with_lua_collision_rule(group_a, group_b, ongoing) end
+
+---Set the Lua collision rule's callback for when the groups start touching (requires with_lua_collision_rule first)
+---@param callback string
+---@return EntityBuilder
+function EntityBuilder:with_lua_collision_started(callback) end
 
 ---Call a Lua function `fn(ctx, input)` each time the core `Phase` enters a phase (branch on `ctx.phase`; `ctx.previous_phase` is the phase left). A returned phase name requests that phase.
 ---@param callback string
@@ -2405,22 +2405,22 @@ function CollisionEntityBuilder:with_gui_theme_key(key) end
 ---@return CollisionEntityBuilder
 function CollisionEntityBuilder:with_gui_window(width, height) end
 
----Set the Lua collision rule's callback for when the groups start touching (requires with_lua_collision_rule first)
----@param callback string
----@return CollisionEntityBuilder
-function CollisionEntityBuilder:with_lua_collision_enter(callback) end
-
 ---Set the Lua collision rule's callback for when the groups stop touching (requires with_lua_collision_rule first)
 ---@param callback string
 ---@return CollisionEntityBuilder
-function CollisionEntityBuilder:with_lua_collision_exit(callback) end
+function CollisionEntityBuilder:with_lua_collision_ended(callback) end
 
----Add collision callback between two groups, called every tick they touch (nil for none)
+---Add a Lua collision rule between two groups; `ongoing` is called every tick they touch (nil for none)
 ---@param group_a string
 ---@param group_b string
----@param callback string|nil
+---@param ongoing string|nil
 ---@return CollisionEntityBuilder
-function CollisionEntityBuilder:with_lua_collision_rule(group_a, group_b, callback) end
+function CollisionEntityBuilder:with_lua_collision_rule(group_a, group_b, ongoing) end
+
+---Set the Lua collision rule's callback for when the groups start touching (requires with_lua_collision_rule first)
+---@param callback string
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_lua_collision_started(callback) end
 
 ---Call a Lua function `fn(ctx, input)` each time the core `Phase` enters a phase (branch on `ctx.phase`; `ctx.previous_phase` is the phase left). A returned phase name requests that phase.
 ---@param callback string

@@ -199,20 +199,20 @@ pub(super) fn register<M: LuaUserDataMethods<LuaEntityBuilder>>(
         methods,
         meta,
         "with_lua_collision_rule",
-        "Add collision callback between two groups, called every tick they touch (nil for none)",
+        "Add a Lua collision rule between two groups; `ongoing` is called every tick they touch (nil for none)",
         [
             ("group_a", "string"),
             ("group_b", "string"),
-            ("callback", "string?")
+            ("ongoing", "string?")
         ],
         |_,
          this: &mut LuaEntityBuilder,
-         (group_a, group_b, callback): (String, String, Option<String>)| {
+         (group_a, group_b, ongoing): (String, String, Option<String>)| {
             this.cmd.lua_collision_rule = Some(LuaCollisionRuleData {
                 group_a,
                 group_b,
                 callbacks: LuaOnCollision {
-                    stay: callback.map(Into::into),
+                    ongoing: ongoing.map(Into::into),
                     ..Default::default()
                 },
             });
@@ -223,16 +223,16 @@ pub(super) fn register<M: LuaUserDataMethods<LuaEntityBuilder>>(
     builder_method!(
         methods,
         meta,
-        "with_lua_collision_enter",
+        "with_lua_collision_started",
         "Set the Lua collision rule's callback for when the groups start touching (requires with_lua_collision_rule first)",
         [("callback", "string")],
         |_, this: &mut LuaEntityBuilder, callback: String| {
             let Some(ref mut rule) = this.cmd.lua_collision_rule else {
                 return Err(LuaError::runtime(
-                    "with_lua_collision_enter() requires with_lua_collision_rule() first",
+                    "with_lua_collision_started() requires with_lua_collision_rule() first",
                 ));
             };
-            rule.callbacks.enter = Some(callback.into());
+            rule.callbacks.started = Some(callback.into());
             Ok(())
         }
     );
@@ -240,16 +240,16 @@ pub(super) fn register<M: LuaUserDataMethods<LuaEntityBuilder>>(
     builder_method!(
         methods,
         meta,
-        "with_lua_collision_exit",
+        "with_lua_collision_ended",
         "Set the Lua collision rule's callback for when the groups stop touching (requires with_lua_collision_rule first)",
         [("callback", "string")],
         |_, this: &mut LuaEntityBuilder, callback: String| {
             let Some(ref mut rule) = this.cmd.lua_collision_rule else {
                 return Err(LuaError::runtime(
-                    "with_lua_collision_exit() requires with_lua_collision_rule() first",
+                    "with_lua_collision_ended() requires with_lua_collision_rule() first",
                 ));
             };
-            rule.callbacks.exit = Some(callback.into());
+            rule.callbacks.ended = Some(callback.into());
             Ok(())
         }
     );
@@ -551,7 +551,7 @@ mod tests {
             (
                 rule.group_a.as_str(),
                 rule.group_b.as_str(),
-                rule.callbacks.stay.as_deref()
+                rule.callbacks.ongoing.as_deref()
             ),
             ("player", "enemy", Some("on_hit"))
         );
@@ -720,26 +720,26 @@ mod tests {
     }
 
     #[test]
-    fn lua_collision_enter_and_exit_attach_to_the_rule() {
+    fn lua_collision_started_and_ended_attach_to_the_rule() {
         let rule = built(
             ":with_lua_collision_rule('a', 'b', nil)\
-             :with_lua_collision_enter('in'):with_lua_collision_exit('out')",
+             :with_lua_collision_started('in'):with_lua_collision_ended('out')",
         )
         .lua_collision_rule
         .unwrap();
         assert_eq!(
             (
-                rule.callbacks.stay.as_deref(),
-                rule.callbacks.enter.as_deref(),
-                rule.callbacks.exit.as_deref()
+                rule.callbacks.started.as_deref(),
+                rule.callbacks.ongoing.as_deref(),
+                rule.callbacks.ended.as_deref()
             ),
-            (None, Some("in"), Some("out"))
+            (Some("in"), None, Some("out"))
         );
     }
 
     #[test]
-    fn lua_collision_enter_and_exit_require_the_rule_first() {
-        for name in ["with_lua_collision_enter", "with_lua_collision_exit"] {
+    fn lua_collision_started_and_ended_require_the_rule_first() {
+        for name in ["with_lua_collision_started", "with_lua_collision_ended"] {
             assert_runtime_error(
                 &format!("engine.spawn():{name}('cb')"),
                 &format!("{name}() requires with_lua_collision_rule() first"),

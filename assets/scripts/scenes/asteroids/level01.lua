@@ -103,11 +103,11 @@ end
 -- The ship/asteroid rule has no every-tick callback, only enter/exit:
 -- these fire once per touch instead of every tick the two overlap.
 -- ctx.a is the asteroid and ctx.b the ship (the rule's group order).
-local function on_asteroid_ship_enter(ctx)
+local function on_asteroid_ship_started(ctx)
     engine.log_info(string.format("Ship %d hit asteroid %d (ship sides: %s)",
         ctx.b.id, ctx.a.id, table.concat(ctx.sides.b, ",")))
     engine.log_debug(string.format(
-        "on_asteroid_ship_enter: %s %d pos=(%.1f,%.1f) sides=[%s] | %s %d pos=(%.1f,%.1f) vel=(%.1f,%.1f) sides=[%s]",
+        "on_asteroid_ship_started: %s %d pos=(%.1f,%.1f) sides=[%s] | %s %d pos=(%.1f,%.1f) vel=(%.1f,%.1f) sides=[%s]",
         ctx.a.group, ctx.a.id, ctx.a.pos.x, ctx.a.pos.y, table.concat(ctx.sides.a, ","),
         ctx.b.group, ctx.b.id, ctx.b.pos.x, ctx.b.pos.y, ctx.b.vel.x, ctx.b.vel.y,
         table.concat(ctx.sides.b, ",")))
@@ -115,9 +115,9 @@ local function on_asteroid_ship_enter(ctx)
 end
 
 -- The exit ctx carries only ids and groups: either entity may already be gone.
-local function on_asteroid_ship_exit(ctx)
+local function on_asteroid_ship_ended(ctx)
     engine.log_info(string.format("Ship %d cleared asteroid %d", ctx.b.id, ctx.a.id))
-    engine.log_debug(string.format("on_asteroid_ship_exit: %s %d | %s %d",
+    engine.log_debug(string.format("on_asteroid_ship_ended: %s %d | %s %d",
         ctx.a.group, ctx.a.id, ctx.b.group, ctx.b.id))
 end
 
@@ -461,8 +461,8 @@ M._callbacks = {
     -- Scene update (engine calls on_update_<scene_name> automatically)
     on_update_asteroids_level01     = on_update_asteroids_level01,
     -- Collision callbacks
-    on_asteroid_ship_enter          = on_asteroid_ship_enter,
-    on_asteroid_ship_exit           = on_asteroid_ship_exit,
+    on_asteroid_ship_started        = on_asteroid_ship_started,
+    on_asteroid_ship_ended          = on_asteroid_ship_ended,
     on_asteroid_laser_collision     = on_asteroid_laser_collision,
     -- Phase dispatchers
     asteroid_phase_enter            = asteroid_phase_enter,
@@ -606,8 +606,8 @@ end
 local function spawn_collision_rules()
     engine.spawn()
         :with_lua_collision_rule("asteroids", "ship", nil)
-        :with_lua_collision_enter("on_asteroid_ship_enter")
-        :with_lua_collision_exit("on_asteroid_ship_exit")
+        :with_lua_collision_started("on_asteroid_ship_started")
+        :with_lua_collision_ended("on_asteroid_ship_ended")
         :with_group("collision_rules")
         :build()
     engine.spawn()

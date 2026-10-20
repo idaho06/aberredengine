@@ -1726,7 +1726,8 @@ fn lua_phase_transition_drives_a_rust_phase_entity() {
 }
 
 /// A Lua phase enter runs after this tick's collision: the initial enter on
-/// the tick the pair first touches sees the flag the stay callback set.
+/// the tick the pair first touches sees the flag the `ongoing` collision
+/// callback set.
 #[cfg(feature = "lua")]
 #[test]
 fn lua_phase_enter_sees_this_ticks_collision() {
@@ -1982,7 +1983,7 @@ end
 }
 
 /// A scene switch forgets collision contacts without ending them: a
-/// persistent pair that separates after the switch gets no `on_exit`.
+/// persistent pair that separates after the switch gets no `on_ended`.
 #[cfg(feature = "lua")]
 #[test]
 fn lua_scene_switch_forgets_collision_contacts() {
@@ -1990,14 +1991,14 @@ fn lua_scene_switch_forgets_collision_contacts() {
 
     let mut tw = lua_script_world(
         "switch_contacts",
-        "function on_enter(ctx) LOG[#LOG + 1] = 'enter' end\n\
-         function on_exit(ctx) LOG[#LOG + 1] = 'exit' end\n",
+        "function on_started(ctx) LOG[#LOG + 1] = 'started' end\n\
+         function on_ended(ctx) LOG[#LOG + 1] = 'ended' end\n",
     );
-    spawn_lua_rule(&mut tw, None, &format!("{ENTER_EXIT}:with_persistent()"));
+    spawn_lua_rule(&mut tw, None, &format!("{STARTED_ENDED}:with_persistent()"));
     spawn_box(&mut tw, "a", 0.0, Persistent);
     let b = spawn_box(&mut tw, "b", 5.0, Persistent);
     tw.tick(1, DT);
-    assert_eq!(take_lua_log(&mut tw), ["enter"]);
+    assert_eq!(take_lua_log(&mut tw), ["started"]);
 
     // The switch runs after this tick's collision detection, so the pair
     // still touches when its contacts are forgotten.
@@ -2006,7 +2007,7 @@ fn lua_scene_switch_forgets_collision_contacts() {
     move_to(&mut tw, b, 100.0);
     tw.tick(1, DT);
 
-    assert!(!take_lua_log(&mut tw).iter().any(|l| l == "exit"));
+    assert!(!take_lua_log(&mut tw).iter().any(|l| l == "ended"));
 }
 
 /// A scene switch keeps the builder's `.track_group` groups and drops the
@@ -2343,78 +2344,79 @@ fn exec_lua(tw: &mut TestWorld, code: &str) {
 }
 
 /// Spawns a Lua rule for groups `a`/`b` through `engine.spawn()`, with the
-/// stay `callback` (if any) and the builder `modifiers` after it, then ticks
-/// once so the spawn is drained before the caller spawns colliders.
+/// `ongoing` callback (if any) and the builder `modifiers` after it, then
+/// ticks once so the spawn is drained before the caller spawns colliders.
 #[cfg(feature = "lua")]
-fn spawn_lua_rule(tw: &mut TestWorld, callback: Option<&str>, modifiers: &str) {
-    let stay = callback.map_or("nil".to_owned(), |name| format!("'{name}'"));
+fn spawn_lua_rule(tw: &mut TestWorld, ongoing: Option<&str>, modifiers: &str) {
+    let ongoing = ongoing.map_or("nil".to_owned(), |name| format!("'{name}'"));
     exec_lua(
         tw,
-        &format!("engine.spawn():with_lua_collision_rule('a', 'b', {stay}){modifiers}:build()"),
+        &format!("engine.spawn():with_lua_collision_rule('a', 'b', {ongoing}){modifiers}:build()"),
     );
     tw.tick(1, DT);
 }
 
-/// Builder modifiers naming `on_enter`/`on_exit` as a Lua rule's callbacks.
+/// Builder modifiers naming `on_started`/`on_ended` as a Lua rule's callbacks.
 #[cfg(feature = "lua")]
-const ENTER_EXIT: &str = ":with_lua_collision_enter('on_enter'):with_lua_collision_exit('on_exit')";
+const STARTED_ENDED: &str =
+    ":with_lua_collision_started('on_started'):with_lua_collision_ended('on_ended')";
 
-/// A Lua rule for groups `a`/`b` calling `on_enter`/`on_exit` and, if set,
-/// the stay `callback`.
+/// A Lua rule for groups `a`/`b` calling `on_started`/`on_ended` and, if set,
+/// the `ongoing` callback.
 #[cfg(feature = "lua")]
-fn spawn_enter_exit_rule(tw: &mut TestWorld, callback: Option<&str>) {
-    spawn_lua_rule(tw, callback, ENTER_EXIT);
+fn spawn_started_ended_rule(tw: &mut TestWorld, ongoing: Option<&str>) {
+    spawn_lua_rule(tw, ongoing, STARTED_ENDED);
 }
 
-/// A Lua rule's `on_enter` runs once before the stay callback on the first
-/// touching tick; `on_exit` runs once on the first tick apart with the ids
-/// and groups only; touching again enters again.
+/// A Lua rule's `on_started` runs once before the `ongoing` callback on the
+/// first touching tick; `on_ended` runs once on the first tick apart with the
+/// ids and groups only; touching again starts again.
 #[cfg(feature = "lua")]
 #[test]
-fn lua_collision_enter_runs_before_stay_and_exit_gets_ids_and_groups() {
+fn lua_collision_started_runs_before_ongoing_and_ended_gets_ids_and_groups() {
     let mut tw = lua_script_world(
         "order",
-        "function on_enter(ctx) LOG[#LOG + 1] = 'enter ' .. ctx.a.group .. ' ' .. ctx.b.group end\n\
-         function on_stay(ctx) LOG[#LOG + 1] = 'stay' end\n\
-         function on_exit(ctx)\n\
-           LOG[#LOG + 1] = string.format('exit %d %d %s %s %s', ctx.a.id, ctx.b.id,\n\
+        "function on_started(ctx) LOG[#LOG + 1] = 'started ' .. ctx.a.group .. ' ' .. ctx.b.group end\n\
+         function on_ongoing(ctx) LOG[#LOG + 1] = 'ongoing' end\n\
+         function on_ended(ctx)\n\
+           LOG[#LOG + 1] = string.format('ended %d %d %s %s %s', ctx.a.id, ctx.b.id,\n\
              ctx.a.group, ctx.b.group, tostring(ctx.a.pos == nil and ctx.b.pos == nil))\n\
          end\n",
     );
-    spawn_enter_exit_rule(&mut tw, Some("on_stay"));
+    spawn_started_ended_rule(&mut tw, Some("on_ongoing"));
     let a = spawn_box(&mut tw, "a", 0.0, ());
     let b = spawn_box(&mut tw, "b", 5.0, ());
 
     tw.tick(1, DT);
-    assert_eq!(take_lua_log(&mut tw), ["enter a b", "stay"]);
+    assert_eq!(take_lua_log(&mut tw), ["started a b", "ongoing"]);
     tw.tick(1, DT);
-    assert_eq!(take_lua_log(&mut tw), ["stay"]);
+    assert_eq!(take_lua_log(&mut tw), ["ongoing"]);
 
     move_to(&mut tw, b, 100.0);
     tw.tick(1, DT);
     assert_eq!(
         take_lua_log(&mut tw),
-        [format!("exit {} {} a b true", a.to_bits(), b.to_bits())]
+        [format!("ended {} {} a b true", a.to_bits(), b.to_bits())]
     );
     tw.tick(1, DT);
     assert!(take_lua_log(&mut tw).is_empty());
 
     move_to(&mut tw, b, 5.0);
     tw.tick(1, DT);
-    assert_eq!(take_lua_log(&mut tw), ["enter a b", "stay"]);
+    assert_eq!(take_lua_log(&mut tw), ["started a b", "ongoing"]);
 }
 
-/// The commands `on_enter` queues are applied before the stay callback runs,
-/// so it sees them.
+/// The commands `on_started` queues are applied before the `ongoing` callback
+/// runs, so it sees them.
 #[cfg(feature = "lua")]
 #[test]
-fn lua_collision_stay_sees_what_enter_applied() {
+fn lua_collision_ongoing_sees_what_started_applied() {
     let mut tw = lua_script_world(
         "drain",
-        "function on_enter(ctx) engine.collision_set_flag('entered') end\n\
-         function on_stay(ctx) LOG[#LOG + 1] = tostring(engine.has_flag('entered')) end\n",
+        "function on_started(ctx) engine.collision_set_flag('started') end\n\
+         function on_ongoing(ctx) LOG[#LOG + 1] = tostring(engine.has_flag('started')) end\n",
     );
-    spawn_enter_exit_rule(&mut tw, Some("on_stay"));
+    spawn_started_ended_rule(&mut tw, Some("on_ongoing"));
     spawn_box(&mut tw, "a", 0.0, ());
     spawn_box(&mut tw, "b", 5.0, ());
 
@@ -2423,16 +2425,17 @@ fn lua_collision_stay_sees_what_enter_applied() {
     assert_eq!(take_lua_log(&mut tw), ["true"]);
 }
 
-/// An entity write `on_enter` makes is visible in the same pair's stay ctx.
+/// An entity write `on_started` makes is visible in the same pair's `ongoing`
+/// ctx.
 #[cfg(feature = "lua")]
 #[test]
-fn lua_collision_stay_sees_enter_entity_write() {
+fn lua_collision_ongoing_sees_started_entity_write() {
     let mut tw = lua_script_world(
-        "enter_entity_write",
-        "function on_enter(ctx) engine.collision_entity_set_position(ctx.b.id, 3, 0) end\n\
-         function on_stay(ctx) LOG[#LOG + 1] = tostring(ctx.b.pos.x) end\n",
+        "started_entity_write",
+        "function on_started(ctx) engine.collision_entity_set_position(ctx.b.id, 3, 0) end\n\
+         function on_ongoing(ctx) LOG[#LOG + 1] = tostring(ctx.b.pos.x) end\n",
     );
-    spawn_enter_exit_rule(&mut tw, Some("on_stay"));
+    spawn_started_ended_rule(&mut tw, Some("on_ongoing"));
     spawn_box(&mut tw, "a", 0.0, ());
     spawn_box(&mut tw, "b", 5.0, ());
 
@@ -2450,11 +2453,11 @@ fn lua_collision_clone_then_move_template_clones_the_old_position() {
     use aberredengine::core::resources::worldsignals::WorldSignals;
     let mut tw = lua_script_world(
         "collision_clone_order",
-        "function on_enter(ctx)\n\
+        "function on_started(ctx)\n\
            engine.collision_clone('tpl'):build()\n\
            engine.collision_entity_set_position(engine.get_entity('tpl'), 50, 0)\n\
          end\n\
-         function on_exit(ctx) end\n",
+         function on_ended(ctx) end\n",
     );
     let tpl = tw
         .world
@@ -2463,7 +2466,7 @@ fn lua_collision_clone_then_move_template_clones_the_old_position() {
     tw.world
         .resource_mut::<WorldSignals>()
         .set_entity("tpl", tpl);
-    spawn_enter_exit_rule(&mut tw, None);
+    spawn_started_ended_rule(&mut tw, None);
     spawn_box(&mut tw, "a", 0.0, ());
     spawn_box(&mut tw, "b", 5.0, ());
 
@@ -2480,31 +2483,31 @@ fn lua_collision_clone_then_move_template_clones_the_old_position() {
     assert_eq!(tw.world.get::<MapPosition>(tpl).unwrap().pos.x, 50.0);
 }
 
-/// `engine.collision_*` commands queued in `on_enter`/`on_exit` are applied,
-/// on a rule without a stay callback.
+/// `engine.collision_*` commands queued in `on_started`/`on_ended` are applied,
+/// on a rule without an `ongoing` callback.
 #[cfg(feature = "lua")]
 #[test]
-fn lua_collision_enter_and_exit_apply_collision_commands() {
+fn lua_collision_started_and_ended_apply_collision_commands() {
     let mut tw = lua_script_world(
         "commands",
-        "function on_enter(ctx) engine.collision_set_flag('entered') end\n\
-         function on_exit(ctx) engine.collision_set_flag('exited') end\n",
+        "function on_started(ctx) engine.collision_set_flag('started') end\n\
+         function on_ended(ctx) engine.collision_set_flag('ended') end\n",
     );
-    spawn_enter_exit_rule(&mut tw, None);
+    spawn_started_ended_rule(&mut tw, None);
     spawn_box(&mut tw, "a", 0.0, ());
     let b = spawn_box(&mut tw, "b", 5.0, ());
 
     tw.tick(1, DT);
-    assert!(tw.world.resource::<WorldSignals>().has_flag("entered"));
-    assert!(!tw.world.resource::<WorldSignals>().has_flag("exited"));
+    assert!(tw.world.resource::<WorldSignals>().has_flag("started"));
+    assert!(!tw.world.resource::<WorldSignals>().has_flag("ended"));
 
     move_to(&mut tw, b, 100.0);
     tw.tick(1, DT);
-    assert!(tw.world.resource::<WorldSignals>().has_flag("exited"));
+    assert!(tw.world.resource::<WorldSignals>().has_flag("ended"));
 }
 
 /// A Lua game gets core's `clean_all_entities` hook, which forgets collision
-/// contacts: a persistent pair that separates afterwards gets no `on_exit`.
+/// contacts: a persistent pair that separates afterwards gets no `on_ended`.
 #[cfg(feature = "lua")]
 #[test]
 fn lua_game_clean_all_entities_hook_forgets_contacts() {
@@ -2513,14 +2516,14 @@ fn lua_game_clean_all_entities_hook_forgets_contacts() {
 
     let mut tw = lua_script_world(
         "clean_all",
-        "function on_enter(ctx) LOG[#LOG + 1] = 'enter' end\n\
-         function on_exit(ctx) LOG[#LOG + 1] = 'exit' end\n",
+        "function on_started(ctx) LOG[#LOG + 1] = 'started' end\n\
+         function on_ended(ctx) LOG[#LOG + 1] = 'ended' end\n",
     );
-    spawn_lua_rule(&mut tw, None, &format!("{ENTER_EXIT}:with_persistent()"));
+    spawn_lua_rule(&mut tw, None, &format!("{STARTED_ENDED}:with_persistent()"));
     spawn_box(&mut tw, "a", 0.0, Persistent);
     let b = spawn_box(&mut tw, "b", 5.0, Persistent);
     tw.tick(1, DT);
-    assert_eq!(take_lua_log(&mut tw), ["enter"]);
+    assert_eq!(take_lua_log(&mut tw), ["started"]);
 
     let hook = *tw
         .world
@@ -2535,19 +2538,19 @@ fn lua_game_clean_all_entities_hook_forgets_contacts() {
     assert!(take_lua_log(&mut tw).is_empty());
 }
 
-/// Despawning one side of a touching pair calls `on_exit` the next tick with
+/// Despawning one side of a touching pair calls `on_ended` the next tick with
 /// both ids and groups.
 #[cfg(feature = "lua")]
 #[test]
-fn lua_collision_exit_fires_after_a_despawn() {
+fn lua_collision_ended_fires_after_a_despawn() {
     let mut tw = lua_script_world(
-        "exit_despawn",
-        "function on_enter(ctx) end\n\
-         function on_exit(ctx)\n\
-           LOG[#LOG + 1] = string.format('exit %d %d %s %s', ctx.a.id, ctx.b.id, ctx.a.group, ctx.b.group)\n\
+        "ended_despawn",
+        "function on_started(ctx) end\n\
+         function on_ended(ctx)\n\
+           LOG[#LOG + 1] = string.format('ended %d %d %s %s', ctx.a.id, ctx.b.id, ctx.a.group, ctx.b.group)\n\
          end\n",
     );
-    spawn_enter_exit_rule(&mut tw, None);
+    spawn_started_ended_rule(&mut tw, None);
     let a = spawn_box(&mut tw, "a", 0.0, ());
     let b = spawn_box(&mut tw, "b", 5.0, ());
     tw.tick(1, DT);
@@ -2557,7 +2560,7 @@ fn lua_collision_exit_fires_after_a_despawn() {
 
     assert_eq!(
         take_lua_log(&mut tw),
-        [format!("exit {} {} a b", a.to_bits(), b.to_bits())]
+        [format!("ended {} {} a b", a.to_bits(), b.to_bits())]
     );
 }
 
@@ -2572,14 +2575,14 @@ fn lua_rule_entity(tw: &mut TestWorld) -> Entity {
 }
 
 /// Lua collision observers watch the Lua rule entities only: a Lua rule has
-/// its enter/stay/exit observers, a Rust rule none.
+/// its started/ongoing/ended observers, a Rust rule none.
 #[cfg(feature = "lua")]
 #[test]
 fn lua_collision_observers_watch_only_lua_rules() {
     use aberredengine::bevy_ecs::observer::ObservedBy;
 
-    let mut tw = lua_script_world("observed_rules", "function on_enter(ctx) end\n");
-    spawn_enter_exit_rule(&mut tw, None);
+    let mut tw = lua_script_world("observed_rules", "function on_started(ctx) end\n");
+    spawn_started_ended_rule(&mut tw, None);
     let rust_rule = tw.world.spawn(CollisionRule::new("c", "d")).id();
     tw.tick(1, DT);
 
@@ -2590,7 +2593,7 @@ fn lua_collision_observers_watch_only_lua_rules() {
 }
 
 /// Removing and re-inserting a rule's `LuaOnCollision` keeps one set of
-/// callbacks: `on_enter` runs once per contact.
+/// callbacks: `on_started` runs once per contact.
 #[cfg(feature = "lua")]
 #[test]
 fn lua_collision_callbacks_reinserted_still_run_once() {
@@ -2598,9 +2601,9 @@ fn lua_collision_callbacks_reinserted_still_run_once() {
 
     let mut tw = lua_script_world(
         "reinsert",
-        "function on_enter(ctx) LOG[#LOG + 1] = 'enter' end\nfunction on_exit(ctx) end\n",
+        "function on_started(ctx) LOG[#LOG + 1] = 'started' end\nfunction on_ended(ctx) end\n",
     );
-    spawn_enter_exit_rule(&mut tw, None);
+    spawn_started_ended_rule(&mut tw, None);
     let rule = lua_rule_entity(&mut tw);
     let callbacks = tw.world.entity_mut(rule).take::<LuaOnCollision>().unwrap();
     tw.tick(1, DT);
@@ -2611,7 +2614,7 @@ fn lua_collision_callbacks_reinserted_still_run_once() {
     spawn_box(&mut tw, "b", 5.0, ());
     tw.tick(1, DT);
 
-    assert_eq!(take_lua_log(&mut tw), ["enter"]);
+    assert_eq!(take_lua_log(&mut tw), ["started"]);
 }
 
 /// A rule cloned with `engine.clone()` from a registered Lua rule calls the
@@ -2621,9 +2624,13 @@ fn lua_collision_callbacks_reinserted_still_run_once() {
 fn lua_collision_rule_clone_keeps_its_callbacks() {
     let mut tw = lua_script_world(
         "clone_rule",
-        "function on_enter(ctx) LOG[#LOG + 1] = 'enter' end\nfunction on_exit(ctx) end\n",
+        "function on_started(ctx) LOG[#LOG + 1] = 'started' end\nfunction on_ended(ctx) end\n",
     );
-    spawn_lua_rule(&mut tw, None, &format!("{ENTER_EXIT}:register_as('rule')"));
+    spawn_lua_rule(
+        &mut tw,
+        None,
+        &format!("{STARTED_ENDED}:register_as('rule')"),
+    );
     let original = lua_rule_entity(&mut tw);
     exec_lua(&mut tw, "engine.clone('rule'):build()");
     tw.tick(1, DT);
@@ -2634,23 +2641,23 @@ fn lua_collision_rule_clone_keeps_its_callbacks() {
     spawn_box(&mut tw, "b", 5.0, ());
     tw.tick(1, DT);
 
-    assert_eq!(take_lua_log(&mut tw), ["enter"]);
+    assert_eq!(take_lua_log(&mut tw), ["started"]);
 }
 
-/// A Lua rule despawned while its pair touches never calls `on_exit`.
+/// A Lua rule despawned while its pair touches never calls `on_ended`.
 #[cfg(feature = "lua")]
 #[test]
-fn lua_collision_despawned_rule_gets_no_exit() {
+fn lua_collision_despawned_rule_never_calls_ended() {
     let mut tw = lua_script_world(
         "despawned_rule",
-        "function on_enter(ctx) LOG[#LOG + 1] = 'enter' end\n\
-         function on_exit(ctx) LOG[#LOG + 1] = 'exit' end\n",
+        "function on_started(ctx) LOG[#LOG + 1] = 'started' end\n\
+         function on_ended(ctx) LOG[#LOG + 1] = 'ended' end\n",
     );
-    spawn_enter_exit_rule(&mut tw, None);
+    spawn_started_ended_rule(&mut tw, None);
     spawn_box(&mut tw, "a", 0.0, ());
     let b = spawn_box(&mut tw, "b", 5.0, ());
     tw.tick(1, DT);
-    assert_eq!(take_lua_log(&mut tw), ["enter"]);
+    assert_eq!(take_lua_log(&mut tw), ["started"]);
 
     let rule = lua_rule_entity(&mut tw);
     tw.world.despawn(rule);
@@ -2660,21 +2667,21 @@ fn lua_collision_despawned_rule_gets_no_exit() {
     assert!(take_lua_log(&mut tw).is_empty());
 }
 
-/// A rule with only a stay callback runs it every touching tick, and nothing
-/// when the pair separates.
+/// A rule with only an `ongoing` callback runs it every touching tick, and
+/// nothing when the pair separates.
 #[cfg(feature = "lua")]
 #[test]
-fn lua_collision_stay_only_rule_runs_every_touching_tick() {
+fn lua_collision_ongoing_only_rule_runs_every_touching_tick() {
     let mut tw = lua_script_world(
-        "stay_only",
-        "function on_stay(ctx) LOG[#LOG + 1] = 'stay' end\n",
+        "ongoing_only",
+        "function on_ongoing(ctx) LOG[#LOG + 1] = 'ongoing' end\n",
     );
-    spawn_lua_rule(&mut tw, Some("on_stay"), "");
+    spawn_lua_rule(&mut tw, Some("on_ongoing"), "");
     spawn_box(&mut tw, "a", 0.0, ());
     let b = spawn_box(&mut tw, "b", 5.0, ());
 
     tw.tick(2, DT);
-    assert_eq!(take_lua_log(&mut tw), ["stay", "stay"]);
+    assert_eq!(take_lua_log(&mut tw), ["ongoing", "ongoing"]);
 
     move_to(&mut tw, b, 100.0);
     tw.tick(2, DT);
@@ -2693,10 +2700,10 @@ fn count_ongoing(_: On<CollisionOngoing>, mut counter: ResMut<Counter>) {
 fn lua_and_rust_rules_on_one_pair_fire_once_per_tick() {
     let mut tw = lua_script_world(
         "compete",
-        "function on_stay(ctx) LOG[#LOG + 1] = 'stay' end\n",
+        "function on_ongoing(ctx) LOG[#LOG + 1] = 'ongoing' end\n",
     );
     tw.world.init_resource::<Counter>();
-    spawn_lua_rule(&mut tw, Some("on_stay"), "");
+    spawn_lua_rule(&mut tw, Some("on_ongoing"), "");
     tw.world
         .spawn(CollisionRule::new("a", "b"))
         .observe(count_ongoing);

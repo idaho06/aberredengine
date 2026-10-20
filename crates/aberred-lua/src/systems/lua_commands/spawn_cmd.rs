@@ -1357,7 +1357,7 @@ mod tests {
             ("player", "enemy")
         );
         let callbacks = world.get::<LuaOnCollision>(e).unwrap();
-        assert_eq!(callbacks.stay.as_deref(), Some("on_hit"));
+        assert_eq!(callbacks.ongoing.as_deref(), Some("on_hit"));
         assert_eq!(&*world.get::<LuaSetup>(e).unwrap().callback, "setup_fn");
         assert_eq!(
             &*world.get::<LuaOnAnimationEnd>(e).unwrap().callback,
@@ -1366,7 +1366,7 @@ mod tests {
     }
 
     #[test]
-    fn lua_spawn_puts_enter_and_exit_callbacks_on_the_collision_rule() {
+    fn lua_spawn_puts_started_and_ended_callbacks_on_the_collision_rule() {
         use crate::components::lua_on_collision::LuaOnCollision;
         let mut world = World::new();
         let mut signals = WorldSignals::default();
@@ -1374,17 +1374,17 @@ mod tests {
             &mut world,
             &mut signals,
             "engine.spawn():with_lua_collision_rule('a', 'b', nil)\
-             :with_lua_collision_enter('in'):with_lua_collision_exit('out'):build()",
+             :with_lua_collision_started('in'):with_lua_collision_ended('out'):build()",
         );
 
         let callbacks = world.get::<LuaOnCollision>(e).unwrap();
         assert_eq!(
             (
-                callbacks.stay.as_deref(),
-                callbacks.enter.as_deref(),
-                callbacks.exit.as_deref()
+                callbacks.started.as_deref(),
+                callbacks.ongoing.as_deref(),
+                callbacks.ended.as_deref()
             ),
-            (None, Some("in"), Some("out"))
+            (Some("in"), None, Some("out"))
         );
     }
 

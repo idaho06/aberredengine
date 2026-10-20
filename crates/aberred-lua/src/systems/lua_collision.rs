@@ -6,22 +6,22 @@
 //! attaches to each Lua rule entity (so a Rust rule's events never reach
 //! them), call the Lua functions the [`LuaOnCollision`] names:
 //!
-//! - `lua_collision_enter_observer` – on `CollisionStarted`, calls `enter`
-//! - `lua_collision_stay_observer` – on `CollisionOngoing`, calls `stay`
-//! - `lua_collision_exit_observer` – on `CollisionEnded`, calls `exit`
+//! - `lua_collision_started_observer` – on `CollisionStarted`, calls `started`
+//! - `lua_collision_ongoing_observer` – on `CollisionOngoing`, calls `ongoing`
+//! - `lua_collision_ended_observer` – on `CollisionEnded`, calls `ended`
 //!
 //! Each callback gets a fresh pooled ctx and its `engine.collision_*`
 //! commands are applied right after it. Core triggers `CollisionStarted`
-//! just before the pair's first `CollisionOngoing`, so `enter` runs before that
-//! tick's `stay`; `CollisionEnded` comes from `collision_ended_system`, after
-//! detection.
+//! just before the pair's first `CollisionOngoing`, so `started` runs before
+//! that tick's `ongoing`; `CollisionEnded` comes from
+//! `collision_ended_system`, after detection.
 //!
 //! # Lua Collision Callbacks
 //!
 //! Lua collision rules are defined via `engine.spawn():with_lua_collision_rule()`,
-//! with optional `:with_lua_collision_enter()`/`:with_lua_collision_exit()`.
-//! The enter and every-tick callbacks receive a context table with entity
-//! data for both colliders:
+//! with optional `:with_lua_collision_started()`/`:with_lua_collision_ended()`.
+//! The `started` and every-tick `ongoing` callbacks receive a context table
+//! with entity data for both colliders:
 //!
 //! ```lua
 //! function on_player_enemy(ctx)
@@ -30,7 +30,7 @@
 //! end
 //! ```
 //!
-//! The exit callback's context carries only `ctx.a.id`/`ctx.a.group` and
+//! The ended callback's context carries only `ctx.a.id`/`ctx.a.group` and
 //! `ctx.b.id`/`ctx.b.group`; either entity may already be despawned.
 //!
 //! **Performance**: Context tables are pooled and reused between collisions to
@@ -63,7 +63,7 @@ use aberred_core::systems::collision::{compute_sides, resolve_collider_rect, res
 use log::error;
 
 /// One side of a pooled collision context. `Default` leaves everything but
-/// `id` and `group` nil (the exit callback's ctx).
+/// `id` and `group` nil (the ended callback's ctx).
 #[derive(Clone, Copy, Default)]
 struct CollisionSide<'a> {
     id: u64,
@@ -113,7 +113,7 @@ impl LuaRuleDispatch<'_, '_> {
     /// applies the `engine.collision_*` commands it queued.
     ///
     /// Rects and sides are resolved here rather than taken from the event, so
-    /// a stay callback sees what the same tick's enter callback moved.
+    /// `ongoing` sees what the same tick's `started` moved.
     fn call_touching(
         &mut self,
         (rule, a, b): (Entity, Entity, Entity),
@@ -154,14 +154,14 @@ impl LuaRuleDispatch<'_, '_> {
         drain_dispatch_commands(p, DrainScope::Collision);
     }
 
-    /// Calls the `exit` callback of the Lua rule `rule` (if it is one and has
+    /// Calls the `ended` callback of the Lua rule `rule` (if it is one and has
     /// one) for the pair `a`/`b`, with only each side's `id` and `group`, then
     /// applies the `engine.collision_*` commands it queued.
-    fn call_exit(&mut self, CollisionEnded { rule, a, b }: CollisionEnded) {
+    fn call_ended(&mut self, CollisionEnded { rule, a, b }: CollisionEnded) {
         let Ok((rule, callbacks)) = self.rules.get(rule) else {
             return;
         };
-        let Some(name) = callbacks.exit.as_deref() else {
+        let Some(name) = callbacks.ended.as_deref() else {
             return;
         };
 
@@ -193,7 +193,8 @@ impl LuaRuleDispatch<'_, '_> {
 #[component(clone_behavior = Ignore)]
 pub struct LuaCollisionObserved;
 
-/// Attaches the enter/stay/exit observers to each new Lua rule entity, once.
+/// Attaches the `started`/`ongoing`/`ended` observers to each new Lua rule
+/// entity, once.
 ///
 /// Each attached observer is its own entity with its own copy of the
 /// dispatch system state (three per Lua rule, respawned with the rule); in
@@ -211,42 +212,44 @@ pub fn lua_collision_rule_added_observer(
     commands
         .entity(rule)
         .insert(LuaCollisionObserved)
-        .observe(lua_collision_enter_observer)
-        .observe(lua_collision_stay_observer)
-        .observe(lua_collision_exit_observer);
+        .observe(lua_collision_started_observer)
+        .observe(lua_collision_ongoing_observer)
+        .observe(lua_collision_ended_observer);
 }
 
 /// Observes core `CollisionStarted` on a Lua rule entity and calls its
-/// `enter` callback.
+/// `started` callback.
 ///
 /// Core triggers `CollisionStarted` just before the pair's first
-/// `CollisionOngoing`, so `enter` runs before that tick's `stay`.
-fn lua_collision_enter_observer(trigger: On<CollisionStarted>, mut dispatch: LuaRuleDispatch) {
-    aberred_core::tracy::tracy_span!("lua_collision_enter");
+/// `CollisionOngoing`, so `started` runs before that tick's `ongoing`.
+fn lua_collision_started_observer(trigger: On<CollisionStarted>, mut dispatch: LuaRuleDispatch) {
+    aberred_core::tracy::tracy_span!("lua_collision_started");
     let ev = trigger.event();
     dispatch.call_touching((ev.rule, ev.a, ev.b), |callbacks| {
-        callbacks.enter.as_deref()
+        callbacks.started.as_deref()
     });
 }
 
-/// Observes core `CollisionOngoing` on a Lua rule entity and calls its `stay`
-/// callback, every tick the pair touches.
-fn lua_collision_stay_observer(trigger: On<CollisionOngoing>, mut dispatch: LuaRuleDispatch) {
-    aberred_core::tracy::tracy_span!("lua_collision_stay");
+/// Observes core `CollisionOngoing` on a Lua rule entity and calls its
+/// `ongoing` callback, every tick the pair touches.
+fn lua_collision_ongoing_observer(trigger: On<CollisionOngoing>, mut dispatch: LuaRuleDispatch) {
+    aberred_core::tracy::tracy_span!("lua_collision_ongoing");
     let ev = trigger.event();
-    dispatch.call_touching((ev.rule, ev.a, ev.b), |callbacks| callbacks.stay.as_deref());
+    dispatch.call_touching((ev.rule, ev.a, ev.b), |callbacks| {
+        callbacks.ongoing.as_deref()
+    });
 }
 
-/// Observes core `CollisionEnded` on a Lua rule entity and calls its `exit`
-/// callback.
+/// Observes core `CollisionEnded` on a Lua rule entity and calls its
+/// `ended` callback.
 ///
 /// Either touching entity may already be despawned, so the ctx carries only
 /// `id` and `group` per side (from the rule's groups); `pos`, `vel`, `rect`
 /// and `signals` are nil and the sides are empty. A despawned rule takes its
 /// observers with it; a rule whose `LuaOnCollision` was removed is skipped.
-fn lua_collision_exit_observer(trigger: On<CollisionEnded>, mut dispatch: LuaRuleDispatch) {
-    aberred_core::tracy::tracy_span!("lua_collision_exit");
-    dispatch.call_exit(*trigger.event());
+fn lua_collision_ended_observer(trigger: On<CollisionEnded>, mut dispatch: LuaRuleDispatch) {
+    aberred_core::tracy::tracy_span!("lua_collision_ended");
+    dispatch.call_ended(*trigger.event());
 }
 
 /// Convert BoxSide to string representation.
