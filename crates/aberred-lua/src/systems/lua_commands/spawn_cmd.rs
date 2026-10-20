@@ -39,9 +39,9 @@ use aberred_core::math::Color;
 
 use crate::resources::lua_runtime::{
     AnimationControllerData, AnimationData, CloneCmd, ColliderData, EntityShaderData,
-    LuaCollisionRuleData, LuaPhaseCallbacksSpawn, LuaTimerSpawn, MenuActionData, MenuData,
-    ParticleEmitterData, RigidBodyData, SpawnCmd, SpriteData, StuckToData, TextData,
-    TweenPositionData, TweenRotationData, TweenScaleData, TweenScreenPositionData,
+    LuaCollisionRuleData, LuaPhaseCallbacksSpawn, LuaTimerSpawn, MenuData, ParticleEmitterData,
+    RigidBodyData, SpawnCmd, SpriteData, StuckToData, TextData, TweenPositionData,
+    TweenRotationData, TweenScaleData, TweenScreenPositionData,
 };
 use aberred_core::resources::worldsignals::WorldSignals;
 use aberred_core::systems::propagate_transforms::ComputeInitialGlobalTransform;
@@ -494,7 +494,7 @@ fn apply_ui_components(
         ));
     }
     if let Some(menu_data) = menu {
-        use aberred_core::components::menu::{Menu, MenuAction, MenuActions};
+        use aberred_core::components::menu::{Menu, MenuActions};
         let labels: Vec<(&str, &str)> = menu_data
             .items
             .iter()
@@ -546,11 +546,7 @@ fn apply_ui_components(
             entity_commands.insert((menu_component, LuaOnMenuSelect::new(callback)));
         } else {
             let mut actions = MenuActions::new();
-            for (item_id, action_data) in menu_data.actions {
-                let action = match action_data {
-                    MenuActionData::RequestScene { name } => MenuAction::RequestScene(name),
-                    MenuActionData::RequestQuit => MenuAction::RequestQuit,
-                };
+            for (item_id, action) in menu_data.actions {
                 actions = actions.with(item_id, action);
             }
             entity_commands.insert((menu_component, actions));

@@ -1,4 +1,5 @@
 use super::*;
+use aberred_core::components::menu::MenuAction;
 
 pub(super) fn register<M: LuaUserDataMethods<LuaEntityBuilder>>(
     methods: &mut M,
@@ -152,8 +153,7 @@ pub(super) fn register<M: LuaUserDataMethods<LuaEntityBuilder>>(
                     "with_menu_action_request_scene() requires with_menu() first",
                 ));
             };
-            menu.actions
-                .push((item_id, MenuActionData::RequestScene { name }));
+            menu.actions.push((item_id, MenuAction::RequestScene(name)));
             Ok(())
         }
     );
@@ -170,7 +170,7 @@ pub(super) fn register<M: LuaUserDataMethods<LuaEntityBuilder>>(
                     "with_menu_action_request_quit() requires with_menu() first",
                 ));
             };
-            menu.actions.push((item_id, MenuActionData::RequestQuit));
+            menu.actions.push((item_id, MenuAction::RequestQuit));
             Ok(())
         }
     );
@@ -309,8 +309,9 @@ mod tests {
             .actions
             .iter()
             .map(|(id, action)| match action {
-                MenuActionData::RequestScene { name } => format!("{id}:scene:{name}"),
-                MenuActionData::RequestQuit => format!("{id}:quit"),
+                MenuAction::RequestScene(name) => format!("{id}:scene:{name}"),
+                MenuAction::RequestQuit => format!("{id}:quit"),
+                MenuAction::Noop => format!("{id}:noop"),
             })
             .collect();
         assert_eq!(

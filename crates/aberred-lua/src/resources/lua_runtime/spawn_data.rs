@@ -9,6 +9,7 @@ use aberred_core::components::guiimage::GuiImage;
 use aberred_core::components::guilabel::GuiLabel;
 use aberred_core::components::guiprogressbar::GuiProgressBar;
 use aberred_core::components::guiwindow::GuiWindow;
+use aberred_core::components::menu::MenuAction;
 use aberred_core::components::timer::TimerMode;
 use aberred_core::components::tween::{Easing, LoopMode};
 use aberred_core::resources::uniformvalue::UniformValue;
@@ -267,13 +268,6 @@ pub struct ColorData {
     pub a: u8,
 }
 
-/// Menu action data from Lua.
-#[derive(Debug, Clone)]
-pub enum MenuActionData {
-    RequestScene { name: String },
-    RequestQuit,
-}
-
 /// Data for spawning a Menu + MenuActions ensemble.
 #[derive(Debug, Clone, Default)]
 pub struct MenuData {
@@ -292,7 +286,7 @@ pub struct MenuData {
     pub cursor_entity_key: Option<String>,
     pub selection_change_sound: Option<String>,
     /// (item_id, action)
-    pub actions: Vec<(String, MenuActionData)>,
+    pub actions: Vec<(String, MenuAction)>,
     /// Optional Lua callback invoked when any item is selected.
     pub on_select_callback: Option<String>,
     /// Maximum number of visible items (None = show all, enables scrolling).
