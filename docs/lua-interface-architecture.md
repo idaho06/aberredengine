@@ -240,7 +240,7 @@ register_getter!(engine, self.lua, meta_fns, "get_scalar",
     params = [("key", "string")], returns = "number?");
 ```
 
-A handful of functions with irregular shapes (`request_scene`, `request_quit`, `set_target_fps`, `set_render_size`, `set_background_color`) are still registered manually with `engine.set()` + a `push_fn_meta()` call, when neither macro's grammar fits cleanly.
+A few functions with irregular shapes (`set_target_fps`, `set_render_size`, `set_background_color`) are registered manually with `engine.set()` + a `push_fn_meta()` call, since neither macro's grammar fits them cleanly.
 
 ### Step 3: Rust Drains Commands
 

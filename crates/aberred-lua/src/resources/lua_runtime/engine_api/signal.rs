@@ -207,47 +207,32 @@ impl LuaRuntime {
             ""
         );
 
-        engine.set(
+        // A request (NextScene), applied by the next scene switch poll; the
+        // scene string stays put until then.
+        register_cmd!(
+            engine,
+            self.lua,
+            meta_fns,
             "request_scene",
-            self.lua.create_function(|lua, name: String| {
-                let data = lua
-                    .app_data_ref::<LuaAppData>()
-                    .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?;
-                // A request (NextScene), applied by the next scene switch poll;
-                // the scene string stays put until then.
-                data.push(&data.signal_commands, SignalCmd::RequestScene { name });
-                Ok(())
-            })?,
-        )?;
-        push_fn_meta(
-            &self.lua,
-            &meta_fns,
-            "request_scene",
-            "Request a switch to scene `name`, applied by the next scene switch poll",
-            "base",
-            &[("name", "string")],
-            None,
-        )?;
-
-        engine.set(
+            signal_commands,
+            |name| String,
+            SignalCmd::RequestScene { name },
+            desc = "Request a switch to scene `name`, applied by the next scene switch poll",
+            cat = "base",
+            params = [("name", "string")]
+        );
+        register_cmd!(
+            engine,
+            self.lua,
+            meta_fns,
             "request_quit",
-            self.lua.create_function(|lua, ()| {
-                let data = lua
-                    .app_data_ref::<LuaAppData>()
-                    .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?;
-                data.push(&data.signal_commands, SignalCmd::RequestQuit);
-                Ok(())
-            })?,
-        )?;
-        push_fn_meta(
-            &self.lua,
-            &meta_fns,
-            "request_quit",
-            "Request quitting the game (sets the Quitting state as the next game state)",
-            "base",
-            &[],
-            None,
-        )?;
+            signal_commands,
+            |()| (),
+            SignalCmd::RequestQuit,
+            desc = "Request quitting the game (sets the Quitting state as the next game state)",
+            cat = "base",
+            params = []
+        );
 
         Ok(())
     }
