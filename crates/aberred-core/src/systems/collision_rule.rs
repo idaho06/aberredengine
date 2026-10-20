@@ -1,6 +1,6 @@
 //! Rule-matched collision events.
 //!
-//! [`collision_rule_observer`] receives each [`Overlapping`], finds the
+//! [`collision_rule_observer`] receives each [`BoxOverlap`], finds the
 //! [`CollisionRule`] covering the pair's groups, and triggers
 //! [`CollisionOngoing`] on that rule's entity, preceded by
 //! [`CollisionStarted`] when the contact is new. [`collision_ended_system`]
@@ -9,7 +9,7 @@
 //! # Collision Flow
 //!
 //! 1. [`collision_detector`](crate::systems::collision_detector::collision_detector) detects overlaps
-//!    and triggers `Overlapping` events
+//!    and triggers `BoxOverlap` events
 //! 2. `collision_rule_observer` looks up the matching rule by
 //!    [`Group`] names
 //! 3. It computes the contact sides, records the contact in
@@ -23,18 +23,18 @@
 //! - [`crate::systems::collision_detector`] – collision detection
 //! - [`crate::components::collision::CollisionRule`] – group-pair rule
 //! - [`crate::components::boxcollider::BoxCollider`] – axis-aligned collider
-//! - [`crate::events::collision`] – `Overlapping`, `CollisionOngoing` and the contact events
+//! - [`crate::events::collision`] – `BoxOverlap`, `CollisionOngoing` and the contact events
 
 use bevy_ecs::prelude::*;
 
 use crate::components::collision::CollisionRule;
 use crate::components::group::Group;
-use crate::events::collision::{CollisionEnded, CollisionOngoing, CollisionStarted, Overlapping};
+use crate::events::collision::{BoxOverlap, CollisionEnded, CollisionOngoing, CollisionStarted};
 use crate::resources::collision_contacts::CollisionContacts;
 use crate::resources::collision_rule_index::CollisionRuleIndex;
 use crate::systems::collision::{ColliderRects, compute_sides, resolve_groups};
 
-/// Observer that turns an [`Overlapping`] into a [`CollisionOngoing`] on the
+/// Observer that turns a [`BoxOverlap`] into a [`CollisionOngoing`] on the
 /// matching [`CollisionRule`] entity.
 ///
 /// 1. Looks up [`Group`] names for both entities (returns early if missing)
@@ -46,7 +46,7 @@ use crate::systems::collision::{ColliderRects, compute_sides, resolve_groups};
 ///    [`CollisionStarted`] first
 /// 5. Triggers `CollisionOngoing` with `a`/`b` in the rule's group order
 pub fn collision_rule_observer(
-    trigger: On<Overlapping>,
+    trigger: On<BoxOverlap>,
     rules: Query<&CollisionRule>,
     index: Res<CollisionRuleIndex>,
     groups: Query<&Group>,
@@ -58,7 +58,7 @@ pub fn collision_rule_observer(
         return;
     }
 
-    let Overlapping { a, b } = *trigger.event();
+    let BoxOverlap { a, b } = *trigger.event();
 
     let Some((ga, gb)) = resolve_groups(&groups, a, b) else {
         return;

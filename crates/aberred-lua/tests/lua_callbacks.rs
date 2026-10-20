@@ -17,7 +17,7 @@ use aberred_core::components::signals::Signals;
 use aberred_core::components::timer::{Timer, TimerMode};
 use aberred_core::components::ttl::Ttl;
 use aberred_core::events::animation::AnimationFinished;
-use aberred_core::events::collision::Overlapping;
+use aberred_core::events::collision::BoxOverlap;
 use aberred_core::events::gui_interactable::GuiClicked;
 use aberred_core::events::menu::MenuSelected;
 use aberred_core::events::timer::TimerFired;
@@ -143,13 +143,13 @@ fn collision_pipeline_triggers_lua_side_effects() {
     let saw_collision_clone = saw_collision.clone();
 
     // Register the test observer to track collision events
-    world.add_observer(move |_trigger: On<Overlapping>| {
+    world.add_observer(move |_trigger: On<BoxOverlap>| {
         *saw_collision_clone.lock().unwrap() = true;
     });
 
     world.flush();
 
-    // Run collision detection - this will trigger Overlapping which fires both observers
+    // Run collision detection - this will trigger BoxOverlap which fires both observers
     tick_collision_detector(&mut world);
 
     assert!(*saw_collision.lock().unwrap());

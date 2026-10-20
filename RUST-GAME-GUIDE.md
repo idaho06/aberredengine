@@ -641,7 +641,7 @@ fn my_enter(_: On<SceneEntered>, mut commands: Commands) {
 }
 ```
 
-> You can also observe engine-defined events: `Overlapping`, `TimerFired`, `InputEvent`, `GameStateChangedEvent`, `WindowResizedEvent`, etc. Note that not every engine type that crosses a system boundary is an `Event` — `AudioCmd` and `RenderAssetCmd`, for example, are Bevy `Message`s (`MessageWriter`/`MessageReader`, queue-based), a different mechanism from `Commands::trigger`/`.add_observer()`.
+> You can also observe engine-defined events: `BoxOverlap`, `TimerFired`, `InputEvent`, `GameStateChangedEvent`, `WindowResizedEvent`, etc. Note that not every engine type that crosses a system boundary is an `Event` — `AudioCmd` and `RenderAssetCmd`, for example, are Bevy `Message`s (`MessageWriter`/`MessageReader`, queue-based), a different mechanism from `Commands::trigger`/`.add_observer()`.
 
 ### Your own components and resources
 
@@ -1674,7 +1674,7 @@ Lua phase callbacks (`:with_lua_phase_entered/exited/update`) run on this same `
 
 1. `collision_detector` system iterates all entity pairs with `MapPosition` + `BoxCollider`
 2. Uses AABB overlap via `BoxCollider::as_rectangle()` + `Rect::overlaps()`
-3. On overlap, triggers an `Overlapping { a, b }` (observe it directly for "any overlap" logic)
+3. On overlap, triggers a `BoxOverlap { a, b }` (observe it directly for "any overlap" logic)
 4. `collision_rule_observer` receives the event, looks up `Group` names, finds a matching `CollisionRule`, computes collision sides, and triggers `CollisionOngoing` on the rule entity (preceded by `CollisionStarted` when the pair just started touching)
 5. After detection, `collision_ended_system` triggers `CollisionEnded` for each pair that stopped touching
 

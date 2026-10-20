@@ -19,7 +19,7 @@ use smallvec::SmallVec;
 use crate::components::collision::{CollisionRule, match_groups};
 
 /// Normalizes an unordered group-name pair so `(a, b)` and `(b, a)` produce
-/// the same key. Borrows rather than allocates, so a per-`Overlapping`
+/// the same key. Borrows rather than allocates, so a per-`BoxOverlap`
 /// lookup costs no heap allocation.
 pub(crate) fn normalize_pair<'a>(a: &'a str, b: &'a str) -> (&'a str, &'a str) {
     if a <= b { (a, b) } else { (b, a) }

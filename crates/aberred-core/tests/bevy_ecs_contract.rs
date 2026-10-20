@@ -37,7 +37,7 @@ struct Counter(i32);
 struct DebugOn(bool);
 
 #[derive(Event, Debug, Clone)]
-struct Overlapping {
+struct BoxOverlap {
     a: Entity,
     b: Entity,
 }
@@ -106,7 +106,7 @@ fn messages_cleared_after_second_update() {
 // Observers
 // =============================================================================
 
-// Engine events (`Overlapping`, `AnimationFinished`, ...) are observed
+// Engine events (`BoxOverlap`, `AnimationFinished`, ...) are observed
 // via `add_observer` and fired with `World::trigger`.
 #[test]
 fn observer_receives_event_payload() {
@@ -114,7 +114,7 @@ fn observer_receives_event_payload() {
 
     let seen = Arc::new(Mutex::new(Vec::new()));
     let seen_clone = seen.clone();
-    world.add_observer(move |trigger: On<Overlapping>| {
+    world.add_observer(move |trigger: On<BoxOverlap>| {
         let event = trigger.event();
         seen_clone.lock().unwrap().extend([event.a, event.b]);
     });
@@ -122,7 +122,7 @@ fn observer_receives_event_payload() {
 
     let e1 = world.spawn_empty().id();
     let e2 = world.spawn_empty().id();
-    world.trigger(Overlapping { a: e1, b: e2 });
+    world.trigger(BoxOverlap { a: e1, b: e2 });
 
     assert_eq!(*seen.lock().unwrap(), vec![e1, e2]);
 }
@@ -236,7 +236,7 @@ fn deferred_write_world() -> (World, Entity, Arc<Mutex<Vec<i32>>>) {
     (world, entity, seen)
 }
 
-// `collision_detector` queues one `Overlapping` per pair: a Lua entity command
+// `collision_detector` queues one `BoxOverlap` per pair: a Lua entity command
 // queued by one pair's observer must apply before the next pair's observer reads.
 #[test]
 fn observer_queued_entity_command_applies_before_next_queued_trigger() {

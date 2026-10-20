@@ -4,7 +4,7 @@
 //! `rebuild_rule_index` always runs in `SimSet::Collision`,
 //! `.before(collision_detector)`, so the index reflects this tick's rules
 //! (including ones spawned this same tick via `SimSet::Spawn`) before any
-//! `Overlapping` fires.
+//! `BoxOverlap` fires.
 //!
 //! Full rebuild on any change -- rules are few and changes are rare (scene
 //! switch spawn/despawn), so incremental bucket maintenance isn't worth the

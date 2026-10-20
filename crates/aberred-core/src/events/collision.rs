@@ -1,6 +1,6 @@
 //! Collision event types.
 //!
-//! [`Overlapping`] is the raw overlap event:
+//! [`BoxOverlap`] is the raw overlap event:
 //! [`collision_detector`](crate::systems::collision_detector::collision_detector)
 //! triggers it for every overlapping pair, every tick. Observe it for
 //! "any overlap" logic.
@@ -30,12 +30,12 @@ use crate::components::collision::BoxSides;
 /// `BoxCollider` entities, every tick they overlap. [`CollisionOngoing`] is the
 /// rule-matched event.
 ///
-/// The two fields, [`Overlapping::a`] and [`Overlapping::b`], are the
+/// The two fields, [`BoxOverlap::a`] and [`BoxOverlap::b`], are the
 /// entity IDs of the participants. No ordering guarantees are provided.
 /// Additional collision details (normals, penetration, etc.) can be added by
 /// extending this type when needed.
 #[derive(Event, Debug, Clone, Copy)]
-pub struct Overlapping {
+pub struct BoxOverlap {
     pub a: Entity,
     pub b: Entity,
 }
