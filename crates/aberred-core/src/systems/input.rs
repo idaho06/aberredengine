@@ -11,8 +11,8 @@
 //!   [`RawDeviceSnapshot`]s against [`InputBindings`] and
 //!   [`PrevRawSnapshot`], sequentially (oldest to newest, see its doc comment
 //!   for why this can't be a merge-then-diff-once pass), into [`InputState`],
-//!   then applies imgui capture masking and emits [`InputEvent`]/
-//!   [`SwitchDebugEvent`] once against the tick's final resolved state.
+//!   then applies imgui capture masking and emits [`InputActionChanged`]/
+//!   [`DebugToggled`] once against the tick's final resolved state.
 //!   Logic-side work: no raylib handle involved. Called directly from the
 //!   logic thread's `apply_tick_input`, not as a scheduled system (there's no fixed set of
 //!   `Res`/`ResMut` params that would fit a backlog of variable length).
@@ -24,8 +24,8 @@ use log::debug;
 use crate::math::Vec2;
 use glam::Mat3;
 
-use crate::events::input::{InputAction, InputEvent};
-use crate::events::switchdebug::SwitchDebugEvent;
+use crate::events::input::{InputAction, InputActionChanged};
+use crate::events::switchdebug::DebugToggled;
 use crate::protocol::raw_input::RawDeviceSnapshot;
 use crate::resources::camera2d::{Camera2D, Camera2DRes};
 use crate::resources::gameconfig::GameConfig;
@@ -156,7 +156,7 @@ fn resolve_sample_into(
 
 /// Resolve a sim tick's backlog of raw device samples (oldest to newest)
 /// into [`InputState`], then apply imgui capture masking and emit
-/// [`InputEvent`]/[`SwitchDebugEvent`] once against the tick's final resolved
+/// [`InputActionChanged`]/[`DebugToggled`] once against the tick's final resolved
 /// state.
 ///
 /// **Why sequential per-sample resolution, not merge-then-diff-once:** edge
@@ -302,25 +302,25 @@ pub fn resolve_input_backlog(world: &mut World, samples: &[RawDeviceSnapshot]) {
             }
             let state = *input.action(action);
             if state.just_pressed {
-                world.trigger(InputEvent {
+                world.trigger(InputActionChanged {
                     action,
                     pressed: true,
                 });
             }
             if state.just_released {
-                world.trigger(InputEvent {
+                world.trigger(InputActionChanged {
                     action,
                     pressed: false,
                 });
             }
         }
 
-        // Engine toggles emit no InputEvent: ToggleDebug triggers its own
-        // SwitchDebugEvent; ToggleFullscreen is read off the resolved
+        // Engine toggles emit no InputActionChanged: ToggleDebug triggers its own
+        // DebugToggled; ToggleFullscreen is read off the resolved
         // InputState by the caller, which sends RenderMsg::ToggleFullscreen.
         if input.action(InputAction::ToggleDebug).just_pressed {
             debug!("Debug mode key pressed");
-            world.trigger(SwitchDebugEvent {});
+            world.trigger(DebugToggled {});
         }
     });
 
@@ -436,8 +436,8 @@ mod tests {
 
     #[derive(Resource, Default)]
     struct EventLog {
-        input_events: Vec<(InputAction, bool)>,
-        debug_switches: usize,
+        action_changes: Vec<(InputAction, bool)>,
+        debug_toggles: usize,
     }
 
     fn build_world(camera: Camera2D) -> World {
@@ -451,11 +451,13 @@ mod tests {
         world.insert_resource(ScreenSize { w: 640, h: 360 });
         world.insert_resource(WindowSize { w: 640, h: 360 });
         world.insert_resource(EventLog::default());
-        world.add_observer(|trigger: On<InputEvent>, mut log: ResMut<EventLog>| {
-            log.input_events.push((trigger.action, trigger.pressed));
-        });
-        world.add_observer(|_: On<SwitchDebugEvent>, mut log: ResMut<EventLog>| {
-            log.debug_switches += 1;
+        world.add_observer(
+            |trigger: On<InputActionChanged>, mut log: ResMut<EventLog>| {
+                log.action_changes.push((trigger.action, trigger.pressed));
+            },
+        );
+        world.add_observer(|_: On<DebugToggled>, mut log: ResMut<EventLog>| {
+            log.debug_toggles += 1;
         });
         world
     }
@@ -724,11 +726,11 @@ mod tests {
             "F10 must never be masked -- fullscreen toggling is unrelated to imgui capture"
         );
         let log = world.resource::<EventLog>();
-        assert_eq!(log.debug_switches, 1);
+        assert_eq!(log.debug_toggles, 1);
     }
 
     #[test]
-    fn resolve_emits_input_events_from_edges_in_action_order() {
+    fn resolve_emits_action_changes_from_edges_in_action_order() {
         let mut world = build_world(test_camera((0.0, 0.0), (0.0, 0.0), 1.0, 0.0));
         let mut sample = raw();
         // Action1 pressed (Space), Back released is impossible to
@@ -739,7 +741,7 @@ mod tests {
         sample.set_key(Key::KEY_ESCAPE.as_u32()); // Back
         resolve_input_backlog(&mut world, &[sample]);
         world.resource_mut::<InputState>().clear_edges();
-        world.resource_mut::<EventLog>().input_events.clear();
+        world.resource_mut::<EventLog>().action_changes.clear();
 
         let mut release_back_press_action1 = raw();
         release_back_press_action1.set_key(Key::KEY_SPACE.as_u32());
@@ -747,17 +749,17 @@ mod tests {
 
         let log = world.resource::<EventLog>();
         assert_eq!(
-            log.input_events,
+            log.action_changes,
             vec![(InputAction::Back, false), (InputAction::Action1, true)]
         );
-        assert_eq!(log.debug_switches, 0);
+        assert_eq!(log.debug_toggles, 0);
     }
 
     #[test]
-    fn resolve_emits_input_events_in_input_action_all_order() {
+    fn resolve_emits_action_changes_in_input_action_all_order() {
         // Pins emission to `InputAction::ALL` order for actions edging in
         // the same sample (Down before Left), and that F11/F10 -- engine
-        // toggles -- never emit an `InputEvent`.
+        // toggles -- never emit an `InputActionChanged`.
         let mut world = build_world(test_camera((0.0, 0.0), (0.0, 0.0), 1.0, 0.0));
         let mut sample = raw();
         sample.set_key(Key::KEY_S.as_u32()); // MainDirectionDown
@@ -768,20 +770,20 @@ mod tests {
 
         let log = world.resource::<EventLog>();
         assert_eq!(
-            log.input_events,
+            log.action_changes,
             vec![
                 (InputAction::MainDirectionDown, true),
                 (InputAction::MainDirectionLeft, true),
             ]
         );
-        assert_eq!(log.debug_switches, 1);
+        assert_eq!(log.debug_toggles, 1);
     }
 
     #[test]
     fn resolve_empty_backlog_is_a_no_op() {
         let mut world = build_world(test_camera((0.0, 0.0), (0.0, 0.0), 1.0, 0.0));
         resolve_input_backlog(&mut world, &[]);
-        assert_eq!(world.resource::<EventLog>().input_events.len(), 0);
+        assert_eq!(world.resource::<EventLog>().action_changes.len(), 0);
     }
 
     /// A raw snapshot with pad 0 connected, `button` (if given) held down and

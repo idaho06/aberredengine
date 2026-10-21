@@ -1,7 +1,7 @@
 //! Window-resize detection.
 //!
 //! [`detect_window_resize`] diffs the logic world's [`WindowSize`] against
-//! its previous-tick value and triggers [`WindowResizedEvent`] on a real,
+//! its previous-tick value and triggers [`WindowResized`] on a real,
 //! positive-dimensioned change. `WindowSize` itself is mirrored from the
 //! newest input sample's raw window dims directly in `logic_thread_main`'s
 //! per-tick loop (`engine_app.rs`), before the sim schedule runs — this
@@ -9,16 +9,16 @@
 //! `Local<Option<T>>`-diff convention used by `send_render_mirrors`/
 //! `apply_gameconfig_changes` on the render side.
 
-use crate::events::window::WindowResizedEvent;
+use crate::events::window::WindowResized;
 use crate::resources::windowsize::WindowSize;
 use bevy_ecs::prelude::*;
 
-/// Triggers [`WindowResizedEvent`] whenever [`WindowSize`] differs from its
+/// Triggers [`WindowResized`] whenever [`WindowSize`] differs from its
 /// value on this system's previous run, as long as both new dimensions are
 /// `> 0`. The `Local` starting at `None` is treated as "no baseline
 /// established yet" rather than "changed" -- the first run only records
 /// `WindowSize`'s current value without firing, matching
-/// [`WindowResizedEvent`]'s documented "not triggered on the first tick"
+/// [`WindowResized`]'s documented "not triggered on the first tick"
 /// contract (unlike `send_render_mirrors`'s `Local<Option<T>>` fields on
 /// the render side, where a first-frame fire is harmless; here it would
 /// misreport the window's startup size as a resize).
@@ -34,7 +34,7 @@ pub fn detect_window_resize(
     if prev != *window_size {
         *last = Some(*window_size);
         if window_size.w > 0 && window_size.h > 0 {
-            commands.trigger(WindowResizedEvent {
+            commands.trigger(WindowResized {
                 w: window_size.w,
                 h: window_size.h,
             });
@@ -49,7 +49,7 @@ mod tests {
     #[derive(Resource, Default)]
     struct ResizeCount(u32);
 
-    fn count_resizes(_event: On<WindowResizedEvent>, mut count: ResMut<ResizeCount>) {
+    fn count_resizes(_event: On<WindowResized>, mut count: ResMut<ResizeCount>) {
         count.0 += 1;
     }
 

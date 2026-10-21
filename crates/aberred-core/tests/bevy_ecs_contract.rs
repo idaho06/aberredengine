@@ -127,7 +127,7 @@ fn observer_receives_event_payload() {
     assert_eq!(*seen.lock().unwrap(), vec![e1, e2]);
 }
 
-// Systems trigger events via `Commands::trigger` (input -> `InputEvent`,
+// Systems trigger events via `Commands::trigger` (input -> `InputActionChanged`,
 // GUI hit-test -> `GuiClicked`); `pump_render_msgs` relies on
 // the observer running as soon as the command queue is applied.
 #[test]

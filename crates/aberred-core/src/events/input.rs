@@ -1,6 +1,6 @@
 //! Input action events.
 //!
-//! This module defines [`InputEvent`] which is triggered when gameplay-relevant
+//! This module defines [`InputActionChanged`] which is triggered when gameplay-relevant
 //! input actions occur (press or release). The [`InputAction`] enum lists all
 //! recognized actions.
 //!
@@ -46,10 +46,10 @@ pub enum InputAction {
     /// Special function (default: F12).
     Special = 12,
     /// Toggle debug overlays (default: F11). Triggers
-    /// [`SwitchDebugEvent`](crate::events::switchdebug::SwitchDebugEvent)
-    /// instead of an [`InputEvent`].
+    /// [`DebugToggled`](crate::events::switchdebug::DebugToggled)
+    /// instead of an [`InputActionChanged`].
     ToggleDebug = 13,
-    /// Toggle fullscreen mode (default: F10). Emits no [`InputEvent`]: the
+    /// Toggle fullscreen mode (default: F10). Emits no [`InputActionChanged`]: the
     /// logic loop sends `RenderMsg::ToggleFullscreen`, which triggers
     /// `SwitchFullScreenEvent` in the render world (`aberred-render`).
     ToggleFullscreen = 14,
@@ -92,7 +92,7 @@ impl InputAction {
 
     /// Whether this is an engine-level toggle (F11 debug overlay, F10
     /// fullscreen) rather than a gameplay action. Engine toggles never emit
-    /// an [`InputEvent`] (debug triggers its own `SwitchDebugEvent`;
+    /// an [`InputActionChanged`] (debug triggers its own `DebugToggled`;
     /// fullscreen is read straight off the resolved `InputState` by the logic
     /// loop) and are never masked by imgui keyboard capture, so F11 can
     /// always close the overlay that holds focus.
@@ -146,7 +146,7 @@ impl InputAction {
 /// The `action` field identifies which logical action occurred, and `pressed`
 /// indicates whether it was a press (true) or release (false).
 #[derive(Event, Debug, Clone, Copy)]
-pub struct InputEvent {
+pub struct InputActionChanged {
     /// The input action that triggered this event.
     pub action: InputAction,
     /// Whether the action was pressed (true) or released (false).

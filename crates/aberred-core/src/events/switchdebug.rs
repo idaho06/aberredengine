@@ -1,6 +1,6 @@
 //! Event and observer to toggle debug visualization and diagnostics.
 //!
-//! Emitting a [`SwitchDebugEvent`] flips the presence of the [`DebugMode`]
+//! Emitting a [`DebugToggled`] flips the presence of the [`DebugMode`]
 //! resource. Systems that render overlays or print extra diagnostics can gate
 //! their behavior on this resource.
 use crate::resources::debugmode::DebugMode;
@@ -13,20 +13,20 @@ use log::{debug, info};
 /// This carries no data; the observer simply switches the presence of the
 /// resource.
 #[derive(Event, Debug, Clone, Copy)]
-pub struct SwitchDebugEvent {}
+pub struct DebugToggled {}
 
 /// Observer that toggles the [`DebugMode`] resource.
 ///
 /// - If `DebugMode` is present, it is removed (debug disabled).
 /// - If absent, it is inserted (debug enabled).
-pub fn switch_debug_observer(
-    _trigger: On<SwitchDebugEvent>,
+pub fn debug_toggled_observer(
+    _trigger: On<DebugToggled>,
     mut commands: Commands,
     debug_mode: Option<Res<DebugMode>>,
 ) {
-    // This observer is triggered when a SwitchDebugEvent is fired.
+    // This observer is triggered when a DebugToggled event is fired.
     // It toggles the DebugMode resource.
-    debug!("SwitchDebugEvent triggered");
+    debug!("DebugToggled triggered");
 
     // Toggle the DebugMode resource
     if debug_mode.is_some() {

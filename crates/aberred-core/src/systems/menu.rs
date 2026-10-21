@@ -19,7 +19,7 @@ use crate::components::screenposition::ScreenPosition;
 use crate::components::signals::Signals;
 use crate::components::sprite::Sprite;
 use crate::components::zindex::ZIndex;
-use crate::events::input::{InputAction, InputEvent};
+use crate::events::input::{InputAction, InputActionChanged};
 use crate::events::menu::MenuSelected;
 use crate::math::Vec2;
 use crate::protocol::audio::AudioCmd;
@@ -340,7 +340,7 @@ pub fn menu_despawn(
 /// When `visible_count` is set, navigation is bounded (no wrap-around) and
 /// scrolling occurs when selection moves outside the visible window.
 pub fn menu_controller_observer(
-    trigger: On<InputEvent>,
+    trigger: On<InputActionChanged>,
     mut query: Query<(Entity, &mut Menu, &mut Signals)>,
     mut dynamic_text_query: Query<&mut DynamicText>,
     mut commands: Commands,
@@ -616,7 +616,7 @@ mod tests {
     }
 
     fn press(world: &mut World, action: InputAction) {
-        world.trigger(InputEvent {
+        world.trigger(InputActionChanged {
             action,
             pressed: true,
         });
@@ -829,7 +829,7 @@ mod tests {
     fn confirming_deactivates_the_menu_and_triggers_selection_once() {
         let (mut world, menu) = spawn_menu(five_items());
         press(&mut world, InputAction::SecondaryDirectionDown);
-        world.trigger(InputEvent {
+        world.trigger(InputActionChanged {
             action: InputAction::Action1,
             pressed: false,
         });

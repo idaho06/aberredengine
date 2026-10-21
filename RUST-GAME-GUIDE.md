@@ -641,7 +641,7 @@ fn my_enter(_: On<SceneEntered>, mut commands: Commands) {
 }
 ```
 
-> You can also observe engine-defined events: `BoxOverlap`, `TimerFired`, `InputEvent`, `GameStateChanged`, `WindowResizedEvent`, etc. Note that not every engine type that crosses a system boundary is an `Event` — `AudioCmd` and `RenderAssetCmd`, for example, are Bevy `Message`s (`MessageWriter`/`MessageReader`, queue-based), a different mechanism from `Commands::trigger`/`.add_observer()`.
+> You can also observe engine-defined events: `BoxOverlap`, `TimerFired`, `InputActionChanged`, `GameStateChanged`, `WindowResized`, etc. Note that not every engine type that crosses a system boundary is an `Event` — `AudioCmd` and `RenderAssetCmd`, for example, are Bevy `Message`s (`MessageWriter`/`MessageReader`, queue-based), a different mechanism from `Commands::trigger`/`.add_observer()`.
 
 ### Your own components and resources
 

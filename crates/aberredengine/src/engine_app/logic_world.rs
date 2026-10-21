@@ -17,7 +17,7 @@ use aberred_core::components::screenposition::ScreenPosition;
 use aberred_core::error::EngineError;
 use aberred_core::events::gamestate::GameStateChanged;
 use aberred_core::events::gamestate::game_state_changed_observer;
-use aberred_core::events::switchdebug::switch_debug_observer;
+use aberred_core::events::switchdebug::debug_toggled_observer;
 use aberred_core::protocol::endpoints::RenderTx;
 #[cfg(any(test, feature = "test-support"))]
 use aberred_core::protocol::endpoints::setup_audio_stub;
@@ -342,7 +342,7 @@ impl EngineBuilder {
             world.spawn((Observer::new(lua_collision_rule_added_observer), Persistent));
         }
         world.spawn((Observer::new(collision_rule_observer), Persistent));
-        world.spawn((Observer::new(switch_debug_observer), Persistent));
+        world.spawn((Observer::new(debug_toggled_observer), Persistent));
         // switch_fullscreen_observer is NOT here: it lives in the RENDER
         // world — F10 toggles the window, which only exists there.
         world.spawn((Observer::new(menu_controller_observer), Persistent));
