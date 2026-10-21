@@ -232,14 +232,14 @@ macro_rules! define_signal_cmd_twins {
                     "register_entity",
                     |(key, entity_id)| (String, u64),
                     SignalCmd::RegisterEntity { key, entity_id },
-                    desc = "Register `key` as a name for an entity ID (the entity is untouched)",
+                    desc = "Register `key` as a name for an entity ID; the entity is untouched",
                     params = [("key", "string"), ("entity_id", "integer")]
                 ),
                 (
                     "unregister_entity",
                     |key| String,
                     SignalCmd::UnregisterEntity { key },
-                    desc = "Drop the registration for `key` (the entity is not despawned)",
+                    desc = "Drop the registration for `key`; the entity is not despawned",
                     params = [("key", "string")]
                 ),
             ]

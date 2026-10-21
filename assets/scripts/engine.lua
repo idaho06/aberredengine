@@ -445,7 +445,7 @@ function engine.get_strings() end
 ---@return boolean
 function engine.has_flag(key) end
 
----Register `key` as a name for an entity ID (the entity is untouched)
+---Register `key` as a name for an entity ID; the entity is untouched
 ---@param key string
 ---@param entity_id integer
 function engine.register_entity(key, entity_id) end
@@ -489,7 +489,7 @@ function engine.set_string(key, value) end
 ---@param key string
 function engine.toggle_flag(key) end
 
----Drop the registration for `key` (the entity is not despawned)
+---Drop the registration for `key`; the entity is not despawned
 ---@param key string
 function engine.unregister_entity(key) end
 
@@ -1362,7 +1362,7 @@ function engine.collision_play_sound(id) end
 ---@param pitch number
 function engine.collision_play_sound_pitched(id, pitch) end
 
----Register `key` as a name for an entity ID (the entity is untouched) (collision context)
+---Register `key` as a name for an entity ID; the entity is untouched (collision context)
 ---@param key string
 ---@param entity_id integer
 function engine.collision_register_entity(key, entity_id) end
@@ -1419,7 +1419,7 @@ function engine.collision_spawn() end
 ---@param key string
 function engine.collision_toggle_flag(key) end
 
----Drop the registration for `key` (the entity is not despawned) (collision context)
+---Drop the registration for `key`; the entity is not despawned (collision context)
 ---@param key string
 function engine.collision_unregister_entity(key) end
 

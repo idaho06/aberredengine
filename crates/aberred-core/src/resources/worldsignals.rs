@@ -287,7 +287,7 @@ impl WorldSignals {
             self.group_counts_dirty = true;
         }
     }
-    /// Remove all integer signals whose keys start with a given prefix.
+    /// Clear every integer signal whose key starts with `prefix`.
     pub fn clear_integer_prefix(&mut self, prefix: &str) {
         // Collect group names to remove before mutating integers (borrow-checker split).
         // Only the suffix strings are collected, not the full keys.
@@ -309,7 +309,7 @@ impl WorldSignals {
             }
         }
     }
-    /// Remove integer signals for group counting.
+    /// Clear every group-count integer signal.
     pub fn clear_group_counts(&mut self) {
         self.clear_integer_prefix(sk::GROUP_COUNT_PREFIX);
     }
@@ -439,7 +439,7 @@ impl WorldSignals {
         }
     }
 
-    /// Remove every entity registration whose [`Entity`] fails `is_alive`.
+    /// Drop every registration whose [`Entity`] fails `is_alive`.
     ///
     /// Returns `true` if anything was removed. Backs the engine's per-tick
     /// `prune_dead_entity_registrations` sweep, so a registration never
@@ -457,7 +457,7 @@ impl WorldSignals {
         removed
     }
 
-    /// Remove all entity registrations whose [`Entity`] is not in `persistent_entities`.
+    /// Drop every registration whose [`Entity`] is not in `persistent_entities`.
     ///
     /// Called during scene transitions to mirror the entity despawn logic:
     /// non-persistent entities are despawned, so their registrations must be cleared too.

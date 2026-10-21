@@ -1493,7 +1493,7 @@ engine.spawn()
     :with_screen_position(350, 280)
     :with_sprite("cursor", 16, 16, 8, 8)
     :with_zindex(101)
-    :register_as("menu_cursor")  -- Store entity ID for menu to reference
+    :register_as("menu_cursor")  -- Register the entity under a key for the menu to reference
     :build()
 
 -- Step 2: Create menu that uses the registered cursor
@@ -2716,7 +2716,7 @@ Spawn entities from JSON grid layout file.
 
 #### `:register_as(key)`
 
-Store entity ID in world signals for later retrieval.
+Register the entity under `key` in world signals, for later lookup with `engine.get_entity(key)`.
 
 ```lua
 :register_as("player")
@@ -3968,7 +3968,7 @@ end
 
 #### `engine.collision_unregister_entity(key)`
 
-Remove an entity registration from the world-signal registry during collision handling. Collision-safe twin of `engine.unregister_entity()`.
+Drop the registration for `key` during collision handling; the entity is not despawned. Collision-safe twin of `engine.unregister_entity()`.
 
 ```lua
 function on_boss_defeated(ctx)
@@ -6300,7 +6300,7 @@ end
 
 1. **Always call `:build()`** - Entity spawning won't complete without it.
 
-2. **Register entities for later access** - Use `:register_as()` to store entity IDs.
+2. **Register entities for later access** - Use `:register_as()` to register entities under a key.
 
    ```lua
    :register_as("player")

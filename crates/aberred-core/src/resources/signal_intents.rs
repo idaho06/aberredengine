@@ -38,8 +38,8 @@ pub enum SignalIntent {
 pub struct SignalIntents(pub Vec<SignalIntent>);
 
 impl SignalIntents {
-    // The methods below intentionally mirror `WorldSignals`' own setter names
-    // (`set_flag`/`remove_flag`/`set_scalar`/`set_integer`/`set_string`) one-for-one — when a new
+    // The methods below intentionally mirror `WorldSignals`' own write methods
+    // (`set_flag`/`remove_flag`/`set_scalar`/`set_integer`/`set_string`/`register_entity`) by name — when a new
     // `WorldSignals` write method is added, add a matching `SignalIntent` variant + push helper
     // here (and a matching `apply_to` arm below) rather than routing around this buffer.
 
@@ -48,7 +48,7 @@ impl SignalIntents {
         self.0.push(SignalIntent::SetFlag(key.into()));
     }
 
-    /// Queue a flag-clear intent.
+    /// Queue a flag-remove intent.
     pub fn remove_flag(&mut self, key: impl Into<String>) {
         self.0.push(SignalIntent::RemoveFlag(key.into()));
     }
