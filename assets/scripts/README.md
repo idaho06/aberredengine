@@ -2739,6 +2739,8 @@ local player_id = engine.get_entity("player")
 
 World signals provide global game state storage accessible from all scripts.
 
+Verbs: `get_*` reads one key, `set_*` writes one, `remove_*` deletes one (and `unregister_entity` drops one entity registration; `register_entity` adds one). `clear_*` always wipes many keys at once (e.g. `clear_tracked_groups`). The same rule holds for entity signals (`engine.entity_signal_remove_*`) and shader uniforms (`*_remove_uniform` deletes one, `*_clear_uniforms` all).
+
 ### Reading Signals
 
 #### `engine.get_scalar(key) -> f32 or nil`
@@ -3956,13 +3958,9 @@ engine.collision_remove_string("active_effect")
 Register an entity in the world-signal registry during collision handling. This is the collision-safe twin of `engine.register_entity()` — commands are drained immediately after the callback returns.
 
 ```lua
-function on_ball_spawn_enemy(ctx)
-    engine.collision_spawn()
-        :with_group("enemy")
-        :with_position(ctx.b.pos.x, ctx.b.pos.y)
-        :register_as("spawned_enemy")
-        :build()
-    -- The registration above goes through collision_register_entity internally
+function on_ball_hits_enemy(ctx)
+    -- Remember the last enemy hit; read it back later with engine.get_entity("last_hit_enemy")
+    engine.collision_register_entity("last_hit_enemy", ctx.b.id)
 end
 ```
 

@@ -2421,6 +2421,8 @@ Fullscreen is not a resource your game can insert: the engine's `FullScreen` mar
 
 `WorldSignals` is the most-used resource. It provides typed key-value storage for cross-system communication.
 
+Verbs: `get_*` reads one key, `set_*` writes one, `remove_*` deletes one; `register_entity` / `unregister_entity` add and drop one entity registration (the entity itself is untouched). `clear_*` always wipes many keys at once (`clear_group_counts`, `clear_integer_prefix`, `PostProcessShader::clear_uniforms`). Lua uses the same names (`engine.get_scalar`, `engine.remove_flag`, `engine.register_entity`).
+
 **Scalars (`f32`):**
 
 | Method | Signature |
