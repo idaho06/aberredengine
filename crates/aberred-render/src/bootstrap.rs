@@ -33,7 +33,7 @@ use aberred_core::protocol::snapshot::SnapshotConsumer;
 use aberred_core::resources::debugoverlayconfig::DebugOverlayConfig;
 use aberred_core::resources::gameconfig::GameConfig;
 use aberred_core::resources::guitheme::GuiThemeWarnCache;
-use aberred_core::resources::screensize::ScreenSize;
+use aberred_core::resources::render_size::RenderSize;
 use aberred_core::resources::signal_intents::SignalIntents;
 use aberred_core::resources::windowsize::WindowSize;
 use aberred_core::systems::render_assets::update_bevy_render_asset_cmds;
@@ -61,7 +61,7 @@ pub fn setup_render_world(
     bridge: LogicBridge,
 ) -> Result<World, EngineError> {
     let mut world = World::new();
-    world.insert_resource(ScreenSize {
+    world.insert_resource(RenderSize {
         w: config.render_width as i32,
         h: config.render_height as i32,
     });

@@ -44,7 +44,7 @@ use aberred_core::resources::next_scene::NextScene;
 use aberred_core::resources::pending_assets::PendingAssets;
 use aberred_core::resources::postprocessshader::PostProcessShader;
 use aberred_core::resources::rawinput::{ImguiCaptureMirror, PrevRawSnapshot};
-use aberred_core::resources::screensize::ScreenSize;
+use aberred_core::resources::render_size::RenderSize;
 use aberred_core::resources::signal_intents::SignalIntents;
 use aberred_core::resources::sim_rng::SimRng;
 use aberred_core::resources::systemsstore as hook_keys;
@@ -103,7 +103,7 @@ pub(crate) fn register_persistent_system<M>(
 impl EngineBuilder {
     /// Build the logic-thread gameplay `World`: gameplay resources/entities,
     /// excluding GL/window state, plus the
-    /// message-fed mirrors (`ScreenSize`/`WindowSize`/`DebugOverlayConfig`)
+    /// message-fed mirrors (`RenderSize`/`WindowSize`/`DebugOverlayConfig`)
     /// and the logic-owned stores fed by render notifications
     /// (`FontMetricsStore`/`TextureDimsStore`). Runs INSIDE the thread
     /// closure so NonSend `LuaRuntime` is created on (and pinned to) the
@@ -126,7 +126,7 @@ impl EngineBuilder {
         world.insert_resource(tracked_groups);
         world.insert_resource(CollisionRuleIndex::default());
         world.insert_resource(CollisionContacts::default());
-        let screen = ScreenSize {
+        let screen = RenderSize {
             w: render_width as i32,
             h: render_height as i32,
         };

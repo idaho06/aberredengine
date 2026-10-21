@@ -272,7 +272,7 @@ mod tests {
     use aberred_core::resources::camerafollowconfig::{
         CameraFollowConfig, EasingCurve, FollowMode,
     };
-    use aberred_core::resources::screensize::ScreenSize;
+    use aberred_core::resources::render_size::RenderSize;
     use bevy_ecs::prelude::*;
     use bevy_ecs::system::SystemState;
 
@@ -320,7 +320,7 @@ mod tests {
         let camera = MainCamera(
             Camera2D::new(Vec2::new(10.4, 20.6), Vec2::new(320.0, 180.0)).with_zoom(2.0),
         );
-        let screen = ScreenSize { w: 640, h: 360 };
+        let screen = RenderSize { w: 640, h: 360 };
         let read = |runtime: &LuaRuntime| -> ([f32; 6], [f32; 4]) {
             let cam: mlua::Table = runtime
                 .lua()

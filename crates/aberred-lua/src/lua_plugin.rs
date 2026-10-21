@@ -31,8 +31,8 @@ use aberred_core::resources::input::InputState;
 use aberred_core::resources::input_bindings::InputBindings;
 use aberred_core::resources::next_scene::NextScene;
 use aberred_core::resources::postprocessshader::PostProcessShader;
+use aberred_core::resources::render_size::RenderSize;
 use aberred_core::resources::scenemanager::SceneManager;
-use aberred_core::resources::screensize::ScreenSize;
 use aberred_core::resources::systemsstore::SystemsStore;
 
 use crate::systems::lua_commands::{
@@ -97,13 +97,13 @@ pub struct CommonCmdBufs {
 // (dynamictext/menu measurement retries each frame until they land).
 pub fn setup(
     mut commands: Commands,
-    screen_size: Res<ScreenSize>,
+    render_size: Res<RenderSize>,
     mut render_asset_writer: MessageWriter<RenderAssetCmd>,
     mut scripting: ScriptingContext,
 ) {
     // Default camera. Needed to start the engine before entering play state
     // The camera will be overridden later in the scene setup.
-    commands.insert_resource(MainCamera(Camera2D::screen_centered(&screen_size)));
+    commands.insert_resource(MainCamera(Camera2D::screen_centered(&render_size)));
 
     let lua_runtime = &scripting.lua_runtime;
 
@@ -400,7 +400,7 @@ pub fn update(
     time: Res<WorldTime>,
     input: Res<InputState>,
     camera: Res<MainCamera>,
-    screen: Res<ScreenSize>,
+    screen: Res<RenderSize>,
     mut ctx: DrainCtx,
     scene_manager: Res<SceneManager>,
     mut cached_callback: Local<String>,
@@ -766,12 +766,12 @@ mod tests {
 
     /// Builds a [`World`] with all resources [`update`] depends on
     /// (superset of [`new_drain_test_world`]'s: also needs `WorldTime`/`InputState`/
-    /// `MainCamera`/`ScreenSize`).
+    /// `MainCamera`/`RenderSize`).
     fn new_update_test_world() -> World {
         let mut world = new_drain_test_world();
         world.insert_resource(WorldTime::default());
         world.insert_resource(InputState::default());
-        let screen = ScreenSize { w: 800, h: 600 };
+        let screen = RenderSize { w: 800, h: 600 };
         world.insert_resource(screen);
         world.insert_resource(MainCamera(Camera2D::screen_centered(&screen)));
         world

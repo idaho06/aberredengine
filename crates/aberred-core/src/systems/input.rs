@@ -32,7 +32,7 @@ use crate::resources::gameconfig::GameConfig;
 use crate::resources::input::{BoolState, InputAction, InputState};
 use crate::resources::input_bindings::{AxisDirection, InputBinding, InputBindings, MouseButton};
 use crate::resources::rawinput::{ImguiCaptureMirror, PrevRawSnapshot};
-use crate::resources::screensize::ScreenSize;
+use crate::resources::render_size::RenderSize;
 use crate::resources::windowsize::WindowSize;
 
 /// Shared engine-wide axis-to-digital crossing threshold for
@@ -196,7 +196,7 @@ pub fn resolve_input_backlog(world: &mut World, samples: &[RawDeviceSnapshot]) {
     // letterbox-correct the mouse position against — no need to rebuild a
     // second `WindowSize` from `samples.last()` here.
     let window_size = *world.resource::<WindowSize>();
-    let screen_size = *world.resource::<ScreenSize>();
+    let render_size = *world.resource::<RenderSize>();
     let deadzone = world.resource::<GameConfig>().gamepad_deadzone;
     let mut prev_raw = world.resource::<PrevRawSnapshot>().0;
 
@@ -240,8 +240,8 @@ pub fn resolve_input_backlog(world: &mut World, samples: &[RawDeviceSnapshot]) {
                 x: newest.mouse_x,
                 y: newest.mouse_y,
             },
-            screen_size.w as u32,
-            screen_size.h as u32,
+            render_size.w as u32,
+            render_size.h as u32,
         );
         input.mouse_x = game_mouse_pos.x;
         input.mouse_y = game_mouse_pos.y;
@@ -448,7 +448,7 @@ mod tests {
         world.insert_resource(PrevRawSnapshot::default());
         world.insert_resource(ImguiCaptureMirror::default());
         world.insert_resource(MainCamera(camera));
-        world.insert_resource(ScreenSize { w: 640, h: 360 });
+        world.insert_resource(RenderSize { w: 640, h: 360 });
         world.insert_resource(WindowSize { w: 640, h: 360 });
         world.insert_resource(EventLog::default());
         world.add_observer(
@@ -464,7 +464,7 @@ mod tests {
 
     /// An empty raw snapshot at the standard 640x360 test window size (every
     /// test in this module uses the same size; see `build_world`'s matching
-    /// `WindowSize`/`ScreenSize`).
+    /// `WindowSize`/`RenderSize`).
     fn raw() -> RawDeviceSnapshot {
         RawDeviceSnapshot {
             window_w: 640,
@@ -488,7 +488,7 @@ mod tests {
     #[test]
     fn resolve_computes_mouse_world_and_scroll() {
         // camera: target (100, 50), offset (400, 300), zoom 2 (window ==
-        // screen size, so letterbox is a no-op and game coords == window
+        // render size, so letterbox is a no-op and game coords == window
         // coords).
         let mut world = build_world(test_camera((100.0, 50.0), (400.0, 300.0), 2.0, 0.0));
         let mut sample = raw_with_key_down(Key::KEY_SPACE, (500.0, 300.0));

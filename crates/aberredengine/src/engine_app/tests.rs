@@ -235,7 +235,7 @@ fn logic_and_render_msgs_round_trip_across_a_thread() {
         loop {
             match rx_logic.recv().expect("sender alive") {
                 LogicMsg::Shutdown => break,
-                LogicMsg::ScreenSize { w, h } => assert_eq!((w, h), (320, 200)),
+                LogicMsg::RenderSize { w, h } => assert_eq!((w, h), (320, 200)),
                 _ => {}
             }
         }
@@ -243,7 +243,7 @@ fn logic_and_render_msgs_round_trip_across_a_thread() {
     });
 
     tx_logic
-        .send(LogicMsg::ScreenSize { w: 320, h: 200 })
+        .send(LogicMsg::RenderSize { w: 320, h: 200 })
         .unwrap();
     tx_logic.send(LogicMsg::Shutdown).unwrap();
 

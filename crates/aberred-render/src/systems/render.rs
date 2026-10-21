@@ -59,7 +59,7 @@ use crate::resources::scene_table::{GuiCallback, GuiCtx};
 use crate::resources::shaderstore::ShaderStore;
 use crate::resources::texturestore::TextureStore;
 use crate::resources::thread_stats::RenderStats;
-use aberred_core::resources::screensize::ScreenSize;
+use aberred_core::resources::render_size::RenderSize;
 use aberred_core::resources::windowsize::WindowSize;
 use aberred_core::systems::scene_dispatch::WorldDrawCtx;
 use log::warn;
@@ -257,7 +257,7 @@ pub struct RenderLocals {
 /// Bundled render resources to reduce system parameter count.
 #[derive(SystemParam)]
 pub struct RenderResources<'w> {
-    pub screensize: Res<'w, ScreenSize>,
+    pub render_size: Res<'w, RenderSize>,
     pub window_size: Res<'w, WindowSize>,
     pub textures: Res<'w, TextureStore>,
     pub fonts: NonSend<'w, FontStore>,
@@ -356,7 +356,7 @@ pub fn render_system(
     } = &mut *locals;
 
     // Unpack bundled resources for easier access
-    let screensize = &res.screensize;
+    let render_size = &res.render_size;
     let window_size = &res.window_size;
     let textures = &res.textures;
     // Single source of truth for "is debug active": the debug snapshot
@@ -393,8 +393,8 @@ pub fn render_system(
             let render_cam_core: aberred_core::resources::camera2d::Camera2D =
                 camera2d_from_raylib(render_cam);
             let (view_min, view_max) = compute_view_bounds(
-                screensize.w as f32,
-                screensize.h as f32,
+                render_size.w as f32,
+                render_size.h as f32,
                 render_cam,
                 |pos, _cam| super::math::screen_to_world2d_raylib(pos, &render_cam_core),
             );
@@ -507,7 +507,7 @@ pub fn render_system(
                                         &mut entry.shader,
                                         &mut entry.locations,
                                         &res.world_time.0,
-                                        screensize,
+                                        render_size,
                                         window_size,
                                         &dest,
                                     );
@@ -685,7 +685,7 @@ pub fn render_system(
                                         &mut entry.shader,
                                         &mut entry.locations,
                                         &res.world_time.0,
-                                        screensize,
+                                        render_size,
                                         window_size,
                                         &dest,
                                     );
@@ -852,7 +852,7 @@ pub fn render_system(
                 cb(&mut WorldDrawCtx::new(
                     &mut crate::systems::math::RaylibWorldDraw(&mut d2),
                     &core_camera,
-                    &res.screensize,
+                    &res.render_size,
                     &res.app_state.0,
                     &res.signals.0,
                 ));
@@ -952,8 +952,8 @@ pub fn render_system(
             let window_mouse_pos = rl.get_mouse_position();
             let game_mouse_pos = vec2_to_raylib(window_size.window_to_game_pos(
                 vec2_from_raylib(window_mouse_pos),
-                screensize.w as u32,
-                screensize.h as u32,
+                render_size.w as u32,
+                render_size.h as u32,
             ));
             let mouse_world = super::math::screen_to_world2d_raylib(
                 game_mouse_pos,
@@ -1038,7 +1038,7 @@ pub fn render_system(
                         textures,
                         fonts,
                         shader_count,
-                        screensize,
+                        render_size,
                         window_size,
                         world_time,
                         config,
@@ -1074,7 +1074,7 @@ pub fn render_system(
             &mut shader_store,
             &res.post_process.0,
             world_time,
-            &res.screensize,
+            &res.render_size,
             &res.window_size,
             Some(closure),
         );
@@ -1091,7 +1091,7 @@ pub fn render_system(
             &mut shader_store,
             &res.post_process.0,
             &res.world_time.0,
-            &res.screensize,
+            &res.render_size,
             &res.window_size,
             None::<fn(&RaylibDrawHandle<'_>)>,
         );

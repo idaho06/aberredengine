@@ -22,7 +22,7 @@
 //! - [`guitheme`] – theme resource for GUI rendering (nine-patch window/button skins)
 //! - [`input`] – per-tick resolved input ([`input::InputState`]) and the bindable [`input::InputAction`]s
 //! - [`next_scene`] – pending scene switch request
-//! - [`screensize`] – game's internal render resolution in pixels
+//! - [`render_size`] – game's internal render resolution in pixels
 //! - [`scenemanager`] – scene registry and active-scene tracking
 //! - [`signal_intents`] – deferred `WorldSignals` writes queued by render-side scene callbacks
 //! - [`sim_rng`] – shared, deterministic RNG for sim-schedule systems and observers
@@ -57,8 +57,8 @@ pub mod next_scene;
 pub mod pending_assets;
 pub mod postprocessshader;
 pub mod rawinput;
+pub mod render_size;
 pub mod scenemanager;
-pub mod screensize;
 pub mod signal_intents;
 pub mod signal_keys;
 pub mod sim_rng;

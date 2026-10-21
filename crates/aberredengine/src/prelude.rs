@@ -75,7 +75,7 @@ pub use aberred_core::resources::input::InputState;
 pub use aberred_core::resources::next_scene::NextScene;
 pub use aberred_core::resources::pending_assets::PendingAssets;
 pub use aberred_core::resources::postprocessshader::PostProcessShader;
-pub use aberred_core::resources::screensize::ScreenSize;
+pub use aberred_core::resources::render_size::RenderSize;
 pub use aberred_core::resources::signal_intents::SignalIntents;
 pub use aberred_core::resources::signal_keys as sk;
 pub use aberred_core::resources::sim_rng::SimRng;

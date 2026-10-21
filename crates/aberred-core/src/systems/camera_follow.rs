@@ -17,7 +17,7 @@ use crate::components::globaltransform2d::GlobalTransform2D;
 use crate::components::world_position::WorldPosition;
 use crate::resources::camera2d::MainCamera;
 use crate::resources::camerafollowconfig::{CameraFollowConfig, EasingCurve, FollowMode};
-use crate::resources::screensize::ScreenSize;
+use crate::resources::render_size::RenderSize;
 use crate::resources::worldtime::WorldTime;
 
 /// Zoom difference at or below which the camera stops lerping toward the
@@ -39,7 +39,7 @@ pub fn camera_follow_system(
     mut camera: ResMut<MainCamera>,
     mut config: ResMut<CameraFollowConfig>,
     time: Res<WorldTime>,
-    screensize: Res<ScreenSize>,
+    render_size: Res<RenderSize>,
 ) {
     if !config.enabled {
         return;
@@ -122,8 +122,8 @@ pub fn camera_follow_system(
     // --- 4. Bounds clamping ---
     let clamped = if let Some(bounds) = config.bounds {
         let zoom = camera.0.zoom.max(f32::EPSILON);
-        let half_vw = (screensize.w as f32 / 2.0) / zoom;
-        let half_vh = (screensize.h as f32 / 2.0) / zoom;
+        let half_vw = (render_size.w as f32 / 2.0) / zoom;
+        let half_vh = (render_size.h as f32 / 2.0) / zoom;
 
         Vec2 {
             x: clamp_axis_to_bounds(new_target.x, bounds.x, bounds.width, half_vw),

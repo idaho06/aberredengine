@@ -172,7 +172,7 @@ impl ReplayRecorder {
 /// Streaming reader, standing in for live `rx_input`/`rx_logic` collection.
 /// `logic_thread_main` still drains `rx_logic` for real during playback, but
 /// only its non-sim-visible messages are applied (font/texture loads and
-/// overlay edits keep happening); live `ScreenSize`/`SignalIntent`s are
+/// overlay edits keep happening); live `RenderSize`/`SignalIntent`s are
 /// discarded along with `rx_input` outright, so every sim-visible fact comes
 /// from the file. This type only supplies [`collect`](Self::collect)'s
 /// `TickInput` fields and answers [`verify_checkpoint`](Self::verify_checkpoint).
@@ -260,7 +260,7 @@ impl ReplayPlayer {
     /// Reset `out` for tick `tick` (same 0-indexed-before-
     /// `update_world_time`-increments convention `collect_tick_input_live`
     /// uses -- callers pass `world.resource::<WorldTime>().frame_count`) and
-    /// fill its `samples`/`capture`/`intents`/`screen_size` from the next
+    /// fill its `samples`/`capture`/`intents`/`render_size` from the next
     /// recorded tick (the recorded `TickInput::tick` value itself isn't
     /// trusted to overwrite `out.tick`). Once the log is exhausted, every
     /// subsequent call leaves `out` empty (frozen on the last tick) -- see
@@ -286,7 +286,7 @@ impl ReplayPlayer {
                 out.samples = ti.samples;
                 out.capture = ti.capture;
                 out.intents = ti.intents;
-                out.screen_size = ti.screen_size;
+                out.render_size = ti.render_size;
             }
             Ok(Some(ReplayEntry::Checkpoint { .. })) => {
                 log::error!(

@@ -6169,7 +6169,7 @@ engine.set_target_fps(nil)  -- Reset to 60 FPS (default)
 
 #### `engine.set_render_size(width, height)`
 
-Set the internal render resolution. The render target is recreated at the new size and the screen size resource is updated accordingly. Width and height are each clamped independently to a minimum of 120 and a maximum of 7680 (width) / 4320 (height).
+Set the internal render resolution. The render target is recreated at the new size and the render size resource is updated accordingly. Width and height are each clamped independently to a minimum of 120 and a maximum of 7680 (width) / 4320 (height).
 
 **Parameters:**
 

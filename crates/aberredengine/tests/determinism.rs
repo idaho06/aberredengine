@@ -30,7 +30,7 @@ use aberredengine::core::protocol::raw_input::RawDeviceSnapshot;
 use aberredengine::core::protocol::tick_input::TickInput;
 use aberredengine::core::resources::input::InputAction;
 use aberredengine::core::resources::input::InputState;
-use aberredengine::core::resources::screensize::ScreenSize;
+use aberredengine::core::resources::render_size::RenderSize;
 use aberredengine::core::resources::signal_intents::SignalIntent;
 use aberredengine::core::resources::signal_keys as sk;
 use aberredengine::core::resources::worldsignals::WorldSignals;
@@ -201,7 +201,7 @@ fn identical_scenario_allocates_identical_entity_ids_across_runs() {
 struct TickInputScenarioResult {
     up_active: bool,
     flagged: bool,
-    screen_size: (i32, i32),
+    render_size: (i32, i32),
 }
 
 /// Drives a fresh, independently-seeded `TestWorld` through an identical
@@ -210,7 +210,7 @@ struct TickInputScenarioResult {
 /// Recorder/serialization; the `TickInput` values are already the loss-free
 /// record). Exercises all four `TickInput` fields relevant to `apply_tick_input`:
 /// raw samples (held key), an empty tick, queued `SignalIntent`s, and a
-/// `ScreenSize` change.
+/// `RenderSize` change.
 fn run_tick_input_scenario(seed: u64) -> TickInputScenarioResult {
     let mut tw = TestWorldBuilder::new()
         .deterministic(seed)
@@ -251,11 +251,11 @@ fn run_tick_input_scenario(seed: u64) -> TickInputScenarioResult {
         DT,
     );
 
-    // Tick 3: a ScreenSize change.
+    // Tick 3: a RenderSize change.
     tw.apply_tick_input(
         &TickInput {
             tick: 3,
-            screen_size: Some((800, 600)),
+            render_size: Some((800, 600)),
             ..Default::default()
         },
         DT,
@@ -270,13 +270,13 @@ fn run_tick_input_scenario(seed: u64) -> TickInputScenarioResult {
         .world
         .resource::<WorldSignals>()
         .has_flag("tick_input_round_trip");
-    let screen = tw.world.resource::<ScreenSize>();
-    let screen_size = (screen.w, screen.h);
+    let screen = tw.world.resource::<RenderSize>();
+    let render_size = (screen.w, screen.h);
 
     TickInputScenarioResult {
         up_active,
         flagged,
-        screen_size,
+        render_size,
     }
 }
 
@@ -288,14 +288,14 @@ fn round_trip_tick_input_sequence_produces_identical_state_across_two_runs() {
     assert!(
         run1.up_active,
         "the held key from tick 0 must still read active after the \
-         intervening empty/intent/screen-size ticks -- resolve_input_backlog \
+         intervening empty/intent/render-size ticks -- resolve_input_backlog \
          holds previous state across an empty tick rather than resetting it"
     );
     assert!(
         run1.flagged,
         "the queued SignalIntent must have been applied"
     );
-    assert_eq!(run1.screen_size, (800, 600));
+    assert_eq!(run1.render_size, (800, 600));
     assert_eq!(
         run1, run2,
         "driving two independent TestWorlds through the identical scripted \
@@ -334,7 +334,7 @@ fn empty_tick_input_holds_previous_state_and_fires_no_new_edges() {
     );
 
     // A genuinely empty TickInput: no samples, no capture, no intents, no
-    // screen_size change -- must hold InputState.active as-is (the key is
+    // render_size change -- must hold InputState.active as-is (the key is
     // still physically down).
     tw.apply_tick_input(
         &TickInput {

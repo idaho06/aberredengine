@@ -46,8 +46,8 @@ use aberredengine::core::resources::input_bindings::MouseButton;
 use aberredengine::core::resources::loaded_assets::LoadedAssets;
 use aberredengine::core::resources::next_scene::NextScene;
 use aberredengine::core::resources::pending_assets::PendingAssets;
+use aberredengine::core::resources::render_size::RenderSize;
 use aberredengine::core::resources::scenemanager::SceneManager;
-use aberredengine::core::resources::screensize::ScreenSize;
 use aberredengine::core::resources::signal_intents::SignalIntent;
 use aberredengine::core::resources::signal_keys as sk;
 use aberredengine::core::resources::worldsignals::WorldSignals;
@@ -1579,7 +1579,7 @@ fn gui_click_observer_fires_once_without_lua() {
     tw.tick(1, DT);
 
     // A window the size of the game resolution maps cursor coordinates 1:1.
-    let screen = *tw.world.resource::<ScreenSize>();
+    let screen = *tw.world.resource::<RenderSize>();
     let sample = |down: bool| {
         let mut raw = RawDeviceSnapshot {
             window_w: screen.w,

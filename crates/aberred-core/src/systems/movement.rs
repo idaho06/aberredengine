@@ -14,7 +14,7 @@ use crate::components::rigidbody::RigidBody;
 use crate::components::signals::Signals;
 use crate::components::world_position::WorldPosition;
 use crate::protocol::audio::AudioCmd;
-use crate::resources::screensize::ScreenSize;
+use crate::resources::render_size::RenderSize;
 use crate::resources::signal_keys as sk;
 use crate::resources::worldtime::WorldTime;
 
@@ -36,7 +36,7 @@ pub fn movement(
         Option<&mut Signals>,
     )>,
     time: Res<WorldTime>,
-    _screensize: Res<ScreenSize>,
+    _render_size: Res<RenderSize>,
     mut _audio_cmd_writer: MessageWriter<AudioCmd>,
 ) {
     crate::tracy::tracy_span!("movement");
@@ -109,7 +109,7 @@ mod tests {
     fn world_with_time(time: WorldTime) -> World {
         let mut world = World::new();
         world.insert_resource(time);
-        world.insert_resource(ScreenSize { w: 800, h: 600 });
+        world.insert_resource(RenderSize { w: 800, h: 600 });
         world.init_resource::<Messages<AudioCmd>>();
         world
     }

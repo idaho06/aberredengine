@@ -13,7 +13,7 @@ use aberred_core::components::world_position::WorldPosition;
 use aberred_core::math::Rect;
 use aberred_core::resources::camera2d::{Camera2D, MainCamera};
 use aberred_core::resources::camerafollowconfig::{CameraFollowConfig, EasingCurve, FollowMode};
-use aberred_core::resources::screensize::ScreenSize;
+use aberred_core::resources::render_size::RenderSize;
 use aberred_core::resources::worldtime::WorldTime;
 use aberred_core::systems::camera_follow::camera_follow_system;
 use aberred_core::testing::approx_eq;
@@ -32,7 +32,7 @@ fn make_camera(target_x: f32, target_y: f32) -> MainCamera {
 fn setup_world() -> World {
     let mut world = World::new();
     world.insert_resource(make_camera(0.0, 0.0));
-    world.insert_resource(ScreenSize { w: 320, h: 240 });
+    world.insert_resource(RenderSize { w: 320, h: 240 });
     world.insert_resource(WorldTime::default().with_time_scale(1.0));
     // Set a 60fps-like delta
     {
@@ -477,7 +477,7 @@ fn bounds_clamp_prevents_camera_leaving_world() {
             height: 1000.0,
         });
     }
-    // ScreenSize is 320x240, zoom 1.0 → half viewport = 160, 120
+    // RenderSize is 320x240, zoom 1.0 → half viewport = 160, 120
     // So camera target should clamp to [160..840, 120..880]
     // Place target at the origin corner
     world.spawn((WorldPosition::new(0.0, 0.0), CameraTarget::default()));

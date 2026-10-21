@@ -119,7 +119,7 @@ impl LuaRuntime {
     pub fn update_camera_cache(
         &self,
         camera: &aberred_core::resources::camera2d::MainCamera,
-        screen: &aberred_core::resources::screensize::ScreenSize,
+        screen: &aberred_core::resources::render_size::RenderSize,
         pixel_snap: bool,
     ) {
         if let Some(data) = self.lua.app_data_ref::<LuaAppData>() {

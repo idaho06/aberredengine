@@ -1,7 +1,7 @@
 //! Game configuration change detection system.
 //!
 //! Monitors the [`GameConfig`] mirrored into [`RenderGameConfig`] for changes
-//! and applies settings to the window, render target, and screen size
+//! and applies settings to the window, render target, and render size
 //! resources.
 
 use crate::events::switchfullscreen::SwitchFullScreenEvent;
@@ -9,7 +9,7 @@ use crate::resources::fullscreen::FullScreen;
 use crate::resources::mirrors::RenderGameConfig;
 use crate::resources::rendertarget::RenderTarget;
 use aberred_core::resources::gameconfig::GameConfig;
-use aberred_core::resources::screensize::ScreenSize;
+use aberred_core::resources::render_size::RenderSize;
 use bevy_ecs::prelude::*;
 use log::{debug, error};
 use raylib::ffi;
@@ -40,12 +40,12 @@ use raylib::ffi;
 /// - `RaylibHandle` (non-send, mutable) - for window operations
 /// - `RaylibThread` (non-send) - required for render texture recreation
 /// - `RenderTarget` (non-send, mutable) - for render resolution changes
-/// - `ScreenSize` (mutable) - updated to match render resolution
+/// - `RenderSize` (mutable) - updated to match render resolution
 pub fn apply_gameconfig_changes(
     render_game_config: Res<RenderGameConfig>,
     mut raylib: super::RaylibAccess,
     mut render_target: NonSendMut<RenderTarget>,
-    mut screen_size: ResMut<ScreenSize>,
+    mut render_size: ResMut<RenderSize>,
     fullscreen: Option<Res<FullScreen>>,
     mut commands: Commands,
     mut last_applied: Local<Option<GameConfig>>,
@@ -72,8 +72,8 @@ pub fn apply_gameconfig_changes(
             {
                 error!("Failed to resize render target: {}", e);
             } else {
-                screen_size.w = config.render_width as i32;
-                screen_size.h = config.render_height as i32;
+                render_size.w = config.render_width as i32;
+                render_size.h = config.render_height as i32;
             }
         }
 

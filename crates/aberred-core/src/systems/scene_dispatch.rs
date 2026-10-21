@@ -37,8 +37,8 @@ use crate::resources::collision_contacts::CollisionContacts;
 use crate::resources::gamestate::{CurrentGameState, GameState, NextGameState};
 use crate::resources::group::TrackedGroups;
 use crate::resources::next_scene::NextScene;
+use crate::resources::render_size::RenderSize;
 use crate::resources::scenemanager::SceneManager;
-use crate::resources::screensize::ScreenSize;
 use crate::resources::signal_keys as sk;
 use crate::resources::systemsstore as hook_keys;
 use crate::resources::systemsstore::SystemsStore;
@@ -113,7 +113,7 @@ pub struct WorldDrawCtx<'a> {
     /// The camera this frame is drawn with.
     pub camera: &'a Camera2D,
     /// The internal game resolution.
-    pub screen: &'a ScreenSize,
+    pub screen: &'a RenderSize,
     /// The latest snapshot of the logic world's [`AppState`].
     pub app_state: &'a AppState,
     /// The latest snapshot of the logic world's signals.
@@ -126,7 +126,7 @@ impl<'a> WorldDrawCtx<'a> {
     pub fn new(
         draw: &'a mut dyn WorldDraw,
         camera: &'a Camera2D,
-        screen: &'a ScreenSize,
+        screen: &'a RenderSize,
         app_state: &'a AppState,
         signals: &'a SignalSnapshot,
     ) -> Self {
@@ -426,7 +426,7 @@ mod tests {
     #[test]
     fn destructured_draw_handle_passes_to_helpers() {
         let mut lines = RecordedLines::default();
-        let (camera, screen) = (Camera2D::default(), ScreenSize { w: 1, h: 1 });
+        let (camera, screen) = (Camera2D::default(), RenderSize { w: 1, h: 1 });
         let (app_state, signals) = (AppState::default(), SignalSnapshot::default());
 
         overlay(&mut WorldDrawCtx::new(

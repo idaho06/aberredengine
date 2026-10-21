@@ -80,7 +80,7 @@ pub struct RawDeviceSnapshot {
     pub mouse_buttons: u8,
     /// Mouse position in WINDOW coordinates. Letterbox correction into
     /// game-space happens sim-side (`WindowSize::window_to_game_pos`), since
-    /// that needs `ScreenSize`, which the sim world owns.
+    /// that needs `RenderSize`, which the sim world owns.
     pub mouse_x: f32,
     pub mouse_y: f32,
     /// Mouse wheel delta this frame (positive = up).

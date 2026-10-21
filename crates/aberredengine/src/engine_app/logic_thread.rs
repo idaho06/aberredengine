@@ -27,7 +27,7 @@ use aberred_core::resources::input::InputAction;
 use aberred_core::resources::input::InputState;
 use aberred_core::resources::loaded_assets::LoadedAssets;
 use aberred_core::resources::rawinput::ImguiCaptureMirror;
-use aberred_core::resources::screensize::ScreenSize;
+use aberred_core::resources::render_size::RenderSize;
 use aberred_core::resources::signal_intents::SignalIntents;
 use aberred_core::resources::texturedims::TextureDimsStore;
 use aberred_core::resources::thread_stats::SimStats;
@@ -46,7 +46,7 @@ use aberred_core::systems::time::update_world_time;
 /// nothing to affect) rather than a value threaded through
 /// `collect_tick_input_live`/`drain_logic_messages` as an extra parameter --
 /// matches how every other `LogicMsg`-driven cross-cutting concern
-/// (`DebugOverlayConfig`, `ScreenSize`, `ImguiCaptureMirror`, ...) is
+/// (`DebugOverlayConfig`, `RenderSize`, `ImguiCaptureMirror`, ...) is
 /// written: through `world`, which those functions already take.
 #[derive(Resource, Default)]
 struct ReplayRuntimeState {
@@ -151,7 +151,7 @@ pub(crate) fn in_envelope(world: &World) -> bool {
 
 /// Keeps live input out of deterministic Setup ticks (see [`in_envelope`]).
 /// Outside the envelope it moves `tick_input`'s latched facts
-/// (`screen_size`, `capture`, `intents`) into `held` and drops its samples;
+/// (`render_size`, `capture`, `intents`) into `held` and drops its samples;
 /// on the first `Playing` tick it folds `held` back in, so those facts are
 /// applied, and recorded, there.
 pub(crate) fn hold_back_setup_input(
@@ -165,7 +165,7 @@ pub(crate) fn hold_back_setup_input(
         }
     } else {
         held.capture = tick_input.capture.take().or(held.capture);
-        held.screen_size = tick_input.screen_size.take().or(held.screen_size);
+        held.render_size = tick_input.render_size.take().or(held.render_size);
         held.intents.append(&mut tick_input.intents);
         tick_input.samples.clear();
     }
@@ -187,7 +187,7 @@ pub(crate) fn hold_back_deterministic_setup_input(
 /// Non-sim-visible messages (`FontLoaded`/`FontRemoved`/`FontRenamed`,
 /// `TextureRemoved`/`TextureRenamed`, `OverlayConfig`) are applied directly
 /// to `world` here rather than through `apply_tick_input`. Sim-visible facts
-/// (raw samples, capture, `ScreenSize`, `SignalIntent`s) are written into
+/// (raw samples, capture, `RenderSize`, `SignalIntent`s) are written into
 /// `out` instead of straight into `World`
 /// resources, so `out` already holds every sim-visible fact for this tick
 /// before `apply_tick_input` consumes it.
@@ -233,7 +233,7 @@ pub(crate) struct DrainOutcome {
 
 /// Applies every non-sim-visible `LogicMsg` (font/texture load/remove/
 /// rename, overlay config, replay playback control) directly to `world`,
-/// and folds sim-visible `ScreenSize`/`SignalIntent`s into `out`. Shared by
+/// and folds sim-visible `RenderSize`/`SignalIntent`s into `out`. Shared by
 /// the live collector above, the replay path and the paused path in
 /// `logic_thread_main` -- asset loads/overlay edits/playback control keep
 /// happening for real in all three, regardless of where `out`'s other
@@ -241,7 +241,7 @@ pub(crate) struct DrainOutcome {
 ///
 /// `out` is `None` when the caller must NOT let live sim-visible facts reach
 /// the sim: during replay playback (every sim-visible fact comes from the
-/// file -- a live `LogicMsg::ScreenSize`, which `send_render_mirrors` emits
+/// file -- a live `LogicMsg::RenderSize`, which `send_render_mirrors` emits
 /// unconditionally on its first frame, would otherwise overwrite the
 /// recorded one and guarantee divergence) and while playback is paused (no
 /// tick runs, so there is nothing for them to apply to). The non-sim-visible
@@ -263,9 +263,9 @@ pub(crate) fn drain_logic_messages(
         let change = msg.asset_change();
         let settled = msg.load_reply();
         match msg {
-            LogicMsg::ScreenSize { w, h } => {
+            LogicMsg::RenderSize { w, h } => {
                 if let Some(out) = out.as_deref_mut() {
-                    out.screen_size = Some((w, h));
+                    out.render_size = Some((w, h));
                 }
             }
             LogicMsg::FontLoaded { key, metrics } => {
@@ -337,17 +337,17 @@ pub(crate) fn drain_logic_messages(
 /// replay playback (`ReplayPlayer`) — the determinism contract is "same
 /// `TickInput` sequence in -> same state out".
 ///
-/// Order matters: `ScreenSize`/`WindowSize`/`ImguiCaptureMirror` land first,
+/// Order matters: `RenderSize`/`WindowSize`/`ImguiCaptureMirror` land first,
 /// then [`resolve_input_backlog`] (which reads `WindowSize`/
-/// `ScreenSize`/the capture mirror while resolving `tick_input.samples`),
+/// `RenderSize`/the capture mirror while resolving `tick_input.samples`),
 /// then queued `SignalIntent`s are appended to the `SignalIntents` buffer
 /// for `apply_signal_intents` (`SimSet::ApplyIntents`) to drain once `sim`
 /// runs.
 pub(crate) fn apply_tick_input(world: &mut World, tick_input: &TickInput) {
-    if let Some((w, h)) = tick_input.screen_size {
-        let mut screen_size = world.resource_mut::<ScreenSize>();
-        screen_size.w = w;
-        screen_size.h = h;
+    if let Some((w, h)) = tick_input.render_size {
+        let mut render_size = world.resource_mut::<RenderSize>();
+        render_size.w = w;
+        render_size.h = h;
     }
     if let Some(newest) = tick_input.samples.last() {
         let mut window_size = world.resource_mut::<WindowSize>();
@@ -457,7 +457,7 @@ fn logic_thread_main(mut init: LogicInit) -> Result<(), EngineError> {
             // Still service the channels (shutdown, replay control, asset
             // replies) so a paused session stays responsive; no sim/present
             // work runs. `None`: no tick will run, so there is nothing for a
-            // live ScreenSize/SignalIntent to apply to -- collecting them
+            // live RenderSize/SignalIntent to apply to -- collecting them
             // here would only pile them into `tick_input` for the next
             // `reset` to discard.
             let drained = drain_logic_messages(None, &rx_logic, &mut world);
@@ -738,7 +738,7 @@ mod tests {
     /// while paused) the same batch must leave `tick_input` completely alone.
     /// Live sim-visible facts merging on top of the recorded ones is what
     /// made every playback session diverge -- `send_render_mirrors` emits a
-    /// `ScreenSize` on its first frame unconditionally, so this fired without
+    /// `RenderSize` on its first frame unconditionally, so this fired without
     /// anyone touching the window.
     #[test]
     fn draining_without_a_tick_input_discards_sim_visible_facts() {
@@ -749,7 +749,7 @@ mod tests {
             )]))
             .unwrap();
         tx_logic
-            .send(LogicMsg::ScreenSize { w: 1280, h: 720 })
+            .send(LogicMsg::RenderSize { w: 1280, h: 720 })
             .unwrap();
         drop(tx_logic);
 
@@ -763,7 +763,7 @@ mod tests {
         assert!(!drained.shutdown);
         assert_eq!(
             tick_input, recorded,
-            "a live SignalIntent/ScreenSize must not reach the sim during \
+            "a live SignalIntent/RenderSize must not reach the sim during \
              playback -- every sim-visible fact comes from the replay file"
         );
     }
@@ -813,20 +813,20 @@ mod tests {
             samples: vec![sample_with_window_w(1)],
             capture: None,
             intents: vec![SignalIntent::SetFlag("during_setup".into())],
-            screen_size: Some((320, 240)),
+            render_size: Some((320, 240)),
         };
         hold_back_setup_input(&mut tick_input, &mut held, false);
         assert!(tick_input.is_empty(), "a Setup tick sees no input");
         assert_eq!(tick_input.tick, 0);
 
-        tick_input.screen_size = Some((640, 480));
+        tick_input.render_size = Some((640, 480));
         hold_back_setup_input(&mut tick_input, &mut held, false);
         assert!(tick_input.is_empty());
 
         tick_input.samples = vec![sample_with_window_w(2)];
         tick_input.intents = vec![SignalIntent::SetFlag("playing".into())];
         hold_back_setup_input(&mut tick_input, &mut held, true);
-        assert_eq!(tick_input.screen_size, Some((640, 480)), "the latest size");
+        assert_eq!(tick_input.render_size, Some((640, 480)), "the latest size");
         assert_eq!(
             tick_input.intents,
             [
@@ -989,7 +989,7 @@ mod tests {
                 .unwrap();
         }
         tx_logic
-            .send(LogicMsg::ScreenSize { w: 320, h: 240 })
+            .send(LogicMsg::RenderSize { w: 320, h: 240 })
             .unwrap();
         tx_logic
             .send(LogicMsg::SignalIntents(vec![SignalIntent::SetFlag(
@@ -1014,7 +1014,7 @@ mod tests {
             samples: vec![sample_with_window_w(-1)],
             capture: Some(ImguiCaptureState::default()),
             intents: vec![SignalIntent::SetFlag("stale".into())],
-            screen_size: Some((1, 1)),
+            render_size: Some((1, 1)),
         };
 
         collect_tick_input_live(&mut tick_input, &rx_input, &rx_logic, &mut world);
@@ -1028,7 +1028,7 @@ mod tests {
         );
         assert_eq!(tick_input.capture, Some(newest_capture));
         assert_eq!(tick_input.intents, [SignalIntent::SetFlag("new".into())]);
-        assert_eq!(tick_input.screen_size, Some((320, 240)));
+        assert_eq!(tick_input.render_size, Some((320, 240)));
         assert_eq!(
             world.resource::<TextureDimsStore>().get("player"),
             Some((1, 1)),
@@ -1053,12 +1053,12 @@ mod tests {
                 samples: vec![sample_with_window_w(100), sample_with_window_w(200)],
                 capture: Some(capture),
                 intents: vec![SignalIntent::SetFlag("tick".into())],
-                screen_size: Some((640, 360)),
+                render_size: Some((640, 360)),
             },
         );
 
         let check = |world: &World| {
-            let screen = world.resource::<ScreenSize>();
+            let screen = world.resource::<RenderSize>();
             assert_eq!((screen.w, screen.h), (640, 360));
             assert_eq!(world.resource::<WindowSize>().w, 200, "newest sample wins");
             assert_eq!(world.resource::<ImguiCaptureMirror>().0, capture);

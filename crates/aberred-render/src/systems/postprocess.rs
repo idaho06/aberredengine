@@ -10,7 +10,7 @@ use aberred_core::components::rotation::Rotation;
 use aberred_core::components::scale::Scale;
 use aberred_core::components::world_position::WorldPosition;
 use aberred_core::resources::postprocessshader::PostProcessShader;
-use aberred_core::resources::screensize::ScreenSize;
+use aberred_core::resources::render_size::RenderSize;
 use aberred_core::resources::uniformvalue::UniformValue;
 use aberred_core::resources::windowsize::WindowSize;
 use aberred_core::resources::worldtime::WorldTime;
@@ -34,7 +34,7 @@ pub(super) fn apply_postprocess_passes<F: FnOnce(&RaylibDrawHandle<'_>)>(
     shader_store: &mut ShaderStore,
     post_process: &PostProcessShader,
     world_time: &WorldTime,
-    screensize: &ScreenSize,
+    render_size: &RenderSize,
     window_size: &WindowSize,
     mut post_blit: Option<F>,
 ) {
@@ -123,7 +123,7 @@ pub(super) fn apply_postprocess_passes<F: FnOnce(&RaylibDrawHandle<'_>)>(
                     &mut entry.shader,
                     &mut entry.locations,
                     world_time,
-                    screensize,
+                    render_size,
                     window_size,
                     uniform_dest,
                 );
@@ -385,7 +385,7 @@ pub(super) fn set_standard_uniforms(
     shader: &mut Shader,
     locations: &mut FxHashMap<String, i32>,
     world_time: &WorldTime,
-    screensize: &ScreenSize,
+    render_size: &RenderSize,
     window_size: &WindowSize,
     dest: &Rectangle,
 ) {
@@ -400,7 +400,7 @@ pub(super) fn set_standard_uniforms(
         shader,
         locations,
         "uResolution",
-        &[screensize.w as f32, screensize.h as f32],
+        &[render_size.w as f32, render_size.h as f32],
     );
 
     // uFrame (int)

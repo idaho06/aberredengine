@@ -26,8 +26,8 @@ use crate::resources::signal_intents::SignalIntent;
 pub enum LogicMsg {
     /// Sent after `apply_gameconfig_changes` recreates the render target;
     /// the logic world mirrors it (`camera_follow_system` and input math
-    /// read `ScreenSize`).
-    ScreenSize { w: i32, h: i32 },
+    /// read `RenderSize`).
+    RenderSize { w: i32, h: i32 },
     /// CPU-side glyph metrics extracted after a render-side font load,
     /// sent by `process_render_asset_cmds`. Also sent for a
     /// `skip_if_loaded` load of an already-loaded font.

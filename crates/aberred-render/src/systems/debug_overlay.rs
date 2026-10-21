@@ -9,7 +9,7 @@ use aberred_core::resources::debugoverlayconfig::DebugOverlayConfig;
 use aberred_core::resources::gameconfig::GameConfig;
 use aberred_core::resources::input::InputAction;
 use aberred_core::resources::input::{BoolState, InputState};
-use aberred_core::resources::screensize::ScreenSize;
+use aberred_core::resources::render_size::RenderSize;
 use aberred_core::resources::thread_stats::SimStats;
 use aberred_core::resources::windowsize::WindowSize;
 use aberred_core::resources::worldsignals::SignalSnapshot;
@@ -43,7 +43,7 @@ pub(super) fn draw_imgui_debug(
     textures: &TextureStore,
     fonts: &FontStore,
     shader_count: usize,
-    screensize: &ScreenSize,
+    render_size: &RenderSize,
     window_size: &WindowSize,
     world_time: &WorldTime,
     config: &GameConfig,
@@ -79,7 +79,7 @@ pub(super) fn draw_imgui_debug(
         ui,
         game_mouse_pos,
         mouse_world,
-        screensize,
+        render_size,
         window_size,
         config,
         active_scene,
@@ -334,7 +334,7 @@ pub(super) fn draw_mouse_config_panel(
     ui: &ImguiUi,
     game_mouse_pos: Vector2,
     mouse_world: Vector2,
-    screensize: &ScreenSize,
+    render_size: &RenderSize,
     window_size: &WindowSize,
     config: &GameConfig,
     active_scene: Option<&str>,
@@ -351,7 +351,7 @@ pub(super) fn draw_mouse_config_panel(
                 mouse_world.x, mouse_world.y
             ));
             ui.separator();
-            ui.text(format!("Render size: {}x{}", screensize.w, screensize.h));
+            ui.text(format!("Render size: {}x{}", render_size.w, render_size.h));
             ui.text(format!("Window size: {}x{}", window_size.w, window_size.h));
             ui.separator();
             ui.text(format!("FPS target: {}", config.target_fps));

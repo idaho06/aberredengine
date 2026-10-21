@@ -1244,12 +1244,12 @@ A `.deterministic()` game loads a map's assets during `Setup` (see [Assets load 
 
 ### Camera
 
-`MainCamera` is pre-inserted by the engine with `Camera2D::screen_centered(&screen)`: `target` at the origin and `offset` at half the render resolution (center-screen). If you need a different initial position, request `ResMut<MainCamera>` and overwrite it — use `ScreenSize` (a logic-side resource) rather than a live raylib handle for the resolution, since `RaylibAccess` isn't available here:
+`MainCamera` is pre-inserted by the engine with `Camera2D::screen_centered(&screen)`: `target` at the origin and `offset` at half the render resolution (center-screen). If you need a different initial position, request `ResMut<MainCamera>` and overwrite it — use `RenderSize` (a logic-side resource) rather than a live raylib handle for the resolution, since `RaylibAccess` isn't available here:
 
 ```rust
 use aberredengine::prelude::*;
 
-fn setup_camera(mut camera: ResMut<MainCamera>, screen: Res<ScreenSize>) {
+fn setup_camera(mut camera: ResMut<MainCamera>, screen: Res<RenderSize>) {
     // Look at (512, 256) from the screen center, zoomed in 2×
     camera.0 = Camera2D::screen_centered(&screen).with_zoom(2.0);
     camera.0.target = Vec2::new(512.0, 256.0);
@@ -2240,7 +2240,7 @@ The callback takes a `&mut WorldDrawCtx` with these fields:
 
 - `draw: &mut dyn WorldDraw` with a minimal object-safe drawing API
 - `camera: &Camera2D` for the active render camera
-- `screen: &ScreenSize` for the internal game resolution
+- `screen: &RenderSize` for the internal game resolution
 - `app_state: &AppState` for typed Rust-only snapshots
 - `signals: &SignalSnapshot` for read-only signal access (the `SignalsRead` getters, e.g. `ctx.signals.has_flag("key")`)
 
@@ -2364,7 +2364,7 @@ All resources are accessed as Bevy ECS system parameters. Use `Res<T>` / `ResMut
 | `WorldSignals` | `ResMut` | Global cross-system communication (scalars, integers, strings, flags, entities) |
 | `AppState` | `ResMut` | Rust-only typed state store keyed by Rust type; useful for GUI/editor snapshots and view-models |
 | `TrackedGroups` | `ResMut` | Group names to count — engine publishes counts to `WorldSignals` each sim tick |
-| `ScreenSize` | `Res` | Internal render resolution (`w`, `h`) — inserted independently on both the logic and render threads, always in sync |
+| `RenderSize` | `Res` | Internal render resolution (`w`, `h`) — inserted independently on both the logic and render threads, always in sync |
 | `WindowSize` | `Res` | OS window dimensions (`w`, `h`), has `calculate_letterbox()` and `window_to_game_pos()` |
 | `GameConfig` | `ResMut` | Loaded from `config.ini` — all render/window/simulation/audio settings |
 | `GameConfigDefaults` | `Res` | Read-only snapshot (`.0: GameConfig`) of `GameConfig` as loaded at startup, before any runtime mutation — use to restore a field to its loaded default (e.g. window title after a map override) without needing your own capture-resource |
