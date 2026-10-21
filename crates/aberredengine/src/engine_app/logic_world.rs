@@ -15,8 +15,8 @@ use aberred_core::components::scale::Scale;
 #[cfg(feature = "lua")]
 use aberred_core::components::screenposition::ScreenPosition;
 use aberred_core::error::EngineError;
-use aberred_core::events::gamestate::GameStateChangedEvent;
-use aberred_core::events::gamestate::observe_gamestate_change_event;
+use aberred_core::events::gamestate::GameStateChanged;
+use aberred_core::events::gamestate::game_state_changed_observer;
 use aberred_core::events::switchdebug::switch_debug_observer;
 use aberred_core::protocol::endpoints::RenderTx;
 #[cfg(any(test, feature = "test-support"))]
@@ -215,7 +215,7 @@ impl EngineBuilder {
             world.insert_non_send(lua_runtime);
         }
 
-        world.spawn((Observer::new(observe_gamestate_change_event), Persistent));
+        world.spawn((Observer::new(game_state_changed_observer), Persistent));
 
         Ok(world)
     }
@@ -328,7 +328,7 @@ impl EngineBuilder {
         Self::register_logic_systems(init, world)?;
         Self::spawn_observers(world, has_lua, std::mem::take(&mut init.extra_observers));
         world.resource_mut::<NextGameState>().set(GameState::Setup);
-        world.trigger(GameStateChangedEvent {});
+        world.trigger(GameStateChanged {});
         Self::build_logic_schedules(std::mem::take(&mut init.extra_systems), world, has_lua)
     }
 

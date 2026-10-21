@@ -1,7 +1,7 @@
 //! Game state systems.
 //!
 //! - [`check_pending_state`] monitors [`NextGameState`] and triggers a
-//!   [`GameStateChangedEvent`]
+//!   [`GameStateChanged`]
 //!   when a transition is requested.
 //! - [`state_is_playing`] helper for run conditions that returns true when the
 //!   current state is [`GameState::Playing`]; [`state_runs_scenes`] also
@@ -11,7 +11,7 @@
 //!   [`Persistent`](crate::components::persistent::Persistent), keeping their observers.
 
 use crate::components::persistent::SceneCleanup;
-use crate::events::gamestate::GameStateChangedEvent;
+use crate::events::gamestate::GameStateChanged;
 use crate::protocol::endpoints::RenderTx;
 use crate::protocol::render_logic::RenderMsg;
 use crate::resources::collision_contacts::CollisionContacts;
@@ -20,7 +20,7 @@ use crate::resources::pending_assets::PendingAssets;
 use bevy_ecs::prelude::*;
 use log::info;
 
-/// If a state transition is pending, trigger a `GameStateChangedEvent`.
+/// If a state transition is pending, trigger a `GameStateChanged`.
 ///
 /// `Setup` → `Playing` is left to [`finish_setup`], which waits for the
 /// queued asset loads. A request for any other state (e.g. `Quitting` from
@@ -31,7 +31,7 @@ pub fn check_pending_state(
     state: Res<CurrentGameState>,
 ) {
     if next_state.get().is_some() && !ends_setup(&state, &next_state) {
-        commands.trigger(GameStateChangedEvent {});
+        commands.trigger(GameStateChanged {});
     }
 }
 
@@ -46,7 +46,7 @@ pub fn finish_setup(
     pending: Res<PendingAssets>,
 ) {
     if ends_setup(&state, &next_state) && pending.is_empty() {
-        commands.trigger(GameStateChangedEvent {});
+        commands.trigger(GameStateChanged {});
     }
 }
 
@@ -126,12 +126,12 @@ mod tests {
         assert!(world.resource::<CollisionContacts>().is_empty());
     }
 
-    /// Number of `GameStateChangedEvent`s observed.
+    /// Number of `GameStateChanged`s observed.
     #[derive(Resource, Default)]
     struct ChangedCount(u32);
 
     /// World with `CurrentGameState`, the given `NextGameState`, and an observer
-    /// counting `GameStateChangedEvent` into `ChangedCount`.
+    /// counting `GameStateChanged` into `ChangedCount`.
     fn world_with_next_state(next: NextGameState) -> World {
         let mut world = World::new();
         world.init_resource::<CurrentGameState>();
@@ -139,7 +139,7 @@ mod tests {
         world.init_resource::<PendingAssets>();
         world.init_resource::<ChangedCount>();
         world.add_observer(
-            |_trigger: On<GameStateChangedEvent>, mut count: ResMut<ChangedCount>| {
+            |_trigger: On<GameStateChanged>, mut count: ResMut<ChangedCount>| {
                 count.0 += 1;
             },
         );

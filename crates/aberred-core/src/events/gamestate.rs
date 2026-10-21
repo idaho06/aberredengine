@@ -1,7 +1,7 @@
 //! Game state transition event and observer.
 //!
 //! Systems can request a change to the high-level [`GameState`] by updating
-//! [`NextGameState`]. Emitting a [`GameStateChangedEvent`] then triggers the
+//! [`NextGameState`]. Emitting a [`GameStateChanged`] then triggers the
 //! observer in this module, which applies the transition to [`CurrentGameState`]
 //! and invokes the appropriate enter/exit systems stored in
 //! [`crate::resources::systemsstore::SystemsStore`].
@@ -18,12 +18,12 @@ use log::{debug, info, warn};
 /// Event used to indicate that a pending game state transition should be
 /// applied.
 ///
-/// Emitting this event causes [`observe_gamestate_change_event`] to read
+/// Emitting this event causes [`game_state_changed_observer`] to read
 /// [`NextGameState`]. If a transition is pending, the observer updates the
 /// authoritative [`CurrentGameState`], runs exit/enter hooks, and clears the
 /// request; otherwise nothing happens.
 #[derive(Event, Debug, Clone, Copy)]
-pub struct GameStateChangedEvent {}
+pub struct GameStateChanged {}
 
 /// Observer that applies a pending game state transition.
 ///
@@ -37,16 +37,16 @@ pub struct GameStateChangedEvent {}
 ///
 /// The enter hooks are executed by looking up system IDs in
 /// [`SystemsStore`] under well-known keys (e.g. `"setup"`, `"enter_play"`).
-pub fn observe_gamestate_change_event(
-    _trigger: On<GameStateChangedEvent>,
+pub fn game_state_changed_observer(
+    _trigger: On<GameStateChanged>,
     mut commands: Commands, // for spawning/despawning entities and triggering events
     mut next_game_state: Option<ResMut<NextGameState>>,
     mut game_state: Option<ResMut<CurrentGameState>>,
     systems_store: Res<SystemsStore>,
 ) {
-    // This observer is triggered when a GameStateChangedEvent is fired.
+    // This observer is triggered when a GameStateChanged event is fired.
     // It checks the NextGameState resource and updates the CurrentGameState resource accordingly.
-    debug!("GameStateChangedEvent triggered");
+    debug!("GameStateChanged triggered");
 
     if let (Some(next_game_state), Some(game_state)) =
         (next_game_state.as_deref_mut(), game_state.as_deref_mut())
@@ -74,7 +74,7 @@ pub fn observe_gamestate_change_event(
         }
     } else {
         warn!(
-            "One or more resources missing in observe_gamestate_change_event. next_state: {:?}, game_state: {:?}",
+            "One or more resources missing in game_state_changed_observer. next_state: {:?}, game_state: {:?}",
             next_game_state.is_some(),
             game_state.is_some()
         );
@@ -142,7 +142,7 @@ mod tests {
         let mut world = World::new();
         world.insert_resource(CurrentGameState::new());
         world.insert_resource(NextGameState::new());
-        world.add_observer(observe_gamestate_change_event);
+        world.add_observer(game_state_changed_observer);
         let mut store = SystemsStore::new();
         if let Some(setup) = setup {
             store.insert(hook_keys::SETUP, world.register_system(setup));
@@ -153,7 +153,7 @@ mod tests {
 
     fn enter(world: &mut World, state: GameState) {
         world.resource_mut::<NextGameState>().set(state);
-        world.trigger(GameStateChangedEvent {});
+        world.trigger(GameStateChanged {});
         world.flush();
     }
 
