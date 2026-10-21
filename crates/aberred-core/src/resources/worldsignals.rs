@@ -1044,7 +1044,7 @@ mod tests {
     }
 
     #[test]
-    fn test_clear_integer_syncs_group_counts() {
+    fn test_remove_integer_syncs_group_counts() {
         let mut ws = WorldSignals::default();
         ws.set_group_count("enemy", 5);
         ws.remove_integer(&format!("{}enemy", sk::GROUP_COUNT_PREFIX));
@@ -1053,7 +1053,7 @@ mod tests {
         assert_eq!(
             snap.group_counts.get("enemy"),
             None,
-            "clear_integer on a group_count key must remove it from the snapshot"
+            "remove_integer on a group_count key must remove it from the snapshot"
         );
     }
 

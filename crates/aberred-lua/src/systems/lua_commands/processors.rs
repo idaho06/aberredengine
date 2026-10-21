@@ -104,7 +104,7 @@ pub fn process_signal_command(targets: &mut SignalTargets, cmd: SignalCmd) {
         SignalCmd::SetFlag { key } => {
             world_signals.set_flag(key);
         }
-        SignalCmd::ClearFlag { key } => {
+        SignalCmd::RemoveFlag { key } => {
             world_signals.remove_flag(&key);
         }
         SignalCmd::ToggleFlag { key } => {
@@ -117,13 +117,13 @@ pub fn process_signal_command(targets: &mut SignalTargets, cmd: SignalCmd) {
         // switch poll applies it at the end of the tick.
         SignalCmd::RequestScene { name } => next_scene.set(name),
         SignalCmd::RequestQuit => next_game_state.set(GameState::Quitting),
-        SignalCmd::ClearScalar { key } => {
+        SignalCmd::RemoveScalar { key } => {
             world_signals.remove_scalar(&key);
         }
-        SignalCmd::ClearInteger { key } => {
+        SignalCmd::RemoveInteger { key } => {
             world_signals.remove_integer(&key);
         }
-        SignalCmd::ClearString { key } => {
+        SignalCmd::RemoveString { key } => {
             world_signals.remove_string(&key);
         }
         SignalCmd::RegisterEntity { key, entity_id } => {
@@ -1102,7 +1102,7 @@ mod tests {
                 key: s("gone_s"),
                 value: 1.0,
             },
-            SignalCmd::ClearScalar { key: s("gone_s") },
+            SignalCmd::RemoveScalar { key: s("gone_s") },
             SignalCmd::SetInteger {
                 key: s("lives"),
                 value: 3,
@@ -1111,10 +1111,10 @@ mod tests {
                 key: s("gone_i"),
                 value: 1,
             },
-            SignalCmd::ClearInteger { key: s("gone_i") },
+            SignalCmd::RemoveInteger { key: s("gone_i") },
             SignalCmd::SetFlag { key: s("kept") },
             SignalCmd::SetFlag { key: s("gone_f") },
-            SignalCmd::ClearFlag { key: s("gone_f") },
+            SignalCmd::RemoveFlag { key: s("gone_f") },
             SignalCmd::SetString {
                 key: s("name"),
                 value: s("bob"),
@@ -1123,7 +1123,7 @@ mod tests {
                 key: s("gone_str"),
                 value: s("x"),
             },
-            SignalCmd::ClearString { key: s("gone_str") },
+            SignalCmd::RemoveString { key: s("gone_str") },
             SignalCmd::RegisterEntity {
                 key: s("player"),
                 entity_id: player.to_bits(),

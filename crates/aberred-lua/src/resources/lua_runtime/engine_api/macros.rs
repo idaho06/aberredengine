@@ -194,10 +194,10 @@ macro_rules! define_signal_cmd_twins {
                     params = [("key", "string")]
                 ),
                 (
-                    "clear_flag",
+                    "remove_flag",
                     |key| String,
-                    SignalCmd::ClearFlag { key },
-                    desc = "Clear a world signal flag",
+                    SignalCmd::RemoveFlag { key },
+                    desc = "Remove a world signal flag",
                     params = [("key", "string")]
                 ),
                 (
@@ -208,24 +208,24 @@ macro_rules! define_signal_cmd_twins {
                     params = [("key", "string")]
                 ),
                 (
-                    "clear_scalar",
+                    "remove_scalar",
                     |key| String,
-                    SignalCmd::ClearScalar { key },
-                    desc = "Clear a world signal scalar",
+                    SignalCmd::RemoveScalar { key },
+                    desc = "Remove a world signal scalar",
                     params = [("key", "string")]
                 ),
                 (
-                    "clear_integer",
+                    "remove_integer",
                     |key| String,
-                    SignalCmd::ClearInteger { key },
-                    desc = "Clear a world signal integer",
+                    SignalCmd::RemoveInteger { key },
+                    desc = "Remove a world signal integer",
                     params = [("key", "string")]
                 ),
                 (
-                    "clear_string",
+                    "remove_string",
                     |key| String,
-                    SignalCmd::ClearString { key },
-                    desc = "Clear a world signal string",
+                    SignalCmd::RemoveString { key },
+                    desc = "Remove a world signal string",
                     params = [("key", "string")]
                 ),
                 (

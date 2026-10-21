@@ -399,22 +399,6 @@ function engine.unload_sound(id) end
 
 -- ==================== World Signals ====================
 
----Clear a world signal flag
----@param key string
-function engine.clear_flag(key) end
-
----Clear a world signal integer
----@param key string
-function engine.clear_integer(key) end
-
----Clear a world signal scalar
----@param key string
-function engine.clear_scalar(key) end
-
----Clear a world signal string
----@param key string
-function engine.clear_string(key) end
-
 ---Get a registered entity ID by key
 ---@param key string
 ---@return integer|nil
@@ -465,6 +449,22 @@ function engine.has_flag(key) end
 ---@param key string
 ---@param entity_id integer
 function engine.register_entity(key, entity_id) end
+
+---Remove a world signal flag
+---@param key string
+function engine.remove_flag(key) end
+
+---Remove a world signal integer
+---@param key string
+function engine.remove_integer(key) end
+
+---Remove a world signal scalar
+---@param key string
+function engine.remove_scalar(key) end
+
+---Remove a world signal string
+---@param key string
+function engine.remove_string(key) end
 
 ---Set a world signal flag
 ---@param key string
@@ -1343,22 +1343,6 @@ function engine.set_camera(target_x, target_y, offset_x, offset_y, rotation, zoo
 
 -- ==================== Collision Commands ====================
 
----Clear a world signal flag (collision context)
----@param key string
-function engine.collision_clear_flag(key) end
-
----Clear a world signal integer (collision context)
----@param key string
-function engine.collision_clear_integer(key) end
-
----Clear a world signal scalar (collision context)
----@param key string
-function engine.collision_clear_scalar(key) end
-
----Clear a world signal string (collision context)
----@param key string
-function engine.collision_clear_string(key) end
-
 ---Clone a registered entity (collision context)
 ---@param source_key string
 ---@return CollisionEntityBuilder
@@ -1382,6 +1366,22 @@ function engine.collision_play_sound_pitched(id, pitch) end
 ---@param key string
 ---@param entity_id integer
 function engine.collision_register_entity(key, entity_id) end
+
+---Remove a world signal flag (collision context)
+---@param key string
+function engine.collision_remove_flag(key) end
+
+---Remove a world signal integer (collision context)
+---@param key string
+function engine.collision_remove_integer(key) end
+
+---Remove a world signal scalar (collision context)
+---@param key string
+function engine.collision_remove_scalar(key) end
+
+---Remove a world signal string (collision context)
+---@param key string
+function engine.collision_remove_string(key) end
 
 ---Set the 2D camera target, offset, rotation and zoom (collision context)
 ---@param target_x number

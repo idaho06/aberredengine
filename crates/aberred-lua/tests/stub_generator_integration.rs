@@ -473,9 +473,9 @@ fn meta_functions_complete() {
             "get_scalars", "get_integers", "get_strings", "get_flags",
             "get_group_count", "get_entity",
             -- signal writes
-            "set_scalar", "set_integer", "set_string", "set_flag", "clear_flag",
+            "set_scalar", "set_integer", "set_string", "set_flag", "remove_flag",
             "toggle_flag",
-            "clear_scalar", "clear_integer", "clear_string",
+            "remove_scalar", "remove_integer", "remove_string",
             "register_entity", "unregister_entity",
             -- phase
             "phase_transition",
@@ -494,8 +494,8 @@ fn meta_functions_complete() {
             "collision_spawn", "collision_clone",
             "collision_play_sound",
             "collision_set_scalar", "collision_set_integer", "collision_set_string",
-            "collision_set_flag", "collision_clear_flag", "collision_toggle_flag",
-            "collision_clear_scalar", "collision_clear_integer", "collision_clear_string",
+            "collision_set_flag", "collision_remove_flag", "collision_toggle_flag",
+            "collision_remove_scalar", "collision_remove_integer", "collision_remove_string",
             "collision_phase_transition", "collision_set_camera",
         }
 

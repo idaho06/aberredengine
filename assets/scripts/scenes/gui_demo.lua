@@ -535,7 +535,7 @@ local function on_hide_window2_clicked()
             WINDOW2_ANIM_DURATION, "quad_in", "once", false, "on_hide_window2_tween_done"
         )
     end
-    engine.clear_flag("gui_demo_window2_visible")
+    engine.remove_flag("gui_demo_window2_visible")
 end
 
 --- Fired once the slide-out tween above finishes — removes ScreenPosition so
@@ -666,7 +666,7 @@ function M.spawn()
     -- Reset in case this scene is being re-entered (the flag is a generic
     -- WorldSignals flag, not scene-scoped, and window 2 is freshly spawned
     -- with no ScreenPosition every time this function runs).
-    engine.clear_flag("gui_demo_window2_visible")
+    engine.remove_flag("gui_demo_window2_visible")
 
     -- No :with_screen_position() here — window 2 starts fully invisible;
     -- on_show_window2_clicked is what gives it one. Uses the "compact"
@@ -692,7 +692,7 @@ function M.spawn()
     engine.set_string("char_sword_cooldown", "")
     sword_cooldown_secs = 0.0
     sword_cooldown_last_display = ""
-    engine.clear_flag("char_game_over")
+    engine.remove_flag("char_game_over")
 
     engine.spawn()
         :with_gui_window(197, 260)

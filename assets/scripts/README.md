@@ -322,7 +322,7 @@ Collision callbacks process commands from their own dedicated queues, which are 
 - `engine.collision_clone()` instead of `engine.clone()`
 - `engine.collision_play_sound()` instead of `engine.play_sound()`
 - `engine.collision_play_sound_pitched()` instead of `engine.play_sound_pitched()`
-- `engine.collision_set_flag()` / `engine.collision_clear_flag()` instead of `engine.set_flag()` / `engine.clear_flag()`
+- `engine.collision_set_flag()` / `engine.collision_remove_flag()` instead of `engine.set_flag()` / `engine.remove_flag()`
 - `engine.collision_set_integer()` instead of `engine.set_integer()`
 - `engine.collision_register_entity()` / `engine.collision_unregister_entity()` instead of `engine.register_entity()` / `engine.unregister_entity()`
 - `engine.collision_phase_transition()` instead of `engine.phase_transition()`
@@ -2873,13 +2873,13 @@ engine.set_flag("boss_defeated")
 engine.set_flag("game_paused")
 ```
 
-#### `engine.clear_flag(key)`
+#### `engine.remove_flag(key)`
 
-Clear boolean flag (set to false).
+Remove a flag (it then reads as false).
 
 ```lua
-engine.clear_flag("boss_defeated")
-engine.clear_flag("game_paused")
+engine.remove_flag("boss_defeated")
+engine.remove_flag("game_paused")
 ```
 
 #### `engine.toggle_flag(key)`
@@ -2890,28 +2890,28 @@ Toggle a boolean flag in world signals.
 engine.toggle_flag("game_paused")
 ```
 
-#### `engine.clear_scalar(key)`
+#### `engine.remove_scalar(key)`
 
 Remove a scalar signal.
 
 ```lua
-engine.clear_scalar("player_y")
+engine.remove_scalar("player_y")
 ```
 
-#### `engine.clear_integer(key)`
+#### `engine.remove_integer(key)`
 
 Remove an integer signal.
 
 ```lua
-engine.clear_integer("temp_score")
+engine.remove_integer("temp_score")
 ```
 
-#### `engine.clear_string(key)`
+#### `engine.remove_string(key)`
 
 Remove a string signal.
 
 ```lua
-engine.clear_string("current_powerup")
+engine.remove_string("current_powerup")
 ```
 
 #### `engine.register_entity(key, entity_id)`
@@ -3895,12 +3895,12 @@ Set global flag during collision.
 engine.collision_set_flag("ball_hit_player")
 ```
 
-#### `engine.collision_clear_flag(key)`
+#### `engine.collision_remove_flag(key)`
 
-Clear global flag during collision.
+Remove a global flag during collision.
 
 ```lua
-engine.collision_clear_flag("ball_hit_player")
+engine.collision_remove_flag("ball_hit_player")
 ```
 
 #### `engine.collision_toggle_flag(key)`
@@ -3927,28 +3927,28 @@ Set global string signal during collision.
 engine.collision_set_string("last_collision", "ball_brick")
 ```
 
-#### `engine.collision_clear_scalar(key)`
+#### `engine.collision_remove_scalar(key)`
 
 Remove a scalar signal during collision.
 
 ```lua
-engine.collision_clear_scalar("temp_boost")
+engine.collision_remove_scalar("temp_boost")
 ```
 
-#### `engine.collision_clear_integer(key)`
+#### `engine.collision_remove_integer(key)`
 
 Remove an integer signal during collision.
 
 ```lua
-engine.collision_clear_integer("combo_count")
+engine.collision_remove_integer("combo_count")
 ```
 
-#### `engine.collision_clear_string(key)`
+#### `engine.collision_remove_string(key)`
 
 Remove a string signal during collision.
 
 ```lua
-engine.collision_clear_string("active_effect")
+engine.collision_remove_string("active_effect")
 ```
 
 #### `engine.collision_register_entity(key, entity_id)`
