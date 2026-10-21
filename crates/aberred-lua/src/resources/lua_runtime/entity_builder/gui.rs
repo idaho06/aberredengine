@@ -8,7 +8,7 @@ pub(super) fn register<M: LuaUserDataMethods<LuaEntityBuilder>>(
         methods,
         meta,
         "with_gui_window",
-        "Set GuiWindow component (themed panel, drawn via the named theme looked up in GuiThemeStore (see :with_gui_theme_key)). Requires :with_screen_position() and :with_zindex() to render.",
+        "Set GuiWindow component (themed panel, drawn via the named theme looked up in GuiThemeStore (see :with_gui_theme_key)). Requires :with_screen_position() and :with_z_index() to render.",
         [("width", "number"), ("height", "number")],
         |_, this: &mut LuaEntityBuilder, (width, height): (f32, f32)| {
             this.cmd.gui_window = Some(GuiWindow::new(width, height));
@@ -37,7 +37,7 @@ pub(super) fn register<M: LuaUserDataMethods<LuaEntityBuilder>>(
         methods,
         meta,
         "with_gui_button",
-        "Set GuiButton component; gui_button_spawn_system spawns a co-located GuiInteractable plus a caption DynamicText child on Added<GuiButton>, themed via GuiTheme.font/font_size/text_color (see engine.set_gui_theme_font). An empty `label` skips spawning the caption entirely (captionless button). Requires :with_screen_position() (or :with_parent()+:with_gui_offset()) and :with_zindex() to render.",
+        "Set GuiButton component; gui_button_spawn_system spawns a co-located GuiInteractable plus a caption DynamicText child on Added<GuiButton>, themed via GuiTheme.font/font_size/text_color (see engine.set_gui_theme_font). An empty `label` skips spawning the caption entirely (captionless button). Requires :with_screen_position() (or :with_parent()+:with_gui_offset()) and :with_z_index() to render.",
         [
             ("width", "number"),
             ("height", "number"),
@@ -70,7 +70,7 @@ pub(super) fn register<M: LuaUserDataMethods<LuaEntityBuilder>>(
         methods,
         meta,
         "with_gui_label",
-        "Set GuiLabel component; gui_label_spawn_system spawns a caption DynamicText child on Added<GuiLabel>, themed via the named theme looked up in GuiThemeStore (see engine.set_gui_theme_font / :with_gui_theme_key). An empty `text` skips spawning the caption entirely (captionless label). Requires :with_screen_position() (or :with_parent()+:with_gui_offset()) and :with_zindex() to render.",
+        "Set GuiLabel component; gui_label_spawn_system spawns a caption DynamicText child on Added<GuiLabel>, themed via the named theme looked up in GuiThemeStore (see engine.set_gui_theme_font / :with_gui_theme_key). An empty `text` skips spawning the caption entirely (captionless label). Requires :with_screen_position() (or :with_parent()+:with_gui_offset()) and :with_z_index() to render.",
         [
             ("width", "number"),
             ("height", "number"),
@@ -155,7 +155,7 @@ pub(super) fn register<M: LuaUserDataMethods<LuaEntityBuilder>>(
         methods,
         meta,
         "with_gui_image",
-        "Set GuiImage component; gui_image_spawn_system spawns a co-located GuiInteractable + Sprite on Added<GuiImage> (no caption child, unlike GuiButton/GuiLabel). `offset_x`/`offset_y` select the atlas sub-rect within `tex_key` (mirrors Sprite.offset; size doubles as source-rect size and render size) — this is the Normal-state offset; see :with_gui_image_hover_offset()/:with_gui_image_pressed_offset()/:with_gui_image_disabled_offset() for per-state offsets (each falls back to this one when unset). Click callbacks attach with :with_lua_gui_clicked(); without one the image still hit-tests/hovers/presses, it just has nothing to dispatch. Requires :with_screen_position() (or :with_parent()+:with_gui_offset()) and :with_zindex() to render.",
+        "Set GuiImage component; gui_image_spawn_system spawns a co-located GuiInteractable + Sprite on Added<GuiImage> (no caption child, unlike GuiButton/GuiLabel). `offset_x`/`offset_y` select the atlas sub-rect within `tex_key` (mirrors Sprite.offset; size doubles as source-rect size and render size) — this is the Normal-state offset; see :with_gui_image_hover_offset()/:with_gui_image_pressed_offset()/:with_gui_image_disabled_offset() for per-state offsets (each falls back to this one when unset). Click callbacks attach with :with_lua_gui_clicked(); without one the image still hit-tests/hovers/presses, it just has nothing to dispatch. Requires :with_screen_position() (or :with_parent()+:with_gui_offset()) and :with_z_index() to render.",
         [
             ("width", "number"),
             ("height", "number"),
@@ -238,7 +238,7 @@ pub(super) fn register<M: LuaUserDataMethods<LuaEntityBuilder>>(
         methods,
         meta,
         "with_gui_progress_bar",
-        "Set GuiProgressBar component (themed nine-patch fill bar, rendered directly by render_system — no spawn system). Requires :with_screen_position() (or :with_parent()+:with_gui_offset()) and :with_zindex() to render. Theme registered via engine.set_gui_theme_progress_bar(); see :with_gui_theme_key() to override the \"default\" key.",
+        "Set GuiProgressBar component (themed nine-patch fill bar, rendered directly by render_system — no spawn system). Requires :with_screen_position() (or :with_parent()+:with_gui_offset()) and :with_z_index() to render. Theme registered via engine.set_gui_theme_progress_bar(); see :with_gui_theme_key() to override the \"default\" key.",
         [
             ("width", "number"),
             ("height", "number"),

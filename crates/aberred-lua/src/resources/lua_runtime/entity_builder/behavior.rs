@@ -187,10 +187,10 @@ pub(super) fn register<M: LuaUserDataMethods<LuaEntityBuilder>>(
         [
             ("path", "string"),
             ("group", "string"),
-            ("zindex", "number")
+            ("z_index", "number")
         ],
-        |_, this: &mut LuaEntityBuilder, (path, group, zindex): (String, String, f32)| {
-            this.cmd.grid_layout = Some((path, group, zindex));
+        |_, this: &mut LuaEntityBuilder, (path, group, z_index): (String, String, f32)| {
+            this.cmd.grid_layout = Some((path, group, z_index));
             Ok(())
         }
     );

@@ -73,7 +73,7 @@ crates/aberred-lua/src/resources/lua_runtime/
 │   ├── mod.rs           # LuaEntityBuilder struct, builder_method!/DummyMethods, register_methods() dispatch, register_as/build
 │   ├── transform.rs     # with_position, with_screen_position, with_rotation, with_scale, with_parent, with_stuckto*, with_camera_target, ...
 │   ├── physics.rs       # with_velocity, with_accel, with_friction, with_max_speed, with_frozen, with_collider*
-│   ├── sprite.rs        # with_sprite*, with_tint, with_shadow, with_animation*, with_lua_animation_finished, with_zindex
+│   ├── sprite.rs        # with_sprite*, with_tint, with_shadow, with_animation*, with_lua_animation_finished, with_z_index
 │   ├── gui.rs            # with_gui_window/button/label/image/progress_bar/offset/theme_key, their per-state offset variants, with_lua_gui_clicked
 │   ├── menu.rs           # with_menu and its with_menu_* configuration methods
 │   ├── tween.rs          # with_tween_position/rotation/scale/screen_position and their *_easing/*_loop/*_backwards variants, with_lua_tween_*_finished
@@ -579,7 +579,7 @@ with_sprite_flip
 with_sprite_offset
 with_tint
 with_shadow
-with_zindex
+with_z_index
 with_animation
 with_animation_controller
 with_animation_rule
@@ -710,12 +710,12 @@ engine.clone("some_template_key")
 
 ### GUI Widget Builders
 
-GUI widgets are spawned the same way as any other entity, via dedicated `with_gui_*` methods. Each widget requires `:with_screen_position()` (or `:with_parent()` + `:with_gui_offset()` for a child widget positioned relative to its parent) and `:with_zindex()` to render:
+GUI widgets are spawned the same way as any other entity, via dedicated `with_gui_*` methods. Each widget requires `:with_screen_position()` (or `:with_parent()` + `:with_gui_offset()` for a child widget positioned relative to its parent) and `:with_z_index()` to render:
 
 ```lua
 engine.spawn()
     :with_screen_position(100, 40)
-    :with_zindex(10)
+    :with_z_index(10)
     :with_gui_button(120, 32, "Start")
     :with_lua_gui_clicked("on_start_clicked")
     :with_gui_theme_key("hud")
@@ -789,7 +789,7 @@ Spawn and clone commands are processed via `process_spawn_command()` and `proces
 `apply_components()` is split into focused sub-functions:
 - `apply_transform_components()` — position, screen position, rotation, scale, parent, stuckto, camera target
 - `apply_physics_components()` — rigidbody, collider
-- `apply_render_components()` — sprite, zindex, shader, tint, shadow
+- `apply_render_components()` — sprite, z_index, shader, tint, shadow
 - `apply_animation_components()` — animation, animation controller, tweens
 - `apply_signal_components()` — signals, signal bindings
 - `apply_behavior_components()` — phase, lua timer, lua collision rule, lua setup, on_animation_finished

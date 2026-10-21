@@ -207,7 +207,7 @@ engine.spawn()
     :with_gui_window(200, 150)        -- width, height
     :with_gui_theme_key("compact")    -- optional; default "default"
     :with_screen_position(10, 80)
-    :with_zindex(0)
+    :with_z_index(0)
     :build()
 ```
 
@@ -250,7 +250,7 @@ engine.spawn()
     :with_gui_theme_key("compact")    -- optional; default "default"
     :with_parent(window_entity_id)
     :with_gui_offset(16, 50)
-    :with_zindex(2)
+    :with_z_index(2)
     :build()
 ```
 
@@ -310,7 +310,7 @@ engine.spawn()
     :with_gui_label(160, 24, "Score")
     :with_parent(window_entity_id)
     :with_gui_offset(16, 16)
-    :with_zindex(2)
+    :with_z_index(2)
     :build()
 
 -- Signal-bound label (live value from WorldSignals)
@@ -321,7 +321,7 @@ engine.spawn()
     :with_gui_theme_key("compact")
     :with_parent(window_entity_id)
     :with_gui_offset(16, 44)
-    :with_zindex(2)
+    :with_z_index(2)
     :build()
 ```
 
@@ -368,7 +368,7 @@ engine.spawn()
     :with_gui_image_disabled_offset(32, 32)
     :with_parent(window_entity_id)
     :with_gui_offset(8, 36)
-    :with_zindex(2)
+    :with_z_index(2)
     :build()
 ```
 
@@ -432,7 +432,7 @@ Signature: `engine.set_gui_theme_progress_bar(theme_key, part, tex_key, sx, sy, 
 local bar = engine.spawn()
     :with_gui_progress_bar(200, 16, 75, 100)  -- 75/100
     :with_screen_position(10, 10)
-    :with_zindex(1)
+    :with_z_index(1)
     :build()
 
 -- Signal-bound (auto-updated each frame)
@@ -440,7 +440,7 @@ engine.spawn()
     :with_gui_progress_bar(200, 16, 100, 100)
     :with_gui_progress_bar_signal_binding("player_hp")
     :with_screen_position(10, 30)
-    :with_zindex(1)
+    :with_z_index(1)
     :build()
 engine.set_integer("player_hp", 40)  -- bar shows 40%
 
@@ -450,7 +450,7 @@ engine.spawn()
     :with_gui_progress_bar_vertical()
     :with_gui_progress_bar_reversed()
     :with_screen_position(220, 10)
-    :with_zindex(1)
+    :with_z_index(1)
     :build()
 ```
 
@@ -528,7 +528,7 @@ callback (which fires the frame after the window entity exists):
 engine.spawn()
     :with_gui_window(200, 150)
     :with_screen_position(10, 80)
-    :with_zindex(0)
+    :with_z_index(0)
     :with_lua_setup("build_my_window")
     :build()
 
@@ -538,7 +538,7 @@ local function build_my_window(ctx)
         :with_gui_label(160, 24, "Hello!")
         :with_parent(ctx.id)
         :with_gui_offset(16, 16)
-        :with_zindex(2)
+        :with_z_index(2)
         :build()
 
     engine.spawn()
@@ -546,7 +546,7 @@ local function build_my_window(ctx)
         :with_lua_gui_clicked("on_ok_clicked")
         :with_parent(ctx.id)
         :with_gui_offset(16, 50)
-        :with_zindex(2)
+        :with_z_index(2)
         :build()
 end
 ```
@@ -754,7 +754,7 @@ engine.spawn()
     :with_gui_label_signal_binding_format("HP: {}")
     :with_parent(window_id)
     :with_gui_offset(8, 162)
-    :with_zindex(2)
+    :with_z_index(2)
     :build()
 
 -- Update the value from anywhere:
@@ -810,7 +810,7 @@ local function build_main_panel(ctx)
         :with_gui_progress_bar_signal_binding("player_hp")
         :with_parent(ctx.id)
         :with_gui_offset(16, 16)
-        :with_zindex(2)
+        :with_z_index(2)
         :build()
 
     -- Attack icon button (GuiImage with 2×2 atlas states)
@@ -823,7 +823,7 @@ local function build_main_panel(ctx)
         :register_as("attack_btn")
         :with_parent(ctx.id)
         :with_gui_offset(16, 44)
-        :with_zindex(2)
+        :with_z_index(2)
         :build()
 
     -- Regular button
@@ -832,7 +832,7 @@ local function build_main_panel(ctx)
         :with_lua_gui_clicked("on_retreat_clicked")
         :with_parent(ctx.id)
         :with_gui_offset(16, 84)
-        :with_zindex(2)
+        :with_z_index(2)
         :build()
 end
 
@@ -859,7 +859,7 @@ function M.spawn()
     engine.spawn()
         :with_gui_window(200, 130)
         :with_screen_position(PANEL_X, PANEL_Y)
-        :with_zindex(0)
+        :with_z_index(0)
         :with_lua_setup("build_main_panel")
         :build()
 end

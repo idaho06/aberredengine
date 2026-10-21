@@ -52,14 +52,14 @@ function M.spawn()
     engine.spawn()
         :with_text("BUNNYMARK", "future", 36, 255, 255, 255, 255)
         :with_screen_position(8, 20)
-        :with_zindex(1)
+        :with_z_index(1)
         :build()
 
     -- Subtitle
     engine.spawn()
         :with_text("select variant", "arcade", 12, 160, 160, 160, 255)
         :with_screen_position(10, 68)
-        :with_zindex(1)
+        :with_z_index(1)
         :build()
 
     -- Cursor

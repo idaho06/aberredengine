@@ -1709,16 +1709,16 @@ function EntityBuilder:with_frozen() end
 ---Spawn entities from a JSON grid layout
 ---@param path string
 ---@param group string
----@param zindex number
+---@param z_index number
 ---@return EntityBuilder
-function EntityBuilder:with_grid_layout(path, group, zindex) end
+function EntityBuilder:with_grid_layout(path, group, z_index) end
 
 ---Set entity group
 ---@param name string
 ---@return EntityBuilder
 function EntityBuilder:with_group(name) end
 
----Set GuiButton component; gui_button_spawn_system spawns a co-located GuiInteractable plus a caption DynamicText child on Added<GuiButton>, themed via GuiTheme.font/font_size/text_color (see engine.set_gui_theme_font). An empty `label` skips spawning the caption entirely (captionless button). Requires :with_screen_position() (or :with_parent()+:with_gui_offset()) and :with_zindex() to render.
+---Set GuiButton component; gui_button_spawn_system spawns a co-located GuiInteractable plus a caption DynamicText child on Added<GuiButton>, themed via GuiTheme.font/font_size/text_color (see engine.set_gui_theme_font). An empty `label` skips spawning the caption entirely (captionless button). Requires :with_screen_position() (or :with_parent()+:with_gui_offset()) and :with_z_index() to render.
 ---@param width number
 ---@param height number
 ---@param label string
@@ -1729,7 +1729,7 @@ function EntityBuilder:with_gui_button(width, height, label) end
 ---@return EntityBuilder
 function EntityBuilder:with_gui_button_disabled() end
 
----Set GuiImage component; gui_image_spawn_system spawns a co-located GuiInteractable + Sprite on Added<GuiImage> (no caption child, unlike GuiButton/GuiLabel). `offset_x`/`offset_y` select the atlas sub-rect within `tex_key` (mirrors Sprite.offset; size doubles as source-rect size and render size) — this is the Normal-state offset; see :with_gui_image_hover_offset()/:with_gui_image_pressed_offset()/:with_gui_image_disabled_offset() for per-state offsets (each falls back to this one when unset). Click callbacks attach with :with_lua_gui_clicked(); without one the image still hit-tests/hovers/presses, it just has nothing to dispatch. Requires :with_screen_position() (or :with_parent()+:with_gui_offset()) and :with_zindex() to render.
+---Set GuiImage component; gui_image_spawn_system spawns a co-located GuiInteractable + Sprite on Added<GuiImage> (no caption child, unlike GuiButton/GuiLabel). `offset_x`/`offset_y` select the atlas sub-rect within `tex_key` (mirrors Sprite.offset; size doubles as source-rect size and render size) — this is the Normal-state offset; see :with_gui_image_hover_offset()/:with_gui_image_pressed_offset()/:with_gui_image_disabled_offset() for per-state offsets (each falls back to this one when unset). Click callbacks attach with :with_lua_gui_clicked(); without one the image still hit-tests/hovers/presses, it just has nothing to dispatch. Requires :with_screen_position() (or :with_parent()+:with_gui_offset()) and :with_z_index() to render.
 ---@param width number
 ---@param height number
 ---@param tex_key string
@@ -1756,7 +1756,7 @@ function EntityBuilder:with_gui_image_hover_offset(offset_x, offset_y) end
 ---@return EntityBuilder
 function EntityBuilder:with_gui_image_pressed_offset(offset_x, offset_y) end
 
----Set GuiLabel component; gui_label_spawn_system spawns a caption DynamicText child on Added<GuiLabel>, themed via the named theme looked up in GuiThemeStore (see engine.set_gui_theme_font / :with_gui_theme_key). An empty `text` skips spawning the caption entirely (captionless label). Requires :with_screen_position() (or :with_parent()+:with_gui_offset()) and :with_zindex() to render.
+---Set GuiLabel component; gui_label_spawn_system spawns a caption DynamicText child on Added<GuiLabel>, themed via the named theme looked up in GuiThemeStore (see engine.set_gui_theme_font / :with_gui_theme_key). An empty `text` skips spawning the caption entirely (captionless label). Requires :with_screen_position() (or :with_parent()+:with_gui_offset()) and :with_z_index() to render.
 ---@param width number
 ---@param height number
 ---@param text string
@@ -1779,7 +1779,7 @@ function EntityBuilder:with_gui_label_signal_binding_format(format) end
 ---@return EntityBuilder
 function EntityBuilder:with_gui_offset(x, y) end
 
----Set GuiProgressBar component (themed nine-patch fill bar, rendered directly by render_system — no spawn system). Requires :with_screen_position() (or :with_parent()+:with_gui_offset()) and :with_zindex() to render. Theme registered via engine.set_gui_theme_progress_bar(); see :with_gui_theme_key() to override the "default" key.
+---Set GuiProgressBar component (themed nine-patch fill bar, rendered directly by render_system — no spawn system). Requires :with_screen_position() (or :with_parent()+:with_gui_offset()) and :with_z_index() to render. Theme registered via engine.set_gui_theme_progress_bar(); see :with_gui_theme_key() to override the "default" key.
 ---@param width number
 ---@param height number
 ---@param value number
@@ -1805,7 +1805,7 @@ function EntityBuilder:with_gui_progress_bar_vertical() end
 ---@return EntityBuilder
 function EntityBuilder:with_gui_theme_key(key) end
 
----Set GuiWindow component (themed panel, drawn via the named theme looked up in GuiThemeStore (see :with_gui_theme_key)). Requires :with_screen_position() and :with_zindex() to render.
+---Set GuiWindow component (themed panel, drawn via the named theme looked up in GuiThemeStore (see :with_gui_theme_key)). Requires :with_screen_position() and :with_z_index() to render.
 ---@param width number
 ---@param height number
 ---@return EntityBuilder
@@ -2005,7 +2005,7 @@ function EntityBuilder:with_rotation(degrees) end
 ---@return EntityBuilder
 function EntityBuilder:with_scale(sx, sy) end
 
----Set screen position (UI elements). Requires :with_zindex() to render -- screen-space rendering requires ZIndex (mirrors world-space); entities without it are silently excluded, not an error.
+---Set screen position (UI elements). Requires :with_z_index() to render -- screen-space rendering requires ZIndex (mirrors world-space); entities without it are silently excluded, not an error.
 ---@param x number
 ---@param y number
 ---@return EntityBuilder
@@ -2232,7 +2232,7 @@ function EntityBuilder:with_velocity(vx, vy) end
 ---Set render order
 ---@param z number
 ---@return EntityBuilder
-function EntityBuilder:with_zindex(z) end
+function EntityBuilder:with_z_index(z) end
 
 ---Register entity in WorldSignals for later retrieval
 ---@param key string
@@ -2304,16 +2304,16 @@ function CollisionEntityBuilder:with_frozen() end
 ---Spawn entities from a JSON grid layout
 ---@param path string
 ---@param group string
----@param zindex number
+---@param z_index number
 ---@return CollisionEntityBuilder
-function CollisionEntityBuilder:with_grid_layout(path, group, zindex) end
+function CollisionEntityBuilder:with_grid_layout(path, group, z_index) end
 
 ---Set entity group
 ---@param name string
 ---@return CollisionEntityBuilder
 function CollisionEntityBuilder:with_group(name) end
 
----Set GuiButton component; gui_button_spawn_system spawns a co-located GuiInteractable plus a caption DynamicText child on Added<GuiButton>, themed via GuiTheme.font/font_size/text_color (see engine.set_gui_theme_font). An empty `label` skips spawning the caption entirely (captionless button). Requires :with_screen_position() (or :with_parent()+:with_gui_offset()) and :with_zindex() to render.
+---Set GuiButton component; gui_button_spawn_system spawns a co-located GuiInteractable plus a caption DynamicText child on Added<GuiButton>, themed via GuiTheme.font/font_size/text_color (see engine.set_gui_theme_font). An empty `label` skips spawning the caption entirely (captionless button). Requires :with_screen_position() (or :with_parent()+:with_gui_offset()) and :with_z_index() to render.
 ---@param width number
 ---@param height number
 ---@param label string
@@ -2324,7 +2324,7 @@ function CollisionEntityBuilder:with_gui_button(width, height, label) end
 ---@return CollisionEntityBuilder
 function CollisionEntityBuilder:with_gui_button_disabled() end
 
----Set GuiImage component; gui_image_spawn_system spawns a co-located GuiInteractable + Sprite on Added<GuiImage> (no caption child, unlike GuiButton/GuiLabel). `offset_x`/`offset_y` select the atlas sub-rect within `tex_key` (mirrors Sprite.offset; size doubles as source-rect size and render size) — this is the Normal-state offset; see :with_gui_image_hover_offset()/:with_gui_image_pressed_offset()/:with_gui_image_disabled_offset() for per-state offsets (each falls back to this one when unset). Click callbacks attach with :with_lua_gui_clicked(); without one the image still hit-tests/hovers/presses, it just has nothing to dispatch. Requires :with_screen_position() (or :with_parent()+:with_gui_offset()) and :with_zindex() to render.
+---Set GuiImage component; gui_image_spawn_system spawns a co-located GuiInteractable + Sprite on Added<GuiImage> (no caption child, unlike GuiButton/GuiLabel). `offset_x`/`offset_y` select the atlas sub-rect within `tex_key` (mirrors Sprite.offset; size doubles as source-rect size and render size) — this is the Normal-state offset; see :with_gui_image_hover_offset()/:with_gui_image_pressed_offset()/:with_gui_image_disabled_offset() for per-state offsets (each falls back to this one when unset). Click callbacks attach with :with_lua_gui_clicked(); without one the image still hit-tests/hovers/presses, it just has nothing to dispatch. Requires :with_screen_position() (or :with_parent()+:with_gui_offset()) and :with_z_index() to render.
 ---@param width number
 ---@param height number
 ---@param tex_key string
@@ -2351,7 +2351,7 @@ function CollisionEntityBuilder:with_gui_image_hover_offset(offset_x, offset_y) 
 ---@return CollisionEntityBuilder
 function CollisionEntityBuilder:with_gui_image_pressed_offset(offset_x, offset_y) end
 
----Set GuiLabel component; gui_label_spawn_system spawns a caption DynamicText child on Added<GuiLabel>, themed via the named theme looked up in GuiThemeStore (see engine.set_gui_theme_font / :with_gui_theme_key). An empty `text` skips spawning the caption entirely (captionless label). Requires :with_screen_position() (or :with_parent()+:with_gui_offset()) and :with_zindex() to render.
+---Set GuiLabel component; gui_label_spawn_system spawns a caption DynamicText child on Added<GuiLabel>, themed via the named theme looked up in GuiThemeStore (see engine.set_gui_theme_font / :with_gui_theme_key). An empty `text` skips spawning the caption entirely (captionless label). Requires :with_screen_position() (or :with_parent()+:with_gui_offset()) and :with_z_index() to render.
 ---@param width number
 ---@param height number
 ---@param text string
@@ -2374,7 +2374,7 @@ function CollisionEntityBuilder:with_gui_label_signal_binding_format(format) end
 ---@return CollisionEntityBuilder
 function CollisionEntityBuilder:with_gui_offset(x, y) end
 
----Set GuiProgressBar component (themed nine-patch fill bar, rendered directly by render_system — no spawn system). Requires :with_screen_position() (or :with_parent()+:with_gui_offset()) and :with_zindex() to render. Theme registered via engine.set_gui_theme_progress_bar(); see :with_gui_theme_key() to override the "default" key.
+---Set GuiProgressBar component (themed nine-patch fill bar, rendered directly by render_system — no spawn system). Requires :with_screen_position() (or :with_parent()+:with_gui_offset()) and :with_z_index() to render. Theme registered via engine.set_gui_theme_progress_bar(); see :with_gui_theme_key() to override the "default" key.
 ---@param width number
 ---@param height number
 ---@param value number
@@ -2400,7 +2400,7 @@ function CollisionEntityBuilder:with_gui_progress_bar_vertical() end
 ---@return CollisionEntityBuilder
 function CollisionEntityBuilder:with_gui_theme_key(key) end
 
----Set GuiWindow component (themed panel, drawn via the named theme looked up in GuiThemeStore (see :with_gui_theme_key)). Requires :with_screen_position() and :with_zindex() to render.
+---Set GuiWindow component (themed panel, drawn via the named theme looked up in GuiThemeStore (see :with_gui_theme_key)). Requires :with_screen_position() and :with_z_index() to render.
 ---@param width number
 ---@param height number
 ---@return CollisionEntityBuilder
@@ -2600,7 +2600,7 @@ function CollisionEntityBuilder:with_rotation(degrees) end
 ---@return CollisionEntityBuilder
 function CollisionEntityBuilder:with_scale(sx, sy) end
 
----Set screen position (UI elements). Requires :with_zindex() to render -- screen-space rendering requires ZIndex (mirrors world-space); entities without it are silently excluded, not an error.
+---Set screen position (UI elements). Requires :with_z_index() to render -- screen-space rendering requires ZIndex (mirrors world-space); entities without it are silently excluded, not an error.
 ---@param x number
 ---@param y number
 ---@return CollisionEntityBuilder
@@ -2827,7 +2827,7 @@ function CollisionEntityBuilder:with_velocity(vx, vy) end
 ---Set render order
 ---@param z number
 ---@return CollisionEntityBuilder
-function CollisionEntityBuilder:with_zindex(z) end
+function CollisionEntityBuilder:with_z_index(z) end
 
 ---Register entity in WorldSignals for later retrieval
 ---@param key string

@@ -30,7 +30,7 @@
 //!     :with_group("player")
 //!     :with_position(400, 700)
 //!     :with_sprite("vaus", 48, 12, 24, 6)
-//!     :with_zindex(10)
+//!     :with_z_index(10)
 //!     :build()
 //! ```
 

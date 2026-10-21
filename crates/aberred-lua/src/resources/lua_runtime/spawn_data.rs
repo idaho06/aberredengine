@@ -384,7 +384,7 @@ pub struct SpawnCmd {
     /// Dynamic text component data
     pub text: Option<TextData>,
     /// Z-index for render ordering
-    pub zindex: Option<f32>,
+    pub z_index: Option<f32>,
     /// RigidBody velocity data
     pub rigidbody: Option<RigidBodyData>,
     /// BoxCollider data
@@ -417,7 +417,7 @@ pub struct SpawnCmd {
     pub lua_timer: Option<LuaTimerSpawn>,
     /// SignalBinding component data (key, optional format)
     pub signal_binding: Option<(String, Option<String>)>,
-    /// GridLayout component data (path, group, zindex)
+    /// GridLayout component data (path, group, z_index)
     pub grid_layout: Option<(String, String, f32)>,
     /// TweenPosition component data
     pub tween_position: Option<TweenPositionData>,

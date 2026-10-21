@@ -411,7 +411,7 @@ mod tests {
                 :with_sprite('rock', 64, 64, 32, 32) \
                 :with_rotation(45) \
                 :with_velocity(1, 2) \
-                :with_zindex(5) \
+                :with_z_index(5) \
                 :with_collider(40, 40, 20, 20) \
                 :with_signal_integer('hp', 3) \
                 :build()",
@@ -420,7 +420,7 @@ mod tests {
         assert_eq!(cmd.position, Some((10.0, 20.0)));
         assert!(cmd.sprite.is_some());
         assert_eq!(cmd.rotation, Some(45.0));
-        assert_eq!(cmd.zindex, Some(5.0));
+        assert_eq!(cmd.z_index, Some(5.0));
         assert!(cmd.collider.is_some());
         assert_eq!(cmd.signal_integers, vec![("hp".to_string(), 3)]);
     }

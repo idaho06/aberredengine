@@ -46,7 +46,7 @@ local function on_update_bunnymark_screen_loop(input, dt)
                 :with_sprite("bunnymark-raybunny", C.BUNNY_W, C.BUNNY_H, 0, 0)
                 :with_screen_position(mx, my)
                 :with_tint(r, g, b, 255)
-                :with_zindex(0)
+                :with_z_index(0)
                 :register_as(key)
                 :build()
             pending[#pending + 1] = { key = key, x = mx, y = my, vx = vx, vy = vy }

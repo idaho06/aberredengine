@@ -31,11 +31,11 @@ pub(super) fn register<M: LuaUserDataMethods<LuaEntityBuilder>>(
     builder_method!(
         methods,
         meta,
-        "with_zindex",
+        "with_z_index",
         "Set render order",
         [("z", "number")],
         |_, this: &mut LuaEntityBuilder, z: f32| {
-            this.cmd.zindex = Some(z);
+            this.cmd.z_index = Some(z);
             Ok(())
         }
     );
@@ -80,7 +80,7 @@ pub(super) fn register<M: LuaUserDataMethods<LuaEntityBuilder>>(
         methods,
         meta,
         "with_screen_position",
-        "Set screen position (UI elements). Requires :with_zindex() to render -- screen-space rendering requires ZIndex (mirrors world-space); entities without it are silently excluded, not an error.",
+        "Set screen position (UI elements). Requires :with_z_index() to render -- screen-space rendering requires ZIndex (mirrors world-space); entities without it are silently excluded, not an error.",
         [("x", "number"), ("y", "number")],
         |_, this: &mut LuaEntityBuilder, (x, y): (f32, f32)| {
             this.cmd.screen_position = Some((x, y));

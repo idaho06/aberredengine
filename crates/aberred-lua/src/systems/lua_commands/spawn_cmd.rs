@@ -128,7 +128,7 @@ pub(super) fn apply_components(
     apply_render_components(
         entity_commands,
         cmd.sprite,
-        cmd.zindex,
+        cmd.z_index,
         cmd.shader,
         cmd.tint,
         cmd.shadow,
@@ -286,7 +286,7 @@ fn apply_physics_components(
 fn apply_render_components(
     entity_commands: &mut EntityCommands,
     sprite: Option<SpriteData>,
-    zindex: Option<f32>,
+    z_index: Option<f32>,
     shader: Option<EntityShaderData>,
     tint: Option<(u8, u8, u8, u8)>,
     shadow: Option<(f32, f32, u8, u8, u8, u8)>,
@@ -299,7 +299,7 @@ fn apply_render_components(
                 .with_flip(sprite_data.flip_h, sprite_data.flip_v),
         );
     }
-    if let Some(z) = zindex {
+    if let Some(z) = z_index {
         entity_commands.insert(ZIndex(z));
     }
     if let Some(shader_data) = shader {
@@ -552,9 +552,9 @@ fn apply_ui_components(
             entity_commands.insert((menu_component, actions));
         }
     }
-    if let Some((path, group, zindex)) = grid_layout {
+    if let Some((path, group, z_index)) = grid_layout {
         use aberred_core::components::gridlayout::GridLayout;
-        entity_commands.insert(GridLayout::new(path, group, zindex));
+        entity_commands.insert(GridLayout::new(path, group, z_index));
     }
     if let Some((follow_x, follow_y)) = mouse_controlled {
         use aberred_core::components::inputcontrolled::MouseControlled;
@@ -1162,7 +1162,7 @@ mod tests {
              :with_accel('gravity', 0, 10, false):with_frozen()\
              :with_collider(20, 10, 5, 2):with_collider_offset(3, 4)\
              :with_sprite('hero', 32, 48, 16, 24):with_sprite_offset(64, 0):with_sprite_flip(true, false)\
-             :with_zindex(7):with_shader('wave', { amp = 2 }):with_tint(1, 2, 3, 4)\
+             :with_z_index(7):with_shader('wave', { amp = 2 }):with_tint(1, 2, 3, 4)\
              :with_shadow(2, 3, 5, 6, 7, 8):build()",
         );
 

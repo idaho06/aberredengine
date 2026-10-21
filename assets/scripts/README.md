@@ -1082,7 +1082,7 @@ Entities are created using a fluent builder pattern starting with `engine.spawn(
 engine.spawn()
     :with_position(400, 300)
     :with_sprite("player", 32, 32, 16, 16)
-    :with_zindex(10)
+    :with_z_index(10)
     :build()  -- Always call build() to finalize!
 ```
 
@@ -1152,14 +1152,14 @@ Set entity's world position.
 
 Set entity's screen position (for UI elements that don't scroll with camera).
 
-**Requires `:with_zindex()` to render** — screen-space rendering requires `ZIndex`
+**Requires `:with_z_index()` to render** — screen-space rendering requires `ZIndex`
 (mirrors world-space `:with_position()` entities). An entity with
-`:with_screen_position()` but no `:with_zindex()` is silently excluded from
+`:with_screen_position()` but no `:with_z_index()` is silently excluded from
 rendering, not an error.
 
 ```lua
 :with_screen_position(10, 10)  -- Top-left corner
-:with_zindex(100)              -- required for it to actually render
+:with_z_index(100)              -- required for it to actually render
 ```
 
 #### `:with_sprite(tex_key, width, height, origin_x, origin_y)`
@@ -1196,12 +1196,12 @@ Flip sprite horizontally and/or vertically (requires `:with_sprite()`).
 :with_sprite_flip(true, false)  -- Flip horizontally only
 ```
 
-#### `:with_zindex(z)`
+#### `:with_z_index(z)`
 
 Set rendering order (higher values render on top). Accepts floating-point values for fine-grained control.
 
 **Required for screen-space rendering**: any entity using `:with_screen_position()`
-must also call `:with_zindex()`, or it won't render (silently excluded), exactly
+must also call `:with_z_index()`, or it won't render (silently excluded), exactly
 like world-space `:with_position()` entities already require.
 
 **Parameters:**
@@ -1209,10 +1209,10 @@ like world-space `:with_position()` entities already require.
 - `z` (number): Z-index value (supports decimals, e.g., `1.5` renders between `1` and `2`)
 
 ```lua
-:with_zindex(10)     -- Game entities
-:with_zindex(100)    -- UI elements
-:with_zindex(10.5)   -- Between two existing layers
-:with_zindex(-1)     -- Behind default (0) layer
+:with_z_index(10)     -- Game entities
+:with_z_index(100)    -- UI elements
+:with_z_index(10.5)   -- Between two existing layers
+:with_z_index(-1)     -- Behind default (0) layer
 ```
 
 #### `:with_velocity(vx, vy)`
@@ -1492,7 +1492,7 @@ Specify cursor entity to display next to selected menu item (requires `:with_men
 engine.spawn()
     :with_screen_position(350, 280)
     :with_sprite("cursor", 16, 16, 8, 8)
-    :with_zindex(101)
+    :with_z_index(101)
     :register_as("menu_cursor")  -- Register the entity under a key for the menu to reference
     :build()
 
@@ -2172,7 +2172,7 @@ function M.spawn()
         :with_group("satellite")
         :with_position(80, 0)        -- 80px to the right of planet center
         :with_sprite("satellite", 16, 16, 8, 8)
-        :with_zindex(10)
+        :with_z_index(10)
         :with_parent(planet_id)
         :build()
 
@@ -2379,7 +2379,7 @@ engine.spawn()
     :with_gui_window(200, 80)
     :with_tween_screen_position(-200, 50, 20, 50, 0.4)
     :with_tween_screen_position_easing("cubic_out")
-    :with_zindex(10)
+    :with_z_index(10)
     :build()
 ```
 
@@ -2421,7 +2421,7 @@ engine.spawn()
     :with_tween_screen_position(-200, 50, 20, 50, 0.3)
     :with_tween_screen_position_easing("cubic_out")
     :with_lua_tween_screen_position_finished("on_panel_visible")
-    :with_zindex(10)
+    :with_z_index(10)
     :build()
 
 function on_panel_visible(ctx, input)
@@ -2702,7 +2702,7 @@ See [`:with_lua_setup(callback)`](#with_lua_setupcallback) above. `LuaSetup` is 
 
 ---
 
-#### `:with_grid_layout(path, group, zindex)`
+#### `:with_grid_layout(path, group, z_index)`
 
 Spawn entities from JSON grid layout file.
 
@@ -5262,7 +5262,7 @@ engine.spawn()
     :with_animation("vaus_glowing")
     :with_collider(96, 24, 48, 24)
     :with_mouse_controlled(true, false)
-    :with_zindex(10)
+    :with_z_index(10)
     :with_signals()
     :with_phase("sticky")
     :with_lua_phase_entered("player_phase_enter")
@@ -5910,14 +5910,14 @@ end
 
 #### GuiWindow
 
-A panel background using a nine-patch. Requires `:with_screen_position()` and `:with_zindex()` to render.
+A panel background using a nine-patch. Requires `:with_screen_position()` and `:with_z_index()` to render.
 
 ```lua
 local panel_id = engine.spawn()
     :with_gui_window(200, 120)          -- width, height
     :with_gui_theme_key("menu")         -- optional; default = "default"
     :with_screen_position(50, 50)       -- required; absence = hidden
-    :with_zindex(10)
+    :with_z_index(10)
     :build()
 ```
 
@@ -5933,7 +5933,7 @@ engine.spawn()
     :with_gui_theme_key("menu")         -- optional
     :with_parent(panel_id)              -- parent for cascade despawn
     :with_gui_offset(40, 44)            -- position relative to parent's top-left
-    :with_zindex(11)
+    :with_z_index(11)
     :build()
 
 function on_start_clicked(ctx)
@@ -5964,7 +5964,7 @@ engine.spawn()
     :with_gui_theme_key("hud")
     :with_parent(panel_id)
     :with_gui_offset(10, 10)
-    :with_zindex(11)
+    :with_z_index(11)
     :build()
 ```
 
@@ -5986,7 +5986,7 @@ engine.spawn()
     :with_gui_image_pressed_offset(128, 0)
     :with_gui_image_disabled_offset(192, 0)
     :with_screen_position(100, 50)
-    :with_zindex(10)
+    :with_z_index(10)
     :build()
 
 function on_icon_clicked(ctx)
@@ -6004,7 +6004,7 @@ Runtime: `engine.entity_set_gui_disabled(entity_id, true/false)`
 
 #### GuiProgressBar
 
-A fill bar rendered directly (no spawn system). Requires `:with_screen_position()` and `:with_zindex()`.
+A fill bar rendered directly (no spawn system). Requires `:with_screen_position()` and `:with_z_index()`.
 
 ```lua
 engine.spawn()
@@ -6012,7 +6012,7 @@ engine.spawn()
     :with_gui_progress_bar_signal_binding("player_hp")  -- WorldSignals auto-update
     :with_gui_theme_key("hud")
     :with_screen_position(10, 10)
-    :with_zindex(5)
+    :with_z_index(5)
     :build()
 
 -- Direction variants (chain after :with_gui_progress_bar):
@@ -6041,7 +6041,7 @@ engine.spawn()
     :with_lua_gui_clicked("on_ok")
     :with_parent(panel_id)       -- cascade despawn + layout parent
     :with_gui_offset(60, 44)     -- pixels from parent's top-left
-    :with_zindex(11)
+    :with_z_index(11)
     :build()
 ```
 
@@ -6054,7 +6054,7 @@ engine.spawn()
     :with_gui_window(200, 80)
     :with_gui_theme_key("inventory")   -- resolves against "inventory" entry in GuiThemeStore
     :with_screen_position(50, 50)
-    :with_zindex(10)
+    :with_z_index(10)
     :build()
 ```
 
@@ -6088,7 +6088,7 @@ function M.spawn()
     local panel_id = engine.spawn()
         :with_gui_window(200, 60)
         :with_screen_position(10, 10)
-        :with_zindex(20)
+        :with_z_index(20)
         :build()
 
     -- HP bar inside the panel
@@ -6097,7 +6097,7 @@ function M.spawn()
         :with_gui_progress_bar_signal_binding("player_hp")
         :with_parent(panel_id)
         :with_gui_offset(20, 10)
-        :with_zindex(21)
+        :with_z_index(21)
         :build()
 
     -- Label showing HP text
@@ -6107,14 +6107,14 @@ function M.spawn()
         :with_gui_label_signal_binding_format("HP: {}")
         :with_parent(panel_id)
         :with_gui_offset(20, 28)
-        :with_zindex(21)
+        :with_z_index(21)
         :build()
 
     -- A button in its own panel
     local btn_panel_id = engine.spawn()
         :with_gui_window(140, 50)
         :with_screen_position(300, 200)
-        :with_zindex(20)
+        :with_z_index(20)
         :build()
 
     engine.spawn()
@@ -6122,7 +6122,7 @@ function M.spawn()
         :with_lua_gui_clicked("on_restart")
         :with_parent(btn_panel_id)
         :with_gui_offset(10, 10)
-        :with_zindex(21)
+        :with_z_index(21)
         :build()
 end
 
