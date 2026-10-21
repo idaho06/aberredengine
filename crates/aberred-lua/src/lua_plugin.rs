@@ -152,7 +152,7 @@ pub use aberred_core::systems::game_state::quit_game;
 /// nothing down, so entities spawned in `on_setup`/`on_enter_play` survive it.
 pub fn enter_play(
     commands: Commands,
-    mut worldsignals: ResMut<WorldSignals>,
+    mut world_signals: ResMut<WorldSignals>,
     mut next_scene: ResMut<NextScene>,
     mut next_game_state: ResMut<NextGameState>,
     mut tracked_groups: ResMut<TrackedGroups>,
@@ -175,7 +175,7 @@ pub fn enter_play(
     let mut signal_buf = Vec::new();
     lua_runtime.drain_signal_commands_into(&mut signal_buf);
     let mut signals = SignalTargets {
-        world_signals: &mut worldsignals,
+        world_signals: &mut world_signals,
         next_scene: &mut next_scene,
         next_game_state: &mut next_game_state,
     };

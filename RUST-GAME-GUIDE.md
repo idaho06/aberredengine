@@ -1956,7 +1956,7 @@ callback signature is `fn(ctx, input)` — the same as the animation-finished an
 
 ### GUI widgets
 
-**Source:** `aberred-core/src/components/{guiwindow,guibutton,guilabel,guiimage,guiinteractable,guioffset}.rs`, `aberred-core/src/resources/gui_theme.rs`, `aberred-core/src/systems/{gui_spawn,gui_layout,gui_hit_test}.rs`, `aberred-core/src/events/gui_interactable.rs`
+**Source:** `aberred-core/src/components/{gui_window,gui_button,gui_label,gui_image,gui_interactable,gui_offset}.rs`, `aberred-core/src/resources/gui_theme.rs`, `aberred-core/src/systems/{gui_spawn,gui_layout,gui_hit_test}.rs`, `aberred-core/src/events/gui_interactable.rs`
 
 The engine provides a themed, nine-patch-skinned in-game GUI widget system — panels, buttons, labels, and
 clickable images. It is plain ECS components and systems, fully usable from pure Rust; all of its systems
