@@ -66,7 +66,7 @@ pub(super) fn register<M: LuaUserDataMethods<LuaEntityBuilder>>(
     builder_method!(
         methods,
         meta,
-        "with_accel",
+        "with_acceleration",
         "Add a named acceleration force",
         [
             ("name", "string"),
@@ -119,7 +119,7 @@ pub(super) fn register<M: LuaUserDataMethods<LuaEntityBuilder>>(
     builder_method!(
         methods,
         meta,
-        "with_collider",
+        "with_box_collider",
         "Set box collider",
         [
             ("width", "number"),
@@ -145,13 +145,13 @@ pub(super) fn register<M: LuaUserDataMethods<LuaEntityBuilder>>(
     builder_method!(
         methods,
         meta,
-        "with_collider_offset",
-        "Set collider offset",
+        "with_box_collider_offset",
+        "Set box collider offset",
         [("offset_x", "number"), ("offset_y", "number")],
         |_, this: &mut LuaEntityBuilder, (offset_x, offset_y): (f32, f32)| {
             let Some(ref mut collider) = this.cmd.collider else {
                 return Err(LuaError::runtime(
-                    "with_collider_offset() requires with_collider() first",
+                    "with_box_collider_offset() requires with_box_collider() first",
                 ));
             };
             collider.offset_x = offset_x;
@@ -266,7 +266,7 @@ mod tests {
         assert_eq!(rb_summary(&rb), (0.0, 0.0, 0.5, None, false, vec![]));
         let rb = built(":with_max_speed(200)").rigidbody.unwrap();
         assert_eq!(rb_summary(&rb), (0.0, 0.0, 0.0, Some(200.0), false, vec![]));
-        let rb = built(":with_accel('gravity', 0, 98, true)")
+        let rb = built(":with_acceleration('gravity', 0, 98, true)")
             .rigidbody
             .unwrap();
         assert_eq!(
@@ -289,12 +289,12 @@ mod tests {
     fn rigidbody_methods_merge_in_any_order() {
         let forward = built(
             ":with_velocity(1, 2):with_friction(0.3):with_max_speed(50)\
-             :with_accel('gravity', 0, 98, true):with_accel('wind', 5, 0, false):with_frozen()",
+             :with_acceleration('gravity', 0, 98, true):with_acceleration('wind', 5, 0, false):with_frozen()",
         )
         .rigidbody
         .unwrap();
         let reversed = built(
-            ":with_frozen():with_accel('gravity', 0, 98, true):with_accel('wind', 5, 0, false)\
+            ":with_frozen():with_acceleration('gravity', 0, 98, true):with_acceleration('wind', 5, 0, false)\
              :with_max_speed(50):with_friction(0.3):with_velocity(1, 2)",
         )
         .rigidbody
@@ -325,14 +325,14 @@ mod tests {
 
     #[test]
     fn collider_offset_defaults_zero_and_is_set_after_collider() {
-        let c = built(":with_collider(20, 10, 5, 2)").collider.unwrap();
+        let c = built(":with_box_collider(20, 10, 5, 2)").collider.unwrap();
         assert_eq!(
             (
                 c.width, c.height, c.origin_x, c.origin_y, c.offset_x, c.offset_y
             ),
             (20.0, 10.0, 5.0, 2.0, 0.0, 0.0)
         );
-        let c = built(":with_collider(20, 10, 5, 2):with_collider_offset(3, 4)")
+        let c = built(":with_box_collider(20, 10, 5, 2):with_box_collider_offset(3, 4)")
             .collider
             .unwrap();
         assert_eq!((c.offset_x, c.offset_y), (3.0, 4.0));

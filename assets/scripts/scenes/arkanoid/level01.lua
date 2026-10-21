@@ -233,7 +233,7 @@ local function scene_get_started_enter(ctx, input)
         :with_position(336, ball_y)
         :with_sprite("arkanoid-ball", 12, 12, 6, 6)
         :with_z_index(10)
-        :with_collider(12, 12, 6, 6)
+        :with_box_collider(12, 12, 6, 6)
         :with_signals()
         :with_stuck_to(player_id, true, false)
         :with_stuck_to_offset(0, 0)
@@ -532,7 +532,7 @@ local function spawn_walls()
     engine.spawn()
         :with_group("walls")
         :with_position(0, TILE_SIZE * MAP_HEIGHT)
-        :with_collider(
+        :with_box_collider(
             TILE_SIZE * 1,
             TILE_SIZE * (MAP_HEIGHT - 2),
             0,
@@ -544,7 +544,7 @@ local function spawn_walls()
     engine.spawn()
         :with_group("walls")
         :with_position(TILE_SIZE * MAP_WIDTH, TILE_SIZE * MAP_HEIGHT)
-        :with_collider(
+        :with_box_collider(
             TILE_SIZE * 1,
             TILE_SIZE * (MAP_HEIGHT - 2),
             TILE_SIZE * 1,
@@ -556,7 +556,7 @@ local function spawn_walls()
     engine.spawn()
         :with_group("walls")
         :with_position(TILE_SIZE * MAP_WIDTH * 0.5, TILE_SIZE * 2)
-        :with_collider(
+        :with_box_collider(
             TILE_SIZE * (MAP_WIDTH - 2),
             TILE_SIZE * 1,
             TILE_SIZE * (MAP_WIDTH - 2) * 0.5,
@@ -568,7 +568,7 @@ local function spawn_walls()
     engine.spawn()
         :with_group("oob_wall")
         :with_position(-(TILE_SIZE * 5), TILE_SIZE * MAP_HEIGHT)
-        :with_collider(
+        :with_box_collider(
             TILE_SIZE * (MAP_WIDTH + 10),
             TILE_SIZE * 10,
             0,
@@ -590,7 +590,7 @@ local function spawn_player()
         :with_z_index(10)
         :with_sprite("arkanoid-vaus_sheet", 96, 24, 48, 24)
         :with_animation("arkanoid-vaus_glowing")
-        :with_collider(96, 24, 48, 24)
+        :with_box_collider(96, 24, 48, 24)
         :with_mouse_controlled(true, false)
         :with_signals()
         :with_phase("sticky")

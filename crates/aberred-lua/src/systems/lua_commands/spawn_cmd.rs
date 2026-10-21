@@ -1159,8 +1159,8 @@ mod tests {
             &mut world,
             &mut signals,
             "engine.spawn():with_velocity(1, 2):with_friction(0.5):with_max_speed(9)\
-             :with_accel('gravity', 0, 10, false):with_frozen()\
-             :with_collider(20, 10, 5, 2):with_collider_offset(3, 4)\
+             :with_acceleration('gravity', 0, 10, false):with_frozen()\
+             :with_box_collider(20, 10, 5, 2):with_box_collider_offset(3, 4)\
              :with_sprite('hero', 32, 48, 16, 24):with_sprite_offset(64, 0):with_sprite_flip(true, false)\
              :with_z_index(7):with_shader('wave', { amp = 2 }):with_tint(1, 2, 3, 4)\
              :with_shadow(2, 3, 5, 6, 7, 8):build()",

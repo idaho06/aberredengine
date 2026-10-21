@@ -363,10 +363,10 @@ mod tests {
     }
 
     #[test]
-    fn with_collider_offset_requires_with_collider() {
+    fn with_box_collider_offset_requires_with_box_collider() {
         assert_runtime_error(
-            "engine.spawn():with_collider_offset(1, 1)",
-            "with_collider_offset() requires with_collider() first",
+            "engine.spawn():with_box_collider_offset(1, 1)",
+            "with_box_collider_offset() requires with_box_collider() first",
         );
     }
 
@@ -412,7 +412,7 @@ mod tests {
                 :with_rotation(45) \
                 :with_velocity(1, 2) \
                 :with_z_index(5) \
-                :with_collider(40, 40, 20, 20) \
+                :with_box_collider(40, 40, 20, 20) \
                 :with_signal_integer('hp', 3) \
                 :build()",
         );

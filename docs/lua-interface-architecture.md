@@ -72,7 +72,7 @@ crates/aberred-lua/src/resources/lua_runtime/
 ├── entity_builder/      # LuaEntityBuilder fluent API, split by category; builder_method! macro (single source for runtime + stubs)
 │   ├── mod.rs           # LuaEntityBuilder struct, builder_method!/DummyMethods, register_methods() dispatch, register_as/build
 │   ├── transform.rs     # with_position, with_screen_position, with_rotation, with_scale, with_parent, with_stuck_to*, with_camera_target, ...
-│   ├── physics.rs       # with_velocity, with_accel, with_friction, with_max_speed, with_frozen, with_collider*
+│   ├── physics.rs       # with_velocity, with_acceleration, with_friction, with_max_speed, with_frozen, with_box_collider*
 │   ├── sprite.rs        # with_sprite*, with_tint, with_shadow, with_animation*, with_lua_animation_finished, with_z_index
 │   ├── gui.rs            # with_gui_window/button/label/image/progress_bar/offset/theme_key, their per-state offset variants, with_lua_gui_clicked
 │   ├── menu.rs           # with_menu and its with_menu_* configuration methods
@@ -563,12 +563,12 @@ with_camera_target
 
 ```text
 with_velocity
-with_accel
+with_acceleration
 with_friction
 with_max_speed
 with_frozen
-with_collider
-with_collider_offset
+with_box_collider
+with_box_collider_offset
 ```
 
 **Sprite / visuals** (`sprite.rs`)
@@ -690,7 +690,7 @@ engine.spawn()
     :with_position(400, 700)
     :with_sprite("vaus", 48, 12, 24, 6)
     :with_velocity(0, 0)
-    :with_collider(48, 12, 24, 6)
+    :with_box_collider(48, 12, 24, 6)
     :with_phase("idle")
     :with_lua_phase_entered("player_phase_enter")
     :with_lua_phase_update("player_phase_update")

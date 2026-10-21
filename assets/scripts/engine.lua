@@ -1659,7 +1659,7 @@ local EntityBuilder = {}
 ---@param y number
 ---@param enabled boolean
 ---@return EntityBuilder
-function EntityBuilder:with_accel(name, x, y, enabled) end
+function EntityBuilder:with_acceleration(name, x, y, enabled) end
 
 ---Set animation by key
 ---@param animation_key string
@@ -1677,25 +1677,25 @@ function EntityBuilder:with_animation_controller(fallback_key) end
 ---@return EntityBuilder
 function EntityBuilder:with_animation_rule(condition_table, set_key) end
 
----Mark entity as camera follow target (higher priority wins). zoom is the desired camera zoom when this target wins (default 1.0).
----@param priority integer|nil
----@param zoom number|nil
----@return EntityBuilder
-function EntityBuilder:with_camera_target(priority, zoom) end
-
 ---Set box collider
 ---@param width number
 ---@param height number
 ---@param origin_x number
 ---@param origin_y number
 ---@return EntityBuilder
-function EntityBuilder:with_collider(width, height, origin_x, origin_y) end
+function EntityBuilder:with_box_collider(width, height, origin_x, origin_y) end
 
----Set collider offset
+---Set box collider offset
 ---@param offset_x number
 ---@param offset_y number
 ---@return EntityBuilder
-function EntityBuilder:with_collider_offset(offset_x, offset_y) end
+function EntityBuilder:with_box_collider_offset(offset_x, offset_y) end
+
+---Mark entity as camera follow target (higher priority wins). zoom is the desired camera zoom when this target wins (default 1.0).
+---@param priority integer|nil
+---@param zoom number|nil
+---@return EntityBuilder
+function EntityBuilder:with_camera_target(priority, zoom) end
 
 ---Set friction (creates RigidBody if needed)
 ---@param friction number
@@ -2254,7 +2254,7 @@ local CollisionEntityBuilder = {}
 ---@param y number
 ---@param enabled boolean
 ---@return CollisionEntityBuilder
-function CollisionEntityBuilder:with_accel(name, x, y, enabled) end
+function CollisionEntityBuilder:with_acceleration(name, x, y, enabled) end
 
 ---Set animation by key
 ---@param animation_key string
@@ -2272,25 +2272,25 @@ function CollisionEntityBuilder:with_animation_controller(fallback_key) end
 ---@return CollisionEntityBuilder
 function CollisionEntityBuilder:with_animation_rule(condition_table, set_key) end
 
----Mark entity as camera follow target (higher priority wins). zoom is the desired camera zoom when this target wins (default 1.0).
----@param priority integer|nil
----@param zoom number|nil
----@return CollisionEntityBuilder
-function CollisionEntityBuilder:with_camera_target(priority, zoom) end
-
 ---Set box collider
 ---@param width number
 ---@param height number
 ---@param origin_x number
 ---@param origin_y number
 ---@return CollisionEntityBuilder
-function CollisionEntityBuilder:with_collider(width, height, origin_x, origin_y) end
+function CollisionEntityBuilder:with_box_collider(width, height, origin_x, origin_y) end
 
----Set collider offset
+---Set box collider offset
 ---@param offset_x number
 ---@param offset_y number
 ---@return CollisionEntityBuilder
-function CollisionEntityBuilder:with_collider_offset(offset_x, offset_y) end
+function CollisionEntityBuilder:with_box_collider_offset(offset_x, offset_y) end
+
+---Mark entity as camera follow target (higher priority wins). zoom is the desired camera zoom when this target wins (default 1.0).
+---@param priority integer|nil
+---@param zoom number|nil
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_camera_target(priority, zoom) end
 
 ---Set friction (creates RigidBody if needed)
 ---@param friction number

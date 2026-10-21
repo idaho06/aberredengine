@@ -1098,7 +1098,7 @@ Clone an existing entity using `engine.clone(source_key)`. The source entity is 
 -- First, create a template entity (no position = won't render)
 engine.spawn()
     :with_sprite("bullet", 8, 8, 4, 4)
-    :with_collider(8, 8, 4, 4)
+    :with_box_collider(8, 8, 4, 4)
     :with_animation("bullet_anim")
     :register_as("bullet_template")
     :build()
@@ -1247,7 +1247,7 @@ Set maximum velocity magnitude on RigidBody. If the entity does not already have
 :with_max_speed(300.0)  -- Clamp speed to 300 units/sec
 ```
 
-#### `:with_accel(name, x, y, enabled)`
+#### `:with_acceleration(name, x, y, enabled)`
 
 Add a named acceleration force to RigidBody. If the entity does not already have a `RigidBody`, this call creates one.
 
@@ -1260,9 +1260,9 @@ Forces are accumulated each frame and applied to velocity. Multiple forces can b
 - `enabled` - Whether this force is active (true/false)
 
 ```lua
-:with_accel("gravity", 0, 980, true)      -- Enabled gravity
-:with_accel("thrust", 0, -500, false)     -- Disabled thrust (toggle later)
-:with_accel("wind", 50, 0, true)          -- Enabled wind
+:with_acceleration("gravity", 0, 980, true)      -- Enabled gravity
+:with_acceleration("thrust", 0, -500, false)     -- Disabled thrust (toggle later)
+:with_acceleration("wind", 50, 0, true)          -- Enabled wind
 ```
 
 #### `:with_frozen()`
@@ -1286,25 +1286,25 @@ engine.spawn()
     :with_velocity(0, 0)
     :with_friction(5.0)
     :with_max_speed(300.0)
-    :with_accel("gravity", 0, 980, true)
-    :with_accel("jump", 0, -1500, false)  -- Toggle on when jumping
+    :with_acceleration("gravity", 0, 980, true)
+    :with_acceleration("jump", 0, -1500, false)  -- Toggle on when jumping
     :build()
 ```
 
-#### `:with_collider(width, height, origin_x, origin_y)`
+#### `:with_box_collider(width, height, origin_x, origin_y)`
 
 Add BoxCollider for collision detection.
 
 ```lua
-:with_collider(96, 24, 48, 24)
+:with_box_collider(96, 24, 48, 24)
 ```
 
-#### `:with_collider_offset(offset_x, offset_y)`
+#### `:with_box_collider_offset(offset_x, offset_y)`
 
-Offset collider from entity position (requires `:with_collider()`).
+Offset box collider from entity position (requires `:with_box_collider()`).
 
 ```lua
-:with_collider_offset(0, -2)
+:with_box_collider_offset(0, -2)
 ```
 
 #### `:with_rotation(degrees)`
@@ -5260,7 +5260,7 @@ engine.spawn()
     :with_position(400, player_y)
     :with_sprite("vaus_sheet", 96, 24, 48, 24)
     :with_animation("vaus_glowing")
-    :with_collider(96, 24, 48, 24)
+    :with_box_collider(96, 24, 48, 24)
     :with_mouse_controlled(true, false)
     :with_z_index(10)
     :with_signals()
