@@ -20,7 +20,7 @@ use aberred_core::protocol::render_logic::{LogicMsg, RenderMsg};
 use aberred_core::protocol::snapshot::SnapshotPublisher;
 use aberred_core::resources::drawable_snapshot::DrawableSnapshot;
 use aberred_core::resources::gameconfig::GameConfig;
-use aberred_core::resources::gamestate::{CurrentGameState, GameStates};
+use aberred_core::resources::gamestate::{CurrentGameState, GameState};
 use aberred_core::resources::input::InputState;
 use aberred_core::resources::signal_keys as sk;
 use aberred_core::resources::systemsstore::SystemsStore;
@@ -905,7 +905,7 @@ fn with_lua_combines_with_add_system() {
     .unwrap();
 }
 
-/// Runs `schedule` once outside and once inside `GameStates::Playing`,
+/// Runs `schedule` once outside and once inside `GameState::Playing`,
 /// returning how often `bump_ran` fired in each.
 fn runs_outside_and_while_playing(mut schedule: Schedule) -> (u32, u32) {
     let mut world = World::new();
@@ -915,7 +915,7 @@ fn runs_outside_and_while_playing(mut schedule: Schedule) -> (u32, u32) {
     let outside = world.resource::<Ran>().0;
     world
         .resource_mut::<CurrentGameState>()
-        .set(GameStates::Playing);
+        .set(GameState::Playing);
     schedule.run(&mut world);
     (outside, world.resource::<Ran>().0 - outside)
 }

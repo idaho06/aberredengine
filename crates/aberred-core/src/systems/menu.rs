@@ -25,7 +25,7 @@ use crate::math::Vec2;
 use crate::protocol::audio::AudioCmd;
 use crate::protocol::render_assets::RenderAssetCmd;
 use crate::resources::fontmetrics::{FontMetricsStore, FontMetricsWarnCache};
-use crate::resources::gamestate::GameStates::Quitting;
+use crate::resources::gamestate::GameState::Quitting;
 use crate::resources::gamestate::NextGameState;
 use crate::resources::next_scene::NextScene;
 use crate::resources::texturedims::TextureDimsStore;

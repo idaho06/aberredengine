@@ -50,7 +50,7 @@ impl NextScene {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::resources::gamestate::GameStates;
+    use crate::resources::gamestate::GameState;
 
     #[test]
     fn take_returns_the_requested_scene_once() {
@@ -84,7 +84,7 @@ mod tests {
         next.set("b");
         assert!(next.switch_due(&state));
 
-        state.set(GameStates::Quitting);
+        state.set(GameState::Quitting);
         assert!(!next.switch_due(&state));
     }
 }

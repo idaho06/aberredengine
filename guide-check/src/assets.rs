@@ -38,7 +38,7 @@ mod waiting_for_loads {
     fn on_asset_failed(ev: On<AssetLoadFailed>, mut next_state: ResMut<NextGameState>) {
         // The engine has already logged the error.
         if ev.kind == AssetKind::Texture && ev.key == "player" {
-            next_state.set(GameStates::Quitting);
+            next_state.set(GameState::Quitting);
         }
     }
 

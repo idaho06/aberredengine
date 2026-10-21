@@ -32,7 +32,7 @@ pub const REPLAY_MAGIC: [u8; 4] = *b"ABRR";
 /// diverge on first mouse-world read, so it's refused rather than
 /// best-effort replayed.
 ///
-/// `5`: the first entry is the first `GameStates::Playing` tick. `Setup`
+/// `5`: the first entry is the first `GameState::Playing` tick. `Setup`
 /// ticks are neither recorded nor played back, `WorldTime` doesn't advance
 /// during them, and in deterministic mode their input is held for the first
 /// `Playing` tick. A v4 file starts with `Setup` ticks and numbers its

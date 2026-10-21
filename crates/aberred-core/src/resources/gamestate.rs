@@ -9,7 +9,7 @@ use bevy_ecs::prelude::Resource;
 
 /// Discrete high-level states the game can be in.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Default)]
-pub enum GameStates {
+pub enum GameState {
     #[default]
     None,
     Setup,
@@ -26,13 +26,13 @@ pub enum GameStates {
 pub enum NextGameStates {
     #[default]
     Unchanged,
-    Pending(GameStates),
+    Pending(GameState),
 }
 
 /// Authoritative current game state.
 #[derive(Resource, Debug, Clone, PartialEq, Eq, Hash)]
 pub struct CurrentGameState {
-    current: GameStates,
+    current: GameState,
 }
 
 impl Default for CurrentGameState {
@@ -42,21 +42,21 @@ impl Default for CurrentGameState {
 }
 
 impl CurrentGameState {
-    /// Create a new state initialized to [`GameStates::None`].
+    /// Create a new state initialized to [`GameState::None`].
     pub fn new() -> Self {
         CurrentGameState {
-            current: GameStates::None,
+            current: GameState::None,
         }
     }
     /// Read-only access to the current state.
-    pub fn get(&self) -> &GameStates {
+    pub fn get(&self) -> &GameState {
         &self.current
     }
     /// Update the current state immediately.
     ///
     /// Prefer requesting transitions via [`NextGameState`] and the event
     /// observer when setup/teardown hooks must be triggered.
-    pub fn set(&mut self, state: GameStates) {
+    pub fn set(&mut self, state: GameState) {
         self.current = state;
     }
 }
@@ -89,16 +89,16 @@ impl NextGameState {
     /// Request a transition to `next` by marking it as pending.
     ///
     /// An observer will apply the transition and clear the request.
-    pub fn set(&mut self, next: GameStates) {
+    pub fn set(&mut self, next: GameState) {
         self.next = NextGameStates::Pending(next);
         // The system `check_pending_state` will handle the state change event emission.
     }
 
-    /// Whether a transition to [`GameStates::Quitting`] is requested. A
+    /// Whether a transition to [`GameState::Quitting`] is requested. A
     /// pending quit wins over a scene request
     /// (`NextScene::switch_due`).
     pub fn quit_requested(&self) -> bool {
-        self.next == NextGameStates::Pending(GameStates::Quitting)
+        self.next == NextGameStates::Pending(GameState::Quitting)
     }
 
     /// Reset to [`NextGameStates::Unchanged`].
@@ -113,12 +113,12 @@ mod tests {
 
     #[test]
     fn states_start_idle_and_pending_resets_to_unchanged() {
-        assert_eq!(CurrentGameState::default().get(), &GameStates::None);
+        assert_eq!(CurrentGameState::default().get(), &GameState::None);
 
         let mut next = NextGameState::default();
         assert_eq!(next.get(), &NextGameStates::Unchanged);
-        next.set(GameStates::Playing);
-        assert_eq!(next.get(), &NextGameStates::Pending(GameStates::Playing));
+        next.set(GameState::Playing);
+        assert_eq!(next.get(), &NextGameStates::Pending(GameState::Playing));
         next.reset();
         assert_eq!(next.get(), &NextGameStates::Unchanged);
     }

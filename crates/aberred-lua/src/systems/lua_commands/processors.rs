@@ -23,7 +23,7 @@ use aberred_core::resources::animationstore::{AnimationResource, AnimationStore}
 use aberred_core::resources::camera2d::Camera2DRes;
 use aberred_core::resources::camerafollowconfig::{CameraFollowConfig, EasingCurve, FollowMode};
 use aberred_core::resources::gameconfig::GameConfig;
-use aberred_core::resources::gamestate::{GameStates, NextGameState};
+use aberred_core::resources::gamestate::{GameState, NextGameState};
 use aberred_core::resources::group::TrackedGroups;
 use aberred_core::resources::guitheme::{
     GuiButtonSkin, GuiNinePatch, GuiProgressBarSkin, GuiTheme, GuiThemeStore,
@@ -116,7 +116,7 @@ pub fn process_signal_command(targets: &mut SignalTargets, cmd: SignalCmd) {
         // A request, not a write: this drain can run mid-tick, and the scene
         // switch poll applies it at the end of the tick.
         SignalCmd::RequestScene { name } => next_scene.set(name),
-        SignalCmd::RequestQuit => next_game_state.set(GameStates::Quitting),
+        SignalCmd::RequestQuit => next_game_state.set(GameState::Quitting),
         SignalCmd::ClearScalar { key } => {
             world_signals.remove_scalar(&key);
         }

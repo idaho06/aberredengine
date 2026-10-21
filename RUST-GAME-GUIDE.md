@@ -184,10 +184,10 @@ Setup ──→ Playing ──→ Quitting
           scene switches
 ```
 
-1. **Setup** — The engine calls the `setup` hook once, on the logic thread. Load assets here (textures, fonts, sounds, shaders, animations; see [Section 6](#6-loading-assets)). Omit `.on_setup()` if you have nothing to load. With `.loading_scene(name)`, that scene is entered right after the hook and stays active until Setup ends. Once the hook has run, the engine moves to `Playing` on its own, as soon as every load queued so far has been answered (see [Waiting for loads](#waiting-for-loads)); a failed load counts as answered. A hook that requests `Playing` itself waits the same way. A hook that requests another state through `ResMut<NextGameState>` (e.g. `GameStates::Quitting`) gets it at once.
+1. **Setup** — The engine calls the `setup` hook once, on the logic thread. Load assets here (textures, fonts, sounds, shaders, animations; see [Section 6](#6-loading-assets)). Omit `.on_setup()` if you have nothing to load. With `.loading_scene(name)`, that scene is entered right after the hook and stays active until Setup ends. Once the hook has run, the engine moves to `Playing` on its own, as soon as every load queued so far has been answered (see [Waiting for loads](#waiting-for-loads)); a failed load counts as answered. A hook that requests `Playing` itself waits the same way. A hook that requests another state through `ResMut<NextGameState>` (e.g. `GameState::Quitting`) gets it at once.
 2. **Playing** — The engine enters the initial scene (triggering `SceneEntered`) and runs your systems every sim tick.
 3. **Scene switches** — A request through `NextScene::set(name)`, a `MenuAction::RequestScene` menu item or a GUI callback's `intents.request_scene(name)` runs the exit→enter sequence late in the tick (`SimSet::Lifecycle`); see [Triggering scene transitions](#triggering-scene-transitions).
-4. **Quitting** — When the game state becomes `GameStates::Quitting` (via `NextGameState::set(GameStates::Quitting)`, a `MenuAction::RequestQuit` menu item or a GUI callback's `intents.request_quit()`) or the window is closed, the engine shuts down. Request it from any system or observer through `ResMut<NextGameState>`.
+4. **Quitting** — When the game state becomes `GameState::Quitting` (via `NextGameState::set(GameState::Quitting)`, a `MenuAction::RequestQuit` menu item or a GUI callback's `intents.request_quit()`) or the window is closed, the engine shuts down. Request it from any system or observer through `ResMut<NextGameState>`.
 
 ---
 
@@ -510,7 +510,7 @@ coordinates, `scroll_y` and the gamepad axes are plain fields.
 | `ResMut<SimRng>` | Randomness that reproduces under `.deterministic()`. See [Section 10](#10-determinism-and-replay). |
 | `AssetLoader` | Queue texture, font, shader, tilemap, sound and music loads; check whether a texture or font has loaded. See [Section 6](#6-loading-assets). |
 | `MessageWriter<AudioCmd>` | Play, stop and unload sounds and music. A system that takes `AssetLoader` writes through `assets.audio()` instead. |
-| `ResMut<NextGameState>` | Request a game-state change, e.g. quitting with `.set(GameStates::Quitting)`. |
+| `ResMut<NextGameState>` | Request a game-state change, e.g. quitting with `.set(GameState::Quitting)`. |
 | `Res<TextureDimsStore>` | Pixel size of a loaded texture (`aberredengine::core::resources::texturedims`). `AssetLoader::texture_size` reads it too. |
 
 Every logic-thread resource is listed in [Section 11](#11-engine-resources-quick-reference).
@@ -684,7 +684,7 @@ EngineBuilder::new()
 When many systems take the same handful of parameters, bundle them into one struct with `#[derive(SystemParam)]`. The struct is a system parameter like any other: a system takes it next to its own queries, an observer takes it after `On<E>`, and it carries helper methods:
 
 ```rust
-use aberredengine::core::resources::gamestate::{GameStates, NextGameState};
+use aberredengine::core::resources::gamestate::{GameState, NextGameState};
 use aberredengine::prelude::*;
 
 /// What this game's gameplay systems reach for, as one parameter.
@@ -704,7 +704,7 @@ impl Game<'_, '_> {
     }
 
     pub fn quit(&mut self) {
-        self.next_state.set(GameStates::Quitting);
+        self.next_state.set(GameState::Quitting);
     }
 }
 
@@ -778,7 +778,7 @@ fn on_asset_loaded(ev: On<AssetLoaded>) {
 fn on_asset_failed(ev: On<AssetLoadFailed>, mut next_state: ResMut<NextGameState>) {
     // The engine has already logged the error.
     if ev.kind == AssetKind::Texture && ev.key == "player" {
-        next_state.set(GameStates::Quitting);
+        next_state.set(GameState::Quitting);
     }
 }
 
@@ -1843,7 +1843,7 @@ fn on_menu_select(
 ) {
     match ev.item_id.as_str() {
         "start" => next_scene.set("level01"),
-        "quit" => next_state.set(GameStates::Quitting),
+        "quit" => next_state.set(GameState::Quitting),
         _ => {}
     }
 }
@@ -2371,7 +2371,7 @@ All resources are accessed as Bevy ECS system parameters. Use `Res<T>` / `ResMut
 | `InputState` | `Res` | Input state — bound actions via `input.action(InputAction::X)` and the raw `mouse_left_button` are `BoolState { active, just_pressed, just_released }`; analog fields (`scroll_y`, `mouse_x/y`, `mouse_world_x/y`) are `f32`; pad 0 is `gamepad_connected` / `gamepad_axes` |
 | `InputBindings` | `ResMut` | Runtime key/mouse binding map (`InputAction` → `Vec<InputBinding>`). Modify to rebind actions at runtime — takes effect the very next sim tick. |
 | `CurrentGameState` | `Res` | Current state: `None → Setup → Playing → Quitting` |
-| `NextGameState` | `ResMut` | Request state transitions, e.g. `.set(GameStates::Quitting)` |
+| `NextGameState` | `ResMut` | Request state transitions, e.g. `.set(GameState::Quitting)` |
 | `NextScene` | `ResMut` | Request a scene switch with `.set(name)`; `scene_switch_poll` takes it late in the tick (`SimSet::Lifecycle`) |
 | `PostProcessShader` | `ResMut` | Shader chain + uniforms (reserved: `uTime`, `uDeltaTime`, `uResolution`, `uFrame`, `uWindowResolution`, `uLetterbox`) |
 | `CameraFollowConfig` | `ResMut` | Camera-follow behavior (mode, easing, zoom speed, bounds, offsets); see [Following an entity](#following-an-entity) |

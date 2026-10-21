@@ -5,7 +5,7 @@
 //! and entity registrations on every switch.
 
 use aberredengine::core::events::scene::{SceneEntered, SceneExited};
-use aberredengine::core::resources::gamestate::{GameStates, NextGameState};
+use aberredengine::core::resources::gamestate::{GameState, NextGameState};
 use aberredengine::core::resources::next_scene::NextScene;
 use aberredengine::core::resources::scenemanager::SceneManager;
 use aberredengine::core::resources::systemsstore::{self as hook_keys, SystemsStore};
@@ -222,7 +222,7 @@ fn scene_switch_poll_yields_to_a_pending_quit() {
     world.resource_mut::<NextScene>().set("level1");
     world
         .resource_mut::<NextGameState>()
-        .set(GameStates::Quitting);
+        .set(GameState::Quitting);
     world.run_system_once(scene_switch_poll).unwrap();
     world.flush();
 

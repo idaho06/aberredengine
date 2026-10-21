@@ -23,7 +23,7 @@ use aberred_core::resources::debugoverlayconfig::DebugOverlayConfig;
 use aberred_core::resources::deterministic_mode::DeterministicMode;
 use aberred_core::resources::fontmetrics::FontMetricsStore;
 use aberred_core::resources::gameconfig::GameConfig;
-use aberred_core::resources::gamestate::{CurrentGameState, GameStates};
+use aberred_core::resources::gamestate::{CurrentGameState, GameState};
 use aberred_core::resources::input::InputState;
 use aberred_core::resources::loaded_assets::LoadedAssets;
 use aberred_core::resources::rawinput::ImguiCaptureMirror;
@@ -145,7 +145,7 @@ pub(crate) fn run_sim_tick(world: &mut World, sim: &mut Schedule) {
 pub(crate) fn in_envelope(world: &World) -> bool {
     matches!(
         world.resource::<CurrentGameState>().get(),
-        GameStates::Playing
+        GameState::Playing
     )
 }
 

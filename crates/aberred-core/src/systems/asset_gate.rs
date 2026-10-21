@@ -16,7 +16,7 @@ use crate::protocol::asset_kind::AssetKind;
 use crate::protocol::audio::AudioCmd;
 use crate::protocol::render_assets::RenderAssetCmd;
 use crate::resources::deterministic_mode::DeterministicMode;
-use crate::resources::gamestate::{CurrentGameState, GameStates};
+use crate::resources::gamestate::{CurrentGameState, GameState};
 use crate::resources::loaded_assets::LoadedAssets;
 use crate::resources::warn_once::first_seen;
 
@@ -161,7 +161,7 @@ pub struct AssetGate<'w> {
 
 impl AssetGate<'_> {
     fn closed(&self) -> bool {
-        self.deterministic.is_some() && *self.state.get() == GameStates::Playing
+        self.deterministic.is_some() && *self.state.get() == GameState::Playing
     }
 
     /// The verdict for a render command.

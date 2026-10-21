@@ -1,6 +1,6 @@
 //! Game state transition event and observer.
 //!
-//! Systems can request a change to the high-level [`GameStates`] by updating
+//! Systems can request a change to the high-level [`GameState`] by updating
 //! [`NextGameState`]. Emitting a [`GameStateChangedEvent`] then triggers the
 //! observer in this module, which applies the transition to [`CurrentGameState`]
 //! and invokes the appropriate enter/exit systems stored in
@@ -9,7 +9,7 @@
 //! This decouples the intent to change state from the mechanics of running
 //! setup/teardown systems and avoids borrowing conflicts.
 use crate::resources::gamestate::NextGameStates::{Pending, Unchanged};
-use crate::resources::gamestate::{CurrentGameState, GameStates, NextGameState};
+use crate::resources::gamestate::{CurrentGameState, GameState, NextGameState};
 use crate::resources::systemsstore as hook_keys;
 use crate::resources::systemsstore::SystemsStore;
 use bevy_ecs::observer::On;
@@ -84,10 +84,10 @@ pub fn observe_gamestate_change_event(
 }
 
 /// Internal: run state-specific "enter" systems for the given state.
-fn on_state_enter(state: &GameStates, commands: &mut Commands, systems_store: &SystemsStore) {
+fn on_state_enter(state: &GameState, commands: &mut Commands, systems_store: &SystemsStore) {
     match state {
-        GameStates::None => debug!("Entered None state"),
-        GameStates::Setup => {
+        GameState::None => debug!("Entered None state"),
+        GameState::Setup => {
             if let Some(setup) = systems_store.get(hook_keys::SETUP) {
                 commands.run_system(*setup);
             }
@@ -98,13 +98,13 @@ fn on_state_enter(state: &GameStates, commands: &mut Commands, systems_store: &S
             // Queued after the hook, so a state the hook requested wins.
             commands.queue(request_playing_if_unchanged);
         }
-        GameStates::Playing => {
+        GameState::Playing => {
             if let Some(enter_play) = systems_store.get(hook_keys::ENTER_PLAY) {
                 commands.run_system(*enter_play);
             }
         }
-        // GameStates::Paused => eprintln!("Entered Paused state"),
-        GameStates::Quitting => {
+        // GameState::Paused => eprintln!("Entered Paused state"),
+        GameState::Quitting => {
             commands.run_system(
                 *systems_store
                     .get(hook_keys::QUIT_GAME)
@@ -119,18 +119,18 @@ fn on_state_enter(state: &GameStates, commands: &mut Commands, systems_store: &S
 fn request_playing_if_unchanged(world: &mut World) {
     let mut next = world.resource_mut::<NextGameState>();
     if *next.get() == Unchanged {
-        next.set(GameStates::Playing);
+        next.set(GameState::Playing);
     }
 }
 
 /// Internal: run state-specific "exit" systems for the given state.
-fn on_state_exit(state: &GameStates, _commands: &mut Commands, _systems_store: &SystemsStore) {
+fn on_state_exit(state: &GameState, _commands: &mut Commands, _systems_store: &SystemsStore) {
     match state {
-        GameStates::None => debug!("Exited None state"),
-        GameStates::Setup => debug!("Exited Setup state"),
-        GameStates::Playing => debug!("Exited Playing state"),
-        // GameStates::Paused => debug!("Exited Paused state"),
-        GameStates::Quitting => debug!("Exited Quitting state"),
+        GameState::None => debug!("Exited None state"),
+        GameState::Setup => debug!("Exited Setup state"),
+        GameState::Playing => debug!("Exited Playing state"),
+        // GameState::Paused => debug!("Exited Paused state"),
+        GameState::Quitting => debug!("Exited Quitting state"),
     }
 }
 
@@ -154,7 +154,7 @@ mod tests {
         world
     }
 
-    fn enter(world: &mut World, state: GameStates) {
+    fn enter(world: &mut World, state: GameState) {
         world.resource_mut::<NextGameState>().set(state);
         world.trigger(GameStateChangedEvent {});
         world.flush();
@@ -167,42 +167,42 @@ mod tests {
     #[test]
     fn setup_without_a_hook_requests_playing() {
         let mut world = world_with_setup(None);
-        enter(&mut world, GameStates::Setup);
+        enter(&mut world, GameState::Setup);
         assert_eq!(
             world.resource::<CurrentGameState>().get(),
-            &GameStates::Setup
+            &GameState::Setup
         );
-        assert_eq!(next(&world), Pending(GameStates::Playing));
+        assert_eq!(next(&world), Pending(GameState::Playing));
     }
 
     #[test]
     fn setup_hook_that_sets_nothing_requests_playing() {
         let mut world = world_with_setup(Some(|_| {}));
-        enter(&mut world, GameStates::Setup);
-        assert_eq!(next(&world), Pending(GameStates::Playing));
+        enter(&mut world, GameState::Setup);
+        assert_eq!(next(&world), Pending(GameState::Playing));
     }
 
     #[test]
     fn setup_hook_that_requests_another_state_wins() {
-        let mut world = world_with_setup(Some(|mut next| next.set(GameStates::Quitting)));
-        enter(&mut world, GameStates::Setup);
-        assert_eq!(next(&world), Pending(GameStates::Quitting));
+        let mut world = world_with_setup(Some(|mut next| next.set(GameState::Quitting)));
+        enter(&mut world, GameState::Setup);
+        assert_eq!(next(&world), Pending(GameState::Quitting));
     }
 
     #[test]
     fn setup_hook_that_requests_playing_itself_is_unaffected() {
-        let mut world = world_with_setup(Some(|mut next| next.set(GameStates::Playing)));
-        enter(&mut world, GameStates::Setup);
-        assert_eq!(next(&world), Pending(GameStates::Playing));
+        let mut world = world_with_setup(Some(|mut next| next.set(GameState::Playing)));
+        enter(&mut world, GameState::Setup);
+        assert_eq!(next(&world), Pending(GameState::Playing));
     }
 
     #[test]
     fn entering_playing_without_an_enter_play_hook_is_a_no_op() {
         let mut world = world_with_setup(None);
-        enter(&mut world, GameStates::Playing);
+        enter(&mut world, GameState::Playing);
         assert_eq!(
             world.resource::<CurrentGameState>().get(),
-            &GameStates::Playing
+            &GameState::Playing
         );
         assert_eq!(next(&world), Unchanged);
     }

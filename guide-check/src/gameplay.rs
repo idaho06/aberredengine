@@ -215,7 +215,7 @@ mod menus {
     ) {
         match ev.item_id.as_str() {
             "start" => next_scene.set("level01"),
-            "quit" => next_state.set(GameStates::Quitting),
+            "quit" => next_state.set(GameState::Quitting),
             _ => {}
         }
     }

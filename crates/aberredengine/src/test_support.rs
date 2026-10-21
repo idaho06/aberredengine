@@ -57,7 +57,7 @@ use aberred_core::protocol::tick_input::TickInput;
 use aberred_core::resources::drawable_snapshot::DrawableSnapshot;
 use aberred_core::resources::fontmetrics::FontMetrics;
 use aberred_core::resources::gameconfig::GameConfig;
-use aberred_core::resources::gamestate::{CurrentGameState, GameStates};
+use aberred_core::resources::gamestate::{CurrentGameState, GameState};
 use aberred_core::resources::systemsstore as hook_keys;
 use aberred_core::systems::time::update_world_time;
 
@@ -371,7 +371,7 @@ impl TestWorld {
         }
     }
 
-    /// Tick with `dt` until [`CurrentGameState`] reaches [`GameStates::Playing`],
+    /// Tick with `dt` until [`CurrentGameState`] reaches [`GameState::Playing`],
     /// or panic after `max_ticks` ticks without reaching it. Useful for
     /// consumer tests that don't want to reason about exact Setup/EnterPlay
     /// transition timing -- pass a generous bound (a handful of ticks is
@@ -380,7 +380,7 @@ impl TestWorld {
         for _ in 0..max_ticks {
             if matches!(
                 self.world.resource::<CurrentGameState>().get(),
-                GameStates::Playing
+                GameState::Playing
             ) {
                 return;
             }
@@ -389,9 +389,9 @@ impl TestWorld {
         assert!(
             matches!(
                 self.world.resource::<CurrentGameState>().get(),
-                GameStates::Playing
+                GameState::Playing
             ),
-            "TestWorld did not reach GameStates::Playing within {max_ticks} ticks"
+            "TestWorld did not reach GameState::Playing within {max_ticks} ticks"
         );
     }
 
@@ -541,7 +541,7 @@ mod tests {
         tw.tick_to_play(1.0 / 60.0, 8);
         assert!(matches!(
             tw.world.resource::<CurrentGameState>().get(),
-            GameStates::Playing
+            GameState::Playing
         ));
     }
 }

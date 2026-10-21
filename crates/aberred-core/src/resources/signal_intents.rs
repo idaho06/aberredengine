@@ -9,7 +9,7 @@
 //! Keep the [`SignalIntent`] variant set minimal; extend on demand as real `GuiCallback` bodies
 //! need more `WorldSignals` methods or typed requests.
 
-use crate::resources::gamestate::{GameStates, NextGameState};
+use crate::resources::gamestate::{GameState, NextGameState};
 use crate::resources::next_scene::NextScene;
 use crate::resources::worldsignals::WorldSignals;
 use bevy_ecs::prelude::{Entity, Resource};
@@ -28,7 +28,7 @@ pub enum SignalIntent {
     SetEntity(String, u64),
     /// Request a scene switch: sets [`NextScene`].
     RequestScene(String),
-    /// Request a quit: sets [`NextGameState`] to [`GameStates::Quitting`].
+    /// Request a quit: sets [`NextGameState`] to [`GameState::Quitting`].
     RequestQuit,
 }
 
@@ -110,7 +110,7 @@ impl SignalIntents {
                     signals.set_entity(key, Entity::from_bits(bits))
                 }
                 SignalIntent::RequestScene(name) => next_scene.set(name),
-                SignalIntent::RequestQuit => next_state.set(GameStates::Quitting),
+                SignalIntent::RequestQuit => next_state.set(GameState::Quitting),
             }
         }
     }

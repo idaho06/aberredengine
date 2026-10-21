@@ -134,7 +134,7 @@ mod own_components_and_resources {
 
 // Define your own `SystemParam` bundle
 mod define_your_own_systemparam_bundle {
-    use aberredengine::core::resources::gamestate::{GameStates, NextGameState};
+    use aberredengine::core::resources::gamestate::{GameState, NextGameState};
     use aberredengine::prelude::*;
 
     /// What this game's gameplay systems reach for, as one parameter.
@@ -154,7 +154,7 @@ mod define_your_own_systemparam_bundle {
         }
 
         pub fn quit(&mut self) {
-            self.next_state.set(GameStates::Quitting);
+            self.next_state.set(GameState::Quitting);
         }
     }
 
@@ -176,7 +176,7 @@ mod tests {
     use super::define_your_own_systemparam_bundle::Game;
     use aberredengine::bevy_ecs::message::Messages;
     use aberredengine::bevy_ecs::system::RunSystemOnce;
-    use aberredengine::core::resources::gamestate::{GameStates, NextGameState, NextGameStates};
+    use aberredengine::core::resources::gamestate::{GameState, NextGameState, NextGameStates};
     use aberredengine::prelude::*;
     use aberredengine::test_support::TestWorld;
 
@@ -197,7 +197,7 @@ mod tests {
         assert!(queued.iter().any(|c| matches!(c, AudioCmd::PlayFx { id } if id == "jump")));
         assert!(matches!(
             tw.world.resource::<NextGameState>().get(),
-            NextGameStates::Pending(GameStates::Quitting)
+            NextGameStates::Pending(GameState::Quitting)
         ));
     }
 

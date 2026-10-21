@@ -33,7 +33,7 @@ use aberred_core::resources::deterministic_mode::DeterministicMode;
 use aberred_core::resources::drawable_snapshot::DrawableSnapshot;
 use aberred_core::resources::fontmetrics::{FontMetricsStore, FontMetricsWarnCache};
 use aberred_core::resources::gameconfig::GameConfigDefaults;
-use aberred_core::resources::gamestate::{CurrentGameState, GameStates, NextGameState};
+use aberred_core::resources::gamestate::{CurrentGameState, GameState, NextGameState};
 use aberred_core::resources::group::TrackedGroups;
 use aberred_core::resources::guiinputstate::GuiInputState;
 use aberred_core::resources::guitheme::{GuiThemeStore, GuiThemeWarnCache};
@@ -327,7 +327,7 @@ impl EngineBuilder {
         let has_lua = false;
         Self::register_logic_systems(init, world)?;
         Self::spawn_observers(world, has_lua, std::mem::take(&mut init.extra_observers));
-        world.resource_mut::<NextGameState>().set(GameStates::Setup);
+        world.resource_mut::<NextGameState>().set(GameState::Setup);
         world.trigger(GameStateChangedEvent {});
         Self::build_logic_schedules(std::mem::take(&mut init.extra_systems), world, has_lua)
     }
