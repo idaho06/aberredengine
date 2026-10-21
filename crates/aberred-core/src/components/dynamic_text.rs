@@ -71,7 +71,7 @@ impl DynamicText {
     /// Creates a new DynamicText component.
     ///
     /// The `size` field is initialized to zero and will be calculated
-    /// by [`dynamictext_size_system`](crate::systems::dynamictext_size::dynamictext_size_system)
+    /// by [`dynamic_text_size_system`](crate::systems::dynamic_text_size::dynamic_text_size_system)
     /// on the first frame.
     pub fn new(
         content: impl Into<String>,
@@ -97,7 +97,7 @@ impl DynamicText {
     }
 
     /// Sets the cached text bounding box size.
-    /// Used by [`dynamictext_size_system`](crate::systems::dynamictext_size::dynamictext_size_system).
+    /// Used by [`dynamic_text_size_system`](crate::systems::dynamic_text_size::dynamic_text_size_system).
     pub(crate) fn set_size(&mut self, size: Vec2) {
         self.size = size;
     }

@@ -12,7 +12,7 @@
 
 use aberred_core::components::persistent::Persistent;
 use aberred_core::resources::collision_contacts::CollisionContacts;
-use aberred_core::systems::gamestate::clean_all_entities;
+use aberred_core::systems::game_state::clean_all_entities;
 use bevy_ecs::observer::On;
 use bevy_ecs::prelude::*;
 use bevy_ecs::system::{RunSystemOnce, SystemParam, SystemState};
@@ -608,7 +608,7 @@ fn cleanup_keeps_resources() {
 }
 
 // After cleanup, the engine reaches persistent observers/systems through
-// `Commands` (input system triggers events; `gamestate`/`scene_dispatch`
+// `Commands` (input system triggers events; `game_state`/`scene_dispatch`
 // call `commands.run_system(switch_scene)`).
 #[test]
 fn commands_reach_persistent_observer_and_system_after_cleanup() {

@@ -1,7 +1,7 @@
 //! Component for attaching an entity's position to another entity.
 //!
 //! When an entity has the [`StuckTo`] component, the
-//! [`stuck_to_entity_system`](crate::systems::stuckto::stuck_to_entity_system)
+//! [`stuck_to_entity_system`](crate::systems::stuck_to::stuck_to_entity_system)
 //! will update its position to follow the target entity's position, optionally
 //! with an offset.
 //!
@@ -47,7 +47,7 @@
 //!
 //! # Related
 //!
-//! - [`crate::systems::stuckto::stuck_to_entity_system`] – the system that updates positions
+//! - [`crate::systems::stuck_to::stuck_to_entity_system`] – the system that updates positions
 //! - [`super::timer::Timer`] – can be used to auto-remove `StuckTo` after a delay
 
 use crate::math::Vec2;

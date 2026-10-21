@@ -94,7 +94,7 @@ pub struct CommonCmdBufs {
 // render thread, which performs the GL work and replies with
 // `FontLoaded`/`TextureLoaded` notifications). The logic world has no GL
 // resources at all, so bootstrap fonts' metrics arrive asynchronously
-// (dynamictext/menu measurement retries each frame until they land).
+// (dynamic text/menu measurement retries each frame until they land).
 pub fn setup(
     mut commands: Commands,
     render_size: Res<RenderSize>,
@@ -143,7 +143,7 @@ pub fn setup(
     info!("Game setup() done");
 }
 
-pub use aberred_core::systems::gamestate::quit_game;
+pub use aberred_core::systems::game_state::quit_game;
 
 /// The `enter_play` hook of a Lua game: calls `on_enter_play`, applies the
 /// signal and group commands it queued, then enters the first scene through

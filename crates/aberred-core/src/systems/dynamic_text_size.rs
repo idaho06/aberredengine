@@ -20,7 +20,7 @@ use crate::resources::font_metrics::{FontMetricsStore, FontMetricsWarnCache};
 /// Measures text CPU-side via [`FontMetricsStore`] instead of the GL-bound
 /// `FontStore`/`ffi::MeasureTextEx`, so this system has no GL-context
 /// dependency.
-pub fn dynamictext_size_system(
+pub fn dynamic_text_size_system(
     mut query: Query<&mut DynamicText, Changed<DynamicText>>,
     metrics: Res<FontMetricsStore>,
     mut warn_cache: ResMut<FontMetricsWarnCache>,
@@ -69,7 +69,7 @@ mod tests {
         world.spawn(DynamicText::new("abc", "test_font", 20.0, Color::WHITE));
 
         world
-            .run_system_once(dynamictext_size_system)
+            .run_system_once(dynamic_text_size_system)
             .expect("system should run");
 
         let mut query = world.query::<&DynamicText>();
@@ -86,10 +86,10 @@ mod tests {
 
         // Run twice to exercise the warn-once path without panicking.
         world
-            .run_system_once(dynamictext_size_system)
+            .run_system_once(dynamic_text_size_system)
             .expect("system should run");
         world
-            .run_system_once(dynamictext_size_system)
+            .run_system_once(dynamic_text_size_system)
             .expect("system should run");
 
         let mut query = world.query::<&DynamicText>();

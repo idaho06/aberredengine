@@ -17,7 +17,7 @@ use std::ffi::CString;
 ///
 /// The `paths` map stores the source file path (relative to the working
 /// directory) for each editor-managed texture, set via the `path` argument to
-/// `insert()`. Engine-internal textures (loaded by mapspawn, Lua, etc.) pass
+/// `insert()`. Engine-internal textures (loaded by map_spawn, Lua, etc.) pass
 /// `None` and are never added to `paths`; absence of an entry means the
 /// texture was not loaded from a user-visible file.
 ///

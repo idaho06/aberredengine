@@ -4,7 +4,7 @@
 //! [`crate::resources::map_data::load_map`] to have the engine queue the map's
 //! assets and spawn its entities (see [`SpawnMapRequested`]).
 //!
-//! The built-in [`crate::systems::mapspawn::spawn_map_observer`] handles this
+//! The built-in [`crate::systems::map_spawn::spawn_map_observer`] handles this
 //! event automatically; no manual registration is needed. Once the map's
 //! entities are spawned, the engine triggers [`MapSpawned`] with them.
 //!
@@ -34,7 +34,7 @@ pub struct SpawnMapRequested {
     pub map: MapData,
 }
 
-/// Triggered by [`spawn_map`](crate::systems::mapspawn::spawn_map) after it
+/// Triggered by [`spawn_map`](crate::systems::map_spawn::spawn_map) after it
 /// spawns a map's entities (including for every [`SpawnMapRequested`]).
 ///
 /// `spawned[i]` is the entity spawned for `map.entities[i]`, so an observer

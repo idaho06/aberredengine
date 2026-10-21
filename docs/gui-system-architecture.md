@@ -493,7 +493,7 @@ world.spawn((
 
 #### Signal binding system
 
-`gui_progressbar_signal_update_system` runs every frame before `render_system` and updates all
+`gui_progress_bar_signal_update_system` runs every frame before `render_system` and updates all
 `GuiProgressBar` components with a `signal_binding`. It reads the integer signal first; if absent, falls
 back to the scalar. Values are clamped to `[0, max]`. Skips the write if the new value equals the
 current one (avoids spurious change detection).
@@ -1004,7 +1004,7 @@ fn main() {
 The GUI systems and components are **always compiled** regardless of the `lua` feature flag:
 - `gui_button_spawn_system`, `gui_label_spawn_system`, `gui_image_spawn_system`
 - `gui_layout_system`, `gui_hit_test_system`, `gui_image_state_sync_system`,
-  `gui_progressbar_signal_update_system`
+  `gui_progress_bar_signal_update_system`
 - the `GuiClicked` event (see [Click events](#click-events))
 - All component types (`GuiWindow`, `GuiButton`, `GuiLabel`, `GuiImage`, `GuiInteractable`,
   `GuiOffset`, `GuiWidgetState`)

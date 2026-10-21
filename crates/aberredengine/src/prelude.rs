@@ -85,7 +85,7 @@ pub use aberred_core::resources::world_signals::{SignalSnapshot, SignalsRead, Wo
 pub use aberred_core::resources::world_time::WorldTime;
 
 pub use aberred_core::systems::asset_loader::{AssetError, AssetLoader};
-pub use aberred_core::systems::gamestate::state_is_playing;
+pub use aberred_core::systems::game_state::state_is_playing;
 pub use aberred_core::systems::scene_dispatch::{WorldDraw, WorldDrawCtx, in_scene};
 
 pub use crate::render::*;

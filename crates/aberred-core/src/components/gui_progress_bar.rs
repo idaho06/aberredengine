@@ -31,7 +31,7 @@ pub enum ProgressBarDirection {
 /// plus a fill nine-patch scaled to `value / max`. Rendered directly by
 /// `render_system` — no spawn system or companion components are needed.
 ///
-/// `signal_binding`, when set, causes `gui_progressbar_signal_update_system`
+/// `signal_binding`, when set, causes `gui_progress_bar_signal_update_system`
 /// to read `value` from `WorldSignals` every frame (integer preferred, scalar
 /// as fallback), so the bar stays in sync without Lua polling.
 #[derive(Component, Clone, Debug, PartialEq)]
@@ -45,7 +45,7 @@ pub struct GuiProgressBar {
     /// Selects which named theme in `GuiThemeStore` provides the
     /// `GuiProgressBarSkin`. Default `"default"`.
     pub theme_key: Arc<str>,
-    /// When `Some(key)`, `gui_progressbar_signal_update_system` writes the
+    /// When `Some(key)`, `gui_progress_bar_signal_update_system` writes the
     /// `WorldSignals` value at `key` into `self.value` every frame.
     pub signal_binding: Option<String>,
 }

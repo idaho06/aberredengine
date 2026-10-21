@@ -10,7 +10,7 @@ use bevy_ecs::prelude::*;
 use crate::components::gui_progress_bar::GuiProgressBar;
 use crate::resources::world_signals::WorldSignals;
 
-pub fn gui_progressbar_signal_update_system(
+pub fn gui_progress_bar_signal_update_system(
     mut query: Query<&mut GuiProgressBar>,
     world_signals: Res<WorldSignals>,
 ) {
@@ -52,7 +52,7 @@ mod tests {
         world.resource_mut::<WorldSignals>().set_integer("hp", 40);
         world.spawn(GuiProgressBar::new(200.0, 16.0, 100.0, 100.0).with_signal_binding("hp"));
 
-        tick(&mut world, gui_progressbar_signal_update_system);
+        tick(&mut world, gui_progress_bar_signal_update_system);
 
         let bar = world.query::<&GuiProgressBar>().single(&world).unwrap();
         assert!(approx_eq(bar.value, 40.0));
@@ -67,7 +67,7 @@ mod tests {
             .set_scalar("energy", 0.75);
         world.spawn(GuiProgressBar::new(200.0, 16.0, 1.0, 1.0).with_signal_binding("energy"));
 
-        tick(&mut world, gui_progressbar_signal_update_system);
+        tick(&mut world, gui_progress_bar_signal_update_system);
 
         let bar = world.query::<&GuiProgressBar>().single(&world).unwrap();
         assert!(approx_eq(bar.value, 0.75));
@@ -80,7 +80,7 @@ mod tests {
         world.resource_mut::<WorldSignals>().set_integer("hp", 9999);
         world.spawn(GuiProgressBar::new(200.0, 16.0, 0.0, 100.0).with_signal_binding("hp"));
 
-        tick(&mut world, gui_progressbar_signal_update_system);
+        tick(&mut world, gui_progress_bar_signal_update_system);
 
         let bar = world.query::<&GuiProgressBar>().single(&world).unwrap();
         assert!(approx_eq(bar.value, 100.0));
@@ -92,7 +92,7 @@ mod tests {
         world.insert_resource(WorldSignals::default());
         world.spawn(GuiProgressBar::new(200.0, 16.0, 50.0, 100.0).with_signal_binding("missing"));
 
-        tick(&mut world, gui_progressbar_signal_update_system);
+        tick(&mut world, gui_progress_bar_signal_update_system);
 
         let bar = world.query::<&GuiProgressBar>().single(&world).unwrap();
         assert!(approx_eq(bar.value, 50.0));
@@ -105,7 +105,7 @@ mod tests {
         world.resource_mut::<WorldSignals>().set_integer("hp", 10);
         world.spawn(GuiProgressBar::new(200.0, 16.0, 50.0, 100.0)); // no signal binding
 
-        tick(&mut world, gui_progressbar_signal_update_system);
+        tick(&mut world, gui_progress_bar_signal_update_system);
 
         let bar = world.query::<&GuiProgressBar>().single(&world).unwrap();
         assert!(approx_eq(bar.value, 50.0));

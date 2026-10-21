@@ -25,7 +25,7 @@ use aberred_core::resources::input::InputState;
 use aberred_core::resources::signal_keys as sk;
 use aberred_core::resources::systems_store::SystemsStore;
 use aberred_core::systems::collision_detector::collision_detector;
-use aberred_core::systems::inputsimplecontroller::input_simple_controller;
+use aberred_core::systems::input_simple_controller::input_simple_controller;
 use aberred_core::systems::phase::phase_system;
 use aberred_core::systems::scene_dispatch::WorldDrawCtx;
 use aberred_core::systems::signal_intents::apply_signal_intents;
@@ -34,7 +34,7 @@ use aberred_render::resources::scene_table::GuiCtx;
 #[cfg(feature = "lua")]
 use aberred_core::systems::animation::{animation, animation_controller};
 #[cfg(feature = "lua")]
-use aberred_core::systems::dynamictext_size::dynamictext_size_system;
+use aberred_core::systems::dynamic_text_size::dynamic_text_size_system;
 #[cfg(feature = "lua")]
 use aberred_core::systems::group::update_group_counts_system;
 #[cfg(feature = "lua")]
@@ -46,7 +46,7 @@ use aberred_core::systems::render_assets::update_bevy_render_asset_cmds;
 #[cfg(feature = "lua")]
 use aberred_core::systems::scene_dispatch::scene_switch_poll;
 #[cfg(feature = "lua")]
-use aberred_core::systems::signalbinding::update_world_signals_binding_system;
+use aberred_core::systems::signal_binding::update_world_signals_binding_system;
 #[cfg(feature = "lua")]
 use aberred_core::systems::timer::update_timers;
 #[cfg(feature = "lua")]
@@ -442,7 +442,7 @@ fn lua_update_runs_in_late_update_after_lifecycle_before_bookkeeping() {
     for bookkeeping in [
         sim_index(&ids, update_world_signals_binding_system),
         sim_index(&ids, detect_window_resize),
-        sim_index(&ids, dynamictext_size_system),
+        sim_index(&ids, dynamic_text_size_system),
         sim_index(&ids, update_bevy_render_asset_cmds),
         sim_index(&ids, forward_render_asset_cmds),
     ] {

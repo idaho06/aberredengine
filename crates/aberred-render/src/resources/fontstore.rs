@@ -71,7 +71,7 @@ impl FontStore {
     /// Returns `false` (no-op) if `old_id` is not loaded. Callers renaming a
     /// font must also rename/remove the matching `FontMetricsStore`
     /// (`font_metrics.rs`) entry, or a stale/aliased key will silently
-    /// return wrong CPU-side metrics — worse than `dynamictext_size_system`'s
+    /// return wrong CPU-side metrics — worse than `dynamic_text_size_system`'s
     /// current "missing key, warn once" failure mode.
     pub fn rename(&mut self, old_id: impl AsRef<str>, new_id: impl Into<String>) -> bool {
         let old_key = old_id.as_ref();

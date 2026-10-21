@@ -2081,7 +2081,7 @@ cross-cutting logic such as a UI click sound. A disabled widget never triggers i
 
 ### Particle emitters
 
-**Source:** `aberred-core/src/components/particle_emitter.rs`, `aberred-core/src/systems/particleemitter.rs`
+**Source:** `aberred-core/src/components/particle_emitter.rs`, `aberred-core/src/systems/particle_emitter.rs`
 
 A `ParticleEmitter` on an entity with `WorldPosition` spawns particles by cloning **template** entities. Each emission picks a random template, clones every component it has (a `Phase` restarts in its current phase, see [Phase state machines](#phase-state-machines)), then sets the clone's `WorldPosition` (inside the emitter's `shape`, plus `offset`), `Rotation` (the emission angle), `RigidBody` velocity (angle × a speed from `speed_range`; the template's own `RigidBody` friction, max speed and forces carry over), an optional `Ttl`, and `EmittedParticle(emitter)`.
 
@@ -2124,7 +2124,7 @@ fn spawn_smoke(mut commands: Commands) {
 
 ### Attaching entities (StuckTo)
 
-**Source:** `aberred-core/src/components/stuck_to.rs`, `aberred-core/src/systems/stuckto.rs`
+**Source:** `aberred-core/src/components/stuck_to.rs`, `aberred-core/src/systems/stuck_to.rs`
 
 `StuckTo` makes an entity's `WorldPosition` follow another entity's, plus an offset, on both axes (`StuckTo::new`) or one (`follow_x_only`, `follow_y_only`). The classic use is a ball resting on a paddle until launch:
 

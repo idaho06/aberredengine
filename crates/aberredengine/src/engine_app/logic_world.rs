@@ -55,8 +55,8 @@ use aberred_core::resources::window_size::WindowSize;
 use aberred_core::resources::world_signals::WorldSignals;
 use aberred_core::resources::world_time::WorldTime;
 use aberred_core::systems::collision_rule::collision_rule_observer;
-use aberred_core::systems::gamestate::{clean_all_entities, quit_game};
-use aberred_core::systems::mapspawn::spawn_map_observer;
+use aberred_core::systems::game_state::{clean_all_entities, quit_game};
+use aberred_core::systems::map_spawn::spawn_map_observer;
 use aberred_core::systems::menu::{
     menu_controller_observer, menu_despawn, menu_selection_observer,
 };

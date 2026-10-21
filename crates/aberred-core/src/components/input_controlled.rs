@@ -6,9 +6,9 @@
 //! - [`AccelerationControlled`] – keyboard-driven acceleration-based movement (smooth physics)
 //! - [`MouseControlled`] – mouse position tracking
 //!
-//! Systems in [`crate::systems::inputsimplecontroller`],
-//! [`crate::systems::inputaccelerationcontroller`], and
-//! [`crate::systems::mousecontroller`] read these components to update
+//! Systems in [`crate::systems::input_simple_controller`],
+//! [`crate::systems::input_acceleration_controller`], and
+//! [`crate::systems::mouse_controller`] read these components to update
 //! entity positions or velocities.
 
 use crate::math::Vec2;

@@ -46,7 +46,7 @@
 //!
 //! # Related
 //!
-//! - [`crate::systems::particleemitter::particle_emitter_system`] – system that emits particles
+//! - [`crate::systems::particle_emitter::particle_emitter_system`] – system that emits particles
 //! - [`crate::components::ttl::Ttl`] – time-to-live for automatic despawn
 
 use crate::math::Vec2;

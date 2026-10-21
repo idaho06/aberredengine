@@ -13,24 +13,24 @@
 //! - [`collision_detector`] – broad/simple overlap checks and event emission
 //! - [`collision_rule`] – matches overlaps against `CollisionRule`s and triggers `CollisionOngoing`
 //! - [`collision_rule_index`] – rebuilds `CollisionRuleIndex` from rule entities on change
-//! - [`gamestate`] – check for pending state transitions and trigger events
-//! - [`gridlayout`] – spawn entities from JSON-defined grid layouts
+//! - [`game_state`] – check for pending state transitions and trigger events
+//! - [`grid_layout`] – spawn entities from JSON-defined grid layouts
 //! - [`group`] – count entities per tracked group and publish to [`WorldSignals`](crate::resources::world_signals::WorldSignals)
 //! - [`gui_hit_test`] – resolve `GuiInteractable` hover/press/click state from cursor + mouse button
 //! - [`gui_layout`] – resolve GUI children's `ScreenPosition` from parent `ScreenPosition` + `GuiOffset`
-//! - [`gui_progressbar_signal_update`] – keep `GuiProgressBar.value` in sync with `WorldSignals` for signal-bound bars
+//! - [`gui_progress_bar_signal_update`] – keep `GuiProgressBar.value` in sync with `WorldSignals` for signal-bound bars
 //! - [`gui_spawn`] – spawn a `GuiButton`/`GuiLabel`/`GuiImage`'s `GuiInteractable`/caption/`Sprite` on `Added<T>`
 //! - [`input`] – read hardware input and update [`crate::resources::input::InputState`]
-//! - [`inputsimplecontroller`] – translate input state into velocity on entities
-//! - [`inputaccelerationcontroller`] – translate input state into acceleration on entities
+//! - [`input_simple_controller`] – translate input state into velocity on entities
+//! - [`input_acceleration_controller`] – translate input state into acceleration on entities
 //! - [`menu`] – menu spawning, input handling, and selection
-//! - [`mousecontroller`] – update entity positions based on mouse position
+//! - [`mouse_controller`] – update entity positions based on mouse position
 //! - [`movement`] – integrate positions from rigid body velocities and time
 //! - [`phase`] – apply phase state machine transitions and trigger phase events
 //! - [`scene_dispatch`] – scene switch and update systems for `SceneManager`-based games
 //! - [`signal_intents`] – apply buffered `SignalIntent`s queued by render-side scene callbacks
-//! - [`signalbinding`] – update DynamicText components based on signal values
-//! - [`stuckto`] – keep entities attached to other entities
+//! - [`signal_binding`] – update DynamicText components based on signal values
+//! - [`stuck_to`] – keep entities attached to other entities
 //! - [`time`] – update simulation time and delta
 //! - [`tween`] – animate position, rotation, and scale over time
 //!
@@ -48,34 +48,34 @@ pub mod collision;
 pub mod collision_detector;
 pub mod collision_rule;
 pub mod collision_rule_index;
-pub mod dynamictext_size;
+pub mod dynamic_text_size;
 pub mod entity_registrations;
-pub mod gamestate;
-pub mod gridlayout;
+pub mod game_state;
+pub mod grid_layout;
 pub mod group;
 pub mod gui_hit_test;
 pub mod gui_image_state_sync;
 pub mod gui_layout;
-pub mod gui_progressbar_signal_update;
+pub mod gui_progress_bar_signal_update;
 pub mod gui_spawn;
 pub mod input;
-pub mod inputaccelerationcontroller;
-pub mod inputsimplecontroller;
+pub mod input_acceleration_controller;
+pub mod input_simple_controller;
 pub mod logic_bridge;
-pub mod mapspawn;
+pub mod map_spawn;
 pub mod menu;
-pub mod mousecontroller;
+pub mod mouse_controller;
 pub mod movement;
-pub mod particleemitter;
+pub mod particle_emitter;
 pub mod phase;
 pub mod propagate_transforms;
 pub mod render_assets;
 pub mod scene_dispatch;
+pub mod signal_binding;
 pub mod signal_intents;
-pub mod signalbinding;
 pub mod sprite_geometry;
 pub mod state_hash;
-pub mod stuckto;
+pub mod stuck_to;
 pub mod tilemap;
 pub mod time;
 pub mod timer;

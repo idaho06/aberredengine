@@ -50,14 +50,14 @@ mod tests {
     use crate::testing::approx_eq;
     use bevy_ecs::system::RunSystemOnce;
 
-    fn tick_stuckto(world: &mut World) {
+    fn tick_stuck_to(world: &mut World) {
         world
             .run_system_once(stuck_to_entity_system)
             .expect("stuck_to_entity_system should run");
     }
 
     #[test]
-    fn stuckto_follows_target_both_axes() {
+    fn stuck_to_follows_target_both_axes() {
         let mut world = World::new();
 
         let target = world.spawn((WorldPosition::new(100.0, 50.0),)).id();
@@ -65,7 +65,7 @@ mod tests {
             .spawn((WorldPosition::new(0.0, 0.0), StuckTo::new(target)))
             .id();
 
-        tick_stuckto(&mut world);
+        tick_stuck_to(&mut world);
 
         let pos = world.get::<WorldPosition>(follower).unwrap();
         assert!(approx_eq(pos.pos.x, 100.0));
@@ -73,7 +73,7 @@ mod tests {
     }
 
     #[test]
-    fn stuckto_follows_target_x_only() {
+    fn stuck_to_follows_target_x_only() {
         let mut world = World::new();
 
         let target = world.spawn((WorldPosition::new(100.0, 50.0),)).id();
@@ -84,7 +84,7 @@ mod tests {
             ))
             .id();
 
-        tick_stuckto(&mut world);
+        tick_stuck_to(&mut world);
 
         let pos = world.get::<WorldPosition>(follower).unwrap();
         assert!(approx_eq(pos.pos.x, 100.0));
@@ -92,7 +92,7 @@ mod tests {
     }
 
     #[test]
-    fn stuckto_follows_target_y_only() {
+    fn stuck_to_follows_target_y_only() {
         let mut world = World::new();
 
         let target = world.spawn((WorldPosition::new(100.0, 50.0),)).id();
@@ -103,7 +103,7 @@ mod tests {
             ))
             .id();
 
-        tick_stuckto(&mut world);
+        tick_stuck_to(&mut world);
 
         let pos = world.get::<WorldPosition>(follower).unwrap();
         assert!(approx_eq(pos.pos.x, 30.0)); // X unchanged
@@ -111,7 +111,7 @@ mod tests {
     }
 
     #[test]
-    fn stuckto_applies_offset() {
+    fn stuck_to_applies_offset() {
         let mut world = World::new();
 
         let target = world.spawn((WorldPosition::new(100.0, 100.0),)).id();
@@ -122,7 +122,7 @@ mod tests {
             ))
             .id();
 
-        tick_stuckto(&mut world);
+        tick_stuck_to(&mut world);
 
         let pos = world.get::<WorldPosition>(follower).unwrap();
         assert!(approx_eq(pos.pos.x, 110.0));
@@ -130,7 +130,7 @@ mod tests {
     }
 
     #[test]
-    fn stuckto_does_not_move_if_target_missing() {
+    fn stuck_to_does_not_move_if_target_missing() {
         let mut world = World::new();
 
         // Create a fake entity ID that doesn't exist
@@ -139,7 +139,7 @@ mod tests {
             .spawn((WorldPosition::new(50.0, 50.0), StuckTo::new(fake_target)))
             .id();
 
-        tick_stuckto(&mut world);
+        tick_stuck_to(&mut world);
 
         let pos = world.get::<WorldPosition>(follower).unwrap();
         assert!(approx_eq(pos.pos.x, 50.0)); // Unchanged
@@ -149,7 +149,7 @@ mod tests {
     /// Hierarchy takes precedence: a `ChildOf` entity is positioned by
     /// `propagate_transforms`, so `StuckTo` must leave it alone.
     #[test]
-    fn stuckto_skips_entities_with_childof() {
+    fn stuck_to_skips_entities_with_childof() {
         let mut world = World::new();
 
         // Target entity
@@ -167,7 +167,7 @@ mod tests {
             .id();
 
         world.flush();
-        tick_stuckto(&mut world);
+        tick_stuck_to(&mut world);
 
         // Position should NOT have been updated to target's position
         let pos = world.get::<WorldPosition>(follower).unwrap();

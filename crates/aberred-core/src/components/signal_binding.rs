@@ -38,7 +38,7 @@
 //!
 //! # Related
 //!
-//! - [`crate::systems::signalbinding::update_world_signals_binding_system`] – the update system
+//! - [`crate::systems::signal_binding::update_world_signals_binding_system`] – the update system
 //! - [`crate::resources::world_signals::WorldSignals`] – global signal storage
 //! - [`super::signals::Signals`] – per-entity signal storage
 
@@ -56,7 +56,7 @@ pub enum SignalSource {
 /// Binds a [`DynamicText`](super::dynamic_text::DynamicText) to a signal value.
 ///
 /// When attached to an entity with a `DynamicText` component, the
-/// [`update_world_signals_binding_system`](crate::systems::signalbinding::update_world_signals_binding_system)
+/// [`update_world_signals_binding_system`](crate::systems::signal_binding::update_world_signals_binding_system)
 /// will automatically update the text content based on the signal value.
 ///
 /// # Example

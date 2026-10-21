@@ -1,6 +1,6 @@
 //! Grid layout spawning system.
 //!
-//! The [`gridlayout_spawn_system`] processes newly added [`GridLayout`]
+//! The [`grid_layout_spawn_system`] processes newly added [`GridLayout`]
 //! components, loads their JSON data, and spawns child entities for each
 //! cell. Spawned entities receive [`WorldPosition`], [`Sprite`], [`BoxCollider`],
 //! [`Signals`], [`Group`], and [`ZIndex`] components based on the layout data.
@@ -42,7 +42,7 @@ use crate::components::z_index::ZIndex;
 use log::{error, info};
 
 /// System that processes GridLayout components and spawns child entities accordingly.
-pub fn gridlayout_spawn_system(
+pub fn grid_layout_spawn_system(
     mut commands: Commands,
     mut query: Query<&mut GridLayout, Added<GridLayout>>,
 ) {
@@ -152,7 +152,7 @@ mod tests {
 
     fn schedule() -> Schedule {
         let mut schedule = Schedule::default();
-        schedule.add_systems(gridlayout_spawn_system);
+        schedule.add_systems(grid_layout_spawn_system);
         schedule
     }
 

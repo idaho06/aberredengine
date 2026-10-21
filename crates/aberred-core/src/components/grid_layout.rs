@@ -2,7 +2,7 @@
 //!
 //! The [`GridLayout`] component references a JSON file describing a grid of
 //! cells. When the component is added, the
-//! [`gridlayout_spawn_system`](crate::systems::gridlayout::gridlayout_spawn_system)
+//! [`grid_layout_spawn_system`](crate::systems::grid_layout::grid_layout_spawn_system)
 //! reads the file and spawns entities for each non-empty cell with the
 //! specified texture, group, and custom properties.
 //!

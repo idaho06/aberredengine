@@ -1791,7 +1791,7 @@ function EntityBuilder:with_gui_progress_bar(width, height, value, max) end
 ---@return EntityBuilder
 function EntityBuilder:with_gui_progress_bar_reversed() end
 
----Bind a GuiProgressBar's value to a WorldSignals key (integer preferred, scalar fallback). gui_progressbar_signal_update_system reads the signal each frame and clamps to [0, max]. Requires :with_gui_progress_bar() first.
+---Bind a GuiProgressBar's value to a WorldSignals key (integer preferred, scalar fallback). gui_progress_bar_signal_update_system reads the signal each frame and clamps to [0, max]. Requires :with_gui_progress_bar() first.
 ---@param key string
 ---@return EntityBuilder
 function EntityBuilder:with_gui_progress_bar_signal_binding(key) end
@@ -2386,7 +2386,7 @@ function CollisionEntityBuilder:with_gui_progress_bar(width, height, value, max)
 ---@return CollisionEntityBuilder
 function CollisionEntityBuilder:with_gui_progress_bar_reversed() end
 
----Bind a GuiProgressBar's value to a WorldSignals key (integer preferred, scalar fallback). gui_progressbar_signal_update_system reads the signal each frame and clamps to [0, max]. Requires :with_gui_progress_bar() first.
+---Bind a GuiProgressBar's value to a WorldSignals key (integer preferred, scalar fallback). gui_progress_bar_signal_update_system reads the signal each frame and clamps to [0, max]. Requires :with_gui_progress_bar() first.
 ---@param key string
 ---@return CollisionEntityBuilder
 function CollisionEntityBuilder:with_gui_progress_bar_signal_binding(key) end

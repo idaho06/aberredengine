@@ -20,36 +20,36 @@ use aberred_core::systems::camera_follow::camera_follow_system;
 use aberred_core::systems::collision_detector::collision_detector;
 use aberred_core::systems::collision_rule::{collision_ended_system, has_rule_contacts};
 use aberred_core::systems::collision_rule_index::rebuild_rule_index;
-use aberred_core::systems::dynamictext_size::dynamictext_size_system;
+use aberred_core::systems::dynamic_text_size::dynamic_text_size_system;
 use aberred_core::systems::entity_registrations::prune_dead_entity_registrations;
 #[cfg(feature = "lua")]
-use aberred_core::systems::gamestate::state_is_playing;
-use aberred_core::systems::gamestate::{check_pending_state, finish_setup, state_runs_scenes};
-use aberred_core::systems::gridlayout::gridlayout_spawn_system;
+use aberred_core::systems::game_state::state_is_playing;
+use aberred_core::systems::game_state::{check_pending_state, finish_setup, state_runs_scenes};
+use aberred_core::systems::grid_layout::grid_layout_spawn_system;
 use aberred_core::systems::group::update_group_counts_system;
 use aberred_core::systems::gui_hit_test::gui_hit_test_system;
 use aberred_core::systems::gui_image_state_sync::gui_image_state_sync_system;
 use aberred_core::systems::gui_layout::gui_layout_system;
-use aberred_core::systems::gui_progressbar_signal_update::gui_progressbar_signal_update_system;
+use aberred_core::systems::gui_progress_bar_signal_update::gui_progress_bar_signal_update_system;
 use aberred_core::systems::gui_spawn::{
     gui_button_spawn_system, gui_image_spawn_system, gui_label_spawn_system,
 };
-use aberred_core::systems::inputaccelerationcontroller::input_acceleration_controller;
-use aberred_core::systems::inputsimplecontroller::input_simple_controller;
+use aberred_core::systems::input_acceleration_controller::input_acceleration_controller;
+use aberred_core::systems::input_simple_controller::input_simple_controller;
 use aberred_core::systems::logic_bridge::{forward_render_asset_cmds, send_drawable_snapshot};
 use aberred_core::systems::menu::menu_spawn_system;
-use aberred_core::systems::mousecontroller::mouse_controller;
+use aberred_core::systems::mouse_controller::mouse_controller;
 use aberred_core::systems::movement::movement;
-use aberred_core::systems::particleemitter::particle_emitter_system;
+use aberred_core::systems::particle_emitter::particle_emitter_system;
 use aberred_core::systems::phase::phase_system;
 use aberred_core::systems::propagate_transforms::{
     cleanup_orphaned_global_transforms, propagate_transforms,
 };
 use aberred_core::systems::render_assets::update_bevy_render_asset_cmds;
 use aberred_core::systems::scene_dispatch::scene_switch_poll;
+use aberred_core::systems::signal_binding::update_world_signals_binding_system;
 use aberred_core::systems::signal_intents::apply_signal_intents;
-use aberred_core::systems::signalbinding::update_world_signals_binding_system;
-use aberred_core::systems::stuckto::stuck_to_entity_system;
+use aberred_core::systems::stuck_to::stuck_to_entity_system;
 use aberred_core::systems::tilemap::tilemap_spawn_system;
 use aberred_core::systems::timer::update_timers;
 use aberred_core::systems::ttl::ttl_system;
@@ -310,7 +310,7 @@ impl EngineBuilder {
         sim.add_systems(apply_signal_intents.in_set(SimSet::ApplyIntents));
         sim.add_systems(phase_system.in_set(SimSet::Phases));
         sim.add_systems(menu_spawn_system.in_set(SimSet::Spawn));
-        sim.add_systems(gridlayout_spawn_system.in_set(SimSet::Spawn));
+        sim.add_systems(grid_layout_spawn_system.in_set(SimSet::Spawn));
         // .after(menu_spawn_system): both queue into the logic world's
         // Messages<RenderAssetCmd> (RasterizeText / TilemapTexture) with no
         // prior edge between them -- ambiguity_detection flags the shared
@@ -447,7 +447,7 @@ impl EngineBuilder {
                 .after(gui_hit_test_system)
                 .in_set(SimSet::Gui),
         );
-        sim.add_systems(gui_progressbar_signal_update_system.in_set(SimSet::Gui));
+        sim.add_systems(gui_progress_bar_signal_update_system.in_set(SimSet::Gui));
 
         #[cfg(feature = "lua")]
         if has_lua {
@@ -520,7 +520,7 @@ impl EngineBuilder {
         sim.add_systems(update_world_signals_binding_system.in_set(SimSet::Bookkeeping));
         sim.add_systems(detect_window_resize.in_set(SimSet::Bookkeeping));
         sim.add_systems(
-            dynamictext_size_system
+            dynamic_text_size_system
                 .after(update_world_signals_binding_system)
                 .in_set(SimSet::Bookkeeping),
         );
@@ -534,7 +534,7 @@ impl EngineBuilder {
         #[allow(unused_mut)] // only reassigned under #[cfg(feature = "lua")] below
         let mut prune_config = prune_dead_entity_registrations
             .after(update_world_signals_binding_system)
-            .after(dynamictext_size_system)
+            .after(dynamic_text_size_system)
             .in_set(SimSet::Bookkeeping);
         #[cfg(feature = "lua")]
         if has_lua {
@@ -621,8 +621,8 @@ impl EngineBuilder {
         let mut drawable_snapshot_config = build_drawable_snapshot
             .after(gui_hit_test_system)
             .after(gui_image_state_sync_system)
-            .after(gui_progressbar_signal_update_system)
-            .after(dynamictext_size_system)
+            .after(gui_progress_bar_signal_update_system)
+            .after(dynamic_text_size_system)
             .after(scene_switch_poll)
             .before(render_system);
         #[cfg(feature = "lua")]

@@ -40,7 +40,7 @@ use crate::resources::gui_theme::{GuiTheme, GuiThemeStore, GuiThemeWarnCache};
 /// `src/systems/render/mod.rs`) draws text above the parent's background at
 /// equal z, so no separate "caption z" is needed. Padding is a fixed
 /// constant rather than theme-driven: `DynamicText`'s size is only known
-/// after a frame (`dynamictext_size_system`), so this helper anchors the
+/// after a frame (`dynamic_text_size_system`), so this helper anchors the
 /// caption with fixed padding instead of centering from measured text size.
 /// `font`/`font_size`/`text_color` are resolved from the named theme (`theme_key`) in `GuiThemeStore` (or
 /// built-in defaults if the key isn't registered, with a one-time warn via
@@ -463,7 +463,7 @@ mod tests {
     #[test]
     fn gui_label_signal_binding_placeholder_then_live_update() {
         use crate::resources::world_signals::WorldSignals;
-        use crate::systems::signalbinding::update_world_signals_binding_system;
+        use crate::systems::signal_binding::update_world_signals_binding_system;
 
         let mut world = World::new();
         insert_empty_theme_store(&mut world);

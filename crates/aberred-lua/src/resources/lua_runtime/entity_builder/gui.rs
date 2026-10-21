@@ -301,7 +301,7 @@ pub(super) fn register<M: LuaUserDataMethods<LuaEntityBuilder>>(
         methods,
         meta,
         "with_gui_progress_bar_signal_binding",
-        "Bind a GuiProgressBar's value to a WorldSignals key (integer preferred, scalar fallback). gui_progressbar_signal_update_system reads the signal each frame and clamps to [0, max]. Requires :with_gui_progress_bar() first.",
+        "Bind a GuiProgressBar's value to a WorldSignals key (integer preferred, scalar fallback). gui_progress_bar_signal_update_system reads the signal each frame and clamps to [0, max]. Requires :with_gui_progress_bar() first.",
         [("key", "string")],
         |_, this: &mut LuaEntityBuilder, key: String| {
             let Some(bar) = this.cmd.gui_progress_bar.as_mut() else {

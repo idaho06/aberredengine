@@ -519,7 +519,7 @@ fn present_publishes_spawned_sprite_in_snapshot() {
 
 /// (d) Asset round-trip: queue a font load, assert it lands on
 /// `sent_to_render`; then fake the async metrics reply and assert
-/// `dynamictext_size_system` reacts on the very next tick (locks the async
+/// `dynamic_text_size_system` reacts on the very next tick (locks the async
 /// `FontMetricsStore` contract: metrics arrive after the load request, and
 /// text sizing picks them up once they land).
 #[test]
@@ -566,7 +566,7 @@ fn font_load_forwards_and_metrics_reply_sizes_text_next_tick() {
     );
     tw.deliver_font_metrics("test_font", FontMetrics::new(10, glyphs));
 
-    // `dynamictext_size_system` only re-measures on `Changed<DynamicText>` --
+    // `dynamic_text_size_system` only re-measures on `Changed<DynamicText>` --
     // metrics arriving alone doesn't retroactively resize an entity that
     // hasn't been touched since. A legitimate re-touch (here, `set_text`)
     // is what triggers the retry once metrics are available.

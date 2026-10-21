@@ -3,7 +3,7 @@
 //! [`FontMetricsStore`] holds per-glyph measurement data extracted from each
 //! loaded font at load time, keyed by the same string ID used by
 //! `FontStore` (`aberred-render`). This lets
-//! logic-side systems (e.g. `dynamictext_size_system`) measure text without
+//! logic-side systems (e.g. `dynamic_text_size_system`) measure text without
 //! touching the GL-bound `FontStore`/`NonSend<RaylibHandle>` — a requirement
 //! for splitting simulation logic onto its own thread, separate from the
 //! render/GL thread.
@@ -148,7 +148,7 @@ impl FontMetricsStore {
 }
 
 /// Tracks which font keys have already logged a "missing from
-/// `FontMetricsStore`" warning, so `dynamictext_size_system` warns once per
+/// `FontMetricsStore`" warning, so `dynamic_text_size_system` warns once per
 /// key instead of every frame. Same warn-once-per-key shape as
 /// [`GuiThemeWarnCache`](crate::resources::gui_theme::GuiThemeWarnCache),
 /// sharing its underlying bookkeeping via
@@ -165,7 +165,7 @@ impl FontMetricsWarnCache {
 }
 
 /// Shared test fixtures, usable from other modules' `#[cfg(test)]` code
-/// (e.g. `dynamictext_size.rs`, `menu.rs`) so a single "synthetic font"
+/// (e.g. `dynamic_text_size.rs`, `menu.rs`) so a single "synthetic font"
 /// glyph table doesn't get re-derived per module.
 #[cfg(test)]
 pub(crate) mod test_support {
