@@ -37,19 +37,19 @@ use crate::components::tint::Tint;
 use crate::components::world_position::WorldPosition;
 use crate::components::z_index::ZIndex;
 use crate::protocol::stats::ThreadStats;
-use crate::resources::appstate::AppState;
+use crate::resources::app_state::AppState;
+use crate::resources::camera_follow_config::CameraFollowConfig;
 use crate::resources::camera2d::{Camera2D, MainCamera};
-use crate::resources::camerafollowconfig::CameraFollowConfig;
-use crate::resources::debugmode::DebugMode;
-use crate::resources::debugoverlayconfig::DebugOverlayConfig;
-use crate::resources::gameconfig::GameConfig;
-use crate::resources::guitheme::GuiThemeStore;
+use crate::resources::debug_mode::DebugMode;
+use crate::resources::debug_overlay_config::DebugOverlayConfig;
+use crate::resources::game_config::GameConfig;
+use crate::resources::gui_theme::GuiThemeStore;
 use crate::resources::input::InputState;
-use crate::resources::postprocessshader::PostProcessShader;
-use crate::resources::scenemanager::SceneManager;
+use crate::resources::post_process_shader::PostProcessShader;
+use crate::resources::scene_manager::SceneManager;
 use crate::resources::thread_stats::{AudioStats, SimStats};
-use crate::resources::worldsignals::{SignalSnapshot, WorldSignals};
-use crate::resources::worldtime::WorldTime;
+use crate::resources::world_signals::{SignalSnapshot, WorldSignals};
+use crate::resources::world_time::WorldTime;
 
 /// Bundled to keep `build_drawable_snapshot`'s system-param count under
 /// bevy_ecs's 16-param function-system limit.

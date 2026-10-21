@@ -48,7 +48,7 @@ pub fn lua_scene_entered_observer(trigger: On<SceneEntered>, mut ctx: DrainCtx) 
 mod tests {
     use super::*;
     use crate::lua_plugin::{lua_exec, lua_global, new_drain_test_world};
-    use aberred_core::resources::worldsignals::WorldSignals;
+    use aberred_core::resources::world_signals::WorldSignals;
     use std::sync::Arc;
 
     /// A Lua test world with both scene observers.

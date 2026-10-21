@@ -24,12 +24,12 @@ use crate::events::menu::MenuSelected;
 use crate::math::Vec2;
 use crate::protocol::audio::AudioCmd;
 use crate::protocol::render_assets::RenderAssetCmd;
-use crate::resources::fontmetrics::{FontMetricsStore, FontMetricsWarnCache};
-use crate::resources::gamestate::GameState::Quitting;
-use crate::resources::gamestate::NextGameState;
+use crate::resources::font_metrics::{FontMetricsStore, FontMetricsWarnCache};
+use crate::resources::game_state::GameState::Quitting;
+use crate::resources::game_state::NextGameState;
 use crate::resources::input::InputAction;
 use crate::resources::next_scene::NextScene;
-use crate::resources::texturedims::TextureDimsStore;
+use crate::resources::texture_dims::TextureDimsStore;
 use bevy_ecs::prelude::*;
 use log::{debug, warn};
 
@@ -577,11 +577,11 @@ pub fn menu_selection_observer(
 mod tests {
     use super::*;
     use crate::math::{Color, Vec2};
-    use crate::resources::worldsignals::WorldSignals;
+    use crate::resources::world_signals::WorldSignals;
     use bevy_ecs::message::Messages;
     use bevy_ecs::system::RunSystemOnce;
 
-    use crate::resources::fontmetrics::test_support::lowercase_alphabet_metrics;
+    use crate::resources::font_metrics::test_support::lowercase_alphabet_metrics;
 
     fn new_test_world() -> World {
         let mut world = World::new();

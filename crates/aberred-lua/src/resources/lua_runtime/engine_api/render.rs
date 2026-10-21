@@ -504,9 +504,9 @@ mod tests {
     use crate::systems::lua_commands::process_render_command;
     use aberred_core::components::shadow::Shadow;
     use aberred_core::math::{Color, Rect};
-    use aberred_core::resources::guitheme::{GuiNinePatch, GuiTheme, GuiThemeStore};
-    use aberred_core::resources::postprocessshader::PostProcessShader;
-    use aberred_core::resources::uniformvalue::UniformValue;
+    use aberred_core::resources::gui_theme::{GuiNinePatch, GuiTheme, GuiThemeStore};
+    use aberred_core::resources::post_process_shader::PostProcessShader;
+    use aberred_core::resources::uniform_value::UniformValue;
 
     /// Runs `script`, then applies every queued render + GUI-theme command.
     fn apply_script(script: &str) -> (PostProcessShader, GuiThemeStore) {

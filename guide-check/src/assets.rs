@@ -114,7 +114,7 @@ mod textures {
     } // GLUE
 
     use aberredengine::prelude::*;
-    use aberredengine::core::resources::texturedims::TextureDimsStore;
+    use aberredengine::core::resources::texture_dims::TextureDimsStore;
 
     fn spawn_player_once_texture_ready(
         dims: Res<TextureDimsStore>,
@@ -162,7 +162,7 @@ mod fonts {
     });
     } // GLUE
 
-    use aberredengine::core::resources::fontmetrics::FontMetricsStore;
+    use aberredengine::core::resources::font_metrics::FontMetricsStore;
 
     fn measure_label(fonts: Res<FontMetricsStore>) {
         if let Some(metrics) = fonts.0.get("arcade") {
@@ -360,7 +360,7 @@ mod tilemaps {
 mod map_files {
     use aberredengine::prelude::*;
     use aberredengine::core::events::spawnmap::{MapSpawned, SpawnMapRequested};
-    use aberredengine::core::resources::mapdata::load_map;
+    use aberredengine::core::resources::map_data::load_map;
 
     fn spawn_level(_: On<SceneEntered>, mut commands: Commands) {
         match load_map("assets/levels/level01.json") {

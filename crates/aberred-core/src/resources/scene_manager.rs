@@ -28,7 +28,7 @@ pub struct SceneManager {
     scenes: FxHashMap<String, Entity>,
     /// Currently active scene name (set by `scene_switch_system`).
     pub active_scene: Option<String>,
-    /// The [`WorldTime::frame_count`](crate::resources::worldtime::WorldTime::frame_count)
+    /// The [`WorldTime::frame_count`](crate::resources::world_time::WorldTime::frame_count)
     /// of the sim tick that last entered a scene (set by `scene_switch_system`).
     /// `None` before the first scene. A scene's per-tick updates skip this
     /// tick (see [`past_scene_entry`](crate::systems::scene_dispatch::past_scene_entry)).
@@ -50,7 +50,7 @@ impl SceneManager {
     }
 
     /// Whether a scene was entered on the sim tick `frame`
-    /// ([`WorldTime::frame_count`](crate::resources::worldtime::WorldTime::frame_count)).
+    /// ([`WorldTime::frame_count`](crate::resources::world_time::WorldTime::frame_count)).
     pub fn entered_on(&self, frame: u64) -> bool {
         self.entered_at == Some(frame)
     }

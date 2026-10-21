@@ -5,11 +5,11 @@
 //! and entity registrations on every switch.
 
 use aberredengine::core::events::scene::{SceneEntered, SceneExited};
-use aberredengine::core::resources::gamestate::{GameState, NextGameState};
+use aberredengine::core::resources::game_state::{GameState, NextGameState};
 use aberredengine::core::resources::next_scene::NextScene;
-use aberredengine::core::resources::scenemanager::SceneManager;
-use aberredengine::core::resources::systemsstore::{self as hook_keys, SystemsStore};
-use aberredengine::core::resources::worldsignals::WorldSignals;
+use aberredengine::core::resources::scene_manager::SceneManager;
+use aberredengine::core::resources::systems_store::{self as hook_keys, SystemsStore};
+use aberredengine::core::resources::world_signals::WorldSignals;
 use aberredengine::core::systems::scene_dispatch::{
     insert_scene_manager, scene_enter_play, scene_switch_poll, scene_switch_system,
 };

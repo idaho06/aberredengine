@@ -1,7 +1,7 @@
 //! Shared "warn once per key" bookkeeping.
 //!
-//! Several resources (e.g. [`GuiThemeWarnCache`](crate::resources::guitheme::GuiThemeWarnCache),
-//! [`FontMetricsWarnCache`](crate::resources::fontmetrics::FontMetricsWarnCache))
+//! Several resources (e.g. [`GuiThemeWarnCache`](crate::resources::gui_theme::GuiThemeWarnCache),
+//! [`FontMetricsWarnCache`](crate::resources::font_metrics::FontMetricsWarnCache))
 //! want to log a warning the first time a string key is reported
 //! missing/invalid, then stay silent for that key on every subsequent call —
 //! this is the shared comparison/insert logic behind `warn_once`-style

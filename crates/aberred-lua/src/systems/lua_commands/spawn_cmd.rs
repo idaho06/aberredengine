@@ -43,7 +43,7 @@ use crate::resources::lua_runtime::{
     RigidBodyData, SpawnCmd, SpriteData, StuckToData, TextData, TweenPositionData,
     TweenRotationData, TweenScaleData, TweenScreenPositionData,
 };
-use aberred_core::resources::worldsignals::WorldSignals;
+use aberred_core::resources::world_signals::WorldSignals;
 use aberred_core::systems::propagate_transforms::ComputeInitialGlobalTransform;
 
 use super::parse::convert_animation_condition;
@@ -709,8 +709,8 @@ mod tests {
     use aberred_core::components::timer::Timer;
     use aberred_core::components::tween::{Easing, LoopMode, Tween};
     use aberred_core::events::phase::PhaseEntered;
-    use aberred_core::resources::uniformvalue::UniformValue;
-    use aberred_core::resources::worldtime::WorldTime;
+    use aberred_core::resources::uniform_value::UniformValue;
+    use aberred_core::resources::world_time::WorldTime;
     use aberred_core::systems::phase::phase_system;
     use bevy_ecs::system::RunSystemOnce;
 

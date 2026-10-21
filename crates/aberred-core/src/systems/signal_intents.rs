@@ -10,10 +10,10 @@
 
 use bevy_ecs::prelude::*;
 
-use crate::resources::gamestate::NextGameState;
+use crate::resources::game_state::NextGameState;
 use crate::resources::next_scene::NextScene;
 use crate::resources::signal_intents::SignalIntents;
-use crate::resources::worldsignals::WorldSignals;
+use crate::resources::world_signals::WorldSignals;
 
 /// Drains [`SignalIntents`] into [`WorldSignals`], [`NextScene`] and [`NextGameState`]. See the
 /// module doc comment for cadence.

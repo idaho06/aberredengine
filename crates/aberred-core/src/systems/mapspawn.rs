@@ -29,12 +29,12 @@ use crate::components::z_index::ZIndex;
 use crate::events::spawnmap::{MapSpawned, SpawnMapRequested};
 use crate::math::Color;
 use crate::protocol::render_assets::RenderAssetCmd;
-use crate::resources::animationstore::{AnimationClip, AnimationStore};
-use crate::resources::mapdata::{
+use crate::resources::animation_store::{AnimationClip, AnimationStore};
+use crate::resources::map_data::{
     EntityDef, MapData, ParticleEmitterShapeEntry, ParticleEmitterTtlEntry,
 };
-use crate::resources::texturefilter::TextureFilter;
-use crate::resources::worldsignals::WorldSignals;
+use crate::resources::texture_filter::TextureFilter;
+use crate::resources::world_signals::WorldSignals;
 
 /// Load all assets referenced by `map` into the engine stores, spawn its
 /// entities, then trigger [`MapSpawned`] with them. Called by
@@ -230,7 +230,7 @@ fn spawn_entity(commands: &mut Commands, def: &EntityDef) -> Entity {
 fn insert_particle_emitter(
     mut entity_commands: EntityCommands<'_>,
     world_signals: &WorldSignals,
-    entry: &crate::resources::mapdata::ParticleEmitterEntry,
+    entry: &crate::resources::map_data::ParticleEmitterEntry,
 ) {
     let templates: Vec<Entity> = entry
         .template_keys
@@ -317,7 +317,7 @@ pub fn spawn_map_observer(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::resources::mapdata::BoxColliderEntry;
+    use crate::resources::map_data::BoxColliderEntry;
     use crate::testing::approx_eq;
     use bevy_ecs::world::CommandQueue;
 
@@ -351,7 +351,7 @@ mod tests {
 
     #[test]
     fn spawn_map_queues_render_asset_cmds_and_spawns_entities() {
-        use crate::resources::mapdata::{FontEntry, TextureEntry};
+        use crate::resources::map_data::{FontEntry, TextureEntry};
 
         let mut world = World::new();
         let mut queue = CommandQueue::default();
@@ -446,7 +446,7 @@ mod tests {
 
     #[test]
     fn spawn_map_registers_animations_in_the_store() {
-        use crate::resources::mapdata::AnimationEntry;
+        use crate::resources::map_data::AnimationEntry;
         let map = MapData {
             animations: vec![AnimationEntry {
                 key: "walk".into(),
@@ -473,7 +473,7 @@ mod tests {
 
     #[test]
     fn entity_def_fields_become_components() {
-        use crate::resources::mapdata::{DynamicTextEntry, SpriteEntry};
+        use crate::resources::map_data::{DynamicTextEntry, SpriteEntry};
         let map = MapData {
             entities: vec![
                 EntityDef {
@@ -566,7 +566,7 @@ mod tests {
 
     #[test]
     fn particle_emitter_resolves_templates_registered_later_in_the_map() {
-        use crate::resources::mapdata::{
+        use crate::resources::map_data::{
             ParticleEmitterEntry, ParticleEmitterShapeEntry, ParticleEmitterTtlEntry,
         };
         let emitter = |ttl| ParticleEmitterEntry {
@@ -654,7 +654,7 @@ mod tests {
 
     #[test]
     fn spawn_map_observer_spawns_and_forwards_render_asset_cmds() {
-        use crate::resources::mapdata::TextureEntry;
+        use crate::resources::map_data::TextureEntry;
         use bevy_ecs::message::Messages;
         let mut world = observer_world();
 

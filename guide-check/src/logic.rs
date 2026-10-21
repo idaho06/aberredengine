@@ -134,7 +134,7 @@ mod own_components_and_resources {
 
 // Define your own `SystemParam` bundle
 mod define_your_own_systemparam_bundle {
-    use aberredengine::core::resources::gamestate::{GameState, NextGameState};
+    use aberredengine::core::resources::game_state::{GameState, NextGameState};
     use aberredengine::prelude::*;
 
     /// What this game's gameplay systems reach for, as one parameter.
@@ -176,7 +176,7 @@ mod tests {
     use super::define_your_own_systemparam_bundle::Game;
     use aberredengine::bevy_ecs::message::Messages;
     use aberredengine::bevy_ecs::system::RunSystemOnce;
-    use aberredengine::core::resources::gamestate::{GameState, NextGameState};
+    use aberredengine::core::resources::game_state::{GameState, NextGameState};
     use aberredengine::prelude::*;
     use aberredengine::test_support::TestWorld;
 

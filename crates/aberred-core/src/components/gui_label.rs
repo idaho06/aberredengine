@@ -13,7 +13,7 @@ use crate::math::Vec2;
 use bevy_ecs::prelude::Component;
 
 use crate::components::gui_themed::Themed;
-use crate::resources::guitheme::DEFAULT_GUI_THEME_KEY;
+use crate::resources::gui_theme::DEFAULT_GUI_THEME_KEY;
 
 /// Static themed label panel, rendered via the named theme (`theme_key`,
 /// looked up in `GuiThemeStore`)'s optional `label` nine-patch (skipped

@@ -13,13 +13,13 @@
 //!
 //! # Time Scaling
 //!
-//! The countdown respects [`WorldTime::time_scale`](crate::resources::worldtime::WorldTime),
+//! The countdown respects [`WorldTime::time_scale`](crate::resources::world_time::WorldTime),
 //! so slow-motion effects affect TTL duration.
 
 use bevy_ecs::prelude::*;
 
 use crate::components::ttl::Ttl;
-use crate::resources::worldtime::WorldTime;
+use crate::resources::world_time::WorldTime;
 
 /// Decrements TTL and despawns entities when it reaches zero.
 ///

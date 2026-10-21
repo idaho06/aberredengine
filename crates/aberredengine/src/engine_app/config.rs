@@ -1,6 +1,6 @@
 use super::builder::EngineBuilder;
 use aberred_core::error::EngineError;
-use aberred_core::resources::gameconfig::GameConfig;
+use aberred_core::resources::game_config::GameConfig;
 use log::warn;
 
 impl EngineBuilder {

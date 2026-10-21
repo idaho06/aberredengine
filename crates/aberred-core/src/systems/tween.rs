@@ -7,7 +7,7 @@
 
 use crate::components::tween::{Easing, LoopMode, Tween, TweenValue};
 use crate::events::tween::TweenFinished;
-use crate::resources::worldtime::WorldTime;
+use crate::resources::world_time::WorldTime;
 use bevy_ecs::prelude::*;
 
 /// Apply an easing function to a normalized time value.

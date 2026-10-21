@@ -15,7 +15,7 @@
 //! - [`collision_rule_index`] – rebuilds `CollisionRuleIndex` from rule entities on change
 //! - [`gamestate`] – check for pending state transitions and trigger events
 //! - [`gridlayout`] – spawn entities from JSON-defined grid layouts
-//! - [`group`] – count entities per tracked group and publish to [`WorldSignals`](crate::resources::worldsignals::WorldSignals)
+//! - [`group`] – count entities per tracked group and publish to [`WorldSignals`](crate::resources::world_signals::WorldSignals)
 //! - [`gui_hit_test`] – resolve `GuiInteractable` hover/press/click state from cursor + mouse button
 //! - [`gui_layout`] – resolve GUI children's `ScreenPosition` from parent `ScreenPosition` + `GuiOffset`
 //! - [`gui_progressbar_signal_update`] – keep `GuiProgressBar.value` in sync with `WorldSignals` for signal-bound bars

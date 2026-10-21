@@ -250,8 +250,8 @@ mod tests {
     use crate::resources::lua_runtime::LuaRuntime;
     use crate::systems::lua_commands::process_gameconfig_command;
     use aberred_core::math::Color;
-    use aberred_core::resources::gameconfig::GameConfig;
-    use aberred_core::resources::texturefilter::TextureFilter;
+    use aberred_core::resources::game_config::GameConfig;
+    use aberred_core::resources::texture_filter::TextureFilter;
 
     /// Runs `script`, then applies every queued game-config command to `config`.
     fn apply_script(script: &str, config: &mut GameConfig) {

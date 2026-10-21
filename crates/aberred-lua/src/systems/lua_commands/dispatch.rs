@@ -23,12 +23,12 @@ use mlua::prelude::{Lua, LuaResult, LuaTable};
 use crate::resources::lua_runtime::{LuaRuntime, PhaseSnapshot};
 use aberred_core::components::phase::Phase;
 use aberred_core::protocol::audio::AudioCmd;
-use aberred_core::resources::gamestate::NextGameState;
+use aberred_core::resources::game_state::NextGameState;
 use aberred_core::resources::input::InputState;
 use aberred_core::resources::next_scene::NextScene;
-use aberred_core::resources::systemsstore::SystemsStore;
-use aberred_core::resources::worldsignals::WorldSignals;
-use aberred_core::resources::worldtime::WorldTime;
+use aberred_core::resources::systems_store::SystemsStore;
+use aberred_core::resources::world_signals::WorldSignals;
+use aberred_core::resources::world_time::WorldTime;
 
 use super::{
     ContextQueries, DrainScope, EffectCmdBufs, SignalTargets, build_entity_context,

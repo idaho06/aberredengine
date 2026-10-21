@@ -29,7 +29,7 @@
 
 use crate::components::group::Group;
 use crate::resources::group::TrackedGroups;
-use crate::resources::worldsignals::WorldSignals;
+use crate::resources::world_signals::WorldSignals;
 use bevy_ecs::prelude::*;
 
 use rustc_hash::FxHashMap;

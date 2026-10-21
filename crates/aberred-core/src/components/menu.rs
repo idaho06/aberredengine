@@ -138,7 +138,7 @@ pub enum MenuAction {
     /// [`NextScene`](crate::resources::next_scene::NextScene).
     RequestScene(String),
     /// Request quitting the game, through
-    /// [`NextGameState`](crate::resources::gamestate::NextGameState).
+    /// [`NextGameState`](crate::resources::game_state::NextGameState).
     RequestQuit,
     /// Do nothing (placeholder or disabled item).
     Noop,

@@ -8,7 +8,7 @@ use bevy_ecs::prelude::Resource;
 use rustc_hash::FxHashMap;
 use std::sync::Arc;
 
-use crate::resources::uniformvalue::UniformValue;
+use crate::resources::uniform_value::UniformValue;
 
 /// Uniform names the render system sets on every post-process pass.
 /// User uniforms are applied after them, so a user value under one of these

@@ -23,7 +23,7 @@ use aberred_core::components::shadow::Shadow;
 use aberred_core::components::tint::Tint;
 use aberred_core::math::{Color, Rect, Vec2};
 use aberred_core::resources::camera2d::Camera2D;
-use aberred_core::resources::texturefilter::TextureFilter;
+use aberred_core::resources::texture_filter::TextureFilter;
 use aberred_core::systems::scene_dispatch::WorldDraw;
 
 /// Adapts any raylib draw handle to the core-owned [`WorldDraw`] trait.
@@ -147,7 +147,7 @@ pub(super) fn screen_to_world2d_raylib(
 }
 
 /// Maps [`TextureFilter`] to raylib's `TextureFilter` FFI constant. The enum
-/// itself stays in `crate::resources::texturefilter` (engine-owned, no
+/// itself stays in `crate::resources::texture_filter` (engine-owned, no
 /// raylib reference); only this conversion needs raylib, so it lives here
 /// alongside the other render-boundary shims.
 pub(crate) fn texture_filter_to_ffi(filter: TextureFilter) -> i32 {

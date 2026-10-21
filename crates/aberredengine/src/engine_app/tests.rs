@@ -18,12 +18,12 @@ use aberred_core::protocol::raw_input::RawDeviceSnapshot;
 use aberred_core::protocol::render_logic::{LogicMsg, RenderMsg};
 use aberred_core::protocol::snapshot::SnapshotPublisher;
 use aberred_core::resources::drawable_snapshot::DrawableSnapshot;
-use aberred_core::resources::gameconfig::GameConfig;
-use aberred_core::resources::gamestate::{CurrentGameState, GameState};
+use aberred_core::resources::game_config::GameConfig;
+use aberred_core::resources::game_state::{CurrentGameState, GameState};
 use aberred_core::resources::input::InputAction;
 use aberred_core::resources::input::InputState;
 use aberred_core::resources::signal_keys as sk;
-use aberred_core::resources::systemsstore::SystemsStore;
+use aberred_core::resources::systems_store::SystemsStore;
 use aberred_core::systems::collision_detector::collision_detector;
 use aberred_core::systems::inputsimplecontroller::input_simple_controller;
 use aberred_core::systems::phase::phase_system;
@@ -665,7 +665,7 @@ fn valid_replay_and_scene_setups_pass_validation() {
 
 #[test]
 fn track_group_rejects_names_too_long_for_a_signal_key() {
-    use aberred_core::resources::worldsignals::MAX_GROUP_NAME_LEN;
+    use aberred_core::resources::world_signals::MAX_GROUP_NAME_LEN;
 
     let too_long = "g".repeat(MAX_GROUP_NAME_LEN + 1);
     let err = validate(&mut EngineBuilder::new().track_group(too_long.clone())).unwrap_err();

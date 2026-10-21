@@ -688,7 +688,7 @@ mod ambiguity_audit {
         // A user late system writing what Lua's update writes: only the
         // `LateUserSystems` edge orders the two.
         crate::engine_app::registrar::playing_late_system(
-            |_: ResMut<aberred_core::resources::worldsignals::WorldSignals>| {},
+            |_: ResMut<aberred_core::resources::world_signals::WorldSignals>| {},
         )(&mut sim);
 
         let metadata = sim

@@ -31,7 +31,7 @@ use crate::components::gui_offset::GuiOffset;
 use crate::components::signal_binding::SignalBinding;
 use crate::components::sprite::Sprite;
 use crate::components::z_index::ZIndex;
-use crate::resources::guitheme::{GuiTheme, GuiThemeStore, GuiThemeWarnCache};
+use crate::resources::gui_theme::{GuiTheme, GuiThemeStore, GuiThemeWarnCache};
 
 /// Spawns a themed caption child entity for a `GuiButton`/`GuiLabel`,
 /// unless `text` is empty (the "captionless widget" signal). `DynamicText`
@@ -462,7 +462,7 @@ mod tests {
 
     #[test]
     fn gui_label_signal_binding_placeholder_then_live_update() {
-        use crate::resources::worldsignals::WorldSignals;
+        use crate::resources::world_signals::WorldSignals;
         use crate::systems::signalbinding::update_world_signals_binding_system;
 
         let mut world = World::new();

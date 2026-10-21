@@ -4,13 +4,13 @@
 //! [`NextGameState`]. Emitting a [`GameStateChanged`] then triggers the
 //! observer in this module, which applies the transition to [`CurrentGameState`]
 //! and invokes the appropriate enter/exit systems stored in
-//! [`crate::resources::systemsstore::SystemsStore`].
+//! [`crate::resources::systems_store::SystemsStore`].
 //!
 //! This decouples the intent to change state from the mechanics of running
 //! setup/teardown systems and avoids borrowing conflicts.
-use crate::resources::gamestate::{CurrentGameState, GameState, NextGameState};
-use crate::resources::systemsstore as hook_keys;
-use crate::resources::systemsstore::SystemsStore;
+use crate::resources::game_state::{CurrentGameState, GameState, NextGameState};
+use crate::resources::systems_store as hook_keys;
+use crate::resources::systems_store::SystemsStore;
 use bevy_ecs::observer::On;
 use bevy_ecs::prelude::*;
 use log::{debug, info, warn};

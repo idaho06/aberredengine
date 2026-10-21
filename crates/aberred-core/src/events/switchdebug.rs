@@ -3,7 +3,7 @@
 //! Emitting a [`DebugToggled`] flips the presence of the [`DebugMode`]
 //! resource. Systems that render overlays or print extra diagnostics can gate
 //! their behavior on this resource.
-use crate::resources::debugmode::DebugMode;
+use crate::resources::debug_mode::DebugMode;
 use bevy_ecs::observer::On;
 use bevy_ecs::prelude::*;
 use log::{debug, info};

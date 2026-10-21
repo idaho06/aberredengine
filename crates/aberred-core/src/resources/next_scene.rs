@@ -10,7 +10,7 @@
 
 use bevy_ecs::prelude::Resource;
 
-use crate::resources::gamestate::NextGameState;
+use crate::resources::game_state::NextGameState;
 
 /// Request to switch to a scene, by name.
 ///
@@ -50,7 +50,7 @@ impl NextScene {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::resources::gamestate::GameState;
+    use crate::resources::game_state::GameState;
 
     #[test]
     fn take_returns_the_requested_scene_once() {

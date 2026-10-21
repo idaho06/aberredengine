@@ -23,7 +23,7 @@ use crate::components::screen_position::ScreenPosition;
 use crate::components::z_index::ZIndex;
 use crate::events::gui_interactable::GuiClicked;
 use crate::math::{Rect, Vec2};
-use crate::resources::guiinputstate::GuiInputState;
+use crate::resources::gui_input_state::GuiInputState;
 use crate::resources::input::InputState;
 
 fn contains_point(pos: Vec2, size: Vec2, point: Vec2) -> bool {

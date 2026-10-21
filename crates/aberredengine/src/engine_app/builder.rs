@@ -11,7 +11,7 @@ use super::registrar::{
 #[cfg(doc)] // doc links
 use super::schedule::SimSet;
 use aberred_core::events::scene::{SceneEntered, SceneExited};
-use aberred_core::resources::systemsstore as hook_keys;
+use aberred_core::resources::systems_store as hook_keys;
 use aberred_core::systems::scene_dispatch::WorldDrawCallback;
 use aberred_render::resources::scene_table::{GuiCallback, RenderSceneTable, SceneRender};
 use rustc_hash::FxHashMap;
@@ -117,7 +117,7 @@ impl EngineBuilder {
     /// engine moves to `Playing` on its own unless the hook requested another
     /// state through `NextGameState` (e.g. `Quitting`), which then wins.
     ///
-    /// The system is registered into [`SystemsStore`](aberred_core::resources::systemsstore::SystemsStore)
+    /// The system is registered into [`SystemsStore`](aberred_core::resources::systems_store::SystemsStore)
     /// under the key `"setup"`.
     pub fn on_setup<M>(mut self, system: impl IntoSystem<(), (), M> + Send + 'static) -> Self {
         self.setup_hook = Some(hook_registrar(hook_keys::SETUP, system));
@@ -389,7 +389,7 @@ impl EngineBuilder {
         self
     }
 
-    /// Register a named scene for [`SceneManager`](aberred_core::resources::scenemanager::SceneManager)-based games.
+    /// Register a named scene for [`SceneManager`](aberred_core::resources::scene_manager::SceneManager)-based games.
     ///
     /// A scene is a name: its behavior comes from observers of
     /// [`SceneEntered`]/[`SceneExited`] ([`on_scene_enter`](Self::on_scene_enter),
@@ -454,7 +454,7 @@ impl EngineBuilder {
         RenderSceneTable(self.scene_render.clone())
     }
 
-    /// Set the initial scene for [`SceneManager`](aberred_core::resources::scenemanager::SceneManager)-based games.
+    /// Set the initial scene for [`SceneManager`](aberred_core::resources::scene_manager::SceneManager)-based games.
     ///
     /// This scene is entered (triggering [`SceneEntered`]) when the game
     /// transitions to the `Playing` state.

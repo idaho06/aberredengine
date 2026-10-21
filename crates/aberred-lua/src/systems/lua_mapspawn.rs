@@ -10,7 +10,7 @@ use crate::components::lua_on_animation_finished::LuaOnAnimationFinished;
 use crate::components::luasetup::LuaSetup;
 use crate::resources::lua_runtime::{LuaRuntime, MapLuaCmd};
 use aberred_core::events::spawnmap::{MapSpawned, SpawnMapRequested};
-use aberred_core::resources::mapdata::load_map;
+use aberred_core::resources::map_data::load_map;
 use bevy_ecs::prelude::*;
 
 /// Attaches the Lua callback components named by each spawned map entity's
@@ -55,7 +55,7 @@ pub fn process_lua_map_commands(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use aberred_core::resources::mapdata::{EntityDef, MapData};
+    use aberred_core::resources::map_data::{EntityDef, MapData};
 
     #[test]
     fn map_spawned_attaches_lua_components_by_entity_def() {

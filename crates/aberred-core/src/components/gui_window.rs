@@ -1,7 +1,7 @@
 //! Static themed GUI window panel.
 //!
 //! The [`GuiWindow`] component marks a screen-space entity as a themed
-//! panel, rendered as a nine-patch background using [`GuiTheme`](crate::resources::guitheme::GuiTheme).
+//! panel, rendered as a nine-patch background using [`GuiTheme`](crate::resources::gui_theme::GuiTheme).
 //! It carries panel rendering data only; child layout and interaction come
 //! from other GUI components.
 
@@ -11,7 +11,7 @@ use crate::math::Vec2;
 use bevy_ecs::prelude::Component;
 
 use crate::components::gui_themed::Themed;
-use crate::resources::guitheme::DEFAULT_GUI_THEME_KEY;
+use crate::resources::gui_theme::DEFAULT_GUI_THEME_KEY;
 
 /// Themed panel rendered as a nine-patch background at the entity's `ScreenPosition`.
 /// `theme_key` selects which named theme in `GuiThemeStore` to render with

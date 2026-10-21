@@ -55,10 +55,10 @@ use aberred_core::protocol::render_logic::{LogicMsg, RenderMsg};
 use aberred_core::protocol::snapshot::SnapshotPublisher;
 use aberred_core::protocol::tick_input::TickInput;
 use aberred_core::resources::drawable_snapshot::DrawableSnapshot;
-use aberred_core::resources::fontmetrics::FontMetrics;
-use aberred_core::resources::gameconfig::GameConfig;
-use aberred_core::resources::gamestate::{CurrentGameState, GameState};
-use aberred_core::resources::systemsstore as hook_keys;
+use aberred_core::resources::font_metrics::FontMetrics;
+use aberred_core::resources::game_config::GameConfig;
+use aberred_core::resources::game_state::{CurrentGameState, GameState};
+use aberred_core::resources::systems_store as hook_keys;
 use aberred_core::systems::time::update_world_time;
 
 /// A headless logic-thread `World` plus its `sim`/`present` schedules.

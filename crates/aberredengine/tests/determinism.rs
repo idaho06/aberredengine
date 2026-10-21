@@ -33,7 +33,7 @@ use aberredengine::core::resources::input::InputState;
 use aberredengine::core::resources::render_size::RenderSize;
 use aberredengine::core::resources::signal_intents::SignalIntent;
 use aberredengine::core::resources::signal_keys as sk;
-use aberredengine::core::resources::worldsignals::WorldSignals;
+use aberredengine::core::resources::world_signals::WorldSignals;
 use aberredengine::raylib::ffi::KeyboardKey;
 use aberredengine::test_support::{TestWorld, TestWorldBuilder};
 
@@ -366,7 +366,7 @@ use aberredengine::core::EngineError;
 use aberredengine::core::protocol::replay::{
     REPLAY_FORMAT_VERSION, REPLAY_MAGIC, ReplayHeader, config_digest,
 };
-use aberredengine::core::resources::gameconfig::GameConfig;
+use aberredengine::core::resources::game_config::GameConfig;
 use aberredengine::test_support::{
     hash_world_state, read_tick_inputs_from_replay, validate_replay_header,
     write_tick_inputs_to_replay,
@@ -725,8 +725,8 @@ fn golden_replay_rust_scene_matches_checked_in_trail() {
 
 use aberredengine::core::components::rigid_body::RigidBody;
 use aberredengine::core::math::Vec2;
-use aberredengine::core::resources::gamestate::{CurrentGameState, GameState};
-use aberredengine::core::resources::worldtime::WorldTime;
+use aberredengine::core::resources::game_state::{CurrentGameState, GameState};
+use aberredengine::core::resources::world_time::WorldTime;
 use aberredengine::core::systems::asset_loader::AssetLoader;
 
 /// A deterministic `TestWorld` whose Setup lasts `setup_ticks` ticks (its
@@ -830,7 +830,7 @@ fn setup_intents_land_on_the_first_playing_tick() {
 use aberredengine::bevy_ecs::system::RunSystemOnce;
 use aberredengine::core::protocol::render_assets::RenderAssetCmd;
 use aberredengine::core::protocol::render_logic::RenderMsg;
-use aberredengine::core::resources::texturefilter::TextureFilter;
+use aberredengine::core::resources::texture_filter::TextureFilter;
 use aberredengine::core::systems::asset_loader::AssetError;
 
 /// Drains the render commands forwarded so far.

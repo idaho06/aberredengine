@@ -11,8 +11,8 @@
 
 use crate::protocol::asset_kind::{AssetChange, AssetKind, LoadOutcome};
 use crate::protocol::render_assets::RenderAssetCmd;
-use crate::resources::debugoverlayconfig::DebugOverlayConfig;
-use crate::resources::fontmetrics::FontMetrics;
+use crate::resources::debug_overlay_config::DebugOverlayConfig;
+use crate::resources::font_metrics::FontMetrics;
 use crate::resources::signal_intents::SignalIntent;
 
 /// Render thread -> logic thread messages.

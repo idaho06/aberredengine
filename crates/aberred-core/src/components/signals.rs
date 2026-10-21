@@ -15,7 +15,7 @@
 //! # Entity vs World Signals
 //!
 //! - [`Signals`] – per-entity signals, attached to specific entities
-//! - [`WorldSignals`](crate::resources::worldsignals::WorldSignals) – global signals accessible from any system
+//! - [`WorldSignals`](crate::resources::world_signals::WorldSignals) – global signals accessible from any system
 //!
 //! Use entity signals for per-entity state (health, sticky flag) and world
 //! signals for global state (score, scene name, tracked entity counts).

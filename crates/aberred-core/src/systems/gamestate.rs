@@ -15,7 +15,7 @@ use crate::events::gamestate::GameStateChanged;
 use crate::protocol::endpoints::RenderTx;
 use crate::protocol::render_logic::RenderMsg;
 use crate::resources::collision_contacts::CollisionContacts;
-use crate::resources::gamestate::{CurrentGameState, GameState, NextGameState};
+use crate::resources::game_state::{CurrentGameState, GameState, NextGameState};
 use crate::resources::pending_assets::PendingAssets;
 use bevy_ecs::prelude::*;
 use log::info;

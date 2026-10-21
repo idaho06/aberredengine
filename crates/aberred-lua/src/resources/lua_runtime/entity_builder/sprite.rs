@@ -326,7 +326,7 @@ pub(super) fn register<M: LuaUserDataMethods<LuaEntityBuilder>>(
 mod tests {
     use super::super::test_helpers::{assert_runtime_error, built_spawn_cmd};
     use super::*;
-    use aberred_core::resources::uniformvalue::UniformValue;
+    use aberred_core::resources::uniform_value::UniformValue;
 
     fn built(chain: &str) -> super::super::SpawnCmd {
         built_spawn_cmd(&format!("engine.spawn(){chain}:build()"))

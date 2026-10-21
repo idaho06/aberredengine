@@ -146,7 +146,7 @@ use std::sync::Arc;
 use bevy_ecs::prelude::ResMut;
 use aberredengine::core::math::{Color, Rect, Vec2};
 use aberredengine::core::components::shadow::Shadow;
-use aberredengine::core::resources::guitheme::{GuiButtonSkin, GuiNinePatch, GuiTheme, GuiThemeStore};
+use aberredengine::core::resources::gui_theme::{GuiButtonSkin, GuiNinePatch, GuiTheme, GuiThemeStore};
 
 fn setup_gui_theme(mut theme_store: ResMut<GuiThemeStore>) {
     let panel_shadow = Some(Shadow { offset: Vec2::new(2.0, 2.0), color: Color::new(0, 0, 0, 120) });
@@ -895,7 +895,7 @@ use aberredengine::core::{
         screen_position::ScreenPosition,
         z_index::ZIndex,
     },
-    resources::{guitheme::*, next_scene::NextScene},
+    resources::{gui_theme::*, next_scene::NextScene},
     systems::GameCtx,
 };
 use bevy_ecs::hierarchy::ChildOf;

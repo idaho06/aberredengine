@@ -16,8 +16,8 @@ use aberred_core::components::global_transform2d::GlobalTransform2D;
 use aberred_core::components::rotation::Rotation;
 use aberred_core::components::scale::Scale;
 use aberred_core::components::world_position::WorldPosition;
-use aberred_core::resources::systemsstore::SystemsStore;
-use aberred_core::resources::worldsignals::WorldSignals;
+use aberred_core::resources::systems_store::SystemsStore;
+use aberred_core::resources::world_signals::WorldSignals;
 use aberred_core::systems::propagate_transforms::propagate_transforms;
 use aberred_core::testing::approx_eq;
 use aberred_lua::resources::lua_runtime::{

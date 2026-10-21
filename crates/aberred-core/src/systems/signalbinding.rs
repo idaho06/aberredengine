@@ -30,7 +30,7 @@ impl<'a> SignalStr<'a> {
 use crate::components::dynamic_text::DynamicText;
 use crate::components::signal_binding::{SignalBinding, SignalSource};
 use crate::components::signals::Signals;
-use crate::resources::worldsignals::WorldSignals;
+use crate::resources::world_signals::WorldSignals;
 use bevy_ecs::change_detection::DetectChangesMut;
 use bevy_ecs::prelude::*;
 

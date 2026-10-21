@@ -19,20 +19,20 @@ use aberred_core::components::shadow::Shadow;
 use aberred_core::math::{Color, Rect};
 use aberred_core::protocol::audio::AudioCmd;
 use aberred_core::protocol::render_assets::RenderAssetCmd;
-use aberred_core::resources::animationstore::{AnimationClip, AnimationStore};
+use aberred_core::resources::animation_store::{AnimationClip, AnimationStore};
+use aberred_core::resources::camera_follow_config::{CameraFollowConfig, EasingCurve, FollowMode};
 use aberred_core::resources::camera2d::MainCamera;
-use aberred_core::resources::camerafollowconfig::{CameraFollowConfig, EasingCurve, FollowMode};
-use aberred_core::resources::gameconfig::GameConfig;
-use aberred_core::resources::gamestate::{GameState, NextGameState};
+use aberred_core::resources::game_config::GameConfig;
+use aberred_core::resources::game_state::{GameState, NextGameState};
 use aberred_core::resources::group::TrackedGroups;
-use aberred_core::resources::guitheme::{
+use aberred_core::resources::gui_theme::{
     GuiButtonSkin, GuiNinePatch, GuiProgressBarSkin, GuiTheme, GuiThemeStore,
 };
 use aberred_core::resources::input_bindings::{InputBindings, binding_from_str};
 use aberred_core::resources::next_scene::NextScene;
-use aberred_core::resources::postprocessshader::PostProcessShader;
-use aberred_core::resources::texturefilter::TextureFilter;
-use aberred_core::resources::worldsignals::WorldSignals;
+use aberred_core::resources::post_process_shader::PostProcessShader;
+use aberred_core::resources::texture_filter::TextureFilter;
+use aberred_core::resources::world_signals::WorldSignals;
 
 /// Process a single audio command from Lua and write to the audio command channel.
 pub fn process_audio_command(audio_cmd_writer: &mut MessageWriter<AudioCmd>, cmd: AudioLuaCmd) {
@@ -658,12 +658,12 @@ mod tests {
     use aberred_core::math::Color;
     use aberred_core::protocol::audio::AudioCmd;
     use aberred_core::protocol::render_assets::RenderAssetCmd;
-    use aberred_core::resources::animationstore::AnimationStore;
-    use aberred_core::resources::gamestate::NextGameState;
-    use aberred_core::resources::guitheme::GuiThemeStore;
-    use aberred_core::resources::postprocessshader::PostProcessShader;
-    use aberred_core::resources::texturefilter::TextureFilter;
-    use aberred_core::resources::worldsignals::WorldSignals;
+    use aberred_core::resources::animation_store::AnimationStore;
+    use aberred_core::resources::game_state::NextGameState;
+    use aberred_core::resources::gui_theme::GuiThemeStore;
+    use aberred_core::resources::post_process_shader::PostProcessShader;
+    use aberred_core::resources::texture_filter::TextureFilter;
+    use aberred_core::resources::world_signals::WorldSignals;
 
     /// Bundled writers for both message types `translate_asset_command`
     /// can produce, plus a helper to read back what was written.

@@ -1,7 +1,7 @@
 //! Event to request spawning all assets and entities from a [`MapData`].
 //!
 //! Trigger this event after loading a map with
-//! [`crate::resources::mapdata::load_map`] to have the engine queue the map's
+//! [`crate::resources::map_data::load_map`] to have the engine queue the map's
 //! assets and spawn its entities (see [`SpawnMapRequested`]).
 //!
 //! The built-in [`crate::systems::mapspawn::spawn_map_observer`] handles this
@@ -11,7 +11,7 @@
 //! # Example
 //!
 //! ```rust,no_run
-//! # use aberred_core::resources::mapdata::load_map;
+//! # use aberred_core::resources::map_data::load_map;
 //! # use aberred_core::events::spawnmap::SpawnMapRequested;
 //! # use bevy_ecs::prelude::Commands;
 //! # fn example(mut commands: Commands) {
@@ -22,7 +22,7 @@
 
 use bevy_ecs::prelude::{Entity, Event};
 
-use crate::resources::mapdata::MapData;
+use crate::resources::map_data::MapData;
 
 /// Trigger this event to queue every texture and font in a [`MapData`], fill
 /// `AnimationStore` with its animations, and spawn its entity definitions.

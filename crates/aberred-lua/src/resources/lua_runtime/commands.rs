@@ -6,7 +6,7 @@
 // Re-export UniformValue from its canonical location for internal convenience.
 pub use super::spawn_data::TweenConfig;
 use aberred_core::components::timer::TimerMode;
-pub use aberred_core::resources::uniformvalue::UniformValue;
+pub use aberred_core::resources::uniform_value::UniformValue;
 
 /// Commands that Lua can queue for asset loading.
 /// These are processed by Rust systems that have access to the necessary resources.

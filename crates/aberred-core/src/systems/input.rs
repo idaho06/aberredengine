@@ -28,12 +28,12 @@ use crate::events::input::InputActionChanged;
 use crate::events::switchdebug::DebugToggled;
 use crate::protocol::raw_input::RawDeviceSnapshot;
 use crate::resources::camera2d::{Camera2D, MainCamera};
-use crate::resources::gameconfig::GameConfig;
+use crate::resources::game_config::GameConfig;
 use crate::resources::input::{BoolState, InputAction, InputState};
 use crate::resources::input_bindings::{AxisDirection, InputBinding, InputBindings, MouseButton};
-use crate::resources::rawinput::{ImguiCaptureMirror, PrevRawSnapshot};
+use crate::resources::raw_input::{ImguiCaptureMirror, PrevRawSnapshot};
 use crate::resources::render_size::RenderSize;
-use crate::resources::windowsize::WindowSize;
+use crate::resources::window_size::WindowSize;
 
 /// Shared engine-wide axis-to-digital crossing threshold for
 /// [`InputBinding::GamepadAxis`] (see that variant's doc comment for why

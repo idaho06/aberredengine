@@ -153,7 +153,7 @@ pub enum ReplayEntry {
 /// rate, and is already a sim-tick countdown rather than a wall-clock one,
 /// so it cannot change sim state. Including it only made playback refuse
 /// replays whose recording differed in a field the sim never observes.
-pub fn config_digest(config: &crate::resources::gameconfig::GameConfig) -> u64 {
+pub fn config_digest(config: &crate::resources::game_config::GameConfig) -> u64 {
     let mut h = ReplayHasher::new();
     h.write_u64(config.sim_hz.to_bits());
     h.write_f32(config.gamepad_deadzone);
@@ -207,9 +207,9 @@ mod tests {
 
     #[test]
     fn config_digest_changes_with_sim_hz() {
-        let mut c1 = crate::resources::gameconfig::GameConfig::new();
+        let mut c1 = crate::resources::game_config::GameConfig::new();
         c1.sim_hz = 240.0;
-        let mut c2 = crate::resources::gameconfig::GameConfig::new();
+        let mut c2 = crate::resources::game_config::GameConfig::new();
         c2.sim_hz = 120.0;
         assert_ne!(config_digest(&c1), config_digest(&c2));
     }

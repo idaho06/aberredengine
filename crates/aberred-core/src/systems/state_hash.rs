@@ -34,8 +34,8 @@ use crate::components::tween::{Easing, LoopMode, Tween, TweenValue};
 use crate::components::world_position::WorldPosition;
 use crate::protocol::replay::ReplayHasher;
 use crate::resources::sim_rng::SimRng;
-use crate::resources::worldsignals::WorldSignals;
-use crate::resources::worldtime::WorldTime;
+use crate::resources::world_signals::WorldSignals;
+use crate::resources::world_time::WorldTime;
 
 fn hash_vector2(h: &mut ReplayHasher, v: Vec2) {
     h.write_f32(v.x);

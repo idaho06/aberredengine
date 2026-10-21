@@ -9,9 +9,9 @@
 //! Keep the [`SignalIntent`] variant set minimal; extend on demand as real `GuiCallback` bodies
 //! need more `WorldSignals` methods or typed requests.
 
-use crate::resources::gamestate::{GameState, NextGameState};
+use crate::resources::game_state::{GameState, NextGameState};
 use crate::resources::next_scene::NextScene;
-use crate::resources::worldsignals::WorldSignals;
+use crate::resources::world_signals::WorldSignals;
 use bevy_ecs::prelude::{Entity, Resource};
 
 /// One deferred write against [`WorldSignals`], or a scene/quit request, produced by a

@@ -6,7 +6,7 @@
 use super::commands::*;
 use super::runtime::{LuaAppData, LuaRuntime, Ordered};
 use super::spawn_data::*;
-use aberred_core::resources::worldsignals::{SignalSnapshot, WorldSignals};
+use aberred_core::resources::world_signals::{SignalSnapshot, WorldSignals};
 use rustc_hash::FxHashSet;
 use std::cell::RefCell;
 use std::sync::Arc;
@@ -153,7 +153,7 @@ impl LuaRuntime {
     /// Updates the cached game configuration snapshot that Lua can read.
     pub fn update_gameconfig_cache(
         &self,
-        config: &aberred_core::resources::gameconfig::GameConfig,
+        config: &aberred_core::resources::game_config::GameConfig,
     ) {
         if let Some(data) = self.lua.app_data_ref::<LuaAppData>() {
             let mut snapshot = data.gameconfig_snapshot.borrow_mut();

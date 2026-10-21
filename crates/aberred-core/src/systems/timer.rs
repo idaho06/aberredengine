@@ -15,7 +15,7 @@ use bevy_ecs::system::SystemChangeTick;
 
 use crate::components::timer::{Timer, TimerMode};
 use crate::events::timer::TimerFired;
-use crate::resources::worldtime::WorldTime;
+use crate::resources::world_time::WorldTime;
 
 /// Advance all [`Timer`] components and trigger [`TimerFired`] when they expire.
 ///

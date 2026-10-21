@@ -20,20 +20,20 @@ use crate::resources::lua_runtime::{
 };
 use aberred_core::protocol::audio::AudioCmd;
 use aberred_core::protocol::render_assets::RenderAssetCmd;
-use aberred_core::resources::animationstore::AnimationStore;
+use aberred_core::resources::animation_store::AnimationStore;
+use aberred_core::resources::camera_follow_config::CameraFollowConfig;
 use aberred_core::resources::camera2d::MainCamera;
-use aberred_core::resources::camerafollowconfig::CameraFollowConfig;
-use aberred_core::resources::gameconfig::GameConfig;
-use aberred_core::resources::gamestate::NextGameState;
+use aberred_core::resources::game_config::GameConfig;
+use aberred_core::resources::game_state::NextGameState;
 use aberred_core::resources::group::TrackedGroups;
-use aberred_core::resources::guitheme::{GuiThemeStore, GuiThemeWarnCache};
+use aberred_core::resources::gui_theme::{GuiThemeStore, GuiThemeWarnCache};
 use aberred_core::resources::input::InputState;
 use aberred_core::resources::input_bindings::InputBindings;
 use aberred_core::resources::next_scene::NextScene;
-use aberred_core::resources::postprocessshader::PostProcessShader;
+use aberred_core::resources::post_process_shader::PostProcessShader;
 use aberred_core::resources::render_size::RenderSize;
-use aberred_core::resources::scenemanager::SceneManager;
-use aberred_core::resources::systemsstore::SystemsStore;
+use aberred_core::resources::scene_manager::SceneManager;
+use aberred_core::resources::systems_store::SystemsStore;
 
 use crate::systems::lua_commands::{
     DrainScope, EffectCmdBufs, SignalTargets, asset_cmd_to_audio_cmd,
@@ -43,8 +43,8 @@ use crate::systems::lua_commands::{
 };
 use aberred_core::resources::camera2d::Camera2D;
 use aberred_core::resources::signal_keys as sk;
-use aberred_core::resources::worldsignals::WorldSignals;
-use aberred_core::resources::worldtime::WorldTime;
+use aberred_core::resources::world_signals::WorldSignals;
+use aberred_core::resources::world_time::WorldTime;
 use aberred_core::systems::scene_dispatch::switch_to;
 use bevy_ecs::prelude::*;
 use bevy_ecs::system::SystemParam;

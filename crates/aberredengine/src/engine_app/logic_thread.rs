@@ -18,21 +18,21 @@ use aberred_core::protocol::raw_input::InputSample;
 use aberred_core::protocol::render_logic::{LogicMsg, RenderMsg, ReplayControl};
 use aberred_core::protocol::snapshot::SnapshotPublisher;
 use aberred_core::protocol::tick_input::TickInput;
-use aberred_core::resources::debugoverlayconfig::DebugOverlayConfig;
+use aberred_core::resources::debug_overlay_config::DebugOverlayConfig;
 use aberred_core::resources::deterministic_mode::DeterministicMode;
-use aberred_core::resources::fontmetrics::FontMetricsStore;
-use aberred_core::resources::gameconfig::GameConfig;
-use aberred_core::resources::gamestate::{CurrentGameState, GameState};
+use aberred_core::resources::font_metrics::FontMetricsStore;
+use aberred_core::resources::game_config::GameConfig;
+use aberred_core::resources::game_state::{CurrentGameState, GameState};
 use aberred_core::resources::input::InputAction;
 use aberred_core::resources::input::InputState;
 use aberred_core::resources::loaded_assets::LoadedAssets;
-use aberred_core::resources::rawinput::ImguiCaptureMirror;
+use aberred_core::resources::raw_input::ImguiCaptureMirror;
 use aberred_core::resources::render_size::RenderSize;
 use aberred_core::resources::signal_intents::SignalIntents;
-use aberred_core::resources::texturedims::TextureDimsStore;
+use aberred_core::resources::texture_dims::TextureDimsStore;
 use aberred_core::resources::thread_stats::SimStats;
-use aberred_core::resources::windowsize::WindowSize;
-use aberred_core::resources::worldtime::WorldTime;
+use aberred_core::resources::window_size::WindowSize;
+use aberred_core::resources::world_time::WorldTime;
 use aberred_core::systems::asset_tracking::settle_load;
 use aberred_core::systems::input::resolve_input_backlog;
 use aberred_core::systems::signal_intents::apply_signal_intents;
@@ -652,7 +652,7 @@ mod tests {
     use aberred_core::resources::pending_assets::PendingAssets;
     use aberred_core::resources::signal_intents::SignalIntent;
     use aberred_core::resources::sim_rng::SimRng;
-    use aberred_core::resources::worldsignals::WorldSignals;
+    use aberred_core::resources::world_signals::WorldSignals;
 
     fn test_replay_header() -> ReplayHeader {
         ReplayHeader {

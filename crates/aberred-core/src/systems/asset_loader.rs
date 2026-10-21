@@ -6,9 +6,9 @@ use bevy_ecs::system::SystemParam;
 use crate::protocol::asset_kind::AssetKind;
 use crate::protocol::audio::AudioCmd;
 use crate::protocol::render_assets::RenderAssetCmd;
-use crate::resources::fontmetrics::FontMetricsStore;
-use crate::resources::texturedims::TextureDimsStore;
-use crate::resources::texturefilter::TextureFilter;
+use crate::resources::font_metrics::FontMetricsStore;
+use crate::resources::texture_dims::TextureDimsStore;
+use crate::resources::texture_filter::TextureFilter;
 use crate::systems::asset_gate::{AssetGate, Verdict};
 use crate::systems::tilemap::tilemap_texture_cmd;
 
@@ -223,8 +223,8 @@ fn queues(verdict: Verdict, target: Option<(AssetKind, &str)>) -> Result<bool, A
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::resources::fontmetrics::test_support::lowercase_alphabet_metrics;
-    use crate::resources::gamestate::CurrentGameState;
+    use crate::resources::font_metrics::test_support::lowercase_alphabet_metrics;
+    use crate::resources::game_state::CurrentGameState;
     use crate::resources::loaded_assets::LoadedAssets;
     use crate::systems::tilemap::tilemap_texture_key;
     use bevy_ecs::system::RunSystemOnce;

@@ -6,9 +6,9 @@ use rustc_hash::FxHashMap;
 
 use crate::resources::fontstore::FontStore;
 use crate::resources::texturestore::TextureStore;
-use aberred_core::resources::appstate::AppState;
+use aberred_core::resources::app_state::AppState;
 use aberred_core::resources::signal_intents::SignalIntents;
-use aberred_core::resources::worldsignals::SignalSnapshot;
+use aberred_core::resources::world_signals::SignalSnapshot;
 use aberred_core::systems::scene_dispatch::WorldDrawCallback;
 
 /// Called every frame to draw the scene's ImGui GUI.
@@ -84,7 +84,7 @@ pub struct SceneRender {
 /// `render_system` resolves the active scene's GUI/world-draw callbacks
 /// against this table using
 /// `DrawableSnapshot.active_scene`, since the live
-/// [`SceneManager`](aberred_core::resources::scenemanager::SceneManager) (with its
+/// [`SceneManager`](aberred_core::resources::scene_manager::SceneManager) (with its
 /// mutable `active_scene` tracking) is logic-world-only. `SceneRender` is
 /// all fn pointers, so the clone is cheap and the table is immutable after
 /// startup. Only inserted when the game uses `.add_scene()`; a Lua game has a

@@ -13,7 +13,7 @@ use crate::components::sprite::Sprite;
 use crate::resources::collision_contacts::CollisionContacts;
 use crate::resources::group::TrackedGroups;
 use crate::resources::next_scene::NextScene;
-use crate::resources::worldsignals::WorldSignals;
+use crate::resources::world_signals::WorldSignals;
 
 /// Allowed error, in float steps (`f32::EPSILON` scaled to the compared
 /// values' magnitude), for [`approx_eq`] and [`vec2_approx_eq`]. The worst

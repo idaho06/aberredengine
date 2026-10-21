@@ -8,7 +8,7 @@ use bevy_ecs::prelude::Component;
 use rustc_hash::FxHashMap;
 use std::sync::Arc;
 
-use crate::resources::uniformvalue::UniformValue;
+use crate::resources::uniform_value::UniformValue;
 
 /// Component that attaches a shader to an individual entity.
 ///
@@ -18,7 +18,7 @@ use crate::resources::uniformvalue::UniformValue;
 /// # Example
 /// ```
 /// # use aberred_core::components::entity_shader::EntityShader;
-/// # use aberred_core::resources::uniformvalue::UniformValue;
+/// # use aberred_core::resources::uniform_value::UniformValue;
 /// // Apply an "inverse" shader to an entity
 /// let shader = EntityShader::new("inverse");
 ///

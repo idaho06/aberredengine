@@ -8,7 +8,7 @@ use crate::events::switchfullscreen::SwitchFullScreenEvent;
 use crate::resources::fullscreen::FullScreen;
 use crate::resources::mirrors::RenderGameConfig;
 use crate::resources::rendertarget::RenderTarget;
-use aberred_core::resources::gameconfig::GameConfig;
+use aberred_core::resources::game_config::GameConfig;
 use aberred_core::resources::render_size::RenderSize;
 use bevy_ecs::prelude::*;
 use log::{debug, error};

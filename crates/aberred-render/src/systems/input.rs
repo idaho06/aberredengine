@@ -6,7 +6,7 @@ use crate::resources::pending_imgui_capture::PendingImguiCapture;
 use crate::resources::quit_requested::QuitRequested;
 use aberred_core::protocol::endpoints::LogicBridge;
 use aberred_core::protocol::raw_input::{InputSample, MAX_GAMEPADS, RawDeviceSnapshot};
-use aberred_core::resources::windowsize::WindowSize;
+use aberred_core::resources::window_size::WindowSize;
 
 /// Highest raylib keyboard key code in use today (`KEY_KB_MENU`).
 const MAX_KEY_CODE: u32 = 348;

@@ -15,10 +15,10 @@ use bevy_ecs::prelude::*;
 use crate::components::camera_target::CameraTarget;
 use crate::components::global_transform2d::GlobalTransform2D;
 use crate::components::world_position::WorldPosition;
+use crate::resources::camera_follow_config::{CameraFollowConfig, EasingCurve, FollowMode};
 use crate::resources::camera2d::MainCamera;
-use crate::resources::camerafollowconfig::{CameraFollowConfig, EasingCurve, FollowMode};
 use crate::resources::render_size::RenderSize;
-use crate::resources::worldtime::WorldTime;
+use crate::resources::world_time::WorldTime;
 
 /// Zoom difference at or below which the camera stops lerping toward the
 /// target zoom. Must stay well above the float spacing at typical zoom

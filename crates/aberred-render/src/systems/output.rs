@@ -7,7 +7,7 @@ use crate::resources::imgui_bridge::ImguiBridge;
 use crate::resources::pending_imgui_capture::PendingImguiCapture;
 use aberred_core::protocol::endpoints::LogicBridge;
 use aberred_core::protocol::render_logic::LogicMsg;
-use aberred_core::resources::debugoverlayconfig::DebugOverlayConfig;
+use aberred_core::resources::debug_overlay_config::DebugOverlayConfig;
 use aberred_core::resources::render_size::RenderSize;
 use aberred_core::resources::signal_intents::SignalIntents;
 

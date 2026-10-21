@@ -34,7 +34,7 @@ use bevy_ecs::prelude::Component;
 
 /// Time-to-live component that automatically despawns entities after a duration.
 ///
-/// The countdown respects [`WorldTime::time_scale`](crate::resources::worldtime::WorldTime)
+/// The countdown respects [`WorldTime::time_scale`](crate::resources::world_time::WorldTime)
 /// and continues regardless of entity frozen state.
 #[derive(Component, Clone)]
 pub struct Ttl {

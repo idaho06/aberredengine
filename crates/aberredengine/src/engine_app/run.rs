@@ -16,7 +16,7 @@ use aberred_core::protocol::replay::{
 };
 use aberred_core::protocol::snapshot::{SnapshotConsumer, SnapshotPublisher};
 use aberred_core::resources::drawable_snapshot::DrawableSnapshot;
-use aberred_core::resources::gameconfig::default_render_fps;
+use aberred_core::resources::game_config::default_render_fps;
 use aberred_render::resources::mirrors::RenderGameConfig;
 use aberred_render::resources::quit_requested::QuitRequested;
 use aberred_render::resources::thread_stats::RenderStats;

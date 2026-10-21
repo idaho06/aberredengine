@@ -3,7 +3,7 @@
 //! # Loading and saving
 //!
 //! ```rust,no_run
-//! use aberred_core::resources::mapdata::{MapData, load_map, save_map};
+//! use aberred_core::resources::map_data::{MapData, load_map, save_map};
 //!
 //! let map = load_map("assets/levels/level01.json").expect("failed to load level");
 //! save_map("/tmp/level01.json", &map).expect("failed to save level");
@@ -15,7 +15,7 @@
 //! have the engine load all referenced assets and spawn entities:
 //!
 //! ```rust,no_run
-//! # use aberred_core::resources::mapdata::load_map;
+//! # use aberred_core::resources::map_data::load_map;
 //! # use aberred_core::events::spawnmap::SpawnMapRequested;
 //! # use bevy_ecs::prelude::Commands;
 //! # fn example(mut commands: Commands) {
@@ -78,7 +78,7 @@ pub struct FontEntry {
 
 /// An animation clip defined as a strip of frames in a sprite sheet.
 ///
-/// Fields map 1:1 to [`crate::resources::animationstore::AnimationClip`].
+/// Fields map 1:1 to [`crate::resources::animation_store::AnimationClip`].
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct AnimationEntry {
     /// Key used to look up the animation in `AnimationStore`.
@@ -148,7 +148,7 @@ pub struct EntityDef {
     /// Text rendering data (maps to [`crate::components::dynamic_text::DynamicText`]).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub dynamic_text: Option<DynamicTextEntry>,
-    /// Animation key in [`crate::resources::animationstore::AnimationStore`].
+    /// Animation key in [`crate::resources::animation_store::AnimationStore`].
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub animation_key: Option<String>,
     /// Particle emitter component data.

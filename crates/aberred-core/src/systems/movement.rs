@@ -16,7 +16,7 @@ use crate::components::world_position::WorldPosition;
 use crate::protocol::audio::AudioCmd;
 use crate::resources::render_size::RenderSize;
 use crate::resources::signal_keys as sk;
-use crate::resources::worldtime::WorldTime;
+use crate::resources::world_time::WorldTime;
 
 /// Apply acceleration forces and velocity to `WorldPosition` using the frame's delta time.
 ///

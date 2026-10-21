@@ -11,10 +11,10 @@ use aberred_core::components::camera_target::CameraTarget;
 use aberred_core::components::global_transform2d::GlobalTransform2D;
 use aberred_core::components::world_position::WorldPosition;
 use aberred_core::math::Rect;
+use aberred_core::resources::camera_follow_config::{CameraFollowConfig, EasingCurve, FollowMode};
 use aberred_core::resources::camera2d::{Camera2D, MainCamera};
-use aberred_core::resources::camerafollowconfig::{CameraFollowConfig, EasingCurve, FollowMode};
 use aberred_core::resources::render_size::RenderSize;
-use aberred_core::resources::worldtime::WorldTime;
+use aberred_core::resources::world_time::WorldTime;
 use aberred_core::systems::camera_follow::camera_follow_system;
 use aberred_core::testing::approx_eq;
 

@@ -43,10 +43,10 @@ use aberred_core::systems::propagate_transforms::ComputeInitialGlobalTransform;
 use bevy_ecs::system::EntityCommand;
 
 use crate::resources::lua_runtime::{EntityCmd, LuaPhaseCallbackKind, TweenConfig, UniformValue};
-use aberred_core::resources::animationstore::AnimationStore;
-use aberred_core::resources::systemsstore as hook_keys;
-use aberred_core::resources::systemsstore::SystemsStore;
-use aberred_core::resources::worldsignals::WorldSignals;
+use aberred_core::resources::animation_store::AnimationStore;
+use aberred_core::resources::systems_store as hook_keys;
+use aberred_core::resources::systems_store::SystemsStore;
+use aberred_core::resources::world_signals::WorldSignals;
 
 /// Resolve a Lua-supplied u64 entity ID, warning and returning None on invalid bits.
 pub(super) fn resolve_entity(id: u64) -> Option<Entity> {
@@ -1590,7 +1590,7 @@ mod tests {
 
     #[test]
     fn set_animation_resets_frame_and_syncs_sprite_texture_from_store() {
-        use aberred_core::resources::animationstore::AnimationClip;
+        use aberred_core::resources::animation_store::AnimationClip;
         let mut store = AnimationStore::default();
         store.animations.insert(
             "run".to_string(),

@@ -8,7 +8,7 @@ use super::input_snapshot::InputSnapshot;
 use super::input_snapshot::for_each_digital_button;
 use super::spawn_data::*;
 use aberred_core::resources::input::InputState;
-use aberred_core::resources::worldsignals::SignalSnapshot;
+use aberred_core::resources::world_signals::SignalSnapshot;
 use mlua::prelude::*;
 use rustc_hash::{FxHashMap, FxHashSet};
 use std::cell::{Cell, RefCell};

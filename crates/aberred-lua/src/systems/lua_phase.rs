@@ -215,7 +215,7 @@ mod tests {
     use crate::lua_plugin::{lua_exec, lua_global};
     use crate::resources::lua_runtime::LuaRuntime;
     use crate::systems::lua_commands::init_dispatch_resources;
-    use aberred_core::resources::worldtime::WorldTime;
+    use aberred_core::resources::world_time::WorldTime;
     use aberred_core::systems::phase::phase_system;
     use bevy_ecs::system::RunSystemOnce;
 

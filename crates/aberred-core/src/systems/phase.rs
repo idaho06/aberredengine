@@ -32,7 +32,7 @@ use bevy_ecs::prelude::*;
 
 use crate::components::phase::Phase;
 use crate::events::phase::{PhaseEntered, PhaseExited};
-use crate::resources::worldtime::WorldTime;
+use crate::resources::world_time::WorldTime;
 
 /// Apply requested [`Phase`] transitions and trigger [`PhaseEntered`] /
 /// [`PhaseExited`]; see the [module docs](self).
@@ -73,7 +73,7 @@ pub fn phase_system(
 mod tests {
     use super::*;
     use crate::events::phase::{PhaseEntered, PhaseExited};
-    use crate::resources::worldtime::WorldTime;
+    use crate::resources::world_time::WorldTime;
     use crate::testing::approx_eq;
     use bevy_ecs::system::RunSystemOnce;
 

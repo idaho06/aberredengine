@@ -16,7 +16,7 @@ use crate::math::Vec2;
 use bevy_ecs::prelude::Component;
 
 use crate::components::gui_themed::Themed;
-use crate::resources::guitheme::DEFAULT_GUI_THEME_KEY;
+use crate::resources::gui_theme::DEFAULT_GUI_THEME_KEY;
 
 /// Render this entity via `GuiTheme.button`'s nine-patch skin. Carries
 /// everything needed to spawn itself: `gui_button_spawn_system` reacts on

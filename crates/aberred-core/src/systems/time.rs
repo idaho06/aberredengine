@@ -4,7 +4,7 @@
 //! resource once per frame, applying `time_scale` to the provided delta.
 use bevy_ecs::prelude::*;
 
-use crate::resources::worldtime::WorldTime;
+use crate::resources::world_time::WorldTime;
 
 /// Update elapsed and delta seconds on the `WorldTime` resource.
 ///

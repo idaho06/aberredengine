@@ -1,7 +1,7 @@
 use super::builder::EngineBuilder;
 use aberred_core::error::EngineError;
 use aberred_core::resources::signal_keys as sk;
-use aberred_core::resources::worldsignals::MAX_GROUP_NAME_LEN;
+use aberred_core::resources::world_signals::MAX_GROUP_NAME_LEN;
 
 /// Registers and enters [`sk::MAIN_SCENE`] when the game registers no scene of
 /// its own: no `.add_scene()`, no `.initial_scene()` and no Lua (which drives

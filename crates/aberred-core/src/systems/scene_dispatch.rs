@@ -18,7 +18,7 @@
 //!
 //! # Related
 //!
-//! - [`crate::resources::scenemanager::SceneManager`] — the registry resource
+//! - [`crate::resources::scene_manager::SceneManager`] — the registry resource
 //! - `aberredengine::EngineBuilder::add_scene` — builder method for registration
 
 use std::sync::Arc;
@@ -31,19 +31,19 @@ use crate::components::persistent::{Persistent, SceneCleanup};
 use crate::components::scene::SceneName;
 use crate::events::scene::{SceneEntered, SceneExited};
 use crate::math::{Color, Vec2};
-use crate::resources::appstate::AppState;
+use crate::resources::app_state::AppState;
 use crate::resources::camera2d::Camera2D;
 use crate::resources::collision_contacts::CollisionContacts;
-use crate::resources::gamestate::{CurrentGameState, GameState, NextGameState};
+use crate::resources::game_state::{CurrentGameState, GameState, NextGameState};
 use crate::resources::group::TrackedGroups;
 use crate::resources::next_scene::NextScene;
 use crate::resources::render_size::RenderSize;
-use crate::resources::scenemanager::SceneManager;
+use crate::resources::scene_manager::SceneManager;
 use crate::resources::signal_keys as sk;
-use crate::resources::systemsstore as hook_keys;
-use crate::resources::systemsstore::SystemsStore;
-use crate::resources::worldsignals::{SignalSnapshot, WorldSignals};
-use crate::resources::worldtime::WorldTime;
+use crate::resources::systems_store as hook_keys;
+use crate::resources::systems_store::SystemsStore;
+use crate::resources::world_signals::{SignalSnapshot, WorldSignals};
+use crate::resources::world_time::WorldTime;
 
 /// Minimal world-space drawing interface for `WorldDrawCallback`.
 /// Uses concrete types only so the callback stays object-safe.

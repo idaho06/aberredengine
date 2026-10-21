@@ -4,7 +4,7 @@
 //! When multiple targets exist, the one with the highest
 //! [`priority`](CameraTarget::priority) is chosen. Its [`zoom`](CameraTarget::zoom)
 //! is then lerped into the camera each frame via
-//! [`CameraFollowConfig::zoom_lerp_speed`](crate::resources::camerafollowconfig::CameraFollowConfig::zoom_lerp_speed).
+//! [`CameraFollowConfig::zoom_lerp_speed`](crate::resources::camera_follow_config::CameraFollowConfig::zoom_lerp_speed).
 
 use bevy_ecs::prelude::Component;
 

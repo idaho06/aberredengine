@@ -8,7 +8,7 @@
 //!
 //! 1. Register groups to track via `tracked_groups.add_group("ball")`
 //! 2. The group counting system queries all entities with matching [`Group`](crate::components::group::Group) components
-//! 3. Entity counts are published to [`WorldSignals`](crate::resources::worldsignals::WorldSignals) as `"group_count:{name}"`
+//! 3. Entity counts are published to [`WorldSignals`](crate::resources::world_signals::WorldSignals) as `"group_count:{name}"`
 //!
 //! # Integration with Phases
 //!
@@ -36,13 +36,13 @@
 //! # Related
 //!
 //! - [`crate::systems::group::update_group_counts_system`] – the counting system
-//! - [`crate::resources::worldsignals::WorldSignals`] – where counts are published
+//! - [`crate::resources::world_signals::WorldSignals`] – where counts are published
 //! - [`crate::components::group::Group`] – the group tag component
 
 use bevy_ecs::prelude::*;
 use rustc_hash::FxHashSet;
 
-use crate::resources::worldsignals::MAX_GROUP_NAME_LEN;
+use crate::resources::world_signals::MAX_GROUP_NAME_LEN;
 
 /// Whether `group_name`'s `"group_count:{name}"` key fits the no-allocation
 /// stack buffer; warns when it doesn't.
@@ -60,7 +60,7 @@ fn fits_signal_key(group_name: &str) -> bool {
 /// Resource that holds the set of group names to track for entity counting.
 ///
 /// Groups added here will have their entity counts published to
-/// [`WorldSignals`](crate::resources::worldsignals::WorldSignals) by
+/// [`WorldSignals`](crate::resources::world_signals::WorldSignals) by
 /// [`update_group_counts_system`](crate::systems::group::update_group_counts_system).
 ///
 /// A scene switch resets it to its persistent groups (see

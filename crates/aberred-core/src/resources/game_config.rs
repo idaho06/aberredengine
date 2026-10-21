@@ -36,7 +36,7 @@ use log::{debug, info, warn};
 use std::path::PathBuf;
 
 use crate::math::Color;
-use crate::resources::texturefilter::TextureFilter;
+use crate::resources::texture_filter::TextureFilter;
 
 /// Default safe values for startup
 const DEFAULT_RENDER_WIDTH: u32 = 640;

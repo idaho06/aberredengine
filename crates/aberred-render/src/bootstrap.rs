@@ -30,12 +30,12 @@ use aberred_core::error::EngineError;
 use aberred_core::protocol::endpoints::{LogicBridge, LogicTx, shutdown_logic_bridge};
 use aberred_core::protocol::render_assets::RenderAssetCmd;
 use aberred_core::protocol::snapshot::SnapshotConsumer;
-use aberred_core::resources::debugoverlayconfig::DebugOverlayConfig;
-use aberred_core::resources::gameconfig::GameConfig;
-use aberred_core::resources::guitheme::GuiThemeWarnCache;
+use aberred_core::resources::debug_overlay_config::DebugOverlayConfig;
+use aberred_core::resources::game_config::GameConfig;
+use aberred_core::resources::gui_theme::GuiThemeWarnCache;
 use aberred_core::resources::render_size::RenderSize;
 use aberred_core::resources::signal_intents::SignalIntents;
-use aberred_core::resources::windowsize::WindowSize;
+use aberred_core::resources::window_size::WindowSize;
 use aberred_core::systems::render_assets::update_bevy_render_asset_cmds;
 
 /// Build the render (main-thread) `World`: raylib window +

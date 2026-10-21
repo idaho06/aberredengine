@@ -63,7 +63,7 @@ pub enum EngineError {
     #[error(
         "EngineBuilder: .track_group(\"{name}\") is {len} bytes; group names are limited \
          to {max} bytes.",
-        max = crate::resources::worldsignals::MAX_GROUP_NAME_LEN
+        max = crate::resources::world_signals::MAX_GROUP_NAME_LEN
     )]
     GroupNameTooLong { name: String, len: usize },
 

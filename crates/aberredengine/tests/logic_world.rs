@@ -38,8 +38,8 @@ use aberredengine::core::protocol::raw_input::RawDeviceSnapshot;
 use aberredengine::core::protocol::render_assets::RenderAssetCmd;
 use aberredengine::core::protocol::render_logic::{LogicMsg, RenderMsg};
 use aberredengine::core::protocol::tick_input::TickInput;
-use aberredengine::core::resources::fontmetrics::{FontMetrics, GlyphMetrics};
-use aberredengine::core::resources::gamestate::{CurrentGameState, GameState, NextGameState};
+use aberredengine::core::resources::font_metrics::{FontMetrics, GlyphMetrics};
+use aberredengine::core::resources::game_state::{CurrentGameState, GameState, NextGameState};
 use aberredengine::core::resources::input::InputAction;
 use aberredengine::core::resources::input::InputState;
 use aberredengine::core::resources::input_bindings::MouseButton;
@@ -47,10 +47,10 @@ use aberredengine::core::resources::loaded_assets::LoadedAssets;
 use aberredengine::core::resources::next_scene::NextScene;
 use aberredengine::core::resources::pending_assets::PendingAssets;
 use aberredengine::core::resources::render_size::RenderSize;
-use aberredengine::core::resources::scenemanager::SceneManager;
+use aberredengine::core::resources::scene_manager::SceneManager;
 use aberredengine::core::resources::signal_intents::SignalIntent;
 use aberredengine::core::resources::signal_keys as sk;
-use aberredengine::core::resources::worldsignals::WorldSignals;
+use aberredengine::core::resources::world_signals::WorldSignals;
 use aberredengine::core::systems::asset_loader::AssetLoader;
 use aberredengine::core::systems::scene_dispatch::in_scene;
 use aberredengine::engine_app::SimSet;
@@ -2452,7 +2452,7 @@ fn lua_collision_ongoing_sees_started_entity_write() {
 #[cfg(feature = "lua")]
 #[test]
 fn lua_collision_clone_then_move_template_clones_the_old_position() {
-    use aberredengine::core::resources::worldsignals::WorldSignals;
+    use aberredengine::core::resources::world_signals::WorldSignals;
     let mut tw = lua_script_world(
         "collision_clone_order",
         "function on_started(ctx)\n\
@@ -2514,7 +2514,7 @@ fn lua_collision_started_and_ended_apply_collision_commands() {
 #[test]
 fn lua_game_clean_all_entities_hook_forgets_contacts() {
     use aberredengine::core::components::persistent::Persistent;
-    use aberredengine::core::resources::systemsstore::{self as hook_keys, SystemsStore};
+    use aberredengine::core::resources::systems_store::{self as hook_keys, SystemsStore};
 
     let mut tw = lua_script_world(
         "clean_all",
@@ -2726,7 +2726,7 @@ fn lua_and_rust_rules_on_one_pair_fire_once_per_tick() {
 fn lua_timer_callback_sees_this_ticks_animation_state() {
     use aberredengine::core::components::animation::{Animation, AnimationController, Condition};
     use aberredengine::core::components::timer::TimerMode;
-    use aberredengine::core::resources::animationstore::{AnimationClip, AnimationStore};
+    use aberredengine::core::resources::animation_store::{AnimationClip, AnimationStore};
     use aberredengine::lua::components::lua_on_timer_fired::LuaOnTimerFired;
 
     let mut tw = lua_script_world(
@@ -2760,7 +2760,7 @@ fn lua_timer_callback_sees_this_ticks_animation_state() {
 #[test]
 fn rust_only_game_spawns_map_entities_without_lua_components() {
     use aberredengine::core::events::spawnmap::SpawnMapRequested;
-    use aberredengine::core::resources::mapdata::{EntityDef, MapData};
+    use aberredengine::core::resources::map_data::{EntityDef, MapData};
     use aberredengine::lua::components::luasetup::LuaSetup;
 
     let mut tw = TestWorld::new();

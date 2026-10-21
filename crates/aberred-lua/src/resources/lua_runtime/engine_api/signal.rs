@@ -246,7 +246,7 @@ mod tests {
 
     fn set_snapshot(
         runtime: &LuaRuntime,
-        snapshot: aberred_core::resources::worldsignals::SignalSnapshot,
+        snapshot: aberred_core::resources::world_signals::SignalSnapshot,
     ) {
         if let Some(data) = runtime.lua().app_data_ref::<LuaAppData>() {
             *data.signal_snapshot.borrow_mut() = Arc::new(snapshot);
@@ -260,7 +260,7 @@ mod tests {
         scalars.insert("hp".to_string(), 42.0f32);
         set_snapshot(
             &runtime,
-            aberred_core::resources::worldsignals::SignalSnapshot {
+            aberred_core::resources::world_signals::SignalSnapshot {
                 scalars: Arc::new(scalars),
                 ..Default::default()
             },
@@ -288,7 +288,7 @@ mod tests {
         integers.insert("score".to_string(), 7);
         set_snapshot(
             &runtime,
-            aberred_core::resources::worldsignals::SignalSnapshot {
+            aberred_core::resources::world_signals::SignalSnapshot {
                 integers: Arc::new(integers),
                 ..Default::default()
             },
@@ -316,7 +316,7 @@ mod tests {
         strings.insert("name".to_string(), "Aberred".to_string());
         set_snapshot(
             &runtime,
-            aberred_core::resources::worldsignals::SignalSnapshot {
+            aberred_core::resources::world_signals::SignalSnapshot {
                 strings: Arc::new(strings),
                 ..Default::default()
             },
@@ -344,7 +344,7 @@ mod tests {
         flags.insert("paused".to_string());
         set_snapshot(
             &runtime,
-            aberred_core::resources::worldsignals::SignalSnapshot {
+            aberred_core::resources::world_signals::SignalSnapshot {
                 flags: Arc::new(flags),
                 ..Default::default()
             },
@@ -372,7 +372,7 @@ mod tests {
         group_counts.insert("enemies".to_string(), 3u32);
         set_snapshot(
             &runtime,
-            aberred_core::resources::worldsignals::SignalSnapshot {
+            aberred_core::resources::world_signals::SignalSnapshot {
                 group_counts: Arc::new(group_counts),
                 ..Default::default()
             },
@@ -400,7 +400,7 @@ mod tests {
         entities.insert("player".to_string(), 99u64);
         set_snapshot(
             &runtime,
-            aberred_core::resources::worldsignals::SignalSnapshot {
+            aberred_core::resources::world_signals::SignalSnapshot {
                 entities: Arc::new(entities),
                 ..Default::default()
             },

@@ -4,8 +4,8 @@ use bevy_ecs::system::IntoObserverSystem;
 use super::logic_world::register_persistent_system;
 use super::schedule::{LateUserSystems, SimSet};
 use aberred_core::components::persistent::Persistent;
-use aberred_core::resources::scenemanager::SceneManager;
-use aberred_core::resources::systemsstore::SystemsStore;
+use aberred_core::resources::scene_manager::SceneManager;
+use aberred_core::resources::systems_store::SystemsStore;
 use aberred_core::systems::gamestate::{state_is_playing, state_runs_scenes};
 use aberred_core::systems::scene_dispatch::{in_scene, past_scene_entry};
 

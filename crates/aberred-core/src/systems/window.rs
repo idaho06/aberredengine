@@ -10,7 +10,7 @@
 //! `apply_gameconfig_changes` on the render side.
 
 use crate::events::window::WindowResized;
-use crate::resources::windowsize::WindowSize;
+use crate::resources::window_size::WindowSize;
 use bevy_ecs::prelude::*;
 
 /// Triggers [`WindowResized`] whenever [`WindowSize`] differs from its

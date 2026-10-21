@@ -16,7 +16,7 @@
 //!
 //! - [`crate::components::animation::Animation`] – per-entity animation state
 //! - [`crate::components::animation::AnimationController`] – rule-based animation selection
-//! - [`crate::resources::animationstore::AnimationStore`] – animation definitions
+//! - [`crate::resources::animation_store::AnimationStore`] – animation definitions
 
 use crate::math::Vec2;
 use bevy_ecs::prelude::*;
@@ -26,10 +26,10 @@ use crate::components::signals::Signals;
 use crate::components::sprite::Sprite;
 use crate::components::world_position::WorldPosition;
 use crate::events::animation::AnimationFinished;
-use crate::resources::animationstore::AnimationStore;
+use crate::resources::animation_store::AnimationStore;
 use crate::resources::signal_keys as sk;
-use crate::resources::texturedims::TextureDimsStore;
-use crate::resources::worldtime::WorldTime;
+use crate::resources::texture_dims::TextureDimsStore;
+use crate::resources::world_time::WorldTime;
 
 /// Advance animation playback and update the sprite frame.
 ///
@@ -847,7 +847,7 @@ mod tests {
     #[test]
     fn animation_finished_fires_exactly_once() {
         use crate::events::animation::AnimationFinished;
-        use crate::resources::animationstore::AnimationClip;
+        use crate::resources::animation_store::AnimationClip;
         use std::sync::Arc;
 
         #[derive(Resource, Default)]
@@ -948,7 +948,7 @@ mod tests {
 
     #[test]
     fn animation_break_starves_entities_after_finished_nonlooped() {
-        use crate::resources::animationstore::AnimationClip;
+        use crate::resources::animation_store::AnimationClip;
         use std::sync::Arc;
 
         // delta > frame_duration (0.1s at 10 fps) so every entity advances this tick.
@@ -1050,7 +1050,7 @@ mod tests {
     #[test]
     fn animation_stale_signal_cleared_after_restart() {
         use crate::components::signals::Signals;
-        use crate::resources::animationstore::AnimationClip;
+        use crate::resources::animation_store::AnimationClip;
         use std::sync::Arc;
 
         let mut world = World::new();
@@ -1160,8 +1160,8 @@ mod tests {
         frame_count: usize,
         fps: f32,
         looped: bool,
-    ) -> crate::resources::animationstore::AnimationClip {
-        crate::resources::animationstore::AnimationClip {
+    ) -> crate::resources::animation_store::AnimationClip {
+        crate::resources::animation_store::AnimationClip {
             tex_key: std::sync::Arc::from(tex_key),
             position: Vec2 {
                 x: position.0,

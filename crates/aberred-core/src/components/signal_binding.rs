@@ -6,7 +6,7 @@
 //! # Signal Sources
 //!
 //! Bindings can read from two sources:
-//! - [`WorldSignals`](crate::resources::worldsignals::WorldSignals) (default) – global signals like score, lives
+//! - [`WorldSignals`](crate::resources::world_signals::WorldSignals) (default) – global signals like score, lives
 //! - [`Signals`](super::signals::Signals) – per-entity signals from a specific entity
 //!
 //! # Supported Signal Types
@@ -39,7 +39,7 @@
 //! # Related
 //!
 //! - [`crate::systems::signalbinding::update_world_signals_binding_system`] – the update system
-//! - [`crate::resources::worldsignals::WorldSignals`] – global signal storage
+//! - [`crate::resources::world_signals::WorldSignals`] – global signal storage
 //! - [`super::signals::Signals`] – per-entity signal storage
 
 use bevy_ecs::prelude::{Component, Entity};
@@ -47,7 +47,7 @@ use bevy_ecs::prelude::{Component, Entity};
 /// Specifies where to read the signal value from.
 #[derive(Clone, Debug)]
 pub enum SignalSource {
-    /// Read from the global [`WorldSignals`](crate::resources::worldsignals::WorldSignals) resource.
+    /// Read from the global [`WorldSignals`](crate::resources::world_signals::WorldSignals) resource.
     World,
     /// Read from a specific entity's [`Signals`](super::signals::Signals) component.
     Entity(Entity),
@@ -86,7 +86,7 @@ pub struct SignalBinding {
 }
 
 impl SignalBinding {
-    /// Creates a new `SignalBinding` that reads from [`WorldSignals`](crate::resources::worldsignals::WorldSignals).
+    /// Creates a new `SignalBinding` that reads from [`WorldSignals`](crate::resources::world_signals::WorldSignals).
     ///
     /// # Arguments
     ///

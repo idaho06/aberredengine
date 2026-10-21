@@ -3,7 +3,7 @@
 use bevy_ecs::entity::Entities;
 use bevy_ecs::prelude::*;
 
-use crate::resources::worldsignals::WorldSignals;
+use crate::resources::world_signals::WorldSignals;
 
 /// Drop [`WorldSignals`] entity registrations that point at despawned entities.
 ///

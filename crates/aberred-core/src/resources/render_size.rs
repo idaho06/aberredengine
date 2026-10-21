@@ -2,7 +2,7 @@
 //!
 //! The internal render resolution (`[render] width/height` in `config.ini`):
 //! the size of the render target the game draws into, before it is scaled to
-//! the OS window ([`WindowSize`](crate::resources::windowsize::WindowSize)).
+//! the OS window ([`WindowSize`](crate::resources::window_size::WindowSize)).
 
 use bevy_ecs::prelude::Resource;
 

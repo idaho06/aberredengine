@@ -138,7 +138,7 @@ pub struct FontMetricsStore(pub FxHashMap<String, FontMetrics>);
 
 impl FontMetricsStore {
     /// Move the metrics entry for `old_key` to `new_key` in place (mirrors
-    /// [`TextureDimsStore::rename`](crate::resources::texturedims::TextureDimsStore::rename)).
+    /// [`TextureDimsStore::rename`](crate::resources::texture_dims::TextureDimsStore::rename)).
     /// No-op if `old_key` isn't tracked.
     pub fn rename(&mut self, old_key: &str, new_key: String) {
         if let Some(metrics) = self.0.remove(old_key) {
@@ -150,7 +150,7 @@ impl FontMetricsStore {
 /// Tracks which font keys have already logged a "missing from
 /// `FontMetricsStore`" warning, so `dynamictext_size_system` warns once per
 /// key instead of every frame. Same warn-once-per-key shape as
-/// [`GuiThemeWarnCache`](crate::resources::guitheme::GuiThemeWarnCache),
+/// [`GuiThemeWarnCache`](crate::resources::gui_theme::GuiThemeWarnCache),
 /// sharing its underlying bookkeeping via
 /// `warn_once::first_seen`.
 #[derive(Resource, Default)]

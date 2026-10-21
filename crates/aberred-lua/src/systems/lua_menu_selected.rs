@@ -37,9 +37,9 @@ mod tests {
     use crate::systems::lua_commands::init_dispatch_resources;
     use aberred_core::components::menu::{Menu, MenuAction, MenuActions};
     use aberred_core::math::Vec2;
-    use aberred_core::resources::gamestate::NextGameState;
+    use aberred_core::resources::game_state::NextGameState;
     use aberred_core::resources::next_scene::NextScene;
-    use aberred_core::resources::worldsignals::WorldSignals;
+    use aberred_core::resources::world_signals::WorldSignals;
     use aberred_core::systems::menu::menu_selection_observer;
 
     /// Both menu observers, as the engine registers them in a Lua game.

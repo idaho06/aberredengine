@@ -511,7 +511,7 @@ coordinates, `scroll_y` and the gamepad axes are plain fields.
 | `AssetLoader` | Queue texture, font, shader, tilemap, sound and music loads; check whether a texture or font has loaded. See [Section 6](#6-loading-assets). |
 | `MessageWriter<AudioCmd>` | Play, stop and unload sounds and music. A system that takes `AssetLoader` writes through `assets.audio()` instead. |
 | `ResMut<NextGameState>` | Request a game-state change, e.g. quitting with `.set(GameState::Quitting)`. |
-| `Res<TextureDimsStore>` | Pixel size of a loaded texture (`aberredengine::core::resources::texturedims`). `AssetLoader::texture_size` reads it too. |
+| `Res<TextureDimsStore>` | Pixel size of a loaded texture (`aberredengine::core::resources::texture_dims`). `AssetLoader::texture_size` reads it too. |
 
 Every logic-thread resource is listed in [Section 11](#11-engine-resources-quick-reference).
 
@@ -684,7 +684,7 @@ EngineBuilder::new()
 When many systems take the same handful of parameters, bundle them into one struct with `#[derive(SystemParam)]`. The struct is a system parameter like any other: a system takes it next to its own queries, an observer takes it after `On<E>`, and it carries helper methods:
 
 ```rust
-use aberredengine::core::resources::gamestate::{GameState, NextGameState};
+use aberredengine::core::resources::game_state::{GameState, NextGameState};
 use aberredengine::prelude::*;
 
 /// What this game's gameplay systems reach for, as one parameter.
@@ -881,7 +881,7 @@ Keys (`key`) are arbitrary strings you'll reference later in `Sprite` components
 
 ```rust
 use aberredengine::prelude::*;
-use aberredengine::core::resources::texturedims::TextureDimsStore;
+use aberredengine::core::resources::texture_dims::TextureDimsStore;
 
 fn spawn_player_once_texture_ready(
     dims: Res<TextureDimsStore>,
@@ -944,7 +944,7 @@ asset_cmds.write(RenderAssetCmd::Font {
 To measure text (e.g. to size UI elements) without touching the render-world `FontStore`, read `FontMetricsStore` — populated asynchronously the same way `TextureDimsStore` is, so tolerate a missing key the first tick or two after queuing the load:
 
 ```rust
-use aberredengine::core::resources::fontmetrics::FontMetricsStore;
+use aberredengine::core::resources::font_metrics::FontMetricsStore;
 
 fn measure_label(fonts: Res<FontMetricsStore>) {
     if let Some(metrics) = fonts.0.get("arcade") {
@@ -1219,7 +1219,7 @@ A map file (JSON deserialized into `MapData`, any extension) lists textures, fon
 ```rust
 use aberredengine::prelude::*;
 use aberredengine::core::events::spawnmap::{MapSpawned, SpawnMapRequested};
-use aberredengine::core::resources::mapdata::load_map;
+use aberredengine::core::resources::map_data::load_map;
 
 fn spawn_level(_: On<SceneEntered>, mut commands: Commands) {
     match load_map("assets/levels/level01.json") {
@@ -1956,7 +1956,7 @@ callback signature is `fn(ctx, input)` — the same as the animation-finished an
 
 ### GUI widgets
 
-**Source:** `aberred-core/src/components/{guiwindow,guibutton,guilabel,guiimage,guiinteractable,guioffset}.rs`, `aberred-core/src/resources/guitheme.rs`, `aberred-core/src/systems/{gui_spawn,gui_layout,gui_hit_test}.rs`, `aberred-core/src/events/gui_interactable.rs`
+**Source:** `aberred-core/src/components/{guiwindow,guibutton,guilabel,guiimage,guiinteractable,guioffset}.rs`, `aberred-core/src/resources/gui_theme.rs`, `aberred-core/src/systems/{gui_spawn,gui_layout,gui_hit_test}.rs`, `aberred-core/src/events/gui_interactable.rs`
 
 The engine provides a themed, nine-patch-skinned in-game GUI widget system — panels, buttons, labels, and
 clickable images. It is plain ECS components and systems, fully usable from pure Rust; all of its systems

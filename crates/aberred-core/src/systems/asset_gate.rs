@@ -16,7 +16,7 @@ use crate::protocol::asset_kind::AssetKind;
 use crate::protocol::audio::AudioCmd;
 use crate::protocol::render_assets::RenderAssetCmd;
 use crate::resources::deterministic_mode::DeterministicMode;
-use crate::resources::gamestate::{CurrentGameState, GameState};
+use crate::resources::game_state::{CurrentGameState, GameState};
 use crate::resources::loaded_assets::LoadedAssets;
 use crate::resources::warn_once::first_seen;
 
@@ -187,7 +187,7 @@ impl AssetGate<'_> {
 mod tests {
     use super::*;
     use crate::protocol::asset_kind::AssetChange;
-    use crate::resources::texturefilter::TextureFilter;
+    use crate::resources::texture_filter::TextureFilter;
 
     fn s(v: &str) -> String {
         v.to_owned()

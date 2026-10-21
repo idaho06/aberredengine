@@ -240,7 +240,7 @@ impl LuaRuntime {
 
 /// Rejects an unknown follow-mode name at the Lua call site (the processor would only warn).
 fn checked_follow_mode(name: String) -> LuaResult<String> {
-    use aberred_core::resources::camerafollowconfig::FollowMode;
+    use aberred_core::resources::camera_follow_config::FollowMode;
     match FollowMode::from_name(&name) {
         Some(_) => Ok(name),
         None => Err(LuaError::runtime(format!(
@@ -253,7 +253,7 @@ fn checked_follow_mode(name: String) -> LuaResult<String> {
 
 /// Rejects an unknown follow-easing name at the Lua call site (the processor would only warn).
 fn checked_follow_easing(name: String) -> LuaResult<String> {
-    use aberred_core::resources::camerafollowconfig::EasingCurve;
+    use aberred_core::resources::camera_follow_config::EasingCurve;
     match name.parse::<EasingCurve>() {
         Ok(_) => Ok(name),
         Err(()) => Err(LuaError::runtime(format!(
@@ -268,10 +268,10 @@ mod tests {
     use crate::resources::lua_runtime::LuaRuntime;
     use crate::systems::lua_commands::{process_camera_command, process_camera_follow_command};
     use aberred_core::math::{Rect, Vec2};
-    use aberred_core::resources::camera2d::{Camera2D, MainCamera};
-    use aberred_core::resources::camerafollowconfig::{
+    use aberred_core::resources::camera_follow_config::{
         CameraFollowConfig, EasingCurve, FollowMode,
     };
+    use aberred_core::resources::camera2d::{Camera2D, MainCamera};
     use aberred_core::resources::render_size::RenderSize;
     use bevy_ecs::prelude::*;
     use bevy_ecs::system::SystemState;

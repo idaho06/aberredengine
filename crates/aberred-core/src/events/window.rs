@@ -9,7 +9,7 @@ use bevy_ecs::prelude::*;
 /// Triggered when the window's logical size changes.
 ///
 /// Carries the *new* width/height (in the same units as
-/// [`crate::resources::windowsize::WindowSize`]). Not triggered on the
+/// [`crate::resources::window_size::WindowSize`]). Not triggered on the
 /// first tick, and not triggered if either dimension is `<= 0`.
 #[derive(Event, Debug, Clone, Copy)]
 pub struct WindowResized {

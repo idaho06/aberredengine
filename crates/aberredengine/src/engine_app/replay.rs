@@ -15,7 +15,7 @@ use aberred_core::protocol::replay::{
     REPLAY_FORMAT_VERSION, REPLAY_MAGIC, ReplayEntry, ReplayHeader, config_digest,
 };
 use aberred_core::protocol::tick_input::TickInput;
-use aberred_core::resources::gameconfig::GameConfig;
+use aberred_core::resources::game_config::GameConfig;
 
 fn postcard_io_err(e: postcard::Error) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidData, e)

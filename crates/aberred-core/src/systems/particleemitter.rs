@@ -31,7 +31,7 @@ use crate::components::rotation::Rotation;
 use crate::components::ttl::Ttl;
 use crate::components::world_position::WorldPosition;
 use crate::resources::sim_rng::SimRng;
-use crate::resources::worldtime::WorldTime;
+use crate::resources::world_time::WorldTime;
 
 /// System that processes particle emitters and spawns particles.
 ///

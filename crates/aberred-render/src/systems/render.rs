@@ -9,7 +9,7 @@
 //!
 //! When the active scene descriptor provides a [`GuiCallback`], an ImGui frame
 //! is opened every render pass and the callback is invoked. This path is
-//! independent of [`DebugMode`](aberred_core::resources::debugmode::DebugMode) and is
+//! independent of [`DebugMode`](aberred_core::resources::debug_mode::DebugMode) and is
 //! intended for persistent game-developer UI
 //! (HUDs, in-game editors, tool windows).
 
@@ -42,8 +42,8 @@ use aberred_core::components::tint::Tint;
 use aberred_core::components::world_position::WorldPosition;
 use aberred_core::components::z_index::ZIndex;
 use aberred_core::math::Vec2;
-use aberred_core::resources::debugoverlayconfig::DebugOverlayConfig;
-use aberred_core::resources::guitheme::{
+use aberred_core::resources::debug_overlay_config::DebugOverlayConfig;
+use aberred_core::resources::gui_theme::{
     GuiButtonSkin, GuiNinePatch, GuiThemeStore, GuiThemeWarnCache,
 };
 use aberred_core::resources::signal_intents::SignalIntents;
@@ -60,7 +60,7 @@ use crate::resources::shaderstore::ShaderStore;
 use crate::resources::texturestore::TextureStore;
 use crate::resources::thread_stats::RenderStats;
 use aberred_core::resources::render_size::RenderSize;
-use aberred_core::resources::windowsize::WindowSize;
+use aberred_core::resources::window_size::WindowSize;
 use aberred_core::systems::scene_dispatch::WorldDrawCtx;
 use log::warn;
 

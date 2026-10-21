@@ -12,7 +12,7 @@ use aberred_core::components::gui_window::GuiWindow;
 use aberred_core::components::menu::MenuAction;
 use aberred_core::components::timer::TimerMode;
 use aberred_core::components::tween::{Easing, LoopMode};
-use aberred_core::resources::uniformvalue::UniformValue;
+use aberred_core::resources::uniform_value::UniformValue;
 
 /// Sprite component data for spawning.
 #[derive(Debug, Clone, Default)]

@@ -9,11 +9,11 @@ use crate::resources::shaderstore::ShaderStore;
 use aberred_core::components::rotation::Rotation;
 use aberred_core::components::scale::Scale;
 use aberred_core::components::world_position::WorldPosition;
-use aberred_core::resources::postprocessshader::PostProcessShader;
+use aberred_core::resources::post_process_shader::PostProcessShader;
 use aberred_core::resources::render_size::RenderSize;
-use aberred_core::resources::uniformvalue::UniformValue;
-use aberred_core::resources::windowsize::WindowSize;
-use aberred_core::resources::worldtime::WorldTime;
+use aberred_core::resources::uniform_value::UniformValue;
+use aberred_core::resources::window_size::WindowSize;
+use aberred_core::resources::world_time::WorldTime;
 
 use super::math::rect_to_raylib;
 use super::render::SourceBuffer;

@@ -74,7 +74,7 @@ mod tests {
     use crate::protocol::audio::{AudioCmd, AudioMessage};
     use crate::protocol::render_assets::RenderAssetCmd;
     use crate::protocol::render_logic::LogicMsg;
-    use crate::resources::texturefilter::TextureFilter;
+    use crate::resources::texture_filter::TextureFilter;
 
     fn k() -> String {
         "k".to_owned()

@@ -4,7 +4,7 @@
 //! objects keyed by string IDs. Insert textures during setup and read them in
 //! render systems.
 use crate::systems::math::texture_filter_to_ffi;
-use aberred_core::resources::texturefilter::TextureFilter;
+use aberred_core::resources::texture_filter::TextureFilter;
 use bevy_ecs::prelude::Resource;
 use raylib::ffi;
 use raylib::prelude::Texture2D;

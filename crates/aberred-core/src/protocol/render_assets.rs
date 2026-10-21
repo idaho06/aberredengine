@@ -18,7 +18,7 @@ use bevy_ecs::message::Message;
 
 use crate::math::Color;
 use crate::protocol::asset_kind::AssetKind;
-use crate::resources::texturefilter::TextureFilter;
+use crate::resources::texture_filter::TextureFilter;
 
 /// GL asset-load/upload commands. Consumed once per frame by
 /// `process_render_asset_cmds`.

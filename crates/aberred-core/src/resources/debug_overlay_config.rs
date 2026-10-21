@@ -1,6 +1,6 @@
 //! Per-overlay toggles for the debug mode HUD.
 //!
-//! When [`DebugMode`](crate::resources::debugmode::DebugMode) is active (F11),
+//! When [`DebugMode`](crate::resources::debug_mode::DebugMode) is active (F11),
 //! individual world-space overlays can be toggled via imgui checkboxes.
 use bevy_ecs::prelude::Resource;
 

@@ -68,7 +68,7 @@ use aberred_core::components::timer::Timer;
 use aberred_core::components::tween::{Tween, TweenValue};
 use aberred_core::components::world_position::WorldPosition;
 use aberred_core::protocol::audio::AudioCmd;
-use aberred_core::resources::systemsstore::SystemsStore;
+use aberred_core::resources::systems_store::SystemsStore;
 
 /// Persistent per-frame buffers for the 7 effect command queues drained by
 /// `drain_and_process_effect_commands`.
