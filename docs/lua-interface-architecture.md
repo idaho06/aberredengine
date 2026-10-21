@@ -71,7 +71,7 @@ crates/aberred-lua/src/resources/lua_runtime/
 ├── runtime.rs          # LuaRuntime struct, LuaAppData (queue fields generated via lua_queues!), pool types, GameConfigSnapshot, CameraSnapshot
 ├── entity_builder/      # LuaEntityBuilder fluent API, split by category; builder_method! macro (single source for runtime + stubs)
 │   ├── mod.rs           # LuaEntityBuilder struct, builder_method!/DummyMethods, register_methods() dispatch, register_as/build
-│   ├── transform.rs     # with_position, with_screen_position, with_rotation, with_scale, with_parent, with_stuckto*, with_camera_target, ...
+│   ├── transform.rs     # with_position, with_screen_position, with_rotation, with_scale, with_parent, with_stuck_to*, with_camera_target, ...
 │   ├── physics.rs       # with_velocity, with_accel, with_friction, with_max_speed, with_frozen, with_collider*
 │   ├── sprite.rs        # with_sprite*, with_tint, with_shadow, with_animation*, with_lua_animation_finished, with_z_index
 │   ├── gui.rs            # with_gui_window/button/label/image/progress_bar/offset/theme_key, their per-state offset variants, with_lua_gui_clicked
@@ -277,7 +277,7 @@ pub fn process_entity_commands(
 ) { ... }
 ```
 
-Every handler queues its work as one deferred `EntityWorldMut` command — `queue_on_entity(commands, entity_id, |e| ...)`, or `queue_on_component::<C>(commands, entity_id, |c| ...)` for a write to one existing component — so a drained batch applies **in exactly the order the script made the calls**: `entity_set_shader` followed by `entity_shader_set_float`, or `release_stuckto` followed by `entity_set_velocity`, both land. Anything a handler depends on (an existing component, the `AnimationStore`) is read when the command applies, so it sees the earlier commands of the same batch. The commands land at the next command flush: right after the observer for observer callbacks (collision, timer, tween, animation end, menu, GUI click, `on_scene_enter`), and at the next sync point after the system for system callbacks (`update`, `lua_phase_callbacks_system`, `lua_setup_entity_system`). Lua reads ctx snapshots, never the live world, so a script can't observe the difference inside one callback. An entity despawned in an earlier frame is warned about and skipped; one despawned earlier in the same batch is skipped silently. The one immediate effect is `Despawn`'s removal of the entity's `WorldSignals` registrations, so a later command in the same batch can't resolve a stale key.
+Every handler queues its work as one deferred `EntityWorldMut` command — `queue_on_entity(commands, entity_id, |e| ...)`, or `queue_on_component::<C>(commands, entity_id, |c| ...)` for a write to one existing component — so a drained batch applies **in exactly the order the script made the calls**: `entity_set_shader` followed by `entity_shader_set_float`, or `release_stuck_to` followed by `entity_set_velocity`, both land. Anything a handler depends on (an existing component, the `AnimationStore`) is read when the command applies, so it sees the earlier commands of the same batch. The commands land at the next command flush: right after the observer for observer callbacks (collision, timer, tween, animation end, menu, GUI click, `on_scene_enter`), and at the next sync point after the system for system callbacks (`update`, `lua_phase_callbacks_system`, `lua_setup_entity_system`). Lua reads ctx snapshots, never the live world, so a script can't observe the difference inside one callback. An entity despawned in an earlier frame is warned about and skipped; one despawned earlier in the same batch is skipped silently. The one immediate effect is `Despawn`'s removal of the entity's `WorldSignals` registrations, so a later command in the same batch can't resolve a stale key.
 
 `Commands` declare no component access, so the scheduler can't see these writes: an engine system that reads a Lua-written component must be ordered after the Lua drain (any ordering edge is a sync point). An unordered system in the same set reads pre-flush state, and `assert_no_ambiguities` doesn't flag it.
 
@@ -502,7 +502,7 @@ All are registered in `engine_api/render.rs` and queue into `gui_theme_commands`
 - `entity_insert_tween_rotation`, `entity_remove_tween_rotation`
 - `entity_insert_tween_scale`, `entity_remove_tween_scale`
 - `entity_insert_tween_screen_position`, `entity_remove_tween_screen_position`
-- `entity_insert_stuckto`, `release_stuckto`
+- `entity_insert_stuck_to`, `release_stuck_to`
 - `entity_signal_set_scalar`, `entity_signal_set_integer`, `entity_signal_set_string`, `entity_signal_set_flag`
 - `entity_signal_remove_scalar`, `entity_signal_remove_integer`, `entity_signal_remove_string`, `entity_signal_remove_flag`
 - `entity_signal_toggle_flag`
@@ -553,9 +553,9 @@ with_screen_position
 with_rotation
 with_scale
 with_parent
-with_stuckto
-with_stuckto_offset
-with_stuckto_stored_velocity
+with_stuck_to
+with_stuck_to_offset
+with_stuck_to_stored_velocity
 with_camera_target
 ```
 
@@ -787,7 +787,7 @@ When adding a new builder method that accepts a table, add a `schema_refs` entry
 Spawn and clone commands are processed via `process_spawn_command()` and `process_clone_command()` in `lua_commands/spawn_cmd.rs`. Both delegate to the shared `apply_components()` helper, which applies all component data from `SpawnCmd` to the entity. This ensures spawn and clone have identical component support.
 
 `apply_components()` is split into focused sub-functions:
-- `apply_transform_components()` — position, screen position, rotation, scale, parent, stuckto, camera target
+- `apply_transform_components()` — position, screen position, rotation, scale, parent, stuck_to, camera target
 - `apply_physics_components()` — rigidbody, collider
 - `apply_render_components()` — sprite, z_index, shader, tint, shadow
 - `apply_animation_components()` — animation, animation controller, tweens

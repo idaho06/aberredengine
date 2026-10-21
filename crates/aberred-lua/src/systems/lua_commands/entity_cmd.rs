@@ -1862,7 +1862,7 @@ mod tests {
     }
 
     #[test]
-    fn release_stuckto_restores_stored_velocity_as_rigidbody() {
+    fn release_stuck_to_restores_stored_velocity_as_rigidbody() {
         let mut world = World::new();
         let target = world.spawn(WorldPosition::new(0.0, 0.0)).id();
         let e = world
@@ -1908,7 +1908,7 @@ mod tests {
     }
 
     #[test]
-    fn release_stuckto_without_stored_velocity_adds_no_rigidbody() {
+    fn release_stuck_to_without_stored_velocity_adds_no_rigidbody() {
         let mut world = World::new();
         let e = spawn_stuck(&mut world, None);
 
@@ -1923,7 +1923,7 @@ mod tests {
     }
 
     #[test]
-    fn release_stuckto_then_set_velocity_keeps_velocity() {
+    fn release_stuck_to_then_set_velocity_keeps_velocity() {
         let mut world = World::new();
         let e = spawn_stuck(&mut world, Some(Vec2::new(1.0, 1.0)));
         let id = e.to_bits();
@@ -1947,7 +1947,7 @@ mod tests {
     }
 
     #[test]
-    fn release_stuckto_then_add_force_keeps_force() {
+    fn release_stuck_to_then_add_force_keeps_force() {
         let mut world = World::new();
         let e = spawn_stuck(&mut world, Some(Vec2::new(1.0, 1.0)));
         let id = e.to_bits();
@@ -1971,7 +1971,7 @@ mod tests {
     }
 
     #[test]
-    fn insert_stuckto_then_release_in_one_batch_restores_stored_velocity() {
+    fn insert_stuck_to_then_release_in_one_batch_restores_stored_velocity() {
         let mut world = World::new();
         let target = world.spawn(WorldPosition::new(0.0, 0.0)).id();
         let e = world.spawn(RigidBody::new()).id();

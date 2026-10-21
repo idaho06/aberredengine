@@ -2158,7 +2158,7 @@ fn launch_ball(
 ```
 
 - `stuck_to_entity_system` runs every sim tick in `SimSet::Collision`, after movement and collision detection, and overwrites only the followed axes. Keep a stuck entity's velocity at zero, or it drifts along any axis it doesn't follow.
-- `stored_velocity` is only data: removing `StuckTo` from Rust doesn't apply it. Apply it yourself when you release the entity, as `launch_ball` does. (Lua's `engine.release_stuckto` does it for you.)
+- `stored_velocity` is only data: removing `StuckTo` from Rust doesn't apply it. Apply it yourself when you release the entity, as `launch_ball` does. (Lua's `engine.release_stuck_to` does it for you.)
 - The follower copies the target's `WorldPosition` field, which is the target's local position if the target is a `ChildOf` child. A target that is itself `StuckTo` isn't followed (no chains), and a follower with `ChildOf` is skipped. For permanent parent-relative placement, use `ChildOf` instead.
 - If the target is despawned, the follower stays where it is and keeps its `StuckTo` until you remove it.
 

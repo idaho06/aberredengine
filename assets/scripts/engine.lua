@@ -559,7 +559,7 @@ function engine.collision_entity_insert_phase(entity_id, initial) end
 ---@param offset_y number
 ---@param stored_vx number
 ---@param stored_vy number
-function engine.collision_entity_insert_stuckto(entity_id, target_id, follow_x, follow_y, offset_x, offset_y, stored_vx, stored_vy) end
+function engine.collision_entity_insert_stuck_to(entity_id, target_id, follow_x, follow_y, offset_x, offset_y, stored_vx, stored_vy) end
 
 ---Insert a time-to-live component on an entity
 ---@param entity_id integer
@@ -877,7 +877,7 @@ function engine.collision_entity_unfreeze(entity_id) end
 
 ---Release entity from its StuckTo target, restoring stored velocity
 ---@param entity_id integer
-function engine.collision_release_stuckto(entity_id) end
+function engine.collision_release_stuck_to(entity_id) end
 
 ---Add a named acceleration force to an entity
 ---@param entity_id integer
@@ -936,7 +936,7 @@ function engine.entity_insert_phase(entity_id, initial) end
 ---@param offset_y number
 ---@param stored_vx number
 ---@param stored_vy number
-function engine.entity_insert_stuckto(entity_id, target_id, follow_x, follow_y, offset_x, offset_y, stored_vx, stored_vy) end
+function engine.entity_insert_stuck_to(entity_id, target_id, follow_x, follow_y, offset_x, offset_y, stored_vx, stored_vy) end
 
 ---Insert a time-to-live component on an entity
 ---@param entity_id integer
@@ -1254,7 +1254,7 @@ function engine.entity_unfreeze(entity_id) end
 
 ---Release entity from its StuckTo target, restoring stored velocity
 ---@param entity_id integer
-function engine.release_stuckto(entity_id) end
+function engine.release_stuck_to(entity_id) end
 
 -- ==================== Group Tracking ====================
 
@@ -2090,19 +2090,19 @@ function EntityBuilder:with_sprite_offset(offset_x, offset_y) end
 ---@param follow_x boolean
 ---@param follow_y boolean
 ---@return EntityBuilder
-function EntityBuilder:with_stuckto(target_entity_id, follow_x, follow_y) end
+function EntityBuilder:with_stuck_to(target_entity_id, follow_x, follow_y) end
 
 ---Set offset for StuckTo
 ---@param offset_x number
 ---@param offset_y number
 ---@return EntityBuilder
-function EntityBuilder:with_stuckto_offset(offset_x, offset_y) end
+function EntityBuilder:with_stuck_to_offset(offset_x, offset_y) end
 
 ---Set velocity to restore when unstuck
 ---@param vx number
 ---@param vy number
 ---@return EntityBuilder
-function EntityBuilder:with_stuckto_stored_velocity(vx, vy) end
+function EntityBuilder:with_stuck_to_stored_velocity(vx, vy) end
 
 ---Set DynamicText component
 ---@param content string
@@ -2685,19 +2685,19 @@ function CollisionEntityBuilder:with_sprite_offset(offset_x, offset_y) end
 ---@param follow_x boolean
 ---@param follow_y boolean
 ---@return CollisionEntityBuilder
-function CollisionEntityBuilder:with_stuckto(target_entity_id, follow_x, follow_y) end
+function CollisionEntityBuilder:with_stuck_to(target_entity_id, follow_x, follow_y) end
 
 ---Set offset for StuckTo
 ---@param offset_x number
 ---@param offset_y number
 ---@return CollisionEntityBuilder
-function CollisionEntityBuilder:with_stuckto_offset(offset_x, offset_y) end
+function CollisionEntityBuilder:with_stuck_to_offset(offset_x, offset_y) end
 
 ---Set velocity to restore when unstuck
 ---@param vx number
 ---@param vy number
 ---@return CollisionEntityBuilder
-function CollisionEntityBuilder:with_stuckto_stored_velocity(vx, vy) end
+function CollisionEntityBuilder:with_stuck_to_stored_velocity(vx, vy) end
 
 ---Set DynamicText component
 ---@param content string

@@ -412,7 +412,7 @@ pub struct SpawnCmd {
     /// Has Signals component (even if empty)
     pub has_signals: bool,
     /// StuckTo component data
-    pub stuckto: Option<StuckToData>,
+    pub stuck_to: Option<StuckToData>,
     /// Lua timer data
     pub lua_timer: Option<LuaTimerSpawn>,
     /// SignalBinding component data (key, optional format)

@@ -524,7 +524,7 @@ fn meta_functions_complete() {
             "entity_signal_set_integer", "entity_signal_remove_integer",
             "entity_add_force", "entity_remove_force",
             "entity_set_force_enabled", "entity_set_force_value",
-            "release_stuckto", "entity_insert_stuckto",
+            "release_stuck_to", "entity_insert_stuck_to",
             "entity_restart_animation", "entity_set_animation", "entity_set_sprite_flip",
             "entity_set_shader", "entity_remove_shader",
             "entity_set_tint", "entity_remove_tint",

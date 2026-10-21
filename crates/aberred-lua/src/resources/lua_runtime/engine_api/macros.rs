@@ -349,7 +349,7 @@ macro_rules! define_entity_cmds {
             ("entity_menu_despawn", |entity_id| u64, EntityCmd::MenuDespawn { entity_id },
                 desc = "Despawn a menu entity and its children",
                 params = [("entity_id", "integer")]),
-            ("release_stuckto", |entity_id| u64, EntityCmd::ReleaseStuckTo { entity_id },
+            ("release_stuck_to", |entity_id| u64, EntityCmd::ReleaseStuckTo { entity_id },
                 desc = "Release entity from its StuckTo target, restoring stored velocity",
                 params = [("entity_id", "integer")]),
             ("entity_signal_set_flag",
@@ -381,7 +381,7 @@ macro_rules! define_entity_cmds {
                 |(entity_id, max)| (u64, f32), EntityCmd::SetGuiProgressMax { entity_id, max },
                 desc = "Set the max value on a GuiProgressBar; current value is clamped to the new max",
                 params = [("entity_id", "integer"), ("max", "number")]),
-            ("entity_insert_stuckto",
+            ("entity_insert_stuck_to",
                 |(entity_id, target_id, follow_x, follow_y, offset_x, offset_y, stored_vx, stored_vy)|
                 (u64, u64, bool, bool, f32, f32, f32, f32),
                 EntityCmd::InsertStuckTo {

@@ -175,7 +175,7 @@ pub(super) fn register<M: LuaUserDataMethods<LuaEntityBuilder>>(
     builder_method!(
         methods,
         meta,
-        "with_stuckto",
+        "with_stuck_to",
         "Attach entity to a target entity",
         [
             ("target_entity_id", "integer"),
@@ -185,7 +185,7 @@ pub(super) fn register<M: LuaUserDataMethods<LuaEntityBuilder>>(
         |_,
          this: &mut LuaEntityBuilder,
          (target_entity_id, follow_x, follow_y): (u64, bool, bool)| {
-            this.cmd.stuckto = Some(StuckToData {
+            this.cmd.stuck_to = Some(StuckToData {
                 target_entity_id,
                 offset_x: 0.0,
                 offset_y: 0.0,
@@ -200,17 +200,17 @@ pub(super) fn register<M: LuaUserDataMethods<LuaEntityBuilder>>(
     builder_method!(
         methods,
         meta,
-        "with_stuckto_offset",
+        "with_stuck_to_offset",
         "Set offset for StuckTo",
         [("offset_x", "number"), ("offset_y", "number")],
         |_, this: &mut LuaEntityBuilder, (offset_x, offset_y): (f32, f32)| {
-            let Some(ref mut stuckto) = this.cmd.stuckto else {
+            let Some(ref mut stuck_to) = this.cmd.stuck_to else {
                 return Err(LuaError::runtime(
-                    "with_stuckto_offset() requires with_stuckto() first",
+                    "with_stuck_to_offset() requires with_stuck_to() first",
                 ));
             };
-            stuckto.offset_x = offset_x;
-            stuckto.offset_y = offset_y;
+            stuck_to.offset_x = offset_x;
+            stuck_to.offset_y = offset_y;
             Ok(())
         }
     );
@@ -218,16 +218,16 @@ pub(super) fn register<M: LuaUserDataMethods<LuaEntityBuilder>>(
     builder_method!(
         methods,
         meta,
-        "with_stuckto_stored_velocity",
+        "with_stuck_to_stored_velocity",
         "Set velocity to restore when unstuck",
         [("vx", "number"), ("vy", "number")],
         |_, this: &mut LuaEntityBuilder, (vx, vy): (f32, f32)| {
-            let Some(ref mut stuckto) = this.cmd.stuckto else {
+            let Some(ref mut stuck_to) = this.cmd.stuck_to else {
                 return Err(LuaError::runtime(
-                    "with_stuckto_stored_velocity() requires with_stuckto() first",
+                    "with_stuck_to_stored_velocity() requires with_stuck_to() first",
                 ));
             };
-            stuckto.stored_velocity = Some((vx, vy));
+            stuck_to.stored_velocity = Some((vx, vy));
             Ok(())
         }
     );
@@ -339,12 +339,12 @@ mod tests {
     }
 
     #[test]
-    fn stuckto_modifiers_require_stuckto_and_set_offset_and_velocity() {
+    fn stuck_to_modifiers_require_stuck_to_and_set_offset_and_velocity() {
         assert_runtime_error(
-            "engine.spawn():with_stuckto_stored_velocity(1, 2)",
-            "with_stuckto_stored_velocity() requires with_stuckto() first",
+            "engine.spawn():with_stuck_to_stored_velocity(1, 2)",
+            "with_stuck_to_stored_velocity() requires with_stuck_to() first",
         );
-        let s = built(":with_stuckto(42, true, false)").stuckto.unwrap();
+        let s = built(":with_stuck_to(42, true, false)").stuck_to.unwrap();
         assert_eq!(s.target_entity_id, 42);
         assert_eq!((s.follow_x, s.follow_y), (true, false));
         assert_eq!(
@@ -352,8 +352,8 @@ mod tests {
             (0.0, 0.0, None)
         );
 
-        let s = built(":with_stuckto(42, true, true):with_stuckto_offset(0, -8):with_stuckto_stored_velocity(100, 0)")
-            .stuckto
+        let s = built(":with_stuck_to(42, true, true):with_stuck_to_offset(0, -8):with_stuck_to_stored_velocity(100, 0)")
+            .stuck_to
             .unwrap();
         assert_eq!((s.offset_x, s.offset_y), (0.0, -8.0));
         assert_eq!(s.stored_velocity, Some((100.0, 0.0)));

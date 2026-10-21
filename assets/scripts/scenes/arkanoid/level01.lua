@@ -235,9 +235,9 @@ local function scene_get_started_enter(ctx, input)
         :with_z_index(10)
         :with_collider(12, 12, 6, 6)
         :with_signals()
-        :with_stuckto(player_id, true, false)
-        :with_stuckto_offset(0, 0)
-        :with_stuckto_stored_velocity(300, -300)
+        :with_stuck_to(player_id, true, false)
+        :with_stuck_to_offset(0, 0)
+        :with_stuck_to_stored_velocity(300, -300)
         :with_phase("stuck_to_player")
         :with_lua_phase_entered("ball_phase_enter")
         :with_lua_phase_update("ball_phase_update")
@@ -268,7 +268,7 @@ local function ball_stuck_enter(ctx, input)
     local vy = engine.get_scalar("ball_stick_vy") or -300
 
     engine.entity_set_velocity(ctx.id, 0, 0)
-    engine.entity_insert_stuckto(ctx.id, player_id, true, false, offset_x, 0, vx, vy)
+    engine.entity_insert_stuck_to(ctx.id, player_id, true, false, offset_x, 0, vx, vy)
 end
 
 --- Ball stuck update: release after 2 seconds
@@ -282,7 +282,7 @@ end
 --- Ball moving: release from paddle
 local function ball_moving_enter(ctx, input)
     engine.log_debug("Ball released and moving!")
-    engine.release_stuckto(ctx.id)
+    engine.release_stuck_to(ctx.id)
 end
 
 -- ==================== PLAYER PHASE CALLBACKS ====================

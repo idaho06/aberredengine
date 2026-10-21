@@ -308,7 +308,7 @@ Different callbacks process different types of engine commands. Here's what comm
 | Phase/Timer/`on_animation_finished`/LuaSetup/menu/GUI click callbacks | (Signal, Entity, Spawn, Clone in call order) → Audio → Camera → Phase |
 | Collision callbacks | the same, from the collision queues |
 
-**Signal, entity, spawn and clone commands apply in call order.** Within one callback, every `engine.entity_*`, `engine.spawn()`/`engine.clone()` `:build()` and world-signal call (`set_flag`, `register_entity`, `unregister_entity`, …) lands in the order you made it, so an insert followed by a write of the same component works: `engine.entity_set_shader(id, "wave")` then `engine.entity_shader_set_float(id, "u", 1.0)` keeps the uniform, and `engine.release_stuckto(id)` then `engine.entity_set_velocity(id, 5, 0)` keeps the velocity. They apply right after the callback's drain (for system callbacks such as `on_update_<scene>`, at the end of that step of the tick), and a callback's `ctx` is a snapshot taken before the call, so a script never sees its own writes inside the same callback.
+**Signal, entity, spawn and clone commands apply in call order.** Within one callback, every `engine.entity_*`, `engine.spawn()`/`engine.clone()` `:build()` and world-signal call (`set_flag`, `register_entity`, `unregister_entity`, …) lands in the order you made it, so an insert followed by a write of the same component works: `engine.entity_set_shader(id, "wave")` then `engine.entity_shader_set_float(id, "u", 1.0)` keeps the uniform, and `engine.release_stuck_to(id)` then `engine.entity_set_velocity(id, 5, 0)` keeps the velocity. They apply right after the callback's drain (for system callbacks such as `on_update_<scene>`, at the end of that step of the tick), and a callback's `ctx` is a snapshot taken before the call, so a script never sees its own writes inside the same callback.
 
 So a clone copies its template as it is at the `clone()` call: moving it afterwards (`engine.entity_set_position(tpl_id, x, y)`) doesn't change the clone, and despawning it or removing its key (`engine.entity_despawn(tpl_id)`, `engine.unregister_entity("tpl")`) doesn't cancel the clone. And a spawn or clone that looks up a key (a clone source, a particle `templates` entry, a menu cursor) sees only keys set *earlier* in the callback, by `:register_as()` or `engine.register_entity()`.
 
@@ -344,8 +344,8 @@ Collision callbacks process commands from their own dedicated queues, which are 
 - `engine.collision_entity_remove_lua_timer()` instead of `engine.entity_remove_lua_timer()`
 - `engine.collision_entity_insert_phase()` / `engine.collision_entity_insert_lua_phase_*()` instead of `engine.entity_insert_phase()` / `engine.entity_insert_lua_phase_*()`
 - `engine.collision_entity_insert_ttl()` instead of `engine.entity_insert_ttl()`
-- `engine.collision_entity_insert_stuckto()` instead of `engine.entity_insert_stuckto()`
-- `engine.collision_release_stuckto()` instead of `engine.release_stuckto()`
+- `engine.collision_entity_insert_stuck_to()` instead of `engine.entity_insert_stuck_to()`
+- `engine.collision_release_stuck_to()` instead of `engine.release_stuck_to()`
 - `engine.collision_entity_set_animation()` instead of `engine.entity_set_animation()`
 - `engine.collision_entity_restart_animation()` instead of `engine.entity_restart_animation()`
 - `engine.collision_entity_set_sprite_flip()` instead of `engine.entity_set_sprite_flip()`
@@ -2001,7 +2001,7 @@ There are two ways to trigger phase transitions:
 
 ### Attachment Components
 
-#### `:with_stuckto(target_entity_id, follow_x, follow_y)`
+#### `:with_stuck_to(target_entity_id, follow_x, follow_y)`
 
 Attach entity to another entity's position.
 
@@ -2025,24 +2025,24 @@ local player_id = engine.get_entity("player")
 engine.spawn()
     :with_group("ball")
     :with_position(400, 650)
-    :with_stuckto(player_id, true, false)  -- Follow player X only
+    :with_stuck_to(player_id, true, false)  -- Follow player X only
     :build()
 ```
 
-#### `:with_stuckto_offset(offset_x, offset_y)`
+#### `:with_stuck_to_offset(offset_x, offset_y)`
 
-Set offset from target (requires `:with_stuckto()`).
+Set offset from target (requires `:with_stuck_to()`).
 
 ```lua
-:with_stuckto_offset(0, -30)  -- 30 pixels above target
+:with_stuck_to_offset(0, -30)  -- 30 pixels above target
 ```
 
-#### `:with_stuckto_stored_velocity(vx, vy)`
+#### `:with_stuck_to_stored_velocity(vx, vy)`
 
-Set velocity to restore when released (requires `:with_stuckto()`).
+Set velocity to restore when released (requires `:with_stuck_to()`).
 
 ```lua
-:with_stuckto_stored_velocity(300, -300)
+:with_stuck_to_stored_velocity(300, -300)
 ```
 
 **Complete Example:**
@@ -2052,13 +2052,13 @@ engine.spawn()
     :with_group("ball")
     :with_position(336, 650)
     :with_sprite("ball", 12, 12, 6, 6)
-    :with_stuckto(player_id, true, false)     -- Follow player X
-    :with_stuckto_offset(0, 0)                -- Centered on player
-    :with_stuckto_stored_velocity(300, -300)  -- Launch velocity
+    :with_stuck_to(player_id, true, false)     -- Follow player X
+    :with_stuck_to_offset(0, 0)                -- Centered on player
+    :with_stuck_to_stored_velocity(300, -300)  -- Launch velocity
     :build()
 
 -- Later, release the ball
-engine.release_stuckto(ball_id)  -- Restores velocity
+engine.release_stuck_to(ball_id)  -- Restores velocity
 ```
 
 ---
@@ -3474,7 +3474,7 @@ function on_panel_hidden(ctx, input)
 end
 ```
 
-### `engine.entity_insert_stuckto(entity_id, target_id, follow_x, follow_y, offset_x, offset_y, stored_vx, stored_vy)`
+### `engine.entity_insert_stuck_to(entity_id, target_id, follow_x, follow_y, offset_x, offset_y, stored_vx, stored_vy)`
 
 Attach entity to another at runtime.
 
@@ -3487,15 +3487,15 @@ Attach entity to another at runtime.
 - `stored_vx`, `stored_vy` - Velocity to restore on release
 
 ```lua
-engine.entity_insert_stuckto(ball_id, player_id, true, false, 0, 0, 300, -300)
+engine.entity_insert_stuck_to(ball_id, player_id, true, false, 0, 0, 300, -300)
 ```
 
-### `engine.release_stuckto(entity_id)`
+### `engine.release_stuck_to(entity_id)`
 
-Release entity from StuckTo, restore stored velocity as RigidBody. Physics calls made after it in the same callback (`engine.entity_set_velocity()`, `engine.entity_add_force()`, ...) apply to the restored body, and an `engine.entity_insert_stuckto()` earlier in the same callback is released with its stored velocity.
+Release entity from StuckTo, restore stored velocity as RigidBody. Physics calls made after it in the same callback (`engine.entity_set_velocity()`, `engine.entity_add_force()`, ...) apply to the restored body, and an `engine.entity_insert_stuck_to()` earlier in the same callback is released with its stored velocity.
 
 ```lua
-engine.release_stuckto(ball_id)
+engine.release_stuck_to(ball_id)
 engine.entity_set_velocity(ball_id, 0, -300)  -- applies to the restored body
 ```
 
@@ -4183,7 +4183,7 @@ function on_player_switch_state(ctx)
 end
 ```
 
-#### `engine.collision_entity_insert_stuckto(entity_id, target_id, follow_x, follow_y, offset_x, offset_y, stored_vx, stored_vy)`
+#### `engine.collision_entity_insert_stuck_to(entity_id, target_id, follow_x, follow_y, offset_x, offset_y, stored_vx, stored_vy)`
 
 Attach an entity to another entity during collision handling.
 
@@ -4204,7 +4204,7 @@ function on_ball_sticky_paddle(ctx)
     local offset_x = ctx.a.pos.x - ctx.b.pos.x
 
     -- Attach ball to paddle
-    engine.collision_entity_insert_stuckto(
+    engine.collision_entity_insert_stuck_to(
         ball_id, paddle_id,
         true, false,      -- Follow X only
         offset_x, -12,    -- Offset (centered X, above paddle)
@@ -4305,7 +4305,7 @@ function on_ball_speed_boost(ctx)
 end
 ```
 
-#### `engine.collision_release_stuckto(entity_id)`
+#### `engine.collision_release_stuck_to(entity_id)`
 
 Release entity from StuckTo attachment during collision handling, restoring stored velocity.
 
@@ -4316,7 +4316,7 @@ Release entity from StuckTo attachment during collision handling, restoring stor
 ```lua
 function on_ball_release_trigger(ctx)
     local ball_id = ctx.a.id
-    engine.collision_release_stuckto(ball_id)
+    engine.collision_release_stuck_to(ball_id)
     engine.collision_play_sound("launch")
 end
 ```

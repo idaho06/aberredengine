@@ -119,7 +119,7 @@ pub(super) fn apply_components(
             scale: cmd.scale,
             parent: cmd.parent,
             gui_offset: cmd.gui_offset,
-            stuckto: cmd.stuckto,
+            stuck_to: cmd.stuck_to,
             camera_target: cmd.camera_target,
             camera_target_zoom: cmd.camera_target_zoom,
         },
@@ -185,7 +185,7 @@ struct TransformComponents {
     scale: Option<(f32, f32)>,
     parent: Option<u64>,
     gui_offset: Option<(f32, f32)>,
-    stuckto: Option<StuckToData>,
+    stuck_to: Option<StuckToData>,
     camera_target: Option<u8>,
     camera_target_zoom: Option<f32>,
 }
@@ -220,20 +220,20 @@ fn apply_transform_components(
     if let Some((x, y)) = transform.gui_offset {
         entity_commands.insert(GuiOffset(Vec2 { x, y }));
     }
-    if let Some(stuckto_data) = transform.stuckto
-        && let Some(target) = super::entity_cmd::resolve_entity(stuckto_data.target_entity_id)
+    if let Some(stuck_to_data) = transform.stuck_to
+        && let Some(target) = super::entity_cmd::resolve_entity(stuck_to_data.target_entity_id)
     {
-        let mut stuckto = StuckTo::new(target);
-        stuckto.offset = Vec2 {
-            x: stuckto_data.offset_x,
-            y: stuckto_data.offset_y,
+        let mut stuck_to = StuckTo::new(target);
+        stuck_to.offset = Vec2 {
+            x: stuck_to_data.offset_x,
+            y: stuck_to_data.offset_y,
         };
-        stuckto.follow_x = stuckto_data.follow_x;
-        stuckto.follow_y = stuckto_data.follow_y;
-        stuckto.stored_velocity = stuckto_data
+        stuck_to.follow_x = stuck_to_data.follow_x;
+        stuck_to.follow_y = stuck_to_data.follow_y;
+        stuck_to.stored_velocity = stuck_to_data
             .stored_velocity
             .map(|(vx, vy)| Vec2 { x: vx, y: vy });
-        entity_commands.insert(stuckto);
+        entity_commands.insert(stuck_to);
     }
     if let Some(priority) = transform.camera_target {
         let zoom = transform.camera_target_zoom.unwrap_or(1.0);
@@ -1091,8 +1091,8 @@ mod tests {
         let target = world.spawn(WorldPosition::new(0.0, 0.0)).id();
         let script = format!(
             "engine.spawn():with_position(1, 2):with_screen_position(3, 4):with_rotation(45)\
-             :with_scale(2, 3):with_stuckto({}, true, false):with_stuckto_offset(5, 6)\
-             :with_stuckto_stored_velocity(7, 8):with_camera_target(4):build()",
+             :with_scale(2, 3):with_stuck_to({}, true, false):with_stuck_to_offset(5, 6)\
+             :with_stuck_to_stored_velocity(7, 8):with_camera_target(4):build()",
             target.to_bits()
         );
         let e = spawn_from_lua(&mut world, &mut signals, &script);
@@ -1134,14 +1134,14 @@ mod tests {
     }
 
     #[test]
-    fn lua_spawn_with_invalid_parent_or_stuckto_target_skips_them() {
+    fn lua_spawn_with_invalid_parent_or_stuck_to_target_skips_them() {
         let mut world = World::new();
         let mut signals = WorldSignals::default();
         // Entity bits with a zero index are rejected by resolve_entity.
         let e = spawn_from_lua(
             &mut world,
             &mut signals,
-            "engine.spawn():with_position(1, 2):with_parent(0):with_stuckto(0, true, true):build()",
+            "engine.spawn():with_position(1, 2):with_parent(0):with_stuck_to(0, true, true):build()",
         );
         assert!(world.get::<ChildOf>(e).is_none());
         assert!(world.get::<StuckTo>(e).is_none());

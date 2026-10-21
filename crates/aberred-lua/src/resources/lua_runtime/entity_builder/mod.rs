@@ -371,10 +371,10 @@ mod tests {
     }
 
     #[test]
-    fn with_stuckto_offset_requires_with_stuckto() {
+    fn with_stuck_to_offset_requires_with_stuck_to() {
         assert_runtime_error(
-            "engine.spawn():with_stuckto_offset(1, 1)",
-            "with_stuckto_offset() requires with_stuckto() first",
+            "engine.spawn():with_stuck_to_offset(1, 1)",
+            "with_stuck_to_offset() requires with_stuck_to() first",
         );
     }
 
