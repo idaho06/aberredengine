@@ -111,7 +111,7 @@ mod tests {
     fn entered_refreshes_the_signal_cache_before_on_scene_enter() {
         let mut world = scene_observer_world();
         let mut stale = WorldSignals::default();
-        stale.set_entity("player", world.spawn_empty().id());
+        stale.register_entity("player", world.spawn_empty().id());
         world
             .non_send::<LuaRuntime>()
             .update_signal_cache(stale.snapshot());

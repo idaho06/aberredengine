@@ -583,7 +583,9 @@ mod tests {
     /// A template at (1, 2), registered as `"tpl"`.
     fn spawn_registered_template(world: &mut World) -> Entity {
         let tpl = world.spawn(MapPosition::new(1.0, 2.0)).id();
-        world.resource_mut::<WorldSignals>().set_entity("tpl", tpl);
+        world
+            .resource_mut::<WorldSignals>()
+            .register_entity("tpl", tpl);
         tpl
     }
 

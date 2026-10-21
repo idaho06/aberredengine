@@ -128,11 +128,11 @@ pub fn process_signal_command(targets: &mut SignalTargets, cmd: SignalCmd) {
         }
         SignalCmd::SetEntity { key, entity_id } => {
             if let Some(entity) = super::entity_cmd::resolve_entity(entity_id) {
-                world_signals.set_entity(key, entity);
+                world_signals.register_entity(key, entity);
             }
         }
         SignalCmd::RemoveEntity { key } => {
-            world_signals.remove_entity(&key);
+            world_signals.unregister_entity(&key);
         }
     }
 }

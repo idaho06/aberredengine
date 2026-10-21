@@ -16,7 +16,7 @@ use crate::resources::worldsignals::WorldSignals;
 pub fn prune_dead_entity_registrations(mut signals: ResMut<WorldSignals>, entities: &Entities) {
     if signals
         .bypass_change_detection()
-        .remove_dead_entity_registrations(|e| entities.contains(e))
+        .unregister_dead_entities(|e| entities.contains(e))
     {
         signals.set_changed();
     }
@@ -40,8 +40,8 @@ mod tests {
         let live = world.spawn_empty().id();
         {
             let mut ws = world.resource_mut::<WorldSignals>();
-            ws.set_entity("dead", dead);
-            ws.set_entity("live", live);
+            ws.register_entity("dead", dead);
+            ws.register_entity("live", live);
         }
         world.despawn(dead);
 
@@ -63,7 +63,7 @@ mod tests {
         assert!(!world.entities().contains_spawned(reserved));
         world
             .resource_mut::<WorldSignals>()
-            .set_entity("reserved", reserved);
+            .register_entity("reserved", reserved);
 
         world
             .run_system_once(prune_dead_entity_registrations)
@@ -81,7 +81,7 @@ mod tests {
         let live = world.spawn_empty().id();
         world
             .resource_mut::<WorldSignals>()
-            .set_entity("live", live);
+            .register_entity("live", live);
         let tick = world.change_tick();
         world.increment_change_tick();
 

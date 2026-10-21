@@ -106,7 +106,7 @@ pub fn spawn_map(
         .map(|def| {
             let entity = spawn_entity(commands, def);
             if let Some(ref key) = def.registered_as {
-                world_signals.set_entity(key.clone(), entity);
+                world_signals.register_entity(key.clone(), entity);
             }
             (entity, def)
         })

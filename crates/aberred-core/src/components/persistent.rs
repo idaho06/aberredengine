@@ -51,7 +51,7 @@ impl SceneCleanup<'_, '_> {
     }
 
     /// The [`Persistent`] entities, e.g. for
-    /// `WorldSignals::clear_non_persistent_entities`.
+    /// `WorldSignals::unregister_non_persistent_entities`.
     pub fn persistent_set(&self) -> FxHashSet<Entity> {
         self.persistent.iter().map(|(entity, _)| entity).collect()
     }

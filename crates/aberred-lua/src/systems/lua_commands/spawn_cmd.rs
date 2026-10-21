@@ -174,7 +174,7 @@ pub(super) fn apply_components(
 
     // Register entity in WorldSignals if requested
     if let Some(key) = cmd.register_as {
-        world_signals.set_entity(key, entity);
+        world_signals.register_entity(key, entity);
     }
 }
 
@@ -673,7 +673,7 @@ pub fn process_clone_command(
             "Clone source '{}' refers to a despawned entity; skipping clone",
             cmd.source_key
         );
-        world_signals.remove_entity(&cmd.source_key);
+        world_signals.unregister_entity(&cmd.source_key);
         return;
     }
 
@@ -721,7 +721,7 @@ mod tests {
         world.despawn(source);
 
         let mut world_signals = WorldSignals::default();
-        world_signals.set_entity("tpl", source);
+        world_signals.register_entity("tpl", source);
 
         let mut system_state = SystemState::<Commands>::new(&mut world);
         {
@@ -773,7 +773,7 @@ mod tests {
         let mut world = World::new();
         let source = phase_source(&mut world);
         let mut world_signals = WorldSignals::default();
-        world_signals.set_entity("tpl", source);
+        world_signals.register_entity("tpl", source);
 
         let clone = clone_tpl(&mut world, &mut world_signals, SpawnCmd::default());
         world.run_system_once(phase_system).unwrap();
@@ -792,7 +792,7 @@ mod tests {
         let mut world = World::new();
         let source = phase_source(&mut world);
         let mut world_signals = WorldSignals::default();
-        world_signals.set_entity("tpl", source);
+        world_signals.register_entity("tpl", source);
 
         let clone = clone_tpl(
             &mut world,
@@ -815,7 +815,7 @@ mod tests {
         let source = world.spawn(MapPosition::new(1.0, 2.0)).id();
 
         let mut world_signals = WorldSignals::default();
-        world_signals.set_entity("tpl", source);
+        world_signals.register_entity("tpl", source);
 
         let mut system_state = SystemState::<Commands>::new(&mut world);
         {
@@ -874,7 +874,7 @@ mod tests {
             .spawn((MapPosition::new(1.0, 2.0), Group::new("enemy"), ZIndex(3.0)))
             .id();
         let mut world_signals = WorldSignals::default();
-        world_signals.set_entity("tpl", source);
+        world_signals.register_entity("tpl", source);
 
         let clone = clone_tpl(
             &mut world,
@@ -912,7 +912,7 @@ mod tests {
         running.finished = true;
         let source = world.spawn(running).id();
         let mut world_signals = WorldSignals::default();
-        world_signals.set_entity("tpl", source);
+        world_signals.register_entity("tpl", source);
 
         let clone = clone_tpl(&mut world, &mut world_signals, SpawnCmd::default());
 
@@ -933,7 +933,7 @@ mod tests {
         running.frame_index = 3;
         let source = world.spawn(running).id();
         let mut world_signals = WorldSignals::default();
-        world_signals.set_entity("tpl", source);
+        world_signals.register_entity("tpl", source);
 
         let clone = clone_tpl(
             &mut world,
@@ -955,7 +955,7 @@ mod tests {
         let mut world = World::new();
         let source = world.spawn(MapPosition::new(0.0, 0.0)).id();
         let mut world_signals = WorldSignals::default();
-        world_signals.set_entity("tpl", source);
+        world_signals.register_entity("tpl", source);
 
         let clone = clone_tpl(
             &mut world,
@@ -1423,7 +1423,7 @@ mod tests {
         let mut world = World::new();
         let mut signals = WorldSignals::default();
         let cursor = world.spawn(MapPosition::new(0.0, 0.0)).id();
-        signals.set_entity("cursor", cursor);
+        signals.register_entity("cursor", cursor);
 
         let e = spawn_from_lua(
             &mut world,
@@ -1557,7 +1557,7 @@ mod tests {
         let mut world = World::new();
         let mut signals = WorldSignals::default();
         let spark = world.spawn(MapPosition::new(0.0, 0.0)).id();
-        signals.set_entity("spark", spark);
+        signals.register_entity("spark", spark);
 
         let e = spawn_from_lua(
             &mut world,

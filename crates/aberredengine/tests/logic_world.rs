@@ -782,8 +782,8 @@ fn rust_despawn_prunes_world_signals_registration_same_tick() {
     let survivor = tw.world.spawn(MapPosition::new(0.0, 0.0)).id();
     {
         let mut signals = tw.world.resource_mut::<WorldSignals>();
-        signals.set_entity(DOOMED_KEY, doomed);
-        signals.set_entity("test:survivor", survivor);
+        signals.register_entity(DOOMED_KEY, doomed);
+        signals.register_entity("test:survivor", survivor);
     }
 
     tw.tick(1, DT);
@@ -2467,7 +2467,7 @@ fn lua_collision_clone_then_move_template_clones_the_old_position() {
         .id();
     tw.world
         .resource_mut::<WorldSignals>()
-        .set_entity("tpl", tpl);
+        .register_entity("tpl", tpl);
     spawn_started_ended_rule(&mut tw, None);
     spawn_box(&mut tw, "a", 0.0, ());
     spawn_box(&mut tw, "b", 5.0, ());

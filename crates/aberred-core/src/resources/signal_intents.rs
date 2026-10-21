@@ -25,7 +25,7 @@ pub enum SignalIntent {
     SetScalar(String, f32),
     SetInteger(String, i32),
     SetString(String, String),
-    SetEntity(String, u64),
+    RegisterEntity(String, u64),
     /// Request a scene switch: sets [`NextScene`].
     RequestScene(String),
     /// Request a quit: sets [`NextGameState`] to [`GameState::Quitting`].
@@ -69,10 +69,10 @@ impl SignalIntents {
             .push(SignalIntent::SetString(key.into(), value.into()));
     }
 
-    /// Queue an entity-set intent.
-    pub fn set_entity(&mut self, key: impl Into<String>, entity: Entity) {
+    /// Queue an entity-registration intent.
+    pub fn register_entity(&mut self, key: impl Into<String>, entity: Entity) {
         self.0
-            .push(SignalIntent::SetEntity(key.into(), entity.to_bits()));
+            .push(SignalIntent::RegisterEntity(key.into(), entity.to_bits()));
     }
 
     /// Queue a scene switch request. Applied to [`NextScene`] at the top of the next sim tick;
@@ -106,8 +106,8 @@ impl SignalIntents {
                 SignalIntent::SetScalar(key, value) => signals.set_scalar(key, value),
                 SignalIntent::SetInteger(key, value) => signals.set_integer(key, value),
                 SignalIntent::SetString(key, value) => signals.set_string(key, value),
-                SignalIntent::SetEntity(key, bits) => {
-                    signals.set_entity(key, Entity::from_bits(bits))
+                SignalIntent::RegisterEntity(key, bits) => {
+                    signals.register_entity(key, Entity::from_bits(bits))
                 }
                 SignalIntent::RequestScene(name) => next_scene.set(name),
                 SignalIntent::RequestQuit => next_state.set(GameState::Quitting),
@@ -159,10 +159,10 @@ mod tests {
     }
 
     #[test]
-    fn apply_to_routes_set_entity() {
+    fn apply_to_routes_register_entity() {
         let mut intents = SignalIntents::default();
         let entity = Entity::from_bits(7);
-        intents.set_entity("selected", entity);
+        intents.register_entity("selected", entity);
 
         let (mut signals, mut next_scene, mut next_state) = targets();
         intents.apply_to(&mut signals, &mut next_scene, &mut next_state);

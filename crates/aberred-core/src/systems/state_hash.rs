@@ -326,7 +326,7 @@ mod tests {
         ws.set_integer("wi", 1);
         ws.set_string("wn", "a");
         ws.set_flag("wf");
-        ws.set_entity("we", e);
+        ws.register_entity("we", e);
         (world, e)
     }
 
@@ -476,7 +476,8 @@ mod tests {
             }),
             ("WorldSignals.entity", |w, _| {
                 let other = w.spawn_empty().id();
-                w.resource_mut::<WorldSignals>().set_entity("we", other);
+                w.resource_mut::<WorldSignals>()
+                    .register_entity("we", other);
                 w.despawn(other);
             }),
             ("WorldTime.frame_count", |w, _| {

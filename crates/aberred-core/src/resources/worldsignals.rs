@@ -406,13 +406,14 @@ impl WorldSignals {
     pub fn get_entity(&self, key: &str) -> Option<Entity> {
         self.entities.get(key).copied()
     }
-    /// Set an entity by key.
-    pub fn set_entity(&mut self, key: impl Into<String>, entity: Entity) {
+    /// Register `key` as a name for `entity`; the entity itself is untouched.
+    pub fn register_entity(&mut self, key: impl Into<String>, entity: Entity) {
         self.entities.insert(key.into(), entity);
         self.entities_dirty = true;
     }
-    /// Remove an entity by key. Returns the removed entity if it existed.
-    pub fn remove_entity(&mut self, key: &str) -> Option<Entity> {
+    /// Drop the registration for `key`; the entity itself is untouched.
+    /// Returns the entity `key` named, if any.
+    pub fn unregister_entity(&mut self, key: &str) -> Option<Entity> {
         let result = self.entities.remove(key);
         if result.is_some() {
             self.entities_dirty = true;
@@ -420,14 +421,14 @@ impl WorldSignals {
         result
     }
 
-    /// Remove all entity registrations pointing at `entity`.
+    /// Drop every registration (under any key) pointing at `entity`.
     ///
     /// Lua's `EntityCmd::Despawn` calls this immediately, so a later command in
     /// the same drained batch (e.g. `engine.clone` of that key) already sees the
     /// key gone. Every other despawn is covered by
-    /// [`remove_dead_entity_registrations`](Self::remove_dead_entity_registrations),
+    /// [`unregister_dead_entities`](Self::unregister_dead_entities),
     /// which the engine runs at the end of each sim tick.
-    pub fn remove_entity_registrations_for(&mut self, entity: Entity) {
+    pub fn unregister_entity_everywhere(&mut self, entity: Entity) {
         if self.entities.is_empty() {
             return;
         }
@@ -443,7 +444,7 @@ impl WorldSignals {
     /// Returns `true` if anything was removed. Backs the engine's per-tick
     /// `prune_dead_entity_registrations` sweep, so a registration never
     /// resolves to a despawned entity, whichever code path despawned it.
-    pub fn remove_dead_entity_registrations(&mut self, is_alive: impl Fn(Entity) -> bool) -> bool {
+    pub fn unregister_dead_entities(&mut self, is_alive: impl Fn(Entity) -> bool) -> bool {
         if self.entities.is_empty() {
             return false;
         }
@@ -461,7 +462,7 @@ impl WorldSignals {
     /// Called during scene transitions to mirror the entity despawn logic:
     /// non-persistent entities are despawned, so their registrations must be cleared too.
     /// Registrations for persistent entities are preserved unchanged.
-    pub fn clear_non_persistent_entities(&mut self, persistent_entities: &FxHashSet<Entity>) {
+    pub fn unregister_non_persistent_entities(&mut self, persistent_entities: &FxHashSet<Entity>) {
         let before = self.entities.len();
         self.entities
             .retain(|_, entity| persistent_entities.contains(entity));
@@ -588,7 +589,7 @@ mod tests {
         ws.set_integer("score", 7);
         ws.set_string("scene", "menu");
         ws.set_flag("paused");
-        ws.set_entity("player", player);
+        ws.register_entity("player", player);
         ws.set_group_count("enemies", 3);
         ws.set_group_count("debt", -2);
 
@@ -606,7 +607,7 @@ mod tests {
         ws.set_integer("i", 7);
         ws.set_string("t", "hi");
         ws.set_flag("f");
-        ws.set_entity("e", e);
+        ws.register_entity("e", e);
         ws.snapshot();
         assert_eq!(ws.get_string("t"), Some("hi"));
         assert_eq!(ws.get_entity("e"), Some(e));
@@ -615,14 +616,14 @@ mod tests {
         assert_eq!(ws.remove_integer("missing"), None);
         assert_eq!(ws.remove_string("missing"), None);
         assert!(!ws.remove_flag("missing"));
-        assert_eq!(ws.remove_entity("missing"), None);
+        assert_eq!(ws.unregister_entity("missing"), None);
         assert!(!ws.is_dirty(), "removing absent keys must not dirty");
 
         assert_eq!(ws.remove_scalar("s"), Some(1.5));
         assert_eq!(ws.remove_integer("i"), Some(7));
         assert_eq!(ws.remove_string("t").as_deref(), Some("hi"));
         assert!(ws.remove_flag("f"));
-        assert_eq!(ws.remove_entity("e"), Some(e));
+        assert_eq!(ws.unregister_entity("e"), Some(e));
         assert!(ws.scalars_dirty && ws.integers_dirty && ws.strings_dirty);
         assert!(ws.flags_dirty && ws.entities_dirty);
 
@@ -724,15 +725,15 @@ mod tests {
     // --- Entities ---
 
     #[test]
-    fn test_remove_entity_registrations_for() {
+    fn test_unregister_entity_everywhere() {
         let mut ws = WorldSignals::default();
         let entity_a = Entity::from_bits(1);
         let entity_b = Entity::from_bits(2);
-        ws.set_entity("player", entity_a);
-        ws.set_entity("cursor", entity_b);
+        ws.register_entity("player", entity_a);
+        ws.register_entity("cursor", entity_b);
         ws.entities_dirty = false;
 
-        ws.remove_entity_registrations_for(entity_a);
+        ws.unregister_entity_everywhere(entity_a);
 
         assert!(
             ws.get_entity("player").is_none(),
@@ -747,30 +748,30 @@ mod tests {
     }
 
     #[test]
-    fn test_remove_entity_registrations_for_no_match() {
+    fn test_unregister_entity_everywhere_no_match() {
         let mut ws = WorldSignals::default();
         let entity_a = Entity::from_bits(1);
         let entity_b = Entity::from_bits(2);
-        ws.set_entity("cursor", entity_b);
+        ws.register_entity("cursor", entity_b);
         ws.entities_dirty = false;
 
-        ws.remove_entity_registrations_for(entity_a);
+        ws.unregister_entity_everywhere(entity_a);
 
         assert_eq!(ws.get_entity("cursor"), Some(entity_b));
         assert!(!ws.entities_dirty);
     }
 
     #[test]
-    fn test_remove_dead_entity_registrations_drops_dead_keeps_live() {
+    fn test_unregister_dead_entities_drops_dead_keeps_live() {
         let mut ws = WorldSignals::default();
         let dead = Entity::from_bits(1);
         let live = Entity::from_bits(2);
-        ws.set_entity("enemy", dead);
-        ws.set_entity("enemy_alias", dead);
-        ws.set_entity("player", live);
+        ws.register_entity("enemy", dead);
+        ws.register_entity("enemy_alias", dead);
+        ws.register_entity("player", live);
         ws.entities_dirty = false;
 
-        let removed = ws.remove_dead_entity_registrations(|e| e == live);
+        let removed = ws.unregister_dead_entities(|e| e == live);
 
         assert!(removed);
         assert!(ws.get_entity("enemy").is_none());
@@ -780,13 +781,13 @@ mod tests {
     }
 
     #[test]
-    fn test_remove_dead_entity_registrations_all_live_is_clean() {
+    fn test_unregister_dead_entities_all_live_is_clean() {
         let mut ws = WorldSignals::default();
         let live = Entity::from_bits(2);
-        ws.set_entity("player", live);
+        ws.register_entity("player", live);
         ws.entities_dirty = false;
 
-        let removed = ws.remove_dead_entity_registrations(|_| true);
+        let removed = ws.unregister_dead_entities(|_| true);
 
         assert!(!removed);
         assert_eq!(ws.get_entity("player"), Some(live));
@@ -794,27 +795,27 @@ mod tests {
     }
 
     #[test]
-    fn test_remove_entity_registrations_for_empty_registry() {
+    fn test_unregister_entity_everywhere_empty_registry() {
         let mut ws = WorldSignals::default();
         let entity_a = Entity::from_bits(1);
         ws.entities_dirty = false;
 
-        ws.remove_entity_registrations_for(entity_a);
+        ws.unregister_entity_everywhere(entity_a);
 
         assert!(!ws.entities_dirty);
     }
 
     #[test]
-    fn test_clear_non_persistent_entities_removes_non_persistent() {
+    fn test_unregister_non_persistent_entities_removes_non_persistent() {
         let mut ws = WorldSignals::default();
         let entity_a = Entity::from_bits(1);
         let entity_b = Entity::from_bits(2);
-        ws.set_entity("player", entity_a);
-        ws.set_entity("cursor", entity_b);
+        ws.register_entity("player", entity_a);
+        ws.register_entity("cursor", entity_b);
 
         // Only entity_b is "persistent"
         let persistent = FxHashSet::from_iter([entity_b]);
-        ws.clear_non_persistent_entities(&persistent);
+        ws.unregister_non_persistent_entities(&persistent);
 
         assert!(
             ws.get_entity("player").is_none(),
@@ -828,50 +829,50 @@ mod tests {
     }
 
     #[test]
-    fn test_clear_non_persistent_entities_empty_set_clears_all() {
+    fn test_unregister_non_persistent_entities_empty_set_clears_all() {
         let mut ws = WorldSignals::default();
-        ws.set_entity("player", Entity::from_bits(1));
-        ws.set_entity("cursor", Entity::from_bits(2));
+        ws.register_entity("player", Entity::from_bits(1));
+        ws.register_entity("cursor", Entity::from_bits(2));
 
-        ws.clear_non_persistent_entities(&FxHashSet::default());
+        ws.unregister_non_persistent_entities(&FxHashSet::default());
 
         assert!(ws.get_entity("player").is_none());
         assert!(ws.get_entity("cursor").is_none());
     }
 
     #[test]
-    fn test_clear_non_persistent_entities_all_persistent_keeps_all() {
+    fn test_unregister_non_persistent_entities_all_persistent_keeps_all() {
         let mut ws = WorldSignals::default();
         let entity_a = Entity::from_bits(1);
         let entity_b = Entity::from_bits(2);
-        ws.set_entity("player", entity_a);
-        ws.set_entity("cursor", entity_b);
+        ws.register_entity("player", entity_a);
+        ws.register_entity("cursor", entity_b);
 
         let persistent = FxHashSet::from_iter([entity_a, entity_b]);
-        ws.clear_non_persistent_entities(&persistent);
+        ws.unregister_non_persistent_entities(&persistent);
 
         assert_eq!(ws.get_entity("player"), Some(entity_a));
         assert_eq!(ws.get_entity("cursor"), Some(entity_b));
     }
 
     #[test]
-    fn test_clear_non_persistent_entities_marks_dirty_only_when_changed() {
+    fn test_unregister_non_persistent_entities_marks_dirty_only_when_changed() {
         let mut ws = WorldSignals::default();
         let entity_a = Entity::from_bits(1);
-        ws.set_entity("player", entity_a);
+        ws.register_entity("player", entity_a);
         ws.snapshot(); // clear dirty flag
         assert!(!ws.entities_dirty);
 
         // Nothing removed — should stay clean
         let persistent = FxHashSet::from_iter([entity_a]);
-        ws.clear_non_persistent_entities(&persistent);
+        ws.unregister_non_persistent_entities(&persistent);
         assert!(
             !ws.entities_dirty,
             "should not mark dirty when nothing was removed"
         );
 
         // Remove entity — should mark dirty
-        ws.clear_non_persistent_entities(&FxHashSet::default());
+        ws.unregister_non_persistent_entities(&FxHashSet::default());
         assert!(
             ws.entities_dirty,
             "should mark dirty when an entry was removed"
@@ -1016,7 +1017,7 @@ mod tests {
     fn test_snapshot_entities() {
         let mut ws = WorldSignals::default();
         let entity = Entity::from_bits(7);
-        ws.set_entity("player", entity);
+        ws.register_entity("player", entity);
         let snap = ws.snapshot();
         assert_eq!(snap.entities.get("player"), Some(&entity.to_bits()));
     }

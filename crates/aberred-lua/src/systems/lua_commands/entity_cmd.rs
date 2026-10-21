@@ -768,7 +768,7 @@ fn process_lifecycle_cmd(
                 // Immediate removal, so a later command in this same drained batch
                 // (e.g. a clone of the key) already sees it gone; the engine's
                 // end-of-tick prune_dead_entity_registrations covers every other despawn.
-                world_signals.remove_entity_registrations_for(entity);
+                world_signals.unregister_entity_everywhere(entity);
                 queue_on(commands, entity, |e| e.despawn());
             }
         }
@@ -885,7 +885,7 @@ mod tests {
         let entity = world.spawn_empty().id();
 
         let mut world_signals = WorldSignals::default();
-        world_signals.set_entity("tpl", entity);
+        world_signals.register_entity("tpl", entity);
 
         run_entity_cmds_in(
             &mut world,

@@ -259,7 +259,7 @@ fn non_persistent_entity_registration_cleared_on_scene_switch() {
     let player = world.spawn(()).id();
     world
         .resource_mut::<WorldSignals>()
-        .set_entity("player", player);
+        .register_entity("player", player);
 
     switch_to(&mut world, "menu");
 
@@ -284,7 +284,7 @@ fn persistent_entity_registration_survives_scene_switch() {
     let cursor = world.spawn(Persistent).id();
     world
         .resource_mut::<WorldSignals>()
-        .set_entity("cursor", cursor);
+        .register_entity("cursor", cursor);
 
     switch_to(&mut world, "menu");
 
@@ -309,9 +309,9 @@ fn mixed_registrations_only_non_persistent_cleared_on_scene_switch() {
     let enemy = world.spawn(()).id();
     {
         let mut ws = world.resource_mut::<WorldSignals>();
-        ws.set_entity("cursor", cursor);
-        ws.set_entity("player", player);
-        ws.set_entity("enemy", enemy);
+        ws.register_entity("cursor", cursor);
+        ws.register_entity("player", player);
+        ws.register_entity("enemy", enemy);
     }
 
     switch_to(&mut world, "menu");

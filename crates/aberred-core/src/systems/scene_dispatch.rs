@@ -235,7 +235,7 @@ pub fn scene_switch_system(world: &mut World, state: &mut SystemState<SceneTeard
         scene_cleanup.despawn_all(&mut commands);
 
         // Clear entity registrations for despawned (non-persistent) entities
-        world_signals.clear_non_persistent_entities(&scene_cleanup.persistent_set());
+        world_signals.unregister_non_persistent_entities(&scene_cleanup.persistent_set());
 
         tracked_groups.reset_to_persistent();
         world_signals.clear_group_counts();
