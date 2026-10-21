@@ -227,23 +227,25 @@ ctx.commands.spawn((
 
 ### GuiButton
 
-Themed, clickable button. Carries its own caption, callback name, and disabled state.
+Themed, clickable button. Carries its own caption and disabled state; a Lua click callback is a separate
+`LuaOnGuiClicked` component (`:with_lua_gui_clicked()`).
 
 ```
-GuiButton { size: Vec2, caption: String, callback_name: Arc<str>, disabled: bool, theme_key: Arc<str> }
+GuiButton { size: Vec2, caption: String, disabled: bool, theme_key: Arc<str> }
 ```
 
 `gui_button_spawn_system` reacts on `Added<GuiButton>` and, **one frame later**:
 - Inserts a co-located `GuiInteractable` (via `insert_if_new` — a pre-existing one is kept intact).
 - Spawns a caption `DynamicText` as a `ChildOf` child (skipped when `caption` is empty).
 
-Caption font, size, and color come from the theme's `font`/`font_size`/`text_color`. An empty
-`callback_name` means no click callback is wired.
+Caption font, size, and color come from the theme's `font`/`font_size`/`text_color`. Without
+`:with_lua_gui_clicked()` no Lua click callback is wired.
 
 **Lua:**
 ```lua
 engine.spawn()
-    :with_gui_button(100, 24, "Start Game", "on_start_clicked")
+    :with_gui_button(100, 24, "Start Game")
+    :with_lua_gui_clicked("on_start_clicked")
     :with_gui_button_disabled()       -- optional; starts in Disabled state
     :with_gui_theme_key("compact")    -- optional; default "default"
     :with_parent(window_entity_id)
@@ -343,7 +345,7 @@ Clickable image slot for icon-style buttons (inventory, skill icons, etc.). No t
 ```
 GuiImage { size: Vec2, tex_key: String, offset: Vec2,
            offset_hover: Option<Vec2>, offset_pressed: Option<Vec2>,
-           offset_disabled: Option<Vec2>, callback_name: Arc<str> }
+           offset_disabled: Option<Vec2> }
 ```
 
 `gui_image_spawn_system` reacts on `Added<GuiImage>` and, **one frame later**, inserts a
@@ -359,7 +361,8 @@ back to `offset`.
 ```lua
 -- 2×2 atlas: Normal(0,0) Hover(32,0) Pressed(0,32) Disabled(32,32)
 engine.spawn()
-    :with_gui_image(32, 32, "item-atlas", 0, 0, "on_sword_clicked")
+    :with_gui_image(32, 32, "item-atlas", 0, 0)
+    :with_lua_gui_clicked("on_sword_clicked")
     :with_gui_image_hover_offset(32, 0)
     :with_gui_image_pressed_offset(0, 32)
     :with_gui_image_disabled_offset(32, 32)
@@ -539,7 +542,8 @@ local function build_my_window(ctx)
         :build()
 
     engine.spawn()
-        :with_gui_button(100, 24, "OK", "on_ok_clicked")
+        :with_gui_button(100, 24, "OK")
+        :with_lua_gui_clicked("on_ok_clicked")
         :with_parent(ctx.id)
         :with_gui_offset(16, 50)
         :with_zindex(2)
@@ -723,7 +727,8 @@ Atlas layout example (2×2 cells, 32×32 each):
 ```
 
 ```lua
-:with_gui_image(32, 32, "icon-atlas", 0, 0, "on_icon_clicked")
+:with_gui_image(32, 32, "icon-atlas", 0, 0)
+:with_lua_gui_clicked("on_icon_clicked")
 :with_gui_image_hover_offset(32, 0)
 :with_gui_image_pressed_offset(0, 32)
 :with_gui_image_disabled_offset(32, 32)
@@ -810,7 +815,8 @@ local function build_main_panel(ctx)
 
     -- Attack icon button (GuiImage with 2×2 atlas states)
     engine.spawn()
-        :with_gui_image(32, 32, "gui-icons", 0, 0, "on_attack_clicked")
+        :with_gui_image(32, 32, "gui-icons", 0, 0)
+        :with_lua_gui_clicked("on_attack_clicked")
         :with_gui_image_hover_offset(32, 0)
         :with_gui_image_pressed_offset(0, 32)
         :with_gui_image_disabled_offset(32, 32)
@@ -822,7 +828,8 @@ local function build_main_panel(ctx)
 
     -- Regular button
     engine.spawn()
-        :with_gui_button(100, 24, "Retreat", "on_retreat_clicked")
+        :with_gui_button(100, 24, "Retreat")
+        :with_lua_gui_clicked("on_retreat_clicked")
         :with_parent(ctx.id)
         :with_gui_offset(16, 84)
         :with_zindex(2)

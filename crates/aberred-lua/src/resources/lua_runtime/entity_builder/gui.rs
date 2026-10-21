@@ -41,14 +41,10 @@ pub(super) fn register<M: LuaUserDataMethods<LuaEntityBuilder>>(
         [
             ("width", "number"),
             ("height", "number"),
-            ("label", "string"),
-            ("callback_name", "string")
+            ("label", "string")
         ],
-        |_,
-         this: &mut LuaEntityBuilder,
-         (width, height, label, callback_name): (f32, f32, String, String)| {
+        |_, this: &mut LuaEntityBuilder, (width, height, label): (f32, f32, String)| {
             this.cmd.gui_button = Some(GuiButton::new(width, height, label));
-            this.cmd.lua_on_gui_clicked = (!callback_name.is_empty()).then_some(callback_name);
             Ok(())
         }
     );
@@ -159,27 +155,18 @@ pub(super) fn register<M: LuaUserDataMethods<LuaEntityBuilder>>(
         methods,
         meta,
         "with_gui_image",
-        "Set GuiImage component; gui_image_spawn_system spawns a co-located GuiInteractable + Sprite on Added<GuiImage> (no caption child, unlike GuiButton/GuiLabel). `offset_x`/`offset_y` select the atlas sub-rect within `tex_key` (mirrors Sprite.offset; size doubles as source-rect size and render size) — this is the Normal-state offset; see :with_gui_image_hover_offset()/:with_gui_image_pressed_offset()/:with_gui_image_disabled_offset() for per-state offsets (each falls back to this one when unset). A non-empty `callback_name` attaches a LuaOnGuiClicked callback; an empty one attaches none (the image still hit-tests/hovers/presses, it just has nothing to dispatch). Requires :with_screen_position() (or :with_parent()+:with_gui_offset()) and :with_zindex() to render.",
+        "Set GuiImage component; gui_image_spawn_system spawns a co-located GuiInteractable + Sprite on Added<GuiImage> (no caption child, unlike GuiButton/GuiLabel). `offset_x`/`offset_y` select the atlas sub-rect within `tex_key` (mirrors Sprite.offset; size doubles as source-rect size and render size) — this is the Normal-state offset; see :with_gui_image_hover_offset()/:with_gui_image_pressed_offset()/:with_gui_image_disabled_offset() for per-state offsets (each falls back to this one when unset). Click callbacks attach with :with_lua_gui_clicked(); without one the image still hit-tests/hovers/presses, it just has nothing to dispatch. Requires :with_screen_position() (or :with_parent()+:with_gui_offset()) and :with_zindex() to render.",
         [
             ("width", "number"),
             ("height", "number"),
             ("tex_key", "string"),
             ("offset_x", "number"),
-            ("offset_y", "number"),
-            ("callback_name", "string")
+            ("offset_y", "number")
         ],
         |_,
          this: &mut LuaEntityBuilder,
-         (width, height, tex_key, offset_x, offset_y, callback_name): (
-            f32,
-            f32,
-            String,
-            f32,
-            f32,
-            String
-        )| {
+         (width, height, tex_key, offset_x, offset_y): (f32, f32, String, f32, f32)| {
             this.cmd.gui_image = Some(GuiImage::new(width, height, tex_key, offset_x, offset_y));
-            this.cmd.lua_on_gui_clicked = (!callback_name.is_empty()).then_some(callback_name);
             Ok(())
         }
     );
@@ -231,6 +218,18 @@ pub(super) fn register<M: LuaUserDataMethods<LuaEntityBuilder>>(
                 ));
             };
             img.offset_disabled = Some(Vec2::new(offset_x, offset_y));
+            Ok(())
+        }
+    );
+
+    builder_method!(
+        methods,
+        meta,
+        "with_lua_gui_clicked",
+        "Attach a callback fired on each GuiClicked of this entity's GuiInteractable (spawned by :with_gui_button() / :with_gui_image()). Signature: fn(ctx) with ctx.entity_id. A disabled widget does not dispatch it.",
+        [("callback", "string")],
+        |_, this: &mut LuaEntityBuilder, callback: String| {
+            this.cmd.lua_on_gui_clicked = Some(callback);
             Ok(())
         }
     );
@@ -385,15 +384,15 @@ mod tests {
     }
 
     #[test]
-    fn with_gui_button_sets_caption_callback_and_disabled() {
-        let cmd = built(":with_gui_button(80, 20, 'Start', 'on_start')");
-        assert_eq!(cmd.lua_on_gui_clicked.as_deref(), Some("on_start"));
-        let btn = cmd.gui_button.unwrap();
+    fn with_gui_button_sets_caption_and_disabled() {
+        let btn = built(":with_gui_button(80, 20, 'Start')")
+            .gui_button
+            .unwrap();
         assert_eq!(btn.size, Vec2::new(80.0, 20.0));
         assert_eq!(btn.caption, "Start");
         assert!(!btn.disabled);
 
-        let btn = built(":with_gui_button(80, 20, '', 'cb'):with_gui_button_disabled()")
+        let btn = built(":with_gui_button(80, 20, ''):with_gui_button_disabled()")
             .gui_button
             .unwrap();
         assert!(btn.disabled);
@@ -424,7 +423,7 @@ mod tests {
     fn with_gui_theme_key_applies_to_each_widget_kind() {
         let cmd = built(":with_gui_window(100, 50):with_gui_theme_key('dark')");
         assert_eq!(&*cmd.gui_window.unwrap().theme_key, "dark");
-        let cmd = built(":with_gui_button(10, 10, 'b', 'cb'):with_gui_theme_key('dark')");
+        let cmd = built(":with_gui_button(10, 10, 'b'):with_gui_theme_key('dark')");
         assert_eq!(&*cmd.gui_button.unwrap().theme_key, "dark");
         let cmd = built(":with_gui_label(10, 10, 'l'):with_gui_theme_key('dark')");
         assert_eq!(&*cmd.gui_label.unwrap().theme_key, "dark");
@@ -445,9 +444,9 @@ mod tests {
 
     #[test]
     fn with_gui_image_sets_normal_and_per_state_offsets() {
-        let cmd = built(":with_gui_image(16, 16, 'atlas', 32, 0, 'on_icon')");
-        assert_eq!(cmd.lua_on_gui_clicked.as_deref(), Some("on_icon"));
-        let img = cmd.gui_image.unwrap();
+        let img = built(":with_gui_image(16, 16, 'atlas', 32, 0)")
+            .gui_image
+            .unwrap();
         assert_eq!(img.size, Vec2::new(16.0, 16.0));
         assert_eq!(img.tex_key, "atlas");
         assert_eq!(img.offset, Vec2::new(32.0, 0.0));
@@ -457,7 +456,7 @@ mod tests {
         );
 
         let img = built(
-            ":with_gui_image(16, 16, 'atlas', 0, 0, '')\
+            ":with_gui_image(16, 16, 'atlas', 0, 0)\
              :with_gui_image_hover_offset(16, 0)\
              :with_gui_image_pressed_offset(32, 0)\
              :with_gui_image_disabled_offset(48, 0)",

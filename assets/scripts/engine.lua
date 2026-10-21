@@ -1722,23 +1722,21 @@ function EntityBuilder:with_group(name) end
 ---@param width number
 ---@param height number
 ---@param label string
----@param callback_name string
 ---@return EntityBuilder
-function EntityBuilder:with_gui_button(width, height, label, callback_name) end
+function EntityBuilder:with_gui_button(width, height, label) end
 
 ---Mark a GuiButton authored-disabled — gui_button_spawn_system applies this to the spawned GuiInteractable's state. Requires :with_gui_button() first.
 ---@return EntityBuilder
 function EntityBuilder:with_gui_button_disabled() end
 
----Set GuiImage component; gui_image_spawn_system spawns a co-located GuiInteractable + Sprite on Added<GuiImage> (no caption child, unlike GuiButton/GuiLabel). `offset_x`/`offset_y` select the atlas sub-rect within `tex_key` (mirrors Sprite.offset; size doubles as source-rect size and render size) — this is the Normal-state offset; see :with_gui_image_hover_offset()/:with_gui_image_pressed_offset()/:with_gui_image_disabled_offset() for per-state offsets (each falls back to this one when unset). A non-empty `callback_name` attaches a LuaOnGuiClicked callback; an empty one attaches none (the image still hit-tests/hovers/presses, it just has nothing to dispatch). Requires :with_screen_position() (or :with_parent()+:with_gui_offset()) and :with_zindex() to render.
+---Set GuiImage component; gui_image_spawn_system spawns a co-located GuiInteractable + Sprite on Added<GuiImage> (no caption child, unlike GuiButton/GuiLabel). `offset_x`/`offset_y` select the atlas sub-rect within `tex_key` (mirrors Sprite.offset; size doubles as source-rect size and render size) — this is the Normal-state offset; see :with_gui_image_hover_offset()/:with_gui_image_pressed_offset()/:with_gui_image_disabled_offset() for per-state offsets (each falls back to this one when unset). Click callbacks attach with :with_lua_gui_clicked(); without one the image still hit-tests/hovers/presses, it just has nothing to dispatch. Requires :with_screen_position() (or :with_parent()+:with_gui_offset()) and :with_zindex() to render.
 ---@param width number
 ---@param height number
 ---@param tex_key string
 ---@param offset_x number
 ---@param offset_y number
----@param callback_name string
 ---@return EntityBuilder
-function EntityBuilder:with_gui_image(width, height, tex_key, offset_x, offset_y, callback_name) end
+function EntityBuilder:with_gui_image(width, height, tex_key, offset_x, offset_y) end
 
 ---Set the atlas offset GuiImage uses while GuiInteractable.state == Disabled. gui_image_state_sync_system applies this to Sprite.offset each frame the widget is disabled. Requires :with_gui_image() first.
 ---@param offset_x number
@@ -1834,6 +1832,11 @@ function EntityBuilder:with_lua_collision_rule(group_a, group_b, ongoing) end
 ---@param callback string
 ---@return EntityBuilder
 function EntityBuilder:with_lua_collision_started(callback) end
+
+---Attach a callback fired on each GuiClicked of this entity's GuiInteractable (spawned by :with_gui_button() / :with_gui_image()). Signature: fn(ctx) with ctx.entity_id. A disabled widget does not dispatch it.
+---@param callback string
+---@return EntityBuilder
+function EntityBuilder:with_lua_gui_clicked(callback) end
 
 ---Set Lua callback for menu selection
 ---@param callback string
@@ -2314,23 +2317,21 @@ function CollisionEntityBuilder:with_group(name) end
 ---@param width number
 ---@param height number
 ---@param label string
----@param callback_name string
 ---@return CollisionEntityBuilder
-function CollisionEntityBuilder:with_gui_button(width, height, label, callback_name) end
+function CollisionEntityBuilder:with_gui_button(width, height, label) end
 
 ---Mark a GuiButton authored-disabled — gui_button_spawn_system applies this to the spawned GuiInteractable's state. Requires :with_gui_button() first.
 ---@return CollisionEntityBuilder
 function CollisionEntityBuilder:with_gui_button_disabled() end
 
----Set GuiImage component; gui_image_spawn_system spawns a co-located GuiInteractable + Sprite on Added<GuiImage> (no caption child, unlike GuiButton/GuiLabel). `offset_x`/`offset_y` select the atlas sub-rect within `tex_key` (mirrors Sprite.offset; size doubles as source-rect size and render size) — this is the Normal-state offset; see :with_gui_image_hover_offset()/:with_gui_image_pressed_offset()/:with_gui_image_disabled_offset() for per-state offsets (each falls back to this one when unset). A non-empty `callback_name` attaches a LuaOnGuiClicked callback; an empty one attaches none (the image still hit-tests/hovers/presses, it just has nothing to dispatch). Requires :with_screen_position() (or :with_parent()+:with_gui_offset()) and :with_zindex() to render.
+---Set GuiImage component; gui_image_spawn_system spawns a co-located GuiInteractable + Sprite on Added<GuiImage> (no caption child, unlike GuiButton/GuiLabel). `offset_x`/`offset_y` select the atlas sub-rect within `tex_key` (mirrors Sprite.offset; size doubles as source-rect size and render size) — this is the Normal-state offset; see :with_gui_image_hover_offset()/:with_gui_image_pressed_offset()/:with_gui_image_disabled_offset() for per-state offsets (each falls back to this one when unset). Click callbacks attach with :with_lua_gui_clicked(); without one the image still hit-tests/hovers/presses, it just has nothing to dispatch. Requires :with_screen_position() (or :with_parent()+:with_gui_offset()) and :with_zindex() to render.
 ---@param width number
 ---@param height number
 ---@param tex_key string
 ---@param offset_x number
 ---@param offset_y number
----@param callback_name string
 ---@return CollisionEntityBuilder
-function CollisionEntityBuilder:with_gui_image(width, height, tex_key, offset_x, offset_y, callback_name) end
+function CollisionEntityBuilder:with_gui_image(width, height, tex_key, offset_x, offset_y) end
 
 ---Set the atlas offset GuiImage uses while GuiInteractable.state == Disabled. gui_image_state_sync_system applies this to Sprite.offset each frame the widget is disabled. Requires :with_gui_image() first.
 ---@param offset_x number
@@ -2426,6 +2427,11 @@ function CollisionEntityBuilder:with_lua_collision_rule(group_a, group_b, ongoin
 ---@param callback string
 ---@return CollisionEntityBuilder
 function CollisionEntityBuilder:with_lua_collision_started(callback) end
+
+---Attach a callback fired on each GuiClicked of this entity's GuiInteractable (spawned by :with_gui_button() / :with_gui_image()). Signature: fn(ctx) with ctx.entity_id. A disabled widget does not dispatch it.
+---@param callback string
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_lua_gui_clicked(callback) end
 
 ---Set Lua callback for menu selection
 ---@param callback string

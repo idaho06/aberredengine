@@ -5904,7 +5904,8 @@ A clickable button with an optional text caption. Caption text comes from the th
 
 ```lua
 engine.spawn()
-    :with_gui_button(120, 32, "Start Game", "on_start_clicked")
+    :with_gui_button(120, 32, "Start Game")
+    :with_lua_gui_clicked("on_start_clicked")
     :with_gui_button_disabled()         -- optional; starts in Disabled state
     :with_gui_theme_key("menu")         -- optional
     :with_parent(panel_id)              -- parent for cascade despawn
@@ -5921,10 +5922,10 @@ end
 **Notes:**
 - Caption is a `DynamicText` child entity spawned one frame after the `GuiButton`.
 - Empty `caption` string skips spawning the caption entirely.
-- Empty `callback_name` ("") disables click dispatch — the button still hit-tests and draws normally.
+- Without `:with_lua_gui_clicked()` the button still hit-tests and draws normally; it just dispatches no click callback.
 - `:with_gui_button_disabled()` requires `:with_gui_button()` first (chaining validation).
 - Click callbacks must be in `M._callbacks`.
-- **Click callback `ctx.entity_id`** (not `button_id`) — renamed when `GuiImage` was added to the same click system.
+- **Click callback `ctx.entity_id`** (not `button_id`): `GuiButton` and `GuiImage` share one click system.
 
 Runtime: `engine.entity_set_gui_disabled(entity_id, true/false)`
 
@@ -5955,7 +5956,8 @@ A clickable image sprite (e.g. inventory slots, icon buttons) with per-state atl
 
 ```lua
 engine.spawn()
-    :with_gui_image(64, 64, "icons", 0, 0, "on_icon_clicked")
+    :with_gui_image(64, 64, "icons", 0, 0)
+    :with_lua_gui_clicked("on_icon_clicked")
     -- Per-state atlas offsets within the texture (optional; unset = base offset):
     :with_gui_image_hover_offset(64, 0)
     :with_gui_image_pressed_offset(128, 0)
@@ -5973,7 +5975,7 @@ end
 - `offset_x`, `offset_y` select the atlas sub-rect pixel position for the `Normal` state.
 - Per-state offsets are auto-applied each frame by `gui_image_state_sync_system`.
 - No theme — does not use `GuiThemeStore`.
-- Empty `callback_name` ("") disables click dispatch.
+- Without `:with_lua_gui_clicked()` the image still hit-tests; it just dispatches no click callback.
 
 Runtime: `engine.entity_set_gui_disabled(entity_id, true/false)`
 
@@ -6012,7 +6014,8 @@ Child widgets use `:with_gui_offset()` instead of `:with_screen_position()` for 
 
 ```lua
 engine.spawn()
-    :with_gui_button(80, 24, "OK", "on_ok")
+    :with_gui_button(80, 24, "OK")
+    :with_lua_gui_clicked("on_ok")
     :with_parent(panel_id)       -- cascade despawn + layout parent
     :with_gui_offset(60, 44)     -- pixels from parent's top-left
     :with_zindex(11)
@@ -6092,7 +6095,8 @@ function M.spawn()
         :build()
 
     engine.spawn()
-        :with_gui_button(120, 30, "Restart", "on_restart")
+        :with_gui_button(120, 30, "Restart")
+        :with_lua_gui_clicked("on_restart")
         :with_parent(btn_panel_id)
         :with_gui_offset(10, 10)
         :with_zindex(21)

@@ -1465,7 +1465,7 @@ mod tests {
     }
 
     #[test]
-    fn lua_gui_click_callbacks_become_lua_on_gui_clicked() {
+    fn with_lua_gui_clicked_attaches_lua_on_gui_clicked() {
         let mut world = World::new();
         let mut signals = WorldSignals::default();
         let mut on_click = |script: &str| {
@@ -1476,19 +1476,25 @@ mod tests {
         };
 
         assert_eq!(
-            on_click("engine.spawn():with_gui_button(80, 20, 'Start', 'on_start'):build()"),
+            on_click(
+                "engine.spawn():with_gui_button(80, 20, 'Start')\
+                 :with_lua_gui_clicked('on_start'):build()"
+            ),
             Some("on_start".to_string())
         );
         assert_eq!(
-            on_click("engine.spawn():with_gui_image(16, 16, 'atlas', 0, 0, 'on_icon'):build()"),
+            on_click(
+                "engine.spawn():with_gui_image(16, 16, 'atlas', 0, 0)\
+                 :with_lua_gui_clicked('on_icon'):build()"
+            ),
             Some("on_icon".to_string())
         );
         assert_eq!(
-            on_click("engine.spawn():with_gui_button(80, 20, 'Start', ''):build()"),
+            on_click("engine.spawn():with_gui_button(80, 20, 'Start'):build()"),
             None
         );
         assert_eq!(
-            on_click("engine.spawn():with_gui_image(16, 16, 'atlas', 0, 0, ''):build()"),
+            on_click("engine.spawn():with_gui_image(16, 16, 'atlas', 0, 0):build()"),
             None
         );
     }

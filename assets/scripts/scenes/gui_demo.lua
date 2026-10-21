@@ -58,7 +58,8 @@ local function build_gui_demo_window(ctx)
     -- :with_lua_setup() round trip needed here) — see
     -- docs/gui-system-architecture.md's Components section.
     engine.spawn()
-        :with_gui_button(100, 20, "Click Me", "on_gui_demo_button_clicked")
+        :with_gui_button(100, 20, "Click Me")
+        :with_lua_gui_clicked("on_gui_demo_button_clicked")
         :with_parent(ctx.id)
         :with_gui_offset(16, 50)
         :with_zindex(2)
@@ -67,7 +68,8 @@ local function build_gui_demo_window(ctx)
     -- Shows the second window (spawned with no ScreenPosition of its own —
     -- see build_gui_demo_window2) by sliding it in from off-screen.
     engine.spawn()
-        :with_gui_button(80, 20, "Slide", "on_slide_window2_clicked")
+        :with_gui_button(80, 20, "Slide")
+        :with_lua_gui_clicked("on_slide_window2_clicked")
         :with_parent(ctx.id)
         :with_gui_offset(16, 80)
         :with_zindex(2)
@@ -76,7 +78,8 @@ local function build_gui_demo_window(ctx)
     -- Shows the second window instantly, by giving it a ScreenPosition
     -- directly instead of tweening one in.
     engine.spawn()
-        :with_gui_button(80, 20, "Appear", "on_appear_window2_clicked")
+        :with_gui_button(80, 20, "Appear")
+        :with_lua_gui_clicked("on_appear_window2_clicked")
         :with_parent(ctx.id)
         :with_gui_offset(16, 110)
         :with_zindex(2)
@@ -114,7 +117,8 @@ local function build_gui_demo_window2(ctx)
     -- set :with_gui_theme_key("compact"). See docs/gui-system-architecture.md,
     -- Roadmap item #2.
     engine.spawn()
-        :with_gui_button(80, 20, "Hide", "on_hide_window2_clicked")
+        :with_gui_button(80, 20, "Hide")
+        :with_lua_gui_clicked("on_hide_window2_clicked")
         :with_gui_theme_key("compact")
         :with_parent(ctx.id)
         :with_gui_offset(16, 60)
@@ -125,7 +129,7 @@ local function build_gui_demo_window2(ctx)
     -- siblings here) — demonstrates a disabled GuiButton plus mixed themes
     -- within the same window.
     engine.spawn()
-        :with_gui_button(180, 20, "Can't touch this!", "")
+        :with_gui_button(180, 20, "Can't touch this!")
         :with_gui_button_disabled()
         :with_parent(ctx.id)
         :with_gui_offset(106, 60)
@@ -325,7 +329,8 @@ local function build_character_window(ctx)
     -- Potion GuiImage — 2×2 atlas, 32×32 cells:
     -- Normal(0,0)  Hover(32,0)  Pressed/Selected(0,32)  Disabled(32,32)
     engine.spawn()
-        :with_gui_image(32, 32, "gui-potion-btn", 0, 0, "on_potion_clicked")
+        :with_gui_image(32, 32, "gui-potion-btn", 0, 0)
+        :with_lua_gui_clicked("on_potion_clicked")
         :with_gui_image_hover_offset(32, 0)
         :with_gui_image_pressed_offset(0, 32)
         :with_gui_image_disabled_offset(32, 32)
@@ -348,7 +353,8 @@ local function build_character_window(ctx)
 
     -- "+" buy button
     engine.spawn()
-        :with_gui_button(28, 20, "+", "on_char_buy_clicked")
+        :with_gui_button(28, 20, "+")
+        :with_lua_gui_clicked("on_char_buy_clicked")
         :with_gui_theme_key("compact")
         :register_as("char_buy")
         :with_parent(ctx.id)
@@ -358,7 +364,8 @@ local function build_character_window(ctx)
 
     -- "-" sell button
     engine.spawn()
-        :with_gui_button(28, 20, "-", "on_char_sell_clicked")
+        :with_gui_button(28, 20, "-")
+        :with_lua_gui_clicked("on_char_sell_clicked")
         :with_gui_theme_key("compact")
         :register_as("char_sell")
         :with_parent(ctx.id)
@@ -368,7 +375,8 @@ local function build_character_window(ctx)
 
     -- Sword GuiImage — same 2×2 atlas layout as the potion button
     engine.spawn()
-        :with_gui_image(32, 32, "gui-sword-btn", 0, 0, "on_sword_clicked")
+        :with_gui_image(32, 32, "gui-sword-btn", 0, 0)
+        :with_lua_gui_clicked("on_sword_clicked")
         :with_gui_image_hover_offset(32, 0)
         :with_gui_image_pressed_offset(0, 32)
         :with_gui_image_disabled_offset(32, 32)

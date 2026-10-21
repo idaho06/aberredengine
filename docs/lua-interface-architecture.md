@@ -74,7 +74,7 @@ crates/aberred-lua/src/resources/lua_runtime/
 │   ├── transform.rs     # with_position, with_screen_position, with_rotation, with_scale, with_parent, with_stuckto*, with_camera_target, ...
 │   ├── physics.rs       # with_velocity, with_accel, with_friction, with_max_speed, with_frozen, with_collider*
 │   ├── sprite.rs        # with_sprite*, with_tint, with_shadow, with_animation*, with_lua_animation_finished, with_zindex
-│   ├── gui.rs            # with_gui_window/button/label/image/progress_bar/offset/theme_key and their per-state offset variants
+│   ├── gui.rs            # with_gui_window/button/label/image/progress_bar/offset/theme_key, their per-state offset variants, with_lua_gui_clicked
 │   ├── menu.rs           # with_menu and its with_menu_* configuration methods
 │   ├── tween.rs          # with_tween_position/rotation/scale/screen_position and their *_easing/*_loop/*_backwards variants, with_lua_tween_*_finished
 │   └── behavior.rs       # with_phase, with_lua_phase_entered, with_lua_phase_exited, with_lua_phase_update, with_lua_timer, with_lua_timer_once, with_lua_collision_rule, with_lua_collision_started, with_lua_collision_ended, with_lua_setup, with_signal*, with_group, with_persistent, with_grid_layout, with_tilemap, with_particle_emitter, with_mouse_controlled, with_text
@@ -335,7 +335,7 @@ A Lua collision rule is a plain core `CollisionRule` plus a `LuaOnCollision { st
 
 ### Menu Selection and GUI Interactable Click Dispatch
 
-`lua_menu_selection_observer` (`lua_menu.rs`) runs alongside `aberred-core`'s `menu_selection_observer` in games that run a Lua script. It calls the menu's Lua callback (its `LuaOnMenuSelected` component, set via `:with_lua_menu_selected()`; a missing function only warns). A Lua menu with a callback is spawned without `MenuActions`, so core's observer has nothing to run for it. Rust code observes the `MenuSelected` event on the menu entity, which fires for every selection regardless. `lua_gui_interactable_click_observer` (`lua_gui_interactable_click.rs`) is likewise spawned only in games that run a Lua script. It calls the widget's Lua callback (its `LuaOnGuiClicked` component, set via the `callback_name` argument to `with_gui_button`/`with_gui_image`; a missing function only warns). Rust code observes the `GuiClicked` event on the widget entity. Both observers run through `LuaDispatch` (`dispatch_custom_and_drain`): the signal cache is refreshed before the call and the commands the callback queued are drained right after it. They build a small ad-hoc context table rather than using the pooled `EntityCtxTables`/`CollisionCtxTables` (these fire far less often than phase/timer/collision callbacks, so pooling isn't worth the complexity) — the menu callback's table carries `menu_id`/`item_id`/`item_index`; the GUI interactable callback's carries just `entity_id` — and calls the named function with that single table as its only argument (no `input`).
+`lua_menu_selection_observer` (`lua_menu.rs`) runs alongside `aberred-core`'s `menu_selection_observer` in games that run a Lua script. It calls the menu's Lua callback (its `LuaOnMenuSelected` component, set via `:with_lua_menu_selected()`; a missing function only warns). A Lua menu with a callback is spawned without `MenuActions`, so core's observer has nothing to run for it. Rust code observes the `MenuSelected` event on the menu entity, which fires for every selection regardless. `lua_gui_interactable_click_observer` (`lua_gui_interactable_click.rs`) is likewise spawned only in games that run a Lua script. It calls the widget's Lua callback (its `LuaOnGuiClicked` component, set via `with_lua_gui_clicked`; a missing function only warns). Rust code observes the `GuiClicked` event on the widget entity. Both observers run through `LuaDispatch` (`dispatch_custom_and_drain`): the signal cache is refreshed before the call and the commands the callback queued are drained right after it. They build a small ad-hoc context table rather than using the pooled `EntityCtxTables`/`CollisionCtxTables` (these fire far less often than phase/timer/collision callbacks, so pooling isn't worth the complexity) — the menu callback's table carries `menu_id`/`item_id`/`item_index`; the GUI interactable callback's carries just `entity_id` — and calls the named function with that single table as its only argument (no `input`).
 
 ### Stub and `.luarc.json` Generation
 
@@ -600,6 +600,7 @@ with_gui_image
 with_gui_image_hover_offset
 with_gui_image_pressed_offset
 with_gui_image_disabled_offset
+with_lua_gui_clicked
 with_gui_progress_bar
 with_gui_progress_bar_vertical
 with_gui_progress_bar_reversed
@@ -715,7 +716,8 @@ GUI widgets are spawned the same way as any other entity, via dedicated `with_gu
 engine.spawn()
     :with_screen_position(100, 40)
     :with_zindex(10)
-    :with_gui_button(120, 32, "Start", "on_start_clicked")
+    :with_gui_button(120, 32, "Start")
+    :with_lua_gui_clicked("on_start_clicked")
     :with_gui_theme_key("hud")
     :build()
 ```

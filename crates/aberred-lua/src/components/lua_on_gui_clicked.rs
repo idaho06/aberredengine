@@ -13,12 +13,13 @@
 //!
 //! # Usage from Lua
 //!
-//! The last argument of `:with_gui_button()` / `:with_gui_image()` names the
-//! callback; an empty name attaches none.
+//! `:with_lua_gui_clicked()` names the callback of a `:with_gui_button()` /
+//! `:with_gui_image()` widget; without it the widget dispatches nothing.
 //!
 //! ```lua
 //! engine.spawn()
-//!     :with_gui_button(80, 20, "Start", "on_start")
+//!     :with_gui_button(80, 20, "Start")
+//!     :with_lua_gui_clicked("on_start")
 //!     :build()
 //! ```
 
