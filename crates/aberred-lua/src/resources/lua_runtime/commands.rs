@@ -190,8 +190,8 @@ pub enum SignalCmd {
     ClearScalar { key: String },
     ClearInteger { key: String },
     ClearString { key: String },
-    SetEntity { key: String, entity_id: u64 },
-    RemoveEntity { key: String },
+    RegisterEntity { key: String, entity_id: u64 },
+    UnregisterEntity { key: String },
 }
 
 /// Commands for phase transitions from Lua.

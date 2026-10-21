@@ -431,7 +431,7 @@ Both are registered in `engine_api/signal.rs`: `request_scene(name)` queues `Sig
 - `set_scalar`, `set_integer`, `set_string`, `set_flag`
 - `clear_scalar`, `clear_integer`, `clear_string`, `clear_flag`
 - `toggle_flag`
-- `set_entity`, `remove_entity`
+- `register_entity`, `unregister_entity`
 
 #### Groups
 
@@ -528,7 +528,7 @@ The four `entity_insert_tween_*` commands (`position`/`rotation`/`scale`/`screen
 - `collision_set_scalar`, `collision_set_integer`, `collision_set_string`, `collision_set_flag`
 - `collision_toggle_flag`
 - `collision_clear_scalar`, `collision_clear_integer`, `collision_clear_string`, `collision_clear_flag`
-- `collision_set_entity`, `collision_remove_entity`
+- `collision_register_entity`, `collision_unregister_entity`
 
 #### Collision Entity Commands
 

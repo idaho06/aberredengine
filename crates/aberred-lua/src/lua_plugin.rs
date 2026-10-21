@@ -627,14 +627,14 @@ mod tests {
     }
 
     #[test]
-    fn set_entity_then_clone_in_one_script_clones() {
+    fn register_entity_then_clone_in_one_script_clones() {
         let mut world = new_drain_test_world();
         let tpl = world.spawn(MapPosition::new(1.0, 2.0)).id();
 
         exec_and_drain(
             &mut world,
             &format!(
-                "engine.set_entity('tpl', {})\n\
+                "engine.register_entity('tpl', {})\n\
                  engine.clone('tpl'):build()",
                 tpl.to_bits()
             ),
@@ -679,14 +679,14 @@ mod tests {
     }
 
     #[test]
-    fn clone_then_remove_entity_key_still_clones() {
+    fn clone_then_unregister_entity_key_still_clones() {
         let mut world = new_drain_test_world();
         let tpl = spawn_registered_template(&mut world);
 
         exec_and_drain(
             &mut world,
             "engine.clone('tpl'):build()\n\
-             engine.remove_entity('tpl')",
+             engine.unregister_entity('tpl')",
         );
 
         assert!(world.resource::<WorldSignals>().get_entity("tpl").is_none());

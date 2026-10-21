@@ -476,7 +476,7 @@ fn meta_functions_complete() {
             "set_scalar", "set_integer", "set_string", "set_flag", "clear_flag",
             "toggle_flag",
             "clear_scalar", "clear_integer", "clear_string",
-            "set_entity", "remove_entity",
+            "register_entity", "unregister_entity",
             -- phase
             "phase_transition",
             -- group

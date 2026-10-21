@@ -94,9 +94,9 @@ end
 local function build_gui_demo_window2(ctx)
     -- Looked up by id from the Show/Hide button callbacks below, which run
     -- with a *different* entity's ctx (the button that was clicked, not this
-    -- window) — engine.get_entity/set_entity is the existing mechanism for
+    -- window) — engine.get_entity/register_entity is the existing mechanism for
     -- handing an entity id across unrelated callbacks.
-    engine.set_entity("gui_demo_window2", ctx.id)
+    engine.register_entity("gui_demo_window2", ctx.id)
 
     -- Standalone styled DynamicText (not a themed GuiLabel caption) — a
     -- different font/size/color than the GuiTheme default, demonstrating the
@@ -205,7 +205,7 @@ end
 --- Stores the enemy timer entity id and fires the first attack timer.
 --- @param ctx EntityContext
 local function on_char_enemy_timer_setup(ctx)
-    engine.set_entity("char_enemy_timer", ctx.id)
+    engine.register_entity("char_enemy_timer", ctx.id)
     local delay = math.random(5, 10)
     engine.log_debug(string.format("[timer] enemy setup id=%d: first attack in %ds", ctx.id, delay))
     engine.entity_insert_lua_timer_once(ctx.id, delay, "on_enemy_attack")

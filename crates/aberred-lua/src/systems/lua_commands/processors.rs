@@ -126,12 +126,12 @@ pub fn process_signal_command(targets: &mut SignalTargets, cmd: SignalCmd) {
         SignalCmd::ClearString { key } => {
             world_signals.remove_string(&key);
         }
-        SignalCmd::SetEntity { key, entity_id } => {
+        SignalCmd::RegisterEntity { key, entity_id } => {
             if let Some(entity) = super::entity_cmd::resolve_entity(entity_id) {
                 world_signals.register_entity(key, entity);
             }
         }
-        SignalCmd::RemoveEntity { key } => {
+        SignalCmd::UnregisterEntity { key } => {
             world_signals.unregister_entity(&key);
         }
     }
@@ -1124,19 +1124,19 @@ mod tests {
                 value: s("x"),
             },
             SignalCmd::ClearString { key: s("gone_str") },
-            SignalCmd::SetEntity {
+            SignalCmd::RegisterEntity {
                 key: s("player"),
                 entity_id: player.to_bits(),
             },
-            SignalCmd::SetEntity {
+            SignalCmd::RegisterEntity {
                 key: s("bad"),
                 entity_id: 0,
             },
-            SignalCmd::SetEntity {
+            SignalCmd::RegisterEntity {
                 key: s("gone_e"),
                 entity_id: player.to_bits(),
             },
-            SignalCmd::RemoveEntity { key: s("gone_e") },
+            SignalCmd::UnregisterEntity { key: s("gone_e") },
         ] {
             apply_signal(&mut ws, cmd);
         }

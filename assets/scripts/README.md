@@ -308,9 +308,9 @@ Different callbacks process different types of engine commands. Here's what comm
 | Phase/Timer/`on_animation_finished`/LuaSetup/menu/GUI click callbacks | (Signal, Entity, Spawn, Clone in call order) → Audio → Camera → Phase |
 | Collision callbacks | the same, from the collision queues |
 
-**Signal, entity, spawn and clone commands apply in call order.** Within one callback, every `engine.entity_*`, `engine.spawn()`/`engine.clone()` `:build()` and world-signal call (`set_flag`, `set_entity`, `remove_entity`, …) lands in the order you made it, so an insert followed by a write of the same component works: `engine.entity_set_shader(id, "wave")` then `engine.entity_shader_set_float(id, "u", 1.0)` keeps the uniform, and `engine.release_stuckto(id)` then `engine.entity_set_velocity(id, 5, 0)` keeps the velocity. They apply right after the callback's drain (for system callbacks such as `on_update_<scene>`, at the end of that step of the tick), and a callback's `ctx` is a snapshot taken before the call, so a script never sees its own writes inside the same callback.
+**Signal, entity, spawn and clone commands apply in call order.** Within one callback, every `engine.entity_*`, `engine.spawn()`/`engine.clone()` `:build()` and world-signal call (`set_flag`, `register_entity`, `unregister_entity`, …) lands in the order you made it, so an insert followed by a write of the same component works: `engine.entity_set_shader(id, "wave")` then `engine.entity_shader_set_float(id, "u", 1.0)` keeps the uniform, and `engine.release_stuckto(id)` then `engine.entity_set_velocity(id, 5, 0)` keeps the velocity. They apply right after the callback's drain (for system callbacks such as `on_update_<scene>`, at the end of that step of the tick), and a callback's `ctx` is a snapshot taken before the call, so a script never sees its own writes inside the same callback.
 
-So a clone copies its template as it is at the `clone()` call: moving it afterwards (`engine.entity_set_position(tpl_id, x, y)`) doesn't change the clone, and despawning it or removing its key (`engine.entity_despawn(tpl_id)`, `engine.remove_entity("tpl")`) doesn't cancel the clone. And a spawn or clone that looks up a key (a clone source, a particle `templates` entry, a menu cursor) sees only keys set *earlier* in the callback, by `:register_as()` or `engine.set_entity()`.
+So a clone copies its template as it is at the `clone()` call: moving it afterwards (`engine.entity_set_position(tpl_id, x, y)`) doesn't change the clone, and despawning it or removing its key (`engine.entity_despawn(tpl_id)`, `engine.unregister_entity("tpl")`) doesn't cancel the clone. And a spawn or clone that looks up a key (a clone source, a particle `templates` entry, a menu cursor) sees only keys set *earlier* in the callback, by `:register_as()` or `engine.register_entity()`.
 
 **Important: Collision Callbacks Use Separate Queues**
 
@@ -324,7 +324,7 @@ Collision callbacks process commands from their own dedicated queues, which are 
 - `engine.collision_play_sound_pitched()` instead of `engine.play_sound_pitched()`
 - `engine.collision_set_flag()` / `engine.collision_clear_flag()` instead of `engine.set_flag()` / `engine.clear_flag()`
 - `engine.collision_set_integer()` instead of `engine.set_integer()`
-- `engine.collision_set_entity()` / `engine.collision_remove_entity()` instead of `engine.set_entity()` / `engine.remove_entity()`
+- `engine.collision_register_entity()` / `engine.collision_unregister_entity()` instead of `engine.register_entity()` / `engine.unregister_entity()`
 - `engine.collision_phase_transition()` instead of `engine.phase_transition()`
 - `engine.collision_set_camera()` instead of `engine.set_camera()`
 
@@ -2914,21 +2914,21 @@ Remove a string signal.
 engine.clear_string("current_powerup")
 ```
 
-#### `engine.set_entity(key, entity_id)`
+#### `engine.register_entity(key, entity_id)`
 
-Store an entity ID in world signals (alternative to `:register_as()`).
+Register `key` as a name for an entity ID (what `:register_as()` does at build time). The entity itself is untouched; read it back with `engine.get_entity(key)`.
 
 ```lua
 local spawned_id = -- ... get from spawn
-engine.set_entity("special_enemy", spawned_id)
+engine.register_entity("special_enemy", spawned_id)
 ```
 
-#### `engine.remove_entity(key)`
+#### `engine.unregister_entity(key)`
 
-Remove an entity registration from world signals.
+Drop the registration for `key`. The entity is not despawned (that is `engine.entity_despawn(id)`).
 
 ```lua
-engine.remove_entity("special_enemy")
+engine.unregister_entity("special_enemy")
 ```
 
 ### Scene Management
@@ -3951,9 +3951,9 @@ Remove a string signal during collision.
 engine.collision_clear_string("active_effect")
 ```
 
-#### `engine.collision_set_entity(key, entity_id)`
+#### `engine.collision_register_entity(key, entity_id)`
 
-Register an entity in the world-signal registry during collision handling. This is the collision-safe twin of `engine.set_entity()` — commands are drained immediately after the callback returns.
+Register an entity in the world-signal registry during collision handling. This is the collision-safe twin of `engine.register_entity()` — commands are drained immediately after the callback returns.
 
 ```lua
 function on_ball_spawn_enemy(ctx)
@@ -3962,18 +3962,18 @@ function on_ball_spawn_enemy(ctx)
         :with_position(ctx.b.pos.x, ctx.b.pos.y)
         :register_as("spawned_enemy")
         :build()
-    -- The registration above goes through collision_set_entity internally
+    -- The registration above goes through collision_register_entity internally
 end
 ```
 
-#### `engine.collision_remove_entity(key)`
+#### `engine.collision_unregister_entity(key)`
 
-Remove an entity registration from the world-signal registry during collision handling. Collision-safe twin of `engine.remove_entity()`.
+Remove an entity registration from the world-signal registry during collision handling. Collision-safe twin of `engine.unregister_entity()`.
 
 ```lua
 function on_boss_defeated(ctx)
     engine.collision_entity_despawn(ctx.b.id)
-    engine.collision_remove_entity("boss")
+    engine.collision_unregister_entity("boss")
 end
 ```
 

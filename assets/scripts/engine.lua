@@ -461,14 +461,10 @@ function engine.get_strings() end
 ---@return boolean
 function engine.has_flag(key) end
 
----Remove a registered entity from world signals
----@param key string
-function engine.remove_entity(key) end
-
----Register an entity ID in world signals
+---Register `key` as a name for an entity ID (the entity is untouched)
 ---@param key string
 ---@param entity_id integer
-function engine.set_entity(key, entity_id) end
+function engine.register_entity(key, entity_id) end
 
 ---Set a world signal flag
 ---@param key string
@@ -492,6 +488,10 @@ function engine.set_string(key, value) end
 ---Toggle a world signal flag
 ---@param key string
 function engine.toggle_flag(key) end
+
+---Drop the registration for `key` (the entity is not despawned)
+---@param key string
+function engine.unregister_entity(key) end
 
 -- ==================== Phase Control ====================
 
@@ -1378,9 +1378,10 @@ function engine.collision_play_sound(id) end
 ---@param pitch number
 function engine.collision_play_sound_pitched(id, pitch) end
 
----Remove a registered entity from world signals (collision context)
+---Register `key` as a name for an entity ID (the entity is untouched) (collision context)
 ---@param key string
-function engine.collision_remove_entity(key) end
+---@param entity_id integer
+function engine.collision_register_entity(key, entity_id) end
 
 ---Set the 2D camera target, offset, rotation and zoom (collision context)
 ---@param target_x number
@@ -1390,11 +1391,6 @@ function engine.collision_remove_entity(key) end
 ---@param rotation number
 ---@param zoom number
 function engine.collision_set_camera(target_x, target_y, offset_x, offset_y, rotation, zoom) end
-
----Register an entity ID in world signals (collision context)
----@param key string
----@param entity_id integer
-function engine.collision_set_entity(key, entity_id) end
 
 ---Set a world signal flag (collision context)
 ---@param key string
@@ -1422,6 +1418,10 @@ function engine.collision_spawn() end
 ---Toggle a world signal flag (collision context)
 ---@param key string
 function engine.collision_toggle_flag(key) end
+
+---Drop the registration for `key` (the entity is not despawned) (collision context)
+---@param key string
+function engine.collision_unregister_entity(key) end
 
 -- ==================== Animation Registration ====================
 

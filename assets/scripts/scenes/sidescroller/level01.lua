@@ -480,7 +480,7 @@ local function player_attack_on_exit(ctx)
     if hitbox_id then
         log_debug(string.format("player_attack_on_exit: despawning hitbox_id=%d", hitbox_id))
         engine.entity_despawn(hitbox_id)
-        engine.remove_entity("attack_hitbox")
+        engine.unregister_entity("attack_hitbox")
     else
         log_debug("player_attack_on_exit: attack_hitbox not found (already despawned?)")
     end
