@@ -9,7 +9,7 @@ use bevy_ecs::prelude::*;
 
 use crate::components::inputcontrolled::InputControlled;
 use crate::components::rigidbody::RigidBody;
-use crate::events::input::InputAction;
+use crate::resources::input::InputAction;
 use crate::resources::input::InputState;
 
 /// Update each controlled entity's `RigidBody` velocity based on input.

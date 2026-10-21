@@ -8,7 +8,7 @@
 //! # Usage
 //!
 //! ```
-//! # use aberred_core::events::input::InputAction;
+//! # use aberred_core::resources::input::InputAction;
 //! # use aberred_core::resources::input_bindings::{InputBinding, InputBindings, Key};
 //! # let mut bindings = InputBindings::default();
 //! // Rebind Action1 from Space to Z
@@ -24,8 +24,8 @@
 
 use bevy_ecs::prelude::*;
 
-use crate::events::input::InputAction;
 use crate::protocol::raw_input::MAX_GAMEPADS;
+use crate::resources::input::InputAction;
 
 /// Engine-owned hardware keyboard key code. Numeric values match raylib's
 /// `KeyboardKey` codes (GLFW-derived) 1:1 -- verified against this project's

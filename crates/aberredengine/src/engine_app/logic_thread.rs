@@ -9,7 +9,6 @@ use super::builder::EngineBuilder;
 use super::registrar::{HookRegistrar, ObserverRegistrar, UpdateRegistrar};
 use super::replay::{ReplayPlayer, ReplayRecorder};
 use aberred_core::error::EngineError;
-use aberred_core::events::input::InputAction;
 use aberred_core::pacing::{Pacer, StatsWindow, TickCountdown};
 #[cfg(any(test, feature = "test-support"))]
 use aberred_core::protocol::audio::{AudioCmd, AudioMessage};
@@ -24,6 +23,7 @@ use aberred_core::resources::deterministic_mode::DeterministicMode;
 use aberred_core::resources::fontmetrics::FontMetricsStore;
 use aberred_core::resources::gameconfig::GameConfig;
 use aberred_core::resources::gamestate::{CurrentGameState, GameState};
+use aberred_core::resources::input::InputAction;
 use aberred_core::resources::input::InputState;
 use aberred_core::resources::loaded_assets::LoadedAssets;
 use aberred_core::resources::rawinput::ImguiCaptureMirror;

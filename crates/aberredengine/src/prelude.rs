@@ -53,12 +53,12 @@ pub use aberred_core::events::animation::AnimationFinished;
 pub use aberred_core::events::asset::{AssetLoadFailed, AssetLoaded};
 pub use aberred_core::events::collision::{CollisionEnded, CollisionOngoing, CollisionStarted};
 pub use aberred_core::events::gui_interactable::GuiClicked;
-pub use aberred_core::events::input::InputAction;
 pub use aberred_core::events::menu::MenuSelected;
 pub use aberred_core::events::phase::{PhaseEntered, PhaseExited};
 pub use aberred_core::events::scene::{SceneEntered, SceneExited};
 pub use aberred_core::events::timer::TimerFired;
 pub use aberred_core::events::tween::TweenFinished;
+pub use aberred_core::resources::input::InputAction;
 
 pub use aberred_core::protocol::asset_kind::AssetKind;
 pub use aberred_core::protocol::audio::AudioCmd;

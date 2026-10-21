@@ -1,6 +1,6 @@
 use super::*;
 use crate::resources::lua_runtime::action_from_str;
-use aberred_core::events::input::InputAction;
+use aberred_core::resources::input::InputAction;
 
 impl LuaRuntime {
     /// Registers the input rebinding API in the `engine` table.
@@ -133,7 +133,7 @@ mod tests {
 
     #[test]
     fn rebind_replaces_and_add_binding_appends() {
-        use aberred_core::events::input::InputAction;
+        use aberred_core::resources::input::InputAction;
         use aberred_core::resources::input_bindings::{InputBindings, binding_from_str};
         let mut bindings = InputBindings::default();
 

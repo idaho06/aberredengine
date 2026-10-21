@@ -17,7 +17,7 @@ use bevy_ecs::prelude::*;
 
 use crate::components::inputcontrolled::AccelerationControlled;
 use crate::components::rigidbody::RigidBody;
-use crate::events::input::InputAction;
+use crate::resources::input::InputAction;
 use crate::resources::input::InputState;
 
 /// The force name used by the input acceleration controller.

@@ -6,7 +6,7 @@
 //! itself (defaults, rebind/add, key parsing) is unit-tested in
 //! `aberred-core`'s `resources/input_bindings.rs`.
 
-use aberred_core::events::input::InputAction;
+use aberred_core::resources::input::InputAction;
 use aberred_core::resources::input_bindings::{InputBinding, InputBindings, Key, MouseButton};
 
 use aberred_lua::resources::lua_runtime::{InputCmd, action_from_str};

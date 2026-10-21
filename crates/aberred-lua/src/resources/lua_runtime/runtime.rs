@@ -262,9 +262,9 @@ pub struct LuaRuntime {
     input_ctx_tables: InputCtxTables,
 }
 
-/// Converts a canonical Lua action name string to an [`InputAction`](aberred_core::events::input::InputAction).
-pub fn action_from_str(s: &str) -> Option<aberred_core::events::input::InputAction> {
-    use aberred_core::events::input::InputAction;
+/// Converts a canonical Lua action name string to an [`InputAction`](aberred_core::resources::input::InputAction).
+pub fn action_from_str(s: &str) -> Option<aberred_core::resources::input::InputAction> {
+    use aberred_core::resources::input::InputAction;
     match s {
         "up" | "main_up" => Some(InputAction::MainDirectionUp),
         "down" | "main_down" => Some(InputAction::MainDirectionDown),

@@ -18,7 +18,7 @@
 //! input.analog.mouse_world_x
 //! ```
 
-use aberred_core::events::input::InputAction;
+use aberred_core::resources::input::InputAction;
 use aberred_core::resources::input::InputState;
 
 /// State of a single digital input button.
