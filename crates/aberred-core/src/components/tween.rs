@@ -2,7 +2,7 @@
 //!
 //! This module provides a shared [`Tween<T>`] component for smoothly animating
 //! entity properties over time:
-//! - `Tween<MapPosition>` – animate [`MapPosition`]
+//! - `Tween<WorldPosition>` – animate [`WorldPosition`]
 //! - `Tween<Rotation>` – animate [`Rotation`]
 //! - `Tween<Scale>` – animate [`Scale`]
 //! - `Tween<ScreenPosition>` – animate [`ScreenPosition`]
@@ -16,11 +16,11 @@ use crate::math::Vec2;
 use bevy_ecs::component::Mutable;
 use bevy_ecs::prelude::Component;
 
-use crate::components::mapposition::MapPosition;
 use crate::components::position2d::{Position2D, PositionSpace};
 use crate::components::rotation::Rotation;
 use crate::components::scale::Scale;
 use crate::components::screenposition::ScreenPosition;
+use crate::components::world_position::WorldPosition;
 
 /// Determines how a tween behaves when it reaches the end.
 #[derive(Copy, Clone, Debug)]
@@ -216,12 +216,12 @@ impl<T: TweenValue> Tween<T> {
     }
 }
 
-impl Tween<MapPosition> {
+impl Tween<WorldPosition> {
     /// Tweens a world position from `from` to `to` over `duration` seconds.
     pub fn position(from: Vec2, to: Vec2, duration: f32) -> Self {
         Self::new(
-            MapPosition::from_vec(from),
-            MapPosition::from_vec(to),
+            WorldPosition::from_vec(from),
+            WorldPosition::from_vec(to),
             duration,
         )
     }
@@ -272,8 +272,8 @@ mod tests {
         assert_eq!((t.from.scale, t.to.scale), (a, b));
     }
 
-    fn map_position(x: f32, y: f32) -> MapPosition {
-        MapPosition::from_vec(Vec2 { x, y })
+    fn world_position(x: f32, y: f32) -> WorldPosition {
+        WorldPosition::from_vec(Vec2 { x, y })
     }
 
     fn screen_position(x: f32, y: f32) -> ScreenPosition {
@@ -286,8 +286,8 @@ mod tests {
 
     #[test]
     fn new_starts_playing_forward_linear_once() {
-        let tw: Tween<MapPosition> =
-            Tween::new(map_position(0.0, 0.0), map_position(1.0, 1.0), 2.0);
+        let tw: Tween<WorldPosition> =
+            Tween::new(world_position(0.0, 0.0), world_position(1.0, 1.0), 2.0);
         assert!(tw.playing && tw.forward);
         assert_eq!(tw.time, 0.0);
         assert!(matches!(tw.easing, Easing::Linear));
@@ -296,15 +296,16 @@ mod tests {
 
     #[test]
     fn with_backwards_starts_at_end_reversed() {
-        let tw: Tween<MapPosition> =
-            Tween::new(map_position(0.0, 0.0), map_position(10.0, 10.0), 2.0).with_backwards();
+        let tw: Tween<WorldPosition> =
+            Tween::new(world_position(0.0, 0.0), world_position(10.0, 10.0), 2.0).with_backwards();
         assert!(approx_eq(tw.time, 2.0));
         assert!(!tw.forward);
     }
 
     #[test]
-    fn map_position_interpolation() {
-        let mid = MapPosition::interpolate(&map_position(0.0, 0.0), &map_position(10.0, 20.0), 0.5);
+    fn world_position_interpolation() {
+        let mid =
+            WorldPosition::interpolate(&world_position(0.0, 0.0), &world_position(10.0, 20.0), 0.5);
         assert!(vec2_approx_eq(mid.pos, Vec2 { x: 5.0, y: 10.0 }));
     }
 

@@ -25,17 +25,17 @@ use fastrand::Rng;
 
 use crate::components::emittedparticle::EmittedParticle;
 use crate::components::globaltransform2d::GlobalTransform2D;
-use crate::components::mapposition::MapPosition;
 use crate::components::particleemitter::{EmitterShape, ParticleEmitter, TtlSpec};
 use crate::components::rigidbody::RigidBody;
 use crate::components::rotation::Rotation;
 use crate::components::ttl::Ttl;
+use crate::components::world_position::WorldPosition;
 use crate::resources::sim_rng::SimRng;
 use crate::resources::worldtime::WorldTime;
 
 /// System that processes particle emitters and spawns particles.
 ///
-/// Queries all entities with `ParticleEmitter` and `MapPosition`, accumulates
+/// Queries all entities with `ParticleEmitter` and `WorldPosition`, accumulates
 /// time, and spawns particles by cloning templates when thresholds are met.
 ///
 /// Draws from the shared [`SimRng`] rather than a private per-system stream
@@ -51,7 +51,7 @@ use crate::resources::worldtime::WorldTime;
 pub fn particle_emitter_system(
     mut emitter_query: Query<(
         Entity,
-        &MapPosition,
+        &WorldPosition,
         &mut ParticleEmitter,
         Option<&GlobalTransform2D>,
     )>,
@@ -78,7 +78,7 @@ pub fn particle_emitter_system(
         emitter.time_since_emit += dt;
 
         // Use world position from GlobalTransform2D when available
-        let emit_pos = maybe_gt.map_or(*owner_pos, |gt| MapPosition::from_vec(gt.position));
+        let emit_pos = maybe_gt.map_or(*owner_pos, |gt| WorldPosition::from_vec(gt.position));
 
         // Catch-up loop: emit multiple times if dt is large
         while emitter.time_since_emit >= period && emitter.emissions_remaining > 0 {
@@ -111,7 +111,7 @@ fn random_f32_range(rng: &mut Rng, min: f32, max: f32) -> f32 {
 fn emit_particles(
     commands: &mut Commands,
     emitter_entity: Entity,
-    owner_pos: &MapPosition,
+    owner_pos: &WorldPosition,
     emitter: &ParticleEmitter,
     rigidbody_query: &Query<&RigidBody>,
     rng: &mut Rng,
@@ -190,7 +190,7 @@ fn emit_particles(
         let mut source_commands = commands.entity(template);
         source_commands
             .clone_and_spawn()
-            .insert(MapPosition::new(spawn_pos.x, spawn_pos.y))
+            .insert(WorldPosition::new(spawn_pos.x, spawn_pos.y))
             .insert(Rotation { degrees: angle_deg })
             .insert(rb)
             .insert(EmittedParticle(emitter_entity))

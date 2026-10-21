@@ -33,13 +33,13 @@ use aberred_core::components::guiinteractable::{GuiInteractable, GuiWidgetState}
 use aberred_core::components::guilabel::GuiLabel;
 use aberred_core::components::guiprogressbar::{GuiProgressBar, ProgressBarDirection};
 use aberred_core::components::guiwindow::GuiWindow;
-use aberred_core::components::mapposition::MapPosition;
 use aberred_core::components::rotation::Rotation;
 use aberred_core::components::scale::Scale;
 use aberred_core::components::screenposition::ScreenPosition;
 use aberred_core::components::shadow::Shadow;
 use aberred_core::components::sprite::Sprite;
 use aberred_core::components::tint::Tint;
+use aberred_core::components::world_position::WorldPosition;
 use aberred_core::components::zindex::ZIndex;
 use aberred_core::math::Vec2;
 use aberred_core::resources::debugoverlayconfig::DebugOverlayConfig;
@@ -79,7 +79,7 @@ pub(super) struct SpriteBufferItem {
     entity: Entity,
     sprite: Sprite,
     z_index: ZIndex,
-    resolved_pos: MapPosition,
+    resolved_pos: WorldPosition,
     resolved_scale: Option<Scale>,
     resolved_rot: Option<Rotation>,
     maybe_shader: Option<EntityShader>,
@@ -92,7 +92,7 @@ pub(super) struct TextBufferItem {
     entity: Entity,
     text: DynamicText,
     z_index: ZIndex,
-    resolved_pos: MapPosition,
+    resolved_pos: WorldPosition,
     text_size: Vector2,
     maybe_shader: Option<EntityShader>,
     maybe_tint: Option<Tint>,
@@ -613,7 +613,7 @@ pub fn render_system(
                         global_transform,
                         velocity,
                     )| {
-                        let resolved_pos = MapPosition::from_vec(
+                        let resolved_pos = WorldPosition::from_vec(
                             global_transform.map_or(position.pos, |gt| gt.position),
                         );
                         let text_size = text.size();

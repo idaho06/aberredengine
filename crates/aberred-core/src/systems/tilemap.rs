@@ -13,9 +13,9 @@ use log::warn;
 use serde::Deserialize;
 
 use crate::components::group::Group;
-use crate::components::mapposition::MapPosition;
 use crate::components::sprite::Sprite;
 use crate::components::tilemap::TileMap;
+use crate::components::world_position::WorldPosition;
 use crate::components::zindex::ZIndex;
 use crate::protocol::render_assets::RenderAssetCmd;
 use crate::systems::propagate_transforms::ComputeInitialGlobalTransform;
@@ -141,7 +141,7 @@ pub fn load_tilemap_data(path: &str) -> Result<(Tilemap, i32, i32), String> {
 /// Phase 1 — create one template entity per atlas cell (`Group("tiles-templates")` + `Sprite`).
 ///
 /// Phase 2 — clone the matching template for each tile placement and insert
-/// `Group("tiles")`, `MapPosition`, and `ZIndex`. When `parent` is `Some`,
+/// `Group("tiles")`, `WorldPosition`, and `ZIndex`. When `parent` is `Some`,
 /// each tile clone also gets `ChildOf(parent)` and `ComputeInitialGlobalTransform`
 /// is queued so children render at the correct world position on the first frame.
 ///
@@ -205,7 +205,7 @@ pub fn spawn_tiles(
                 .entity(templates[id])
                 .clone_and_spawn()
                 .insert(Group::new(TILES_GROUP))
-                .insert(MapPosition::new(wx, wy))
+                .insert(WorldPosition::new(wx, wy))
                 .insert(ZIndex(z))
                 .id();
             if let Some(p) = parent {
@@ -230,11 +230,11 @@ pub fn spawn_tiles(
 /// [`RenderAssetCmd::TilemapTexture`], and spawns tile entities as
 /// `ChildOf` children of the root entity.
 ///
-/// If the root entity has no [`MapPosition`], a default `(0, 0)` one is inserted
+/// If the root entity has no [`WorldPosition`], a default `(0, 0)` one is inserted
 /// so that [`crate::systems::propagate_transforms`] can compute child transforms.
 pub fn tilemap_spawn_system(
     mut commands: Commands,
-    query: Query<(Entity, &TileMap, Has<MapPosition>), Added<TileMap>>,
+    query: Query<(Entity, &TileMap, Has<WorldPosition>), Added<TileMap>>,
     mut render_asset_cmd_writer: MessageWriter<RenderAssetCmd>,
 ) {
     for (entity, tilemap_comp, has_map_pos) in query.iter() {
@@ -254,7 +254,7 @@ pub fn tilemap_spawn_system(
         let key = tilemap_texture_key(path);
 
         if !has_map_pos {
-            commands.entity(entity).insert(MapPosition::new(0.0, 0.0));
+            commands.entity(entity).insert(WorldPosition::new(0.0, 0.0));
         }
 
         spawn_tiles(
@@ -335,7 +335,7 @@ mod tests {
         run_spawn_tiles(&mut world, (64, 32), &tilemap(16, &[&positions]), None);
 
         let mut by_x: Vec<(f32, Vec2)> = world
-            .query::<(&MapPosition, &Sprite)>()
+            .query::<(&WorldPosition, &Sprite)>()
             .iter(&world)
             .map(|(p, s)| (p.pos.x, s.offset))
             .collect();
@@ -349,12 +349,12 @@ mod tests {
     #[test]
     fn spawn_tiles_places_tiles_by_coordinate_with_layer_zindex_and_parent() {
         let mut world = World::new();
-        let root = world.spawn(MapPosition::new(0.0, 0.0)).id();
+        let root = world.spawn(WorldPosition::new(0.0, 0.0)).id();
         let map = tilemap(16, &[&[(0, 0, 0), (2, 1, 5)], &[(1, 0, 3)]]);
         run_spawn_tiles(&mut world, (64, 32), &map, Some(root));
 
         let mut tiles: Vec<(Vec2, f32, Vec2, Entity)> = world
-            .query::<(&Group, &MapPosition, &ZIndex, &Sprite, &ChildOf)>()
+            .query::<(&Group, &WorldPosition, &ZIndex, &Sprite, &ChildOf)>()
             .iter(&world)
             .filter(|(g, ..)| g.0 == TILES_GROUP)
             .map(|(_, p, z, s, c)| (p.pos, z.0, s.offset, c.parent()))
@@ -409,7 +409,7 @@ mod tests {
     #[test]
     fn spawn_tiles_leaves_no_template_entities_behind() {
         let mut world = World::new();
-        let root = world.spawn(MapPosition::new(0.0, 0.0)).id();
+        let root = world.spawn(WorldPosition::new(0.0, 0.0)).id();
         run_spawn_tiles(
             &mut world,
             (64, 32),
@@ -457,9 +457,9 @@ mod tests {
                 if key == &tilemap_texture_key(FIXTURE_DIR) && png_path.ends_with("sidescroller_test01.png")
         ));
         assert_eq!(
-            world.get::<MapPosition>(root).unwrap().pos,
+            world.get::<WorldPosition>(root).unwrap().pos,
             Vec2::ZERO,
-            "a root without MapPosition gets one at the origin"
+            "a root without WorldPosition gets one at the origin"
         );
         let tiles = in_group(&mut world, TILES_GROUP);
         assert!(!tiles.is_empty());
@@ -474,11 +474,11 @@ mod tests {
     fn system_keeps_an_existing_root_position() {
         let mut world = World::new();
         let root = world
-            .spawn((TileMap::new(FIXTURE_DIR), MapPosition::new(100.0, 50.0)))
+            .spawn((TileMap::new(FIXTURE_DIR), WorldPosition::new(100.0, 50.0)))
             .id();
         run_system(&mut world);
         assert_eq!(
-            world.get::<MapPosition>(root).unwrap().pos,
+            world.get::<WorldPosition>(root).unwrap().pos,
             Vec2::new(100.0, 50.0)
         );
     }
@@ -494,7 +494,7 @@ mod tests {
         assert!(in_group(&mut world, TILES_GROUP).is_empty());
         assert!(in_group(&mut world, TILES_TEMPLATES_GROUP).is_empty());
         assert!(
-            world.get::<MapPosition>(root).is_none(),
+            world.get::<WorldPosition>(root).is_none(),
             "root left untouched"
         );
     }

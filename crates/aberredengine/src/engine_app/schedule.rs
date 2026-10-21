@@ -3,10 +3,10 @@ use bevy_ecs::schedule::SingleThreadedExecutor;
 
 use super::builder::EngineBuilder;
 use super::registrar::UpdateRegistrar;
-use aberred_core::components::mapposition::MapPosition;
 use aberred_core::components::rotation::Rotation;
 use aberred_core::components::scale::Scale;
 use aberred_core::components::screenposition::ScreenPosition;
+use aberred_core::components::world_position::WorldPosition;
 use aberred_core::error::EngineError;
 use aberred_core::resources::drawable_snapshot::build_drawable_snapshot;
 use aberred_core::systems::animation::animation;
@@ -366,15 +366,15 @@ impl EngineBuilder {
         );
         sim.add_systems(movement.in_set(SimSet::Movement));
         sim.add_systems(ttl_system.after(movement).in_set(SimSet::Movement));
-        // .before(particle_emitter_system): both write MapPosition with no
+        // .before(particle_emitter_system): both write WorldPosition with no
         // prior edge (ambiguity_detection flags it; also transitively
-        // resolves tween_system::<MapPosition> vs movement, since
+        // resolves tween_system::<WorldPosition> vs movement, since
         // particle_emitter_system is already .before(movement)). A tweened
         // entity that's also a particle emitter (e.g. a projectile flying a
         // tween path with a trail) should spawn particles from this tick's
         // already-tweened position, not last tick's.
         sim.add_systems(
-            tween_system::<MapPosition>
+            tween_system::<WorldPosition>
                 .before(particle_emitter_system)
                 .in_set(SimSet::Movement),
         );
@@ -416,7 +416,7 @@ impl EngineBuilder {
 
         // --- SIM: GUI (tween_system::<ScreenPosition> feeds GUI layout, not
         // collision, so it's grouped with the GUI chain rather than its
-        // MapPosition/Rotation/Scale siblings above; all four TweenValue
+        // WorldPosition/Rotation/Scale siblings above; all four TweenValue
         // type parameters share sim cadence, so LuaOnTweenFinished<T> fires
         // at the same rate regardless of which T is tweened).
         sim.add_systems(tween_system::<ScreenPosition>.in_set(SimSet::Gui));

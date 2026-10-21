@@ -5,10 +5,10 @@
 //! against what is actually drawn, without touching the render crate.
 
 use crate::components::globaltransform2d::GlobalTransform2D;
-use crate::components::mapposition::MapPosition;
 use crate::components::rotation::Rotation;
 use crate::components::scale::Scale;
 use crate::components::sprite::Sprite;
+use crate::components::world_position::WorldPosition;
 use crate::math::{Rect, Vec2};
 
 /// World-space geometry of one sprite draw: the destination rectangle, the
@@ -32,7 +32,7 @@ pub struct SpriteRenderGeometry {
 /// and rotation for a sprite at `pos` with optional `scale` and `rot`.
 #[inline]
 pub fn compute_sprite_geometry(
-    pos: &MapPosition,
+    pos: &WorldPosition,
     sprite: &Sprite,
     scale: Option<&Scale>,
     rot: Option<&Rotation>,
@@ -54,14 +54,14 @@ pub fn compute_sprite_geometry(
 /// `GlobalTransform2D` (hierarchy) over the entity's own local components.
 #[inline]
 pub fn resolve_world_transform(
-    pos: MapPosition,
+    pos: WorldPosition,
     maybe_scale: Option<Scale>,
     maybe_rot: Option<Rotation>,
     maybe_gt: Option<GlobalTransform2D>,
-) -> (MapPosition, Option<Scale>, Option<Rotation>) {
+) -> (WorldPosition, Option<Scale>, Option<Rotation>) {
     if let Some(gt) = maybe_gt {
         (
-            MapPosition::from_vec(gt.position),
+            WorldPosition::from_vec(gt.position),
             Some(Scale { scale: gt.scale }),
             Some(Rotation {
                 degrees: gt.rotation_degrees,
@@ -96,7 +96,7 @@ mod tests {
 
     #[test]
     fn anchor_preserved_with_center_origin() {
-        let pos = MapPosition::new(100.0, 100.0);
+        let pos = WorldPosition::new(100.0, 100.0);
         let sprite = sprite_with_origin(32.0, 32.0, 16.0, 16.0);
 
         for scale_factor in [0.5_f32, 1.0, 2.0, 3.0, 10.0] {
@@ -115,7 +115,7 @@ mod tests {
 
     #[test]
     fn anchor_preserved_with_topleft_origin() {
-        let pos = MapPosition::new(50.0, 75.0);
+        let pos = WorldPosition::new(50.0, 75.0);
         let sprite = sprite_with_origin(64.0, 48.0, 0.0, 0.0);
 
         for scale_factor in [0.25_f32, 1.0, 4.0] {
@@ -134,7 +134,7 @@ mod tests {
 
     #[test]
     fn anchor_preserved_with_arbitrary_origin() {
-        let pos = MapPosition::new(200.0, 150.0);
+        let pos = WorldPosition::new(200.0, 150.0);
         let sprite = sprite_with_origin(32.0, 48.0, 10.0, 20.0);
 
         for (sx, sy) in [(1.0, 1.0), (2.0, 2.0), (0.5, 0.5), (3.0, 1.5)] {
@@ -156,7 +156,7 @@ mod tests {
 
     #[test]
     fn visual_bounds_scale_proportionally() {
-        let pos = MapPosition::new(100.0, 100.0);
+        let pos = WorldPosition::new(100.0, 100.0);
         let sprite = sprite_with_origin(32.0, 32.0, 10.0, 10.0);
 
         let geom_1x = compute_sprite_geometry(&pos, &sprite, None, None);
@@ -218,7 +218,7 @@ mod tests {
 
     #[test]
     fn non_uniform_scale_preserves_anchor() {
-        let pos = MapPosition::new(100.0, 100.0);
+        let pos = WorldPosition::new(100.0, 100.0);
         let sprite = sprite_with_origin(32.0, 32.0, 16.0, 16.0);
         let scale = Scale::new(2.0, 0.5);
 
@@ -241,7 +241,7 @@ mod tests {
 
     #[test]
     fn unit_scale_matches_no_scale() {
-        let pos = MapPosition::new(42.0, 77.0);
+        let pos = WorldPosition::new(42.0, 77.0);
         let sprite = sprite_with_origin(24.0, 36.0, 8.0, 12.0);
         let unit = Scale::new(1.0, 1.0);
 
@@ -261,7 +261,7 @@ mod tests {
 
     #[test]
     fn default_rotation_is_zero() {
-        let pos = MapPosition::new(0.0, 0.0);
+        let pos = WorldPosition::new(0.0, 0.0);
         let sprite = sprite_with_origin(32.0, 32.0, 0.0, 0.0);
         let geom = compute_sprite_geometry(&pos, &sprite, None, None);
         assert!(approx_eq(geom.rotation, 0.0));
@@ -269,7 +269,7 @@ mod tests {
 
     #[test]
     fn rotation_passes_through() {
-        let pos = MapPosition::new(0.0, 0.0);
+        let pos = WorldPosition::new(0.0, 0.0);
         let sprite = sprite_with_origin(32.0, 32.0, 16.0, 16.0);
         let rot = Rotation { degrees: 45.0 };
         let geom = compute_sprite_geometry(&pos, &sprite, None, Some(&rot));

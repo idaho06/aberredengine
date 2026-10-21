@@ -12,7 +12,7 @@ use bevy_ecs::prelude::*;
 use aberred_core::components::boxcollider::BoxCollider;
 use aberred_core::components::collision::{BoxSide, CollisionRule};
 use aberred_core::components::group::Group;
-use aberred_core::components::mapposition::MapPosition;
+use aberred_core::components::world_position::WorldPosition;
 use aberred_core::events::collision::CollisionOngoing;
 use aberred_core::resources::collision_contacts::CollisionContacts;
 use aberred_core::resources::collision_rule_index::CollisionRuleIndex;
@@ -48,7 +48,7 @@ fn spawn_collider(world: &mut World, group: &str, x: f32) -> Entity {
     world
         .spawn((
             Group::new(group),
-            MapPosition::new(x, 0.0),
+            WorldPosition::new(x, 0.0),
             BoxCollider::new(10.0, 10.0),
         ))
         .id()

@@ -2,15 +2,15 @@
 //!
 //! Updates entity positions to follow the mouse cursor. Entities with a
 //! [`MouseControlled`]
-//! component will have their [`MapPosition`]
+//! component will have their [`WorldPosition`]
 //! updated based on the mouse's world-space position.
 
 use crate::components::inputcontrolled::MouseControlled;
-use crate::components::mapposition::MapPosition;
+use crate::components::world_position::WorldPosition;
 use crate::resources::input::InputState;
 use bevy_ecs::prelude::*;
 
-/// Update each mouse-controlled entity's `MapPosition` based on the mouse's
+/// Update each mouse-controlled entity's `WorldPosition` based on the mouse's
 /// world position.
 ///
 /// Reads `InputState.mouse_world_x/y` — the window→game→world transformation
@@ -20,15 +20,15 @@ use bevy_ecs::prelude::*;
 /// frame and held constant across substeps, matching raylib's own
 /// once-per-real-frame mouse refresh.
 pub fn mouse_controller(
-    mut query: Query<(&MouseControlled, &mut MapPosition)>,
+    mut query: Query<(&MouseControlled, &mut WorldPosition)>,
     input: Res<InputState>,
 ) {
-    for (mouse_controlled, mut map_position) in query.iter_mut() {
+    for (mouse_controlled, mut world_position) in query.iter_mut() {
         if mouse_controlled.follow_x {
-            map_position.pos.x = input.mouse_world_x;
+            world_position.pos.x = input.mouse_world_x;
         }
         if mouse_controlled.follow_y {
-            map_position.pos.y = input.mouse_world_y;
+            world_position.pos.y = input.mouse_world_y;
         }
     }
 }
@@ -52,7 +52,7 @@ mod tests {
                     follow_x: true,
                     follow_y: true,
                 },
-                MapPosition::new(1.0, 2.0),
+                WorldPosition::new(1.0, 2.0),
             ))
             .id();
         let x_only = world
@@ -61,16 +61,16 @@ mod tests {
                     follow_x: true,
                     follow_y: false,
                 },
-                MapPosition::new(1.0, 2.0),
+                WorldPosition::new(1.0, 2.0),
             ))
             .id();
 
         world.run_system_once(mouse_controller).unwrap();
 
-        let pos = world.get::<MapPosition>(both).unwrap();
+        let pos = world.get::<WorldPosition>(both).unwrap();
         assert_eq!(pos.pos.x, 320.0);
         assert_eq!(pos.pos.y, -48.0);
-        let pos = world.get::<MapPosition>(x_only).unwrap();
+        let pos = world.get::<WorldPosition>(x_only).unwrap();
         assert_eq!(pos.pos.x, 320.0);
         assert_eq!(pos.pos.y, 2.0);
     }

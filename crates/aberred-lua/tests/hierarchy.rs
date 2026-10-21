@@ -13,9 +13,9 @@ use bevy_ecs::prelude::*;
 use bevy_ecs::system::SystemState;
 
 use aberred_core::components::globaltransform2d::GlobalTransform2D;
-use aberred_core::components::mapposition::MapPosition;
 use aberred_core::components::rotation::Rotation;
 use aberred_core::components::scale::Scale;
+use aberred_core::components::world_position::WorldPosition;
 use aberred_core::resources::systemsstore::SystemsStore;
 use aberred_core::resources::worldsignals::WorldSignals;
 use aberred_core::systems::propagate_transforms::propagate_transforms;
@@ -56,8 +56,8 @@ fn run_entity_cmds(world: &mut World, cmds: Vec<EntityCmd>) {
 fn entity_cmd_set_parent_inserts_childof() {
     let mut world = World::new();
 
-    let parent = world.spawn((MapPosition::new(100.0, 100.0),)).id();
-    let child = world.spawn((MapPosition::new(0.0, 0.0),)).id();
+    let parent = world.spawn((WorldPosition::new(100.0, 100.0),)).id();
+    let child = world.spawn((WorldPosition::new(0.0, 0.0),)).id();
 
     run_entity_cmds(
         &mut world,
@@ -81,7 +81,7 @@ fn entity_cmd_set_parent_inserts_childof() {
 
     // No placeholder on the root parent: world-position readers prefer a
     // GlobalTransform2D, so a default one would put the parent at the origin
-    // until propagate_transforms runs. It keeps resolving from its MapPosition.
+    // until propagate_transforms runs. It keeps resolving from its WorldPosition.
     assert!(
         world.get::<GlobalTransform2D>(parent).is_none(),
         "SetParent must not give a root parent a placeholder GlobalTransform2D"
@@ -94,7 +94,7 @@ fn entity_cmd_remove_parent_snaps_to_world_position() {
 
     let parent = world
         .spawn((
-            MapPosition::new(100.0, 100.0),
+            WorldPosition::new(100.0, 100.0),
             Rotation { degrees: 90.0 },
             Scale::new(2.0, 2.0),
             GlobalTransform2D::default(),
@@ -103,7 +103,7 @@ fn entity_cmd_remove_parent_snaps_to_world_position() {
 
     let child = world
         .spawn((
-            MapPosition::new(40.0, 0.0),
+            WorldPosition::new(40.0, 0.0),
             ChildOf(parent),
             GlobalTransform2D::default(),
         ))
@@ -149,8 +149,8 @@ fn entity_cmd_remove_parent_snaps_to_world_position() {
         "Child should not have GlobalTransform2D after RemoveParent"
     );
 
-    // MapPosition should be snapped to the world position
-    let pos = world.get::<MapPosition>(child).unwrap();
+    // WorldPosition should be snapped to the world position
+    let pos = world.get::<WorldPosition>(child).unwrap();
     assert!(
         approx_eq(pos.pos.x, 100.0),
         "After RemoveParent, child pos X: expected 100, got {}",
@@ -208,7 +208,7 @@ fn entity_cmd_despawn_then_set_rotation_same_batch_does_not_panic() {
     let mut world = World::new();
 
     let e = world
-        .spawn((MapPosition::new(0.0, 0.0), Rotation { degrees: 0.0 }))
+        .spawn((WorldPosition::new(0.0, 0.0), Rotation { degrees: 0.0 }))
         .id();
 
     run_entity_cmds(
@@ -232,10 +232,10 @@ fn entity_cmd_despawn_then_set_rotation_same_batch_does_not_panic() {
 fn entity_cmd_set_parent_multiple_children() {
     let mut world = World::new();
 
-    let parent = world.spawn((MapPosition::new(0.0, 0.0),)).id();
-    let child1 = world.spawn((MapPosition::new(10.0, 0.0),)).id();
-    let child2 = world.spawn((MapPosition::new(20.0, 0.0),)).id();
-    let child3 = world.spawn((MapPosition::new(30.0, 0.0),)).id();
+    let parent = world.spawn((WorldPosition::new(0.0, 0.0),)).id();
+    let child1 = world.spawn((WorldPosition::new(10.0, 0.0),)).id();
+    let child2 = world.spawn((WorldPosition::new(20.0, 0.0),)).id();
+    let child3 = world.spawn((WorldPosition::new(30.0, 0.0),)).id();
 
     run_entity_cmds(
         &mut world,
@@ -288,7 +288,7 @@ fn spawn_cmd_with_parent_applies_childof() {
     // the case in real gameplay (parent existed for at least one frame).
     let parent = world
         .spawn((
-            MapPosition::new(100.0, 50.0),
+            WorldPosition::new(100.0, 50.0),
             GlobalTransform2D {
                 position: Vec2 { x: 100.0, y: 50.0 },
                 rotation_degrees: 0.0,
@@ -339,8 +339,8 @@ fn spawn_cmd_with_parent_applies_childof() {
         gt.position.y
     );
 
-    // Child's local MapPosition should be unchanged
-    let pos = world.get::<MapPosition>(child).unwrap();
+    // Child's local WorldPosition should be unchanged
+    let pos = world.get::<WorldPosition>(child).unwrap();
     assert!(
         approx_eq(pos.pos.x, 10.0),
         "Child local pos X: expected 10, got {}",
@@ -371,7 +371,7 @@ fn spawn_cmd_child_without_parent_gt_uses_parent_local_transform_immediately() {
     world.insert_resource(WorldSignals::default());
 
     // Spawn a standalone parent without GlobalTransform2D.
-    let parent = world.spawn((MapPosition::new(100.0, 50.0),)).id();
+    let parent = world.spawn((WorldPosition::new(100.0, 50.0),)).id();
 
     let cmd = SpawnCmd {
         position: Some((10.0, 0.0)),
@@ -435,7 +435,7 @@ fn spawn_cmd_child_without_parent_gt_defers_when_parent_is_nested() {
 
     let grandparent = world
         .spawn((
-            MapPosition::new(100.0, 50.0),
+            WorldPosition::new(100.0, 50.0),
             GlobalTransform2D {
                 position: Vec2 { x: 100.0, y: 50.0 },
                 rotation_degrees: 0.0,
@@ -444,7 +444,7 @@ fn spawn_cmd_child_without_parent_gt_defers_when_parent_is_nested() {
         ))
         .id();
     let parent = world
-        .spawn((MapPosition::new(10.0, 0.0), ChildOf(grandparent)))
+        .spawn((WorldPosition::new(10.0, 0.0), ChildOf(grandparent)))
         .id();
     world.flush();
 
@@ -621,9 +621,9 @@ fn entity_cmd_set_screen_position_updates_screen_position() {
 
 #[test]
 fn entity_cmd_set_screen_position_no_op_on_map_entity() {
-    // Entity has MapPosition only — SetScreenPosition should silently do nothing.
+    // Entity has WorldPosition only — SetScreenPosition should silently do nothing.
     let mut world = World::new();
-    let entity = world.spawn(MapPosition::new(10.0, 20.0)).id();
+    let entity = world.spawn(WorldPosition::new(10.0, 20.0)).id();
 
     run_entity_cmds(
         &mut world,
@@ -634,8 +634,8 @@ fn entity_cmd_set_screen_position_no_op_on_map_entity() {
         }],
     );
 
-    // MapPosition unchanged
-    let pos = world.get::<MapPosition>(entity).unwrap();
+    // WorldPosition unchanged
+    let pos = world.get::<WorldPosition>(entity).unwrap();
     assert!(approx_eq(pos.pos.x, 10.0));
     assert!(approx_eq(pos.pos.y, 20.0));
 }

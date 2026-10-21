@@ -2,7 +2,7 @@
 //!
 //! These systems update entity properties over time based on [`Tween<T>`]
 //! components. Register one concrete system per tweened component type, such as
-//! `tween_system::<MapPosition>`, `tween_system::<Rotation>`, and
+//! `tween_system::<WorldPosition>`, `tween_system::<Rotation>`, and
 //! `tween_system::<Scale>`.
 
 use crate::components::tween::{Easing, LoopMode, Tween, TweenValue};
@@ -132,10 +132,10 @@ mod tests {
     use crate::testing::approx_eq;
     use bevy_ecs::system::RunSystemOnce;
 
-    use crate::components::mapposition::MapPosition;
     use crate::components::rotation::Rotation;
     use crate::components::scale::Scale;
     use crate::components::screenposition::ScreenPosition;
+    use crate::components::world_position::WorldPosition;
     use crate::math::Vec2;
 
     // ==================== EASING FUNCTION TESTS ====================
@@ -472,12 +472,12 @@ mod tests {
     }
 
     #[test]
-    fn test_tween_system_updates_map_position() {
+    fn test_tween_system_updates_world_position() {
         let (target, tween) = run_tween_once(
-            MapPosition::from_vec(Vec2 { x: 0.0, y: 0.0 }),
+            WorldPosition::from_vec(Vec2 { x: 0.0, y: 0.0 }),
             Tween::new(
-                MapPosition::from_vec(Vec2 { x: 0.0, y: 0.0 }),
-                MapPosition::from_vec(Vec2 { x: 10.0, y: 20.0 }),
+                WorldPosition::from_vec(Vec2 { x: 0.0, y: 0.0 }),
+                WorldPosition::from_vec(Vec2 { x: 10.0, y: 20.0 }),
                 1.0,
             ),
             0.5,
@@ -563,10 +563,10 @@ mod tests {
     #[test]
     fn tween_position_stops_at_end_with_once_mode() {
         let (target, tween) = run_tween_once(
-            MapPosition::from_vec(Vec2 { x: 0.0, y: 0.0 }),
+            WorldPosition::from_vec(Vec2 { x: 0.0, y: 0.0 }),
             Tween::new(
-                MapPosition::from_vec(Vec2 { x: 0.0, y: 0.0 }),
-                MapPosition::from_vec(Vec2 { x: 100.0, y: 0.0 }),
+                WorldPosition::from_vec(Vec2 { x: 0.0, y: 0.0 }),
+                WorldPosition::from_vec(Vec2 { x: 100.0, y: 0.0 }),
                 0.5,
             )
             .with_loop_mode(LoopMode::Once),
@@ -580,10 +580,10 @@ mod tests {
     #[test]
     fn tween_position_loops_with_loop_mode() {
         let (_, tween) = run_tween_once(
-            MapPosition::from_vec(Vec2 { x: 0.0, y: 0.0 }),
+            WorldPosition::from_vec(Vec2 { x: 0.0, y: 0.0 }),
             Tween::new(
-                MapPosition::from_vec(Vec2 { x: 0.0, y: 0.0 }),
-                MapPosition::from_vec(Vec2 { x: 100.0, y: 0.0 }),
+                WorldPosition::from_vec(Vec2 { x: 0.0, y: 0.0 }),
+                WorldPosition::from_vec(Vec2 { x: 100.0, y: 0.0 }),
                 0.5,
             )
             .with_loop_mode(LoopMode::Loop),
@@ -597,10 +597,10 @@ mod tests {
     #[test]
     fn tween_position_pingpong_reverses() {
         let (_, tween) = run_tween_once(
-            MapPosition::from_vec(Vec2 { x: 0.0, y: 0.0 }),
+            WorldPosition::from_vec(Vec2 { x: 0.0, y: 0.0 }),
             Tween::new(
-                MapPosition::from_vec(Vec2 { x: 0.0, y: 0.0 }),
-                MapPosition::from_vec(Vec2 { x: 100.0, y: 0.0 }),
+                WorldPosition::from_vec(Vec2 { x: 0.0, y: 0.0 }),
+                WorldPosition::from_vec(Vec2 { x: 100.0, y: 0.0 }),
                 0.5,
             )
             .with_loop_mode(LoopMode::PingPong),

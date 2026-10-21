@@ -20,7 +20,7 @@ use bevy_ecs::prelude::Resource;
 pub struct DebugOverlayConfig {
     /// Red AABB outlines around box colliders.
     pub show_collider_boxes: bool,
-    /// Green crosshairs at entity positions (MapPosition).
+    /// Green crosshairs at entity positions (WorldPosition).
     pub show_position_crosshairs: bool,
     /// Yellow per-entity signal text (flags, scalars, integers).
     pub show_entity_signals: bool,

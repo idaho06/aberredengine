@@ -6,7 +6,7 @@ mod example_1_sprite_entity {
     use aberredengine::prelude::*;
 
     commands.spawn((
-        MapPosition::new(100.0, 200.0),
+        WorldPosition::new(100.0, 200.0),
         Sprite::new("player", 32.0, 32.0).centered(),
         ZIndex(1.0),
         Group::new("player"),
@@ -22,7 +22,7 @@ mod example_2_physics_entity {
     use aberredengine::prelude::*;
 
     commands.spawn((
-        MapPosition::new(100.0, 200.0),
+        WorldPosition::new(100.0, 200.0),
         Sprite::new("player", 32.0, 32.0).centered(),
         ZIndex(1.0),
         Group::new("player"),
@@ -76,11 +76,11 @@ mod animation_controller_rules {
 mod tween_components_in_rust {
     use aberredengine::prelude::*; // GLUE
 
-    fn map_position(mut commands: Commands) { // GLUE
+    fn world_position(mut commands: Commands) { // GLUE
     use aberredengine::prelude::*;
 
     commands.spawn((
-        MapPosition::new(0.0, 0.0),
+        WorldPosition::new(0.0, 0.0),
         Tween::position(Vec2::ZERO, Vec2::new(200.0, 120.0), 1.5)
             .with_easing(Easing::CubicOut)
             .with_loop_mode(LoopMode::PingPong),

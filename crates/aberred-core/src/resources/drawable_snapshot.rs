@@ -26,7 +26,6 @@ use crate::components::guiinteractable::GuiInteractable;
 use crate::components::guilabel::GuiLabel;
 use crate::components::guiprogressbar::GuiProgressBar;
 use crate::components::guiwindow::GuiWindow;
-use crate::components::mapposition::MapPosition;
 use crate::components::rigidbody::RigidBody;
 use crate::components::rotation::Rotation;
 use crate::components::scale::Scale;
@@ -35,6 +34,7 @@ use crate::components::shadow::Shadow;
 use crate::components::signals::Signals;
 use crate::components::sprite::Sprite;
 use crate::components::tint::Tint;
+use crate::components::world_position::WorldPosition;
 use crate::components::zindex::ZIndex;
 use crate::protocol::stats::ThreadStats;
 use crate::resources::appstate::AppState;
@@ -67,7 +67,7 @@ pub struct MapSpriteEntry {
     /// consumers (debug overlay, item lookup) don't need a live query.
     pub entity: Entity,
     pub sprite: Sprite,
-    pub position: MapPosition,
+    pub position: WorldPosition,
     pub z_index: ZIndex,
     pub scale: Option<Scale>,
     pub rotation: Option<Rotation>,
@@ -86,7 +86,7 @@ pub struct MapSpriteEntry {
 pub struct MapTextEntry {
     pub entity: Entity,
     pub text: DynamicText,
-    pub position: MapPosition,
+    pub position: WorldPosition,
     pub z_index: ZIndex,
     pub shader: Option<EntityShader>,
     pub tint: Option<Tint>,
@@ -157,7 +157,7 @@ pub struct GuiProgressBarEntry {
 
 /// One collider box for the debug overlay, owned. `world_pos` is already
 /// resolved at capture time: `GlobalTransform2D.position` when the entity has
-/// one, `MapPosition.pos` otherwise (the same fallback the live query used).
+/// one, `WorldPosition.pos` otherwise (the same fallback the live query used).
 #[derive(Clone, Debug)]
 pub struct DebugColliderEntry {
     pub entity: Entity,
@@ -331,7 +331,7 @@ impl DrawableSnapshot {
 type MapSpriteQueryData = (
     Entity,
     &'static Sprite,
-    &'static MapPosition,
+    &'static WorldPosition,
     &'static ZIndex,
     Option<&'static Scale>,
     Option<&'static Rotation>,
@@ -345,7 +345,7 @@ type MapSpriteQueryData = (
 type MapTextQueryData = (
     Entity,
     &'static DynamicText,
-    &'static MapPosition,
+    &'static WorldPosition,
     &'static ZIndex,
     Option<&'static EntityShader>,
     Option<&'static Tint>,
@@ -383,13 +383,13 @@ type GuiButtonQueryData = (
 type DebugColliderQueryData = (
     Entity,
     &'static BoxCollider,
-    &'static MapPosition,
+    &'static WorldPosition,
     Option<&'static GlobalTransform2D>,
 );
 
 type DebugPositionQueryData = (
     Entity,
-    &'static MapPosition,
+    &'static WorldPosition,
     Option<&'static Signals>,
     Option<&'static GlobalTransform2D>,
 );
@@ -721,7 +721,7 @@ mod tests {
                     flip_h: false,
                     flip_v: false,
                 },
-                MapPosition::new(3.0, 4.0),
+                WorldPosition::new(3.0, 4.0),
                 ZIndex(2.0),
                 Scale {
                     scale: Vec2::new(1.0, 1.0),
@@ -769,15 +769,15 @@ mod tests {
         };
         let mut world = new_test_world();
         let child_sprite = world
-            .spawn((sprite(), MapPosition::new(3.0, 4.0), ZIndex(0.0), gt))
+            .spawn((sprite(), WorldPosition::new(3.0, 4.0), ZIndex(0.0), gt))
             .id();
         let root_sprite = world
-            .spawn((sprite(), MapPosition::new(0.0, 0.0), ZIndex(0.0)))
+            .spawn((sprite(), WorldPosition::new(0.0, 0.0), ZIndex(0.0)))
             .id();
         let child_text = world
             .spawn((
                 DynamicText::new("hi", "font", 12.0, Color::WHITE),
-                MapPosition::new(1.0, 1.0),
+                WorldPosition::new(1.0, 1.0),
                 ZIndex(0.0),
                 gt,
             ))
@@ -951,7 +951,7 @@ mod tests {
     fn debug_payload_absent_without_debugmode() {
         let mut world = new_test_world();
         world.spawn((
-            MapPosition::new(1.0, 1.0),
+            WorldPosition::new(1.0, 1.0),
             BoxCollider::new(8.0, 8.0),
             RigidBody::default(),
         ));
@@ -967,15 +967,15 @@ mod tests {
         world.insert_resource(DebugMode {});
         let plain = world
             .spawn((
-                MapPosition::new(1.0, 2.0),
+                WorldPosition::new(1.0, 2.0),
                 BoxCollider::new(8.0, 8.0),
                 RigidBody::default(),
             ))
             .id();
-        // GlobalTransform2D must win over MapPosition for world_pos.
+        // GlobalTransform2D must win over WorldPosition for world_pos.
         let child = world
             .spawn((
-                MapPosition::new(5.0, 5.0),
+                WorldPosition::new(5.0, 5.0),
                 GlobalTransform2D {
                     position: Vec2::new(100.0, 200.0),
                     rotation_degrees: 0.0,
@@ -1010,7 +1010,7 @@ mod tests {
         assert_eq!(
             child_entry.world_pos,
             Vec2::new(100.0, 200.0),
-            "GlobalTransform2D overrides MapPosition"
+            "GlobalTransform2D overrides WorldPosition"
         );
         assert!(
             child_entry
@@ -1048,7 +1048,7 @@ mod tests {
                     flip_h: false,
                     flip_v: false,
                 },
-                MapPosition::new(0.0, 0.0),
+                WorldPosition::new(0.0, 0.0),
                 ZIndex(0.0),
             ))
             .id();

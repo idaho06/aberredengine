@@ -1,9 +1,9 @@
 use raylib::prelude::*;
 
-use aberred_core::components::mapposition::MapPosition;
 use aberred_core::components::rotation::Rotation;
 use aberred_core::components::scale::Scale;
 use aberred_core::components::sprite::Sprite;
+use aberred_core::components::world_position::WorldPosition;
 
 /// Compute the world-space AABB that fully contains the camera's visible area.
 ///
@@ -74,7 +74,7 @@ pub(super) fn compute_view_bounds(
 /// distance from the anchor to the farthest corner of the scaled sprite, and the AABB is
 /// expanded to contain that circle. For non-rotated sprites, returns the tight scaled AABB.
 pub(super) fn compute_sprite_cull_bounds(
-    pos: &MapPosition,
+    pos: &WorldPosition,
     sprite: &Sprite,
     scale: Option<&Scale>,
     rot: Option<&Rotation>,
@@ -297,7 +297,7 @@ mod tests {
 
     #[test]
     fn sprite_cull_bounds_no_scale_no_rot() {
-        let pos = MapPosition::new(100.0, 200.0);
+        let pos = WorldPosition::new(100.0, 200.0);
         let sprite = sprite_with_origin(32.0, 48.0, 16.0, 24.0);
         let (min, max) = compute_sprite_cull_bounds(&pos, &sprite, None, None);
 
@@ -310,7 +310,7 @@ mod tests {
 
     #[test]
     fn sprite_cull_bounds_with_scale() {
-        let pos = MapPosition::new(100.0, 200.0);
+        let pos = WorldPosition::new(100.0, 200.0);
         let sprite = sprite_with_origin(32.0, 48.0, 16.0, 24.0);
         let scale = Scale::new(2.0, 2.0);
         let (min, max) = compute_sprite_cull_bounds(&pos, &sprite, Some(&scale), None);
@@ -324,7 +324,7 @@ mod tests {
 
     #[test]
     fn sprite_cull_bounds_with_rotation() {
-        let pos = MapPosition::new(100.0, 100.0);
+        let pos = WorldPosition::new(100.0, 100.0);
         let sprite = sprite_with_origin(32.0, 32.0, 16.0, 16.0);
         let rot = Rotation { degrees: 45.0 };
         let (min, max) = compute_sprite_cull_bounds(&pos, &sprite, None, Some(&rot));
@@ -357,7 +357,7 @@ mod tests {
 
         // Sprite at the right edge of view, rotated 45°. Its AABB center is just
         // outside the unscaled bounds but the bounding circle overlaps.
-        let pos = MapPosition::new(410.0, 0.0);
+        let pos = WorldPosition::new(410.0, 0.0);
         let sprite = sprite_with_origin(64.0, 64.0, 32.0, 32.0);
         let rot = Rotation { degrees: 45.0 };
         let (min, max) = compute_sprite_cull_bounds(&pos, &sprite, None, Some(&rot));

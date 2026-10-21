@@ -301,7 +301,7 @@ pub enum EntityCmd {
         config: TweenConfig,
     },
     /// Insert TweenScreenPosition component (also inserts ScreenPosition
-    /// itself if the entity doesn't have one yet — unlike MapPosition/
+    /// itself if the entity doesn't have one yet — unlike WorldPosition/
     /// Rotation/Scale, ScreenPosition is not guaranteed to exist, since its
     /// presence/absence is the GUI visibility toggle)
     InsertTweenScreenPosition {
@@ -374,7 +374,7 @@ pub enum EntityCmd {
     UnfreezeEntity { entity_id: u64 },
     /// Set entity speed while maintaining velocity direction
     SetSpeed { entity_id: u64, speed: f32 },
-    /// Set entity position (MapPosition)
+    /// Set entity position (WorldPosition)
     SetPosition { entity_id: u64, x: f32, y: f32 },
     /// Set entity screen-space position (ScreenPosition)
     SetScreenPosition { entity_id: u64, x: f32, y: f32 },

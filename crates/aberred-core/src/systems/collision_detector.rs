@@ -16,7 +16,7 @@ use bevy_ecs::prelude::*;
 
 use crate::components::boxcollider::BoxCollider;
 use crate::components::globaltransform2d::GlobalTransform2D;
-use crate::components::mapposition::MapPosition;
+use crate::components::world_position::WorldPosition;
 use crate::events::collision::BoxOverlap;
 
 /// Broad-phase pairwise overlap test with event emission.
@@ -27,7 +27,7 @@ use crate::events::collision::BoxOverlap;
 pub fn collision_detector(
     mut query: Query<(
         Entity,
-        &MapPosition,
+        &WorldPosition,
         &BoxCollider,
         Option<&GlobalTransform2D>,
     )>,

@@ -1,7 +1,7 @@
 //! Computed world-space transform for entities in a hierarchy.
 //!
 //! When an entity has a [`ChildOf`] parent, its
-//! [`MapPosition`](super::mapposition::MapPosition), [`Rotation`](super::rotation::Rotation),
+//! [`WorldPosition`](super::world_position::WorldPosition), [`Rotation`](super::rotation::Rotation),
 //! and [`Scale`](super::scale::Scale) are interpreted as local to the parent.
 //! The [`propagate_transforms`](crate::systems::propagate_transforms::propagate_transforms)
 //! system computes the resulting world-space values and stores them here.
@@ -12,7 +12,7 @@ use bevy_ecs::prelude::*;
 /// Computed world-space transform for hierarchical entities.
 ///
 /// This component is automatically managed by the transform propagation system.
-/// For root entities (no parent), it mirrors the local MapPosition/Rotation/Scale.
+/// For root entities (no parent), it mirrors the local WorldPosition/Rotation/Scale.
 /// For child entities, it contains the composed result of the full ancestor chain.
 #[derive(Component, Clone, Copy, Debug, PartialEq)]
 pub struct GlobalTransform2D {

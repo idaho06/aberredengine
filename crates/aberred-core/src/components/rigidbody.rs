@@ -40,7 +40,7 @@ impl AccelerationForce {
 /// Kinematic body storing velocity and multiple named acceleration forces.
 ///
 /// Intended to be updated by input/physics systems and consumed by movement
-/// systems to update [`MapPosition`](super::mapposition::MapPosition).
+/// systems to update [`WorldPosition`](super::world_position::WorldPosition).
 ///
 /// # Fields
 /// - `velocity` - Current velocity in world units per second

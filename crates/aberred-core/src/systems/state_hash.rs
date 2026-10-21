@@ -21,7 +21,6 @@ use crate::components::animation::Animation;
 use crate::components::boxcollider::BoxCollider;
 use crate::components::globaltransform2d::GlobalTransform2D;
 use crate::components::group::Group;
-use crate::components::mapposition::MapPosition;
 use crate::components::phase::Phase;
 use crate::components::position2d::{Position2D, PositionSpace};
 use crate::components::rigidbody::RigidBody;
@@ -32,6 +31,7 @@ use crate::components::signals::Signals;
 use crate::components::timer::{Timer, TimerMode};
 use crate::components::ttl::Ttl;
 use crate::components::tween::{Easing, LoopMode, Tween, TweenValue};
+use crate::components::world_position::WorldPosition;
 use crate::protocol::replay::ReplayHasher;
 use crate::resources::sim_rng::SimRng;
 use crate::resources::worldsignals::WorldSignals;
@@ -65,7 +65,7 @@ fn hash_loop_mode(h: &mut ReplayHasher, loop_mode: LoopMode) {
 }
 
 /// Extends [`TweenValue`] with a hash body, implemented for the four
-/// concrete `Tween<T>` instantiations (`MapPosition`/`ScreenPosition` via
+/// concrete `Tween<T>` instantiations (`WorldPosition`/`ScreenPosition` via
 /// the blanket [`Position2D`] impl, plus `Rotation`/`Scale`) so
 /// `hash_tweens::<T>` stays generic instead of one bespoke function per `T`.
 trait HashableTweenValue: TweenValue {
@@ -167,7 +167,7 @@ pub fn hash_world_state(world: &World) -> u64 {
     for e in entities {
         h.write_u64(e.id().to_bits());
 
-        hash_optional(&mut h, e.get::<MapPosition>(), |h, c| {
+        hash_optional(&mut h, e.get::<WorldPosition>(), |h, c| {
             hash_vector2(h, c.pos);
         });
         hash_optional(&mut h, e.get::<ScreenPosition>(), |h, c| {
@@ -226,7 +226,7 @@ pub fn hash_world_state(world: &World) -> u64 {
             h.write_str(&c.animation_key);
             h.write_u64(c.frame_index as u64);
         });
-        hash_tween::<MapPosition>(&mut h, e);
+        hash_tween::<WorldPosition>(&mut h, e);
         hash_tween::<ScreenPosition>(&mut h, e);
         hash_tween::<Rotation>(&mut h, e);
         hash_tween::<Scale>(&mut h, e);
@@ -292,7 +292,7 @@ mod tests {
         signals.set_string("n", "a");
         let e = world
             .spawn((
-                MapPosition::new(1.0, 2.0),
+                WorldPosition::new(1.0, 2.0),
                 ScreenPosition::new(3.0, 4.0),
                 rb,
                 Rotation { degrees: 10.0 },
@@ -312,7 +312,11 @@ mod tests {
             ))
             .id();
         world.entity_mut(e).insert((
-            Tween::new(MapPosition::new(0.0, 0.0), MapPosition::new(5.0, 5.0), 1.0),
+            Tween::new(
+                WorldPosition::new(0.0, 0.0),
+                WorldPosition::new(5.0, 5.0),
+                1.0,
+            ),
             Tween::new(
                 ScreenPosition::new(0.0, 0.0),
                 ScreenPosition::new(5.0, 5.0),
@@ -334,8 +338,8 @@ mod tests {
     fn every_hashed_field_changes_the_hash() {
         type Mutation = fn(&mut World, Entity);
         let mutations: &[(&str, Mutation)] = &[
-            ("MapPosition", |w, e| {
-                w.get_mut::<MapPosition>(e).unwrap().pos.x += 1.0
+            ("WorldPosition", |w, e| {
+                w.get_mut::<WorldPosition>(e).unwrap().pos.x += 1.0
             }),
             ("ScreenPosition", |w, e| {
                 w.get_mut::<ScreenPosition>(e).unwrap().pos.y += 1.0
@@ -417,23 +421,23 @@ mod tests {
             ("Animation.frame", |w, e| {
                 w.get_mut::<Animation>(e).unwrap().frame_index = 1
             }),
-            ("Tween<MapPosition>.to", |w, e| {
-                w.get_mut::<Tween<MapPosition>>(e).unwrap().to = MapPosition::new(6.0, 5.0);
+            ("Tween<WorldPosition>.to", |w, e| {
+                w.get_mut::<Tween<WorldPosition>>(e).unwrap().to = WorldPosition::new(6.0, 5.0);
             }),
-            ("Tween<MapPosition>.time", |w, e| {
-                w.get_mut::<Tween<MapPosition>>(e).unwrap().time = 0.1
+            ("Tween<WorldPosition>.time", |w, e| {
+                w.get_mut::<Tween<WorldPosition>>(e).unwrap().time = 0.1
             }),
-            ("Tween<MapPosition>.playing", |w, e| {
-                w.get_mut::<Tween<MapPosition>>(e).unwrap().playing = false;
+            ("Tween<WorldPosition>.playing", |w, e| {
+                w.get_mut::<Tween<WorldPosition>>(e).unwrap().playing = false;
             }),
-            ("Tween<MapPosition>.forward", |w, e| {
-                w.get_mut::<Tween<MapPosition>>(e).unwrap().forward = false;
+            ("Tween<WorldPosition>.forward", |w, e| {
+                w.get_mut::<Tween<WorldPosition>>(e).unwrap().forward = false;
             }),
-            ("Tween<MapPosition>.easing", |w, e| {
-                w.get_mut::<Tween<MapPosition>>(e).unwrap().easing = Easing::CubicIn;
+            ("Tween<WorldPosition>.easing", |w, e| {
+                w.get_mut::<Tween<WorldPosition>>(e).unwrap().easing = Easing::CubicIn;
             }),
-            ("Tween<MapPosition>.loop_mode", |w, e| {
-                w.get_mut::<Tween<MapPosition>>(e).unwrap().loop_mode = LoopMode::PingPong;
+            ("Tween<WorldPosition>.loop_mode", |w, e| {
+                w.get_mut::<Tween<WorldPosition>>(e).unwrap().loop_mode = LoopMode::PingPong;
             }),
             ("Tween<ScreenPosition>.from", |w, e| {
                 w.get_mut::<Tween<ScreenPosition>>(e).unwrap().from = ScreenPosition::new(1.0, 0.0);

@@ -161,7 +161,7 @@ mod define_your_own_systemparam_bundle {
     #[derive(Component)]
     struct Enemy;
 
-    fn enemy_tick(mut game: Game, enemies: Query<(Entity, &MapPosition), With<Enemy>>) {
+    fn enemy_tick(mut game: Game, enemies: Query<(Entity, &WorldPosition), With<Enemy>>) {
         for (entity, pos) in &enemies {
             if pos.pos.y > 600.0 {
                 game.commands.entity(entity).despawn();
@@ -215,12 +215,12 @@ mod tests {
 
     #[derive(SystemParam)]
     struct Movers<'w, 's> {
-        positions: Query<'w, 's, &'static mut MapPosition>,
+        positions: Query<'w, 's, &'static mut WorldPosition>,
     }
 
     #[test]
     #[should_panic(expected = "B0001")]
     fn a_sibling_query_that_overlaps_a_bundled_query_panics() {
-        let _ = World::new().run_system_once(|_: Movers, _: Query<&MapPosition>| {});
+        let _ = World::new().run_system_once(|_: Movers, _: Query<&WorldPosition>| {});
     }
 }

@@ -314,7 +314,7 @@ fn hud_update(time: Res<WorldTime>) {
 
 // Fires each time "level01" becomes active, after the previous scene is torn down.
 fn spawn_level(_: On<SceneEntered>, mut commands: Commands) {
-    commands.spawn((Group::new("player"), MapPosition::new(100.0, 200.0)));
+    commands.spawn((Group::new("player"), WorldPosition::new(100.0, 200.0)));
 }
 
 // Fires each time "level01" is left, while its entities are still alive.
@@ -345,7 +345,7 @@ For a scene system that must see the same tick's movement, collision and GUI res
 use aberredengine::prelude::*;
 
 // Sees positions after this tick's movement.
-fn level_late(mut signals: ResMut<WorldSignals>, players: Query<&MapPosition, With<Group>>) {
+fn level_late(mut signals: ResMut<WorldSignals>, players: Query<&WorldPosition, With<Group>>) {
     if players.iter().any(|p| p.pos.y > 600.0) {
         signals.set_flag("player_fell");
     }
@@ -502,7 +502,7 @@ coordinates, `scroll_y` and the gamepad axes are plain fields.
 | Parameter | Use it for |
 |-----------|------------|
 | `Commands` | Spawn and despawn entities, insert and remove components, trigger events, insert resources. Applied after the system runs. |
-| `Query<D, F>` | Read or write the components of matching entities, e.g. `Query<&mut MapPosition, With<Player>>`. |
+| `Query<D, F>` | Read or write the components of matching entities, e.g. `Query<&mut WorldPosition, With<Player>>`. |
 | `Res<InputState>` | Bound actions, mouse and gamepad. See [InputState key bindings](#inputstate-key-bindings). |
 | `Res<WorldTime>` | `delta`, the fixed tick length (see [The sim tick and `dt`](#the-sim-tick-and-dt)), and elapsed game time. |
 | `ResMut<WorldSignals>` | Shared scalars, integers, strings, flags and entity refs. See [WorldSignals API](#worldsignals-api). |
@@ -711,7 +711,7 @@ impl Game<'_, '_> {
 #[derive(Component)]
 struct Enemy;
 
-fn enemy_tick(mut game: Game, enemies: Query<(Entity, &MapPosition), With<Enemy>>) {
+fn enemy_tick(mut game: Game, enemies: Query<(Entity, &WorldPosition), With<Enemy>>) {
     for (entity, pos) in &enemies {
         if pos.pos.y > 600.0 {
             game.commands.entity(entity).despawn();
@@ -723,7 +723,7 @@ fn enemy_tick(mut game: Game, enemies: Query<(Entity, &MapPosition), With<Enemy>
 
 Two rules keep a bundle usable:
 
-- **No overlapping access.** A system can't take the bundle plus another parameter that reaches the same data, when either side writes it. `Game` holds `ResMut<WorldSignals>`, so `fn f(game: Game, signals: Res<WorldSignals>)` panics the first time the system is initialized, at startup (Bevy error B0002). Queries follow the same rule: a bundle holding `Query<&mut MapPosition>` conflicts with a sibling `Query<&MapPosition>` (B0001). Reach the data through the bundle, or keep queries out of it, as `Game` does.
+- **No overlapping access.** A system can't take the bundle plus another parameter that reaches the same data, when either side writes it. `Game` holds `ResMut<WorldSignals>`, so `fn f(game: Game, signals: Res<WorldSignals>)` panics the first time the system is initialized, at startup (Bevy error B0002). Queries follow the same rule: a bundle holding `Query<&mut WorldPosition>` conflicts with a sibling `Query<&WorldPosition>` (B0001). Reach the data through the bundle, or keep queries out of it, as `Game` does.
 - **`AssetLoader` holds the render and audio command writers**, so a system with it, directly or inside a bundle, can't also take `MessageWriter<AudioCmd>` or `MessageWriter<RenderAssetCmd>` (B0002). Write other commands through `assets.audio()`/`assets.render()`, as `play_sfx` does; see [Section 6](#6-loading-assets).
 
 ---
@@ -899,7 +899,7 @@ fn spawn_player_once_texture_ready(
     };
 
     commands.spawn((
-        MapPosition::new(100.0, 200.0),
+        WorldPosition::new(100.0, 200.0),
         Sprite::new("player", width as f32, height as f32).centered(),
         ZIndex(1.0),
     ));
@@ -1057,7 +1057,7 @@ Same `None`-per-stage convention as `RenderAssetCmd::Shader`, and the same "no s
 
 #### Per-entity shaders
 
-Attach an `EntityShader` naming a loaded shader key to draw one entity through that shader. It applies to world-space sprites and `DynamicText` (entities with `MapPosition`); screen-space entities ignore it. If the key isn't loaded (yet, or because the load failed), the entity draws without the shader and the render thread logs a warning each frame.
+Attach an `EntityShader` naming a loaded shader key to draw one entity through that shader. It applies to world-space sprites and `DynamicText` (entities with `WorldPosition`); screen-space entities ignore it. If the key isn't loaded (yet, or because the load failed), the entity draws without the shader and the render thread logs a warning each frame.
 
 ```rust
 use aberredengine::prelude::*;
@@ -1066,7 +1066,7 @@ fn spawn_glowing(mut commands: Commands) {
     let mut shader = EntityShader::new("glow");
     shader.set_uniform("uIntensity", UniformValue::Float(0.8));
     commands.spawn((
-        // MapPosition, Sprite, ZIndex, … as in Section 7
+        // WorldPosition, Sprite, ZIndex, … as in Section 7
         shader,
     ));
 }
@@ -1152,23 +1152,23 @@ Spawn a tilemap by attaching the `TileMap` component to any entity. `tilemap_spa
 ```rust
 use aberredengine::prelude::*;
 
-// Minimal — tiles appear at world origin (default MapPosition inserted automatically)
+// Minimal — tiles appear at world origin (default WorldPosition inserted automatically)
 commands.spawn(TileMap::new("assets/tilemaps/level01"));
 
 // Positioned and scaled
 commands.spawn((
     TileMap::new("assets/tilemaps/level01"),
-    MapPosition::new(100.0, 200.0),
+    WorldPosition::new(100.0, 200.0),
     Scale::new(2.0, 2.0),
 ));
 ```
 
 A `.deterministic()` game preloads the atlas in Setup with `assets.load_tilemap("assets/tilemaps/level01")` (see [Determinism and replay](#10-determinism-and-replay)).
 
-Move the whole tilemap at runtime by updating the root entity's `MapPosition`:
+Move the whole tilemap at runtime by updating the root entity's `WorldPosition`:
 
 ```rust
-commands.entity(tilemap_root).insert(MapPosition::new(new_x, new_y));
+commands.entity(tilemap_root).insert(WorldPosition::new(new_x, new_y));
 ```
 
 > **Lua builds only:** a Lua game spawns the same tilemap through the entity builder. A pure-Rust game ignores this snippet.
@@ -1182,7 +1182,7 @@ engine.spawn()
 
 The atlas texture is stored in `TextureStore` under `"tilemap:"` plus the directory path (`"tilemap:assets/tilemaps/level01"` above; `tilemap_texture_key(path)` in `aberredengine::core::systems::tilemap` computes it), and loaded once per key, so two `TileMap` entities pointing to the same directory share one GPU texture. Directories with the same name in different places get separate atlases, and the prefix keeps the key apart from your own texture keys. Tile entities are in `Group("tiles")` and get `ZIndex` values automatically based on layer order (first layer most negative, last layer least negative).
 
-Tile entities carry only `Group`, `Sprite`, `MapPosition`, `ZIndex` and `ChildOf` — **no `BoxCollider`**. Collision detection needs a `BoxCollider` on both entities, so a `CollisionRule` on `"tiles"` never fires until your game adds colliders. One way is a system that gives every newly spawned tile a sprite-sized collider:
+Tile entities carry only `Group`, `Sprite`, `WorldPosition`, `ZIndex` and `ChildOf` — **no `BoxCollider`**. Collision detection needs a `BoxCollider` on both entities, so a `CollisionRule` on `"tiles"` never fires until your game adds colliders. One way is a system that gives every newly spawned tile a sprite-sized collider:
 
 ```rust
 use aberredengine::prelude::*;
@@ -1267,7 +1267,7 @@ use aberredengine::prelude::*;
 
 fn follow_player(mut commands: Commands, mut follow: ResMut<CameraFollowConfig>) {
     commands.spawn((
-        MapPosition::new(100.0, 200.0),
+        WorldPosition::new(100.0, 200.0),
         // … sprite, physics, etc. …
         CameraTarget::new(1).with_zoom(2.0),
     ));
@@ -1323,7 +1323,7 @@ A minimal visible entity needs a position, a sprite, a draw order, and optionall
 use aberredengine::prelude::*;
 
 commands.spawn((
-    MapPosition::new(100.0, 200.0),
+    WorldPosition::new(100.0, 200.0),
     Sprite::new("player", 32.0, 32.0).centered(),
     ZIndex(1.0),
     Group::new("player"),
@@ -1338,7 +1338,7 @@ Add `RigidBody`, `BoxCollider`, and `AccelerationControlled` for a player charac
 use aberredengine::prelude::*;
 
 commands.spawn((
-    MapPosition::new(100.0, 200.0),
+    WorldPosition::new(100.0, 200.0),
     Sprite::new("player", 32.0, 32.0).centered(),
     ZIndex(1.0),
     Group::new("player"),
@@ -1373,7 +1373,7 @@ When `WorldSignals` has a value for key `"score"`, the text automatically update
 
 | Component | Constructor |
 |-----------|-------------|
-| `MapPosition` | `MapPosition::new(x, y)` |
+| `WorldPosition` | `WorldPosition::new(x, y)` |
 | `ScreenPosition` | `ScreenPosition::new(x, y)` |
 | `Sprite` | `Sprite::new("key", w, h)` (origin top-left) then `.centered()` or `.with_origin(v)`, `.with_offset(v)` (spritesheet frame), `.with_flip(h, v)` |
 | `RigidBody` | `RigidBody::new()` or `RigidBody::with_physics(friction, max_speed)` |
@@ -1396,7 +1396,7 @@ When `WorldSignals` has a value for key `"score"`, the text automatically update
 | `Timer` | `Timer::new(duration_secs)` (repeating) or `Timer::once(duration_secs)` — triggers `TimerFired` on its entity; see [Timers](#timers) |
 | `Phase` | `Phase::new("initial_phase")` — set `next` to transition; triggers `PhaseEntered`/`PhaseExited`; see [Phase state machines](#phase-state-machines) |
 | `CollisionRule` | `CollisionRule::new("group_a", "group_b")` — observe `CollisionOngoing` (every tick) or `CollisionStarted`/`CollisionEnded` on it; see [Collision rules](#collision-rules) |
-| `Tween<MapPosition>` | `Tween::position(from: Vec2, to: Vec2, duration)` |
+| `Tween<WorldPosition>` | `Tween::position(from: Vec2, to: Vec2, duration)` |
 | `Tween<Rotation>` | `Tween::rotation(from_degrees, to_degrees, duration)` |
 | `Tween<Scale>` | `Tween::scale(from: Vec2, to: Vec2, duration)` |
 | `Tween<ScreenPosition>` | `Tween::screen_position(from: Vec2, to: Vec2, duration)` |
@@ -1433,7 +1433,7 @@ Tweens are represented by a single generic component: `Tween<T>`.
 
 Use the target component type as `T`:
 
-- `Tween<MapPosition>` for position animation
+- `Tween<WorldPosition>` for position animation
 - `Tween<Rotation>` for rotation animation
 - `Tween<Scale>` for scale animation
 - `Tween<ScreenPosition>` for screen-space (UI) position animation
@@ -1448,7 +1448,7 @@ Use the target component type as `T`:
 use aberredengine::prelude::*;
 
 commands.spawn((
-    MapPosition::new(0.0, 0.0),
+    WorldPosition::new(0.0, 0.0),
     Tween::position(Vec2::ZERO, Vec2::new(200.0, 120.0), 1.5)
         .with_easing(Easing::CubicOut)
         .with_loop_mode(LoopMode::PingPong),
@@ -1489,7 +1489,7 @@ commands.spawn((
 ));
 ```
 
-> **Important:** The generic parameter must match the component you want the engine to animate. For example, use `Tween<MapPosition>` with `MapPosition`, not `Tween<Vec2>`. The tween systems query concrete ECS component types, not raw value types.
+> **Important:** The generic parameter must match the component you want the engine to animate. For example, use `Tween<WorldPosition>` with `WorldPosition`, not `Tween<Vec2>`. The tween systems query concrete ECS component types, not raw value types.
 
 ### Spawning context: observers and systems
 
@@ -1532,7 +1532,7 @@ use aberredengine::prelude::*;
 
 // Spawn an entity with a 2-second repeating timer and a per-entity observer
 commands
-    .spawn((MapPosition::new(0.0, 0.0), Timer::new(2.0)))
+    .spawn((WorldPosition::new(0.0, 0.0), Timer::new(2.0)))
     .observe(on_timer_fired);
 
 fn on_timer_fired(ev: On<TimerFired>, mut signals: ResMut<WorldSignals>) {
@@ -1549,11 +1549,11 @@ struct Spawner;
 
 fn on_spawner_timer(
     ev: On<TimerFired>,
-    spawners: Query<&MapPosition, With<Spawner>>,
+    spawners: Query<&WorldPosition, With<Spawner>>,
     mut commands: Commands,
 ) {
     let Ok(pos) = spawners.get(ev.entity) else { return };
-    commands.spawn(MapPosition::new(pos.pos.x, pos.pos.y));
+    commands.spawn(WorldPosition::new(pos.pos.x, pos.pos.y));
 }
 ```
 
@@ -1595,7 +1595,7 @@ struct Player;
 fn spawn_player(mut commands: Commands) {
     commands.spawn((
         Player,
-        MapPosition::new(100.0, 200.0),
+        WorldPosition::new(100.0, 200.0),
         RigidBody::default(),
         // ... sprite, collider, etc ...
         Phase::new("idle"),
@@ -1672,7 +1672,7 @@ Lua phase callbacks (`:with_lua_phase_entered/exited/update`) run on this same `
 
 **Detection pipeline:**
 
-1. `collision_detector` system iterates all entity pairs with `MapPosition` + `BoxCollider`
+1. `collision_detector` system iterates all entity pairs with `WorldPosition` + `BoxCollider`
 2. Uses AABB overlap via `BoxCollider::as_rectangle()` + `Rect::overlaps()`
 3. On overlap, triggers a `BoxOverlap { a, b }` (observe it directly for "any overlap" logic)
 4. `collision_rule_observer` receives the event, looks up `Group` names, finds a matching `CollisionRule`, computes collision sides, and triggers `CollisionOngoing` on the rule entity (preceded by `CollisionStarted` when the pair just started touching)
@@ -1684,7 +1684,7 @@ Lua phase callbacks (`:with_lua_phase_entered/exited/update`) run on this same `
 
 - `CollisionOngoing` fires **every sim tick** while the two boxes overlap (240 times a second at the default `[simulation] hz`). To react once per touch, observe the [contact events](#contact-events) instead.
 - Only **one rule** fires per overlapping pair. If several rules cover the same two groups, the one on the lowest `Entity` wins and the others never fire for that pair.
-- `collision_detector` tests **every pair** of entities with `MapPosition` + `BoxCollider` (O(n²)), whether or not any rule names their groups. Keep the number of colliders small; give a `BoxCollider` only to entities that need one.
+- `collision_detector` tests **every pair** of entities with `WorldPosition` + `BoxCollider` (O(n²)), whether or not any rule names their groups. Keep the number of colliders small; give a `BoxCollider` only to entities that need one.
 
 **Creating a collision rule:**
 
@@ -1931,13 +1931,13 @@ pub struct TweenFinished<T: TweenValue> {
 }
 ```
 
-**Observing from Rust** — register a persistent observer per tweened type with `EngineBuilder::add_observer`. The engine already runs one monomorphized tween system per `T` (`MapPosition`, `Rotation`, `Scale`, `ScreenPosition`), so register one observer per `T` you care about:
+**Observing from Rust** — register a persistent observer per tweened type with `EngineBuilder::add_observer`. The engine already runs one monomorphized tween system per `T` (`WorldPosition`, `Rotation`, `Scale`, `ScreenPosition`), so register one observer per `T` you care about:
 
 ```rust
 use aberredengine::prelude::*;
 
 fn on_move_tween_done(
-    trigger: On<TweenFinished<MapPosition>>,
+    trigger: On<TweenFinished<WorldPosition>>,
     mut commands: Commands,
 ) {
     // Despawn the entity whose move tween just finished
@@ -2083,13 +2083,13 @@ cross-cutting logic such as a UI click sound. A disabled widget never triggers i
 
 **Source:** `aberred-core/src/components/particleemitter.rs`, `aberred-core/src/systems/particleemitter.rs`
 
-A `ParticleEmitter` on an entity with `MapPosition` spawns particles by cloning **template** entities. Each emission picks a random template, clones every component it has (a `Phase` restarts in its current phase, see [Phase state machines](#phase-state-machines)), then sets the clone's `MapPosition` (inside the emitter's `shape`, plus `offset`), `Rotation` (the emission angle), `RigidBody` velocity (angle × a speed from `speed_range`; the template's own `RigidBody` friction, max speed and forces carry over), an optional `Ttl`, and `EmittedParticle(emitter)`.
+A `ParticleEmitter` on an entity with `WorldPosition` spawns particles by cloning **template** entities. Each emission picks a random template, clones every component it has (a `Phase` restarts in its current phase, see [Phase state machines](#phase-state-machines)), then sets the clone's `WorldPosition` (inside the emitter's `shape`, plus `offset`), `Rotation` (the emission angle), `RigidBody` velocity (angle × a speed from `speed_range`; the template's own `RigidBody` friction, max speed and forces carry over), an optional `Ttl`, and `EmittedParticle(emitter)`.
 
 ```rust
 use aberredengine::prelude::*;
 
 fn spawn_smoke(mut commands: Commands) {
-    // The template has no MapPosition, so it is never drawn, moved or collided
+    // The template has no WorldPosition, so it is never drawn, moved or collided
     let smoke = commands
         .spawn((
             Sprite::new("smoke", 8.0, 8.0).centered(),
@@ -2099,7 +2099,7 @@ fn spawn_smoke(mut commands: Commands) {
         .id();
 
     commands.spawn((
-        MapPosition::new(100.0, 100.0),
+        WorldPosition::new(100.0, 100.0),
         ParticleEmitter {
             templates: vec![smoke],
             shape: EmitterShape::Rect { width: 16.0, height: 4.0 },
@@ -2116,7 +2116,7 @@ fn spawn_smoke(mut commands: Commands) {
 }
 ```
 
-- Leave `MapPosition` off a template: without it the template itself is never drawn, moved or collided, while its clones get a position. Give it a `ZIndex`, or the particles aren't drawn.
+- Leave `WorldPosition` off a template: without it the template itself is never drawn, moved or collided, while its clones get a position. Give it a `ZIndex`, or the particles aren't drawn.
 - The emitter runs every sim tick in `SimSet::Movement`. It emits `emissions_per_second` times a second, `particles_per_emission` particles each time, until `emissions_remaining` reaches 0; set `emissions_remaining` again to restart it. `TtlSpec::None` keeps particles until you despawn them.
 - Random choices come from `SimRng`, so a `.deterministic(seed)` game emits the same particles every run.
 - Templates are regular entities: a scene switch despawns them (and the emitter) unless they're `Persistent`. An emitter skips templates that no longer exist.
@@ -2126,7 +2126,7 @@ fn spawn_smoke(mut commands: Commands) {
 
 **Source:** `aberred-core/src/components/stuckto.rs`, `aberred-core/src/systems/stuckto.rs`
 
-`StuckTo` makes an entity's `MapPosition` follow another entity's, plus an offset, on both axes (`StuckTo::new`) or one (`follow_x_only`, `follow_y_only`). The classic use is a ball resting on a paddle until launch:
+`StuckTo` makes an entity's `WorldPosition` follow another entity's, plus an offset, on both axes (`StuckTo::new`) or one (`follow_x_only`, `follow_y_only`). The classic use is a ball resting on a paddle until launch:
 
 ```rust
 use aberredengine::prelude::*;
@@ -2159,7 +2159,7 @@ fn launch_ball(
 
 - `stuck_to_entity_system` runs every sim tick in `SimSet::Collision`, after movement and collision detection, and overwrites only the followed axes. Keep a stuck entity's velocity at zero, or it drifts along any axis it doesn't follow.
 - `stored_velocity` is only data: removing `StuckTo` from Rust doesn't apply it. Apply it yourself when you release the entity, as `launch_ball` does. (Lua's `engine.release_stuckto` does it for you.)
-- The follower copies the target's `MapPosition` field, which is the target's local position if the target is a `ChildOf` child. A target that is itself `StuckTo` isn't followed (no chains), and a follower with `ChildOf` is skipped. For permanent parent-relative placement, use `ChildOf` instead.
+- The follower copies the target's `WorldPosition` field, which is the target's local position if the target is a `ChildOf` child. A target that is itself `StuckTo` isn't followed (no chains), and a follower with `ChildOf` is skipped. For permanent parent-relative placement, use `ChildOf` instead.
 - If the target is despawned, the follower stays where it is and keeps its `StuckTo` until you remove it.
 
 ---
@@ -2555,8 +2555,8 @@ Each bound action is a `BoolState { active, just_pressed, just_released }`, read
 | `scroll_y` | Mouse wheel delta this sim tick. Positive = up, negative = down. |
 | `mouse_x` | Cursor X in game/render-target space (letterbox-corrected, 0..render_width). |
 | `mouse_y` | Cursor Y in game/render-target space (letterbox-corrected, 0..render_height). |
-| `mouse_world_x` | Cursor X in world-space (after camera transform, matches `MapPosition`). |
-| `mouse_world_y` | Cursor Y in world-space (after camera transform, matches `MapPosition`). |
+| `mouse_world_x` | Cursor X in world-space (after camera transform, matches `WorldPosition`). |
+| `mouse_world_y` | Cursor Y in world-space (after camera transform, matches `WorldPosition`). |
 
 **Gamepad fields (pad 0):**
 

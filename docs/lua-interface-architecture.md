@@ -327,7 +327,7 @@ A Lua collision rule is a plain core `CollisionRule` plus a `LuaOnCollision { st
 
 ### Animation-Finished / Tween-Finished Callbacks
 
-`lua_animation_finished_observer` reacts to `AnimationFinished` (raised once, when a non-looped `Animation` first reaches its last frame) for entities carrying `LuaOnAnimationFinished`. `lua_tween_finished_observer::<T>` — one monomorphized instance registered per tweened type (`MapPosition`, `Rotation`, `Scale`, `ScreenPosition`) — reacts to `TweenFinished<T>` for entities carrying the matching `LuaOnTweenFinished<T>`. Both call the named callback as `(ctx, input)` via `LuaDispatch::dispatch_and_drain`, and both are silently skipped for entities that don't carry the matching component.
+`lua_animation_finished_observer` reacts to `AnimationFinished` (raised once, when a non-looped `Animation` first reaches its last frame) for entities carrying `LuaOnAnimationFinished`. `lua_tween_finished_observer::<T>` — one monomorphized instance registered per tweened type (`WorldPosition`, `Rotation`, `Scale`, `ScreenPosition`) — reacts to `TweenFinished<T>` for entities carrying the matching `LuaOnTweenFinished<T>`. Both call the named callback as `(ctx, input)` via `LuaDispatch::dispatch_and_drain`, and both are silently skipped for entities that don't carry the matching component.
 
 ### Entity Setup Callback
 
@@ -517,7 +517,7 @@ All are registered in `engine_api/render.rs` and queue into `gui_theme_commands`
 - `entity_set_gui_disabled` — enable/disable a `GuiButton`/`GuiImage` (cosmetic: `gui_hit_test_system` stops promoting it and skips its click callback)
 - `entity_set_gui_progress`, `entity_set_gui_progress_max` — set/re-clamp a `GuiProgressBar`'s value
 
-The four `entity_insert_tween_*` commands (`position`/`rotation`/`scale`/`screen_position`) all accept a trailing `callback` function-name string (empty string = no callback); when non-empty, the handler inserts a `LuaOnTweenFinished<T>` component (`T` being the tweened `MapPosition`/`Rotation`/`Scale`/`ScreenPosition`) on the entity, fired once by the corresponding `lua_tween_finished_observer::<T>` when `TweenFinished<T>` triggers.
+The four `entity_insert_tween_*` commands (`position`/`rotation`/`scale`/`screen_position`) all accept a trailing `callback` function-name string (empty string = no callback); when non-empty, the handler inserts a `LuaOnTweenFinished<T>` component (`T` being the tweened `WorldPosition`/`Rotation`/`Scale`/`ScreenPosition`) on the entity, fired once by the corresponding `lua_tween_finished_observer::<T>` when `TweenFinished<T>` triggers.
 
 #### Collision Context Functions
 
@@ -1037,7 +1037,7 @@ Every callback described in [Scene Lifecycle and Callback Dispatch](#scene-lifec
 | `rotation` | number | `Rotation` |
 | `world_rotation` | number | `GlobalTransform2D` |
 | `parent_id` | integer | `ChildOf` |
-| `pos` = `{x, y}` | table | `MapPosition` |
+| `pos` = `{x, y}` | table | `WorldPosition` |
 | `screen_pos` = `{x, y}` | table | `ScreenPosition` |
 | `scale` = `{x, y}` | table | `Scale` |
 | `world_pos` = `{x, y}` | table | `GlobalTransform2D` |

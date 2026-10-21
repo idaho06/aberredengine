@@ -134,7 +134,7 @@ mod scene_scoped_systems_and_observers {
 
     // Fires each time "level01" becomes active, after the previous scene is torn down.
     fn spawn_level(_: On<SceneEntered>, mut commands: Commands) {
-        commands.spawn((Group::new("player"), MapPosition::new(100.0, 200.0)));
+        commands.spawn((Group::new("player"), WorldPosition::new(100.0, 200.0)));
     }
 
     // Fires each time "level01" is left, while its entities are still alive.
@@ -162,7 +162,7 @@ mod late_scene_system {
     use aberredengine::prelude::*;
 
     // Sees positions after this tick's movement.
-    fn level_late(mut signals: ResMut<WorldSignals>, players: Query<&MapPosition, With<Group>>) {
+    fn level_late(mut signals: ResMut<WorldSignals>, players: Query<&WorldPosition, With<Group>>) {
         if players.iter().any(|p| p.pos.y > 600.0) {
             signals.set_flag("player_fell");
         }

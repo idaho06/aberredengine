@@ -1,5 +1,5 @@
 -- scenes/bunnymark/map_loop.lua
--- Bunnymark variant: MapPosition + Lua loop.
+-- Bunnymark variant: WorldPosition + Lua loop.
 -- All positions are stored in a Lua table and updated via entity_set_position.
 
 local M      = {}
@@ -94,11 +94,11 @@ M._callbacks = {
 -- ─── Spawn ────────────────────────────────────────────────────────────────────
 
 function M.spawn()
-    engine.log_debug("Spawning Bunnymark MapPosition+Loop...")
+    engine.log_debug("Spawning Bunnymark WorldPosition+Loop...")
     engine.stop_all_music()
     C.setup()
     C.spawn_hud("MAP+LOOP")
-    engine.log_debug("Bunnymark MapPosition+Loop ready!")
+    engine.log_debug("Bunnymark WorldPosition+Loop ready!")
 end
 
 return M

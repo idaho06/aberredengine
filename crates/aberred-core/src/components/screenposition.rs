@@ -5,7 +5,7 @@
 //! the camera.
 //!
 //! For world-space entities, see
-//! [`MapPosition`](super::mapposition::MapPosition).
+//! [`WorldPosition`](super::world_position::WorldPosition).
 
 use crate::components::position2d::{Position2D, ScreenSpace};
 

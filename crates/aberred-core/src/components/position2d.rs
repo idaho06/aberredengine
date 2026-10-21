@@ -1,7 +1,7 @@
 //! Generic 2D position component, parameterized by coordinate space.
 //!
 //! [`Position2D`] is the shared implementation behind
-//! [`MapPosition`](super::mapposition::MapPosition) (world space) and
+//! [`WorldPosition`](super::world_position::WorldPosition) (world space) and
 //! [`ScreenPosition`](super::screenposition::ScreenPosition) (screen space).
 //! The two are distinct ECS component types — `Position2D<WorldSpace>` and
 //! `Position2D<ScreenSpace>` are different monomorphizations with their own
@@ -21,7 +21,7 @@ use bevy_ecs::prelude::Component;
 /// manual `Clone`/`Copy` impls before adding a new space.
 pub trait PositionSpace: Send + Sync + 'static {}
 
-/// World-space coordinates, used by [`MapPosition`](super::mapposition::MapPosition).
+/// World-space coordinates, used by [`WorldPosition`](super::world_position::WorldPosition).
 #[derive(Debug, Clone, Copy)]
 pub struct WorldSpace;
 impl PositionSpace for WorldSpace {}
@@ -38,7 +38,7 @@ impl PositionSpace for ScreenSpace {}
 /// `Clone`/`Copy` for any `S`. This matters for `clone_behavior`: it lets
 /// `ComponentCloneBehavior::clone::<Self>()` type-check generically over
 /// `S: PositionSpace`, so entity cloning (`clone_and_spawn`) copies this
-/// component for both [`MapPosition`](super::mapposition::MapPosition) and
+/// component for both [`WorldPosition`](super::world_position::WorldPosition) and
 /// [`ScreenPosition`](super::screenposition::ScreenPosition).
 #[derive(Component, Debug)]
 #[component(clone_behavior = clone::<Self>())]
@@ -148,7 +148,7 @@ pub(crate) mod test_helpers {
 
     /// Exercises the full `Position2D` API for the given coordinate space.
     /// Called once per space (`WorldSpace`, `ScreenSpace`) from
-    /// `mapposition`/`screenposition`'s own test modules.
+    /// `world_position`/`screenposition`'s own test modules.
     pub(crate) fn run_shared_tests<S: PositionSpace>() {
         // new
         let pos = Position2D::<S>::new(10.0, 20.0);

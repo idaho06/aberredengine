@@ -105,7 +105,7 @@ pub struct AnimationEntry {
 /// Extend with new optional fields as new component types are introduced.
 #[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
 pub struct EntityDef {
-    /// World-space position `[x, y]` (maps to [`crate::components::mapposition::MapPosition`]).
+    /// World-space position `[x, y]` (maps to [`crate::components::world_position::WorldPosition`]).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub position: Option<[f32; 2]>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

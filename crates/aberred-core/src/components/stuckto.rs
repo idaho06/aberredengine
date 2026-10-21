@@ -56,7 +56,7 @@ use bevy_ecs::prelude::{Component, Entity};
 /// Component that makes an entity follow another entity's position.
 ///
 /// When attached to an entity, the `stuck_to_entity_system` will update
-/// this entity's `MapPosition` to match the target's position plus the offset.
+/// this entity's `WorldPosition` to match the target's position plus the offset.
 #[derive(Debug, Clone, Component)]
 pub struct StuckTo {
     /// The entity to follow.

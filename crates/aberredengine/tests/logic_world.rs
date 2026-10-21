@@ -14,7 +14,6 @@ use aberredengine::core::components::dynamictext::DynamicText;
 use aberredengine::core::components::emittedparticle::EmittedParticle;
 use aberredengine::core::components::group::Group;
 use aberredengine::core::components::guiinteractable::GuiInteractable;
-use aberredengine::core::components::mapposition::MapPosition;
 use aberredengine::core::components::menu::{Menu, MenuAction, MenuActions};
 use aberredengine::core::components::particleemitter::ParticleEmitter;
 use aberredengine::core::components::phase::Phase;
@@ -24,6 +23,7 @@ use aberredengine::core::components::screenposition::ScreenPosition;
 use aberredengine::core::components::signals::Signals;
 use aberredengine::core::components::sprite::Sprite;
 use aberredengine::core::components::timer::Timer;
+use aberredengine::core::components::world_position::WorldPosition;
 use aberredengine::core::components::zindex::ZIndex;
 use aberredengine::core::events::asset::{AssetLoadFailed, AssetLoaded};
 use aberredengine::core::events::collision::{CollisionEnded, CollisionOngoing, CollisionStarted};
@@ -174,7 +174,7 @@ fn spawn_box(tw: &mut TestWorld, group: &str, x: f32, extra: impl Bundle) -> Ent
     tw.world
         .spawn((
             Group::new(group),
-            MapPosition::new(x, 0.0),
+            WorldPosition::new(x, 0.0),
             BoxCollider::new(10.0, 10.0),
             extra,
         ))
@@ -182,7 +182,7 @@ fn spawn_box(tw: &mut TestWorld, group: &str, x: f32, extra: impl Bundle) -> Ent
 }
 
 fn move_to(tw: &mut TestWorld, e: Entity, x: f32) {
-    tw.world.get_mut::<MapPosition>(e).unwrap().pos.x = x;
+    tw.world.get_mut::<WorldPosition>(e).unwrap().pos.x = x;
 }
 
 /// A contact starts once (before that tick's `CollisionOngoing`, with the same
@@ -459,7 +459,7 @@ fn particle_from_phase_template_fires_its_initial_enter() {
     let template = tw
         .world
         .spawn((
-            MapPosition::new(0.0, 0.0),
+            WorldPosition::new(0.0, 0.0),
             RigidBody::new(),
             Phase::new("fade"),
         ))
@@ -468,7 +468,7 @@ fn particle_from_phase_template_fires_its_initial_enter() {
     assert_eq!(take_phase_log(&mut tw), ["entered:fade"]);
 
     tw.world.spawn((
-        MapPosition::new(0.0, 0.0),
+        WorldPosition::new(0.0, 0.0),
         ParticleEmitter {
             templates: vec![template],
             emissions_per_second: 1000.0,
@@ -501,7 +501,7 @@ fn present_publishes_spawned_sprite_in_snapshot() {
     let sprite = Sprite::new("player", 16.0, 16.0);
     let entity = tw
         .world
-        .spawn((sprite, MapPosition::new(3.0, 4.0), ZIndex(2.0)))
+        .spawn((sprite, WorldPosition::new(3.0, 4.0), ZIndex(2.0)))
         .id();
 
     let snapshot = tw.present();
@@ -778,8 +778,8 @@ fn rust_despawn_prunes_world_signals_registration_same_tick() {
         .expect("build should succeed");
     tw.tick_to_play(DT, 8);
 
-    let doomed = tw.world.spawn(MapPosition::new(0.0, 0.0)).id();
-    let survivor = tw.world.spawn(MapPosition::new(0.0, 0.0)).id();
+    let doomed = tw.world.spawn(WorldPosition::new(0.0, 0.0)).id();
+    let survivor = tw.world.spawn(WorldPosition::new(0.0, 0.0)).id();
     {
         let mut signals = tw.world.resource_mut::<WorldSignals>();
         signals.register_entity(DOOMED_KEY, doomed);
@@ -2463,7 +2463,7 @@ fn lua_collision_clone_then_move_template_clones_the_old_position() {
     );
     let tpl = tw
         .world
-        .spawn((Group::new("tpl"), MapPosition::new(-100.0, 0.0)))
+        .spawn((Group::new("tpl"), WorldPosition::new(-100.0, 0.0)))
         .id();
     tw.world
         .resource_mut::<WorldSignals>()
@@ -2476,13 +2476,13 @@ fn lua_collision_clone_then_move_template_clones_the_old_position() {
 
     let clones: Vec<f32> = tw
         .world
-        .query::<(Entity, &Group, &MapPosition)>()
+        .query::<(Entity, &Group, &WorldPosition)>()
         .iter(&tw.world)
         .filter(|(e, g, _)| *e != tpl && g.name() == "tpl")
         .map(|(_, _, p)| p.pos.x)
         .collect();
     assert_eq!(clones, [-100.0]);
-    assert_eq!(tw.world.get::<MapPosition>(tpl).unwrap().pos.x, 50.0);
+    assert_eq!(tw.world.get::<WorldPosition>(tpl).unwrap().pos.x, 50.0);
 }
 
 /// `engine.collision_*` commands queued in `on_started`/`on_ended` are applied,
@@ -2741,7 +2741,7 @@ fn lua_timer_callback_sees_this_ticks_animation_state() {
         .animations
         .insert("run".into(), AnimationClip::new("tex", 16.0, 4, 1.0));
     tw.world.spawn((
-        MapPosition::new(0.0, 0.0),
+        WorldPosition::new(0.0, 0.0),
         Sprite::new("tex", 16.0, 16.0),
         Signals::default().with_flag("run"),
         Animation::new("idle"),
@@ -2797,11 +2797,11 @@ struct ProbedX {
     late: Option<f32>,
 }
 
-fn record_early_x(q: Query<&MapPosition, With<PositionProbe>>, mut seen: ResMut<ProbedX>) {
+fn record_early_x(q: Query<&WorldPosition, With<PositionProbe>>, mut seen: ResMut<ProbedX>) {
     seen.early = q.single().ok().map(|p| p.pos.x);
 }
 
-fn record_late_x(q: Query<&MapPosition, With<PositionProbe>>, mut seen: ResMut<ProbedX>) {
+fn record_late_x(q: Query<&WorldPosition, With<PositionProbe>>, mut seen: ResMut<ProbedX>) {
     seen.late = q.single().ok().map(|p| p.pos.x);
 }
 
@@ -2821,12 +2821,12 @@ fn late_system_sees_this_ticks_movement() {
     body.set_velocity(Vec2::new(100.0, 0.0));
     let mover = tw
         .world
-        .spawn((PositionProbe, MapPosition::new(0.0, 0.0), body))
+        .spawn((PositionProbe, WorldPosition::new(0.0, 0.0), body))
         .id();
 
     for _ in 0..3 {
         tw.tick(1, DT);
-        let after_tick = tw.world.get::<MapPosition>(mover).unwrap().pos.x;
+        let after_tick = tw.world.get::<WorldPosition>(mover).unwrap().pos.x;
         let seen = tw.world.resource::<ProbedX>();
         assert_eq!(seen.late, Some(after_tick), "late: this tick's movement");
         assert!(

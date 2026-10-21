@@ -66,7 +66,7 @@ mod particle_emitters {
     use aberredengine::prelude::*;
 
     fn spawn_smoke(mut commands: Commands) {
-        // The template has no MapPosition, so it is never drawn, moved or collided
+        // The template has no WorldPosition, so it is never drawn, moved or collided
         let smoke = commands
             .spawn((
                 Sprite::new("smoke", 8.0, 8.0).centered(),
@@ -76,7 +76,7 @@ mod particle_emitters {
             .id();
 
         commands.spawn((
-            MapPosition::new(100.0, 100.0),
+            WorldPosition::new(100.0, 100.0),
             ParticleEmitter {
                 templates: vec![smoke],
                 shape: EmitterShape::Rect { width: 16.0, height: 4.0 },

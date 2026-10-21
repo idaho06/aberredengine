@@ -574,8 +574,8 @@ two independent key sets.
 | `scroll_y` | number | Mouse wheel scroll delta this frame. Positive = up, negative = down. Zero if no scroll. |
 | `mouse_x` | number | Cursor X in game/render-target space (letterbox-corrected, 0..render_width). Matches `ScreenPosition`. Use for HUD hit-testing. |
 | `mouse_y` | number | Cursor Y in game/render-target space (letterbox-corrected, 0..render_height). |
-| `mouse_world_x` | number | Cursor X in world-space (after camera transform). Matches `MapPosition` entity coordinates. |
-| `mouse_world_y` | number | Cursor Y in world-space (after camera transform). Matches `MapPosition` entity coordinates. |
+| `mouse_world_x` | number | Cursor X in world-space (after camera transform). Matches `WorldPosition` entity coordinates. |
+| `mouse_world_y` | number | Cursor Y in world-space (after camera transform). Matches `WorldPosition` entity coordinates. |
 | `gamepad_connected` | boolean | Whether pad 0 is connected this tick. |
 | `pad_left_x` / `pad_left_y` | number | Pad 0 left stick axes, `-1.0..1.0`, raw — never deadzoned (deadzone only affects `InputBinding::GamepadAxis` digital-threshold resolution, see [Input Rebinding](#input-rebinding)). |
 | `pad_right_x` / `pad_right_y` | number | Pad 0 right stick axes, `-1.0..1.0`, raw. |
@@ -1854,7 +1854,7 @@ ctx = {
 
     -- Optional fields (nil if component not present)
     group = "player",        -- Entity group name
-    pos = { x = 100, y = 200 },      -- World position (MapPosition)
+    pos = { x = 100, y = 200 },      -- World position (WorldPosition)
     screen_pos = { x = 50, y = 100 }, -- Screen position (ScreenPosition)
     vel = { x = 0, y = 0 },          -- Velocity (RigidBody)
     speed_sq = 0,                    -- Squared speed (RigidBody)
@@ -2065,7 +2065,7 @@ engine.release_stuckto(ball_id)  -- Restores velocity
 
 ### Parent-Child Hierarchy
 
-The parent-child hierarchy system allows entities to inherit position, rotation, and scale transforms from a parent entity. A child's `MapPosition`, `Rotation`, and `Scale` become **local space** (relative to its parent), while the engine computes world-space values automatically for rendering and collision.
+The parent-child hierarchy system allows entities to inherit position, rotation, and scale transforms from a parent entity. A child's `WorldPosition`, `Rotation`, and `Scale` become **local space** (relative to its parent), while the engine computes world-space values automatically for rendering and collision.
 
 #### `:with_parent(parent_id)`
 
@@ -2106,7 +2106,7 @@ You can also attach/detach entities at runtime:
 -- Attach an entity to a parent
 engine.entity_set_parent(child_id, parent_id)
 
--- Detach: snaps MapPosition/Rotation/Scale to current world values
+-- Detach: snaps WorldPosition/Rotation/Scale to current world values
 engine.entity_remove_parent(child_id)
 ```
 
@@ -2186,7 +2186,7 @@ As the planet rotates via its tween, the satellite orbits at 80px radius. No man
 
 #### Known Limitations
 
-1. **MouseControlled on children:** The mouse sets world coordinates into `MapPosition`, which is local space for children. Avoid using `:with_mouse_controlled()` on child entities.
+1. **MouseControlled on children:** The mouse sets world coordinates into `WorldPosition`, which is local space for children. Avoid using `:with_mouse_controlled()` on child entities.
 2. **StuckTo with hierarchy:** `StuckTo` is automatically skipped for entities with a parent. Don't combine both systems on the same entity.
 3. **Parent that is itself a fresh child:** `:with_parent()` and `engine.entity_set_parent()` both compute the child's world transform as soon as they apply, so the child renders at the correct world position on its first frame. The exception is a parent that is itself a child whose own world transform isn't computed yet: the new child waits for the next transform propagation pass.
 
@@ -2998,7 +2998,7 @@ engine.entity_set_velocity(ball_id, 300, -300)
 
 ### `engine.entity_set_position(entity_id, x, y)`
 
-Set entity's world position (updates `MapPosition` component).
+Set entity's world position (updates `WorldPosition` component).
 
 ```lua
 engine.entity_set_position(player_id, 400, 300)
@@ -3022,7 +3022,7 @@ engine.entity_despawn(enemy_id)
 
 ### `engine.entity_set_parent(entity_id, parent_id)`
 
-Attach an entity to a parent for transform hierarchy. The child's `MapPosition`, `Rotation`, and `Scale` become local (relative to parent). The child's world transform is computed as soon as the command applies, so it renders at the right world position on its first frame; propagation keeps it updated after that.
+Attach an entity to a parent for transform hierarchy. The child's `WorldPosition`, `Rotation`, and `Scale` become local (relative to parent). The child's world transform is computed as soon as the command applies, so it renders at the right world position on its first frame; propagation keeps it updated after that.
 
 **Parameters:**
 
@@ -3038,7 +3038,7 @@ engine.entity_set_parent(item_id, player_id)
 
 ### `engine.entity_remove_parent(entity_id)`
 
-Detach an entity from its parent. The entity's `MapPosition`, `Rotation`, and `Scale` are snapped to their current world-space values so the entity stays in place visually. Called right after `engine.entity_set_parent()` in the same callback, it keeps the world position the child had under that parent.
+Detach an entity from its parent. The entity's `WorldPosition`, `Rotation`, and `Scale` are snapped to their current world-space values so the entity stays in place visually. Called right after `engine.entity_set_parent()` in the same callback, it keeps the world position the child had under that parent.
 
 **Parameters:**
 
@@ -3731,7 +3731,7 @@ end
 
 ### `engine.entity_set_shadow(entity_id, dx, dy, r, g, b, a)`
 
-Add or update the `Shadow` component on an entity. The shadow renders a copy of the entity's sprite or text at `position + offset` before the main draw. Works for both world-space (`MapPosition`) and screen-space (`ScreenPosition`) entities; bypasses per-entity shaders.
+Add or update the `Shadow` component on an entity. The shadow renders a copy of the entity's sprite or text at `position + offset` before the main draw. Works for both world-space (`WorldPosition`) and screen-space (`ScreenPosition`) entities; bypasses per-entity shaders.
 
 **Parameters:**
 
@@ -4045,7 +4045,7 @@ Set an entity's world position during collision handling. Useful for teleporting
 
 **Parameters:**
 
-- `entity_id` - Entity with MapPosition component
+- `entity_id` - Entity with WorldPosition component
 - `x`, `y` - New world position
 
 ```lua
@@ -5838,7 +5838,7 @@ Available collision variants:
 ### Notes
 
 - Works for both `Sprite` and `DynamicText` entities.
-- Works in both world-space (`MapPosition`) and screen-space (`ScreenPosition`) entities.
+- Works in both world-space (`WorldPosition`) and screen-space (`ScreenPosition`) entities.
 - Shadow bypasses per-entity shaders — it renders with the default shader regardless of the entity's `EntityShader` component.
 - GUI themes also support drop shadows for all themed widgets (`GuiWindow`, `GuiButton`, `GuiLabel`, `GuiProgressBar`) — see [GUI Widgets](#gui-widgets).
 

@@ -18,15 +18,15 @@ use crate::components::boxcollider::BoxCollider;
 use crate::components::collision::{BoxSides, get_colliding_sides};
 use crate::components::globaltransform2d::GlobalTransform2D;
 use crate::components::group::Group;
-use crate::components::mapposition::MapPosition;
+use crate::components::world_position::WorldPosition;
 use crate::math::Rect;
 
 /// Resolve the world position of an entity.
 ///
 /// Uses [`GlobalTransform2D`] when available, otherwise falls back to the
-/// local [`MapPosition`]. Returns `None` if the entity has no position.
+/// local [`WorldPosition`]. Returns `None` if the entity has no position.
 pub fn resolve_world_pos(
-    positions: &Query<&MapPosition>,
+    positions: &Query<&WorldPosition>,
     global_transforms: &Query<&GlobalTransform2D>,
     entity: Entity,
 ) -> Option<crate::math::Vec2> {
@@ -42,7 +42,7 @@ pub fn resolve_world_pos(
 ///
 /// Combines [`resolve_world_pos`] with [`BoxCollider::as_rectangle`] in one call.
 pub fn resolve_collider_rect(
-    positions: &Query<&MapPosition>,
+    positions: &Query<&WorldPosition>,
     global_transforms: &Query<&GlobalTransform2D>,
     box_colliders: &Query<&BoxCollider>,
     entity: Entity,
@@ -54,7 +54,7 @@ pub fn resolve_collider_rect(
 /// The queries [`resolve_collider_rect`] reads, bundled for observers.
 #[derive(SystemParam)]
 pub struct ColliderRects<'w, 's> {
-    positions: Query<'w, 's, &'static MapPosition>,
+    positions: Query<'w, 's, &'static WorldPosition>,
     global_transforms: Query<'w, 's, &'static GlobalTransform2D>,
     box_colliders: Query<'w, 's, &'static BoxCollider>,
 }
@@ -223,7 +223,7 @@ mod tests {
         let e = world.spawn_empty().id();
 
         let mut state =
-            SystemState::<(Query<&MapPosition>, Query<&GlobalTransform2D>)>::new(&mut world);
+            SystemState::<(Query<&WorldPosition>, Query<&GlobalTransform2D>)>::new(&mut world);
         let (positions, global_transforms) = state
             .get(&world)
             .expect("Position and transform queries should fetch");
@@ -234,10 +234,10 @@ mod tests {
     #[test]
     fn resolve_world_pos_local_only() {
         let mut world = World::new();
-        let e = world.spawn(MapPosition::new(5.0, 10.0)).id();
+        let e = world.spawn(WorldPosition::new(5.0, 10.0)).id();
 
         let mut state =
-            SystemState::<(Query<&MapPosition>, Query<&GlobalTransform2D>)>::new(&mut world);
+            SystemState::<(Query<&WorldPosition>, Query<&GlobalTransform2D>)>::new(&mut world);
         let (positions, global_transforms) = state
             .get(&world)
             .expect("Position and transform queries should fetch");
@@ -254,7 +254,7 @@ mod tests {
         let mut world = World::new();
         let e = world
             .spawn((
-                MapPosition::new(5.0, 10.0),
+                WorldPosition::new(5.0, 10.0),
                 GlobalTransform2D {
                     position: crate::math::Vec2 { x: 100.0, y: 200.0 },
                     rotation_degrees: 0.0,
@@ -264,7 +264,7 @@ mod tests {
             .id();
 
         let mut state =
-            SystemState::<(Query<&MapPosition>, Query<&GlobalTransform2D>)>::new(&mut world);
+            SystemState::<(Query<&WorldPosition>, Query<&GlobalTransform2D>)>::new(&mut world);
         let (positions, global_transforms) = state
             .get(&world)
             .expect("Position and transform queries should fetch");
@@ -272,7 +272,7 @@ mod tests {
         let result = resolve_world_pos(&positions, &global_transforms, e);
         assert!(result.is_some());
         let v = result.unwrap();
-        // Should prefer GlobalTransform2D over local MapPosition
+        // Should prefer GlobalTransform2D over local WorldPosition
         assert!(approx_eq(v.x, 100.0));
         assert!(approx_eq(v.y, 200.0));
     }
@@ -285,7 +285,7 @@ mod tests {
         let e = world.spawn_empty().id();
 
         let mut state = SystemState::<(
-            Query<&MapPosition>,
+            Query<&WorldPosition>,
             Query<&GlobalTransform2D>,
             Query<&BoxCollider>,
         )>::new(&mut world);
@@ -299,11 +299,11 @@ mod tests {
     fn resolve_collider_rect_with_components() {
         let mut world = World::new();
         let e = world
-            .spawn((MapPosition::new(10.0, 20.0), BoxCollider::new(30.0, 40.0)))
+            .spawn((WorldPosition::new(10.0, 20.0), BoxCollider::new(30.0, 40.0)))
             .id();
 
         let mut state = SystemState::<(
-            Query<&MapPosition>,
+            Query<&WorldPosition>,
             Query<&GlobalTransform2D>,
             Query<&BoxCollider>,
         )>::new(&mut world);

@@ -9,7 +9,7 @@ use bevy_ecs::prelude::*;
 
 use aberred_core::components::cameratarget::CameraTarget;
 use aberred_core::components::globaltransform2d::GlobalTransform2D;
-use aberred_core::components::mapposition::MapPosition;
+use aberred_core::components::world_position::WorldPosition;
 use aberred_core::math::Rect;
 use aberred_core::resources::camera2d::{Camera2D, MainCamera};
 use aberred_core::resources::camerafollowconfig::{CameraFollowConfig, EasingCurve, FollowMode};
@@ -65,7 +65,7 @@ fn camera_target(world: &World) -> Vec2 {
 fn disabled_config_does_not_move_camera() {
     let mut world = setup_world();
     world.resource_mut::<CameraFollowConfig>().enabled = false;
-    world.spawn((MapPosition::new(500.0, 500.0), CameraTarget::default()));
+    world.spawn((WorldPosition::new(500.0, 500.0), CameraTarget::default()));
     world.flush();
 
     tick(&mut world);
@@ -94,7 +94,7 @@ fn no_targets_does_not_move_camera() {
 fn instant_snaps_to_target() {
     let mut world = setup_world();
     world.resource_mut::<CameraFollowConfig>().mode = FollowMode::Instant;
-    world.spawn((MapPosition::new(200.0, 300.0), CameraTarget::default()));
+    world.spawn((WorldPosition::new(200.0, 300.0), CameraTarget::default()));
     world.flush();
 
     tick(&mut world);
@@ -112,7 +112,7 @@ fn instant_with_offset() {
         cfg.mode = FollowMode::Instant;
         cfg.offset = Vec2 { x: 10.0, y: -20.0 };
     }
-    world.spawn((MapPosition::new(100.0, 100.0), CameraTarget::default()));
+    world.spawn((WorldPosition::new(100.0, 100.0), CameraTarget::default()));
     world.flush();
 
     tick(&mut world);
@@ -131,9 +131,9 @@ fn highest_priority_wins() {
     let mut world = setup_world();
     world.resource_mut::<CameraFollowConfig>().mode = FollowMode::Instant;
 
-    world.spawn((MapPosition::new(100.0, 100.0), CameraTarget::new(1)));
-    world.spawn((MapPosition::new(500.0, 500.0), CameraTarget::new(10)));
-    world.spawn((MapPosition::new(999.0, 999.0), CameraTarget::new(5)));
+    world.spawn((WorldPosition::new(100.0, 100.0), CameraTarget::new(1)));
+    world.spawn((WorldPosition::new(500.0, 500.0), CameraTarget::new(10)));
+    world.spawn((WorldPosition::new(999.0, 999.0), CameraTarget::new(5)));
     world.flush();
 
     tick(&mut world);
@@ -150,10 +150,10 @@ fn equal_priority_deterministic() {
 
     // Same priority — the entity with the lower Entity id wins
     let e1 = world
-        .spawn((MapPosition::new(100.0, 100.0), CameraTarget::new(5)))
+        .spawn((WorldPosition::new(100.0, 100.0), CameraTarget::new(5)))
         .id();
     let e2 = world
-        .spawn((MapPosition::new(900.0, 900.0), CameraTarget::new(5)))
+        .spawn((WorldPosition::new(900.0, 900.0), CameraTarget::new(5)))
         .id();
     world.flush();
 
@@ -193,12 +193,12 @@ fn equal_priority_deterministic() {
 // ---------------------------------------------------------------------------
 
 #[test]
-fn prefers_global_transform_over_map_position() {
+fn prefers_global_transform_over_world_position() {
     let mut world = setup_world();
     world.resource_mut::<CameraFollowConfig>().mode = FollowMode::Instant;
 
     world.spawn((
-        MapPosition::new(0.0, 0.0),
+        WorldPosition::new(0.0, 0.0),
         CameraTarget::default(),
         GlobalTransform2D {
             position: Vec2 { x: 77.0, y: 88.0 },
@@ -216,11 +216,11 @@ fn prefers_global_transform_over_map_position() {
 }
 
 #[test]
-fn falls_back_to_map_position_without_global_transform() {
+fn falls_back_to_world_position_without_global_transform() {
     let mut world = setup_world();
     world.resource_mut::<CameraFollowConfig>().mode = FollowMode::Instant;
 
-    world.spawn((MapPosition::new(42.0, 13.0), CameraTarget::default()));
+    world.spawn((WorldPosition::new(42.0, 13.0), CameraTarget::default()));
     world.flush();
 
     tick(&mut world);
@@ -243,7 +243,7 @@ fn lerp_moves_toward_target() {
         cfg.easing = EasingCurve::EaseOut;
         cfg.lerp_speed = 5.0;
     }
-    world.spawn((MapPosition::new(200.0, 0.0), CameraTarget::default()));
+    world.spawn((WorldPosition::new(200.0, 0.0), CameraTarget::default()));
     world.flush();
 
     tick(&mut world);
@@ -263,7 +263,7 @@ fn lerp_converges_over_many_frames() {
         cfg.easing = EasingCurve::EaseOut;
         cfg.lerp_speed = 10.0;
     }
-    world.spawn((MapPosition::new(100.0, 100.0), CameraTarget::default()));
+    world.spawn((WorldPosition::new(100.0, 100.0), CameraTarget::default()));
     world.flush();
 
     for _ in 0..300 {
@@ -284,7 +284,7 @@ fn lerp_linear_easing_moves_at_constant_rate() {
         cfg.easing = EasingCurve::Linear;
         cfg.lerp_speed = 5.0;
     }
-    world.spawn((MapPosition::new(100.0, 0.0), CameraTarget::default()));
+    world.spawn((WorldPosition::new(100.0, 0.0), CameraTarget::default()));
     world.flush();
 
     tick(&mut world);
@@ -320,7 +320,7 @@ fn smooth_damp_moves_toward_target() {
         cfg.spring_stiffness = 10.0;
         cfg.spring_damping = 5.0;
     }
-    world.spawn((MapPosition::new(300.0, 0.0), CameraTarget::default()));
+    world.spawn((WorldPosition::new(300.0, 0.0), CameraTarget::default()));
     world.flush();
 
     // A few ticks to build up velocity
@@ -342,7 +342,7 @@ fn smooth_damp_converges() {
         cfg.spring_stiffness = 15.0;
         cfg.spring_damping = 8.0;
     }
-    world.spawn((MapPosition::new(50.0, 50.0), CameraTarget::default()));
+    world.spawn((WorldPosition::new(50.0, 50.0), CameraTarget::default()));
     world.flush();
 
     for _ in 0..600 {
@@ -363,7 +363,7 @@ fn smooth_damp_reset_velocity_prevents_jump() {
         cfg.spring_stiffness = 20.0;
         cfg.spring_damping = 3.0;
     }
-    world.spawn((MapPosition::new(500.0, 0.0), CameraTarget::default()));
+    world.spawn((WorldPosition::new(500.0, 0.0), CameraTarget::default()));
     world.flush();
 
     // Build up velocity
@@ -402,7 +402,7 @@ fn deadzone_holds_when_inside() {
         };
     }
     // Target within deadzone of camera (0,0)
-    world.spawn((MapPosition::new(30.0, 20.0), CameraTarget::default()));
+    world.spawn((WorldPosition::new(30.0, 20.0), CameraTarget::default()));
     world.flush();
 
     tick(&mut world);
@@ -424,7 +424,7 @@ fn deadzone_moves_when_outside() {
         cfg.lerp_speed = 10.0;
     }
     // Target well outside the deadzone
-    world.spawn((MapPosition::new(200.0, 200.0), CameraTarget::default()));
+    world.spawn((WorldPosition::new(200.0, 200.0), CameraTarget::default()));
     world.flush();
 
     tick(&mut world);
@@ -446,7 +446,7 @@ fn deadzone_per_axis_independence() {
         cfg.lerp_speed = 10.0;
     }
     // x inside deadzone, y outside
-    world.spawn((MapPosition::new(30.0, 200.0), CameraTarget::default()));
+    world.spawn((WorldPosition::new(30.0, 200.0), CameraTarget::default()));
     world.flush();
 
     tick(&mut world);
@@ -480,7 +480,7 @@ fn bounds_clamp_prevents_camera_leaving_world() {
     // ScreenSize is 320x240, zoom 1.0 → half viewport = 160, 120
     // So camera target should clamp to [160..840, 120..880]
     // Place target at the origin corner
-    world.spawn((MapPosition::new(0.0, 0.0), CameraTarget::default()));
+    world.spawn((WorldPosition::new(0.0, 0.0), CameraTarget::default()));
     world.flush();
 
     tick(&mut world);
@@ -504,7 +504,7 @@ fn bounds_clamp_far_edge() {
         });
     }
     // Target past the far edge
-    world.spawn((MapPosition::new(9999.0, 9999.0), CameraTarget::default()));
+    world.spawn((WorldPosition::new(9999.0, 9999.0), CameraTarget::default()));
     world.flush();
 
     tick(&mut world);
@@ -535,7 +535,7 @@ fn bounds_clamp_respects_zoom() {
     // Target at origin — zoom must match the initial camera zoom so the lerp
     // starts already at destination and the bounds-clamp assertion still holds.
     world.spawn((
-        MapPosition::new(0.0, 0.0),
+        WorldPosition::new(0.0, 0.0),
         CameraTarget::default().with_zoom(2.0),
     ));
     world.flush();
@@ -561,7 +561,7 @@ fn bounds_smaller_than_viewport_centers_camera() {
             height: 80.0,
         });
     }
-    world.spawn((MapPosition::new(-999.0, 999.0), CameraTarget::default()));
+    world.spawn((WorldPosition::new(-999.0, 999.0), CameraTarget::default()));
     world.flush();
 
     tick(&mut world);
@@ -584,7 +584,7 @@ fn bounds_smaller_than_viewport_only_on_x_centers_that_axis() {
             height: 400.0,
         });
     }
-    world.spawn((MapPosition::new(-999.0, -999.0), CameraTarget::default()));
+    world.spawn((WorldPosition::new(-999.0, -999.0), CameraTarget::default()));
     world.flush();
 
     tick(&mut world);
@@ -607,7 +607,7 @@ fn zero_width_bounds_center_x() {
             height: 400.0,
         });
     }
-    world.spawn((MapPosition::new(999.0, -999.0), CameraTarget::default()));
+    world.spawn((WorldPosition::new(999.0, -999.0), CameraTarget::default()));
     world.flush();
 
     tick(&mut world);
@@ -638,7 +638,7 @@ fn extreme_zoom_out_centers_camera_when_viewport_exceeds_bounds() {
         });
     }
     world.spawn((
-        MapPosition::new(9999.0, -9999.0),
+        WorldPosition::new(9999.0, -9999.0),
         CameraTarget::default().with_zoom(0.1),
     ));
     world.flush();
@@ -667,7 +667,7 @@ fn no_bounds_allows_any_position() {
         cfg.bounds = None;
     }
     world.spawn((
-        MapPosition::new(-99999.0, -99999.0),
+        WorldPosition::new(-99999.0, -99999.0),
         CameraTarget::default(),
     ));
     world.flush();
@@ -697,7 +697,7 @@ fn zoom_lerps_toward_target() {
     }
     // Camera starts at zoom 1.0 (from make_camera); target wants 3.0.
     world.spawn((
-        MapPosition::new(0.0, 0.0),
+        WorldPosition::new(0.0, 0.0),
         CameraTarget::new(0).with_zoom(3.0),
     ));
     world.flush();
@@ -721,11 +721,11 @@ fn zoom_of_winning_target_is_used() {
         cfg.zoom_lerp_speed = 1000.0; // effectively instant
     }
     world.spawn((
-        MapPosition::new(100.0, 0.0),
+        WorldPosition::new(100.0, 0.0),
         CameraTarget::new(1).with_zoom(2.0),
     ));
     world.spawn((
-        MapPosition::new(200.0, 0.0),
+        WorldPosition::new(200.0, 0.0),
         CameraTarget::new(10).with_zoom(4.0),
     ));
     world.flush();
@@ -751,7 +751,7 @@ fn zoom_clamps_to_epsilon() {
         cfg.zoom_lerp_speed = 1000.0;
     }
     world.spawn((
-        MapPosition::new(0.0, 0.0),
+        WorldPosition::new(0.0, 0.0),
         CameraTarget::new(0).with_zoom(-5.0),
     ));
     world.flush();

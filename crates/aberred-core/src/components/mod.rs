@@ -22,11 +22,11 @@
 //! - [`guiprogressbar`] – themed progress bar (nine-patch track + fill, signal-bound value, four direction variants)
 //! - [`guiwindow`] – static themed GUI window panel, rendered as a nine-patch background
 //! - [`inputcontrolled`] – input-driven movement intent for keyboard and mouse
-//! - [`mapposition`] – world-space position (pivot) for an entity
+//! - [`world_position`] – world-space position (pivot) for an entity
 //! - [`menu`] – interactive menu component and actions
 //! - [`persistent`] – marker for entities that persist across scene changes
 //! - [`phase`] – Rust-based state machine with enter/update/exit function-pointer callbacks
-//! - [`position2d`] – generic 2D position component shared by [`mapposition`] and [`screenposition`]
+//! - [`position2d`] – generic 2D position component shared by [`world_position`] and [`screenposition`]
 //! - [`rigidbody`] – simple kinematic body storing velocity
 //! - [`rotation`] – rotation angle in degrees
 //! - [`scale`] – 2D scale factor for sprites
@@ -64,7 +64,6 @@ pub mod guiprogressbar;
 pub mod guiwindow;
 pub use gui_themed::Themed;
 pub mod inputcontrolled;
-pub mod mapposition;
 pub mod menu;
 pub mod particleemitter;
 pub mod persistent;
@@ -85,4 +84,5 @@ pub mod timer;
 pub mod tint;
 pub mod ttl;
 pub mod tween;
+pub mod world_position;
 pub mod zindex;

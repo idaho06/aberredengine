@@ -17,18 +17,18 @@
 use bevy_ecs::hierarchy::ChildOf;
 use bevy_ecs::prelude::*;
 
-use crate::components::mapposition::MapPosition;
 use crate::components::stuckto::StuckTo;
+use crate::components::world_position::WorldPosition;
 
 /// Updates positions of entities with `StuckTo` to follow their targets.
 ///
 /// For each entity with a `StuckTo` component:
-/// - Gets the target entity's `MapPosition`
+/// - Gets the target entity's `WorldPosition`
 /// - Updates this entity's position based on `follow_x` and `follow_y` flags
 /// - Applies the offset
 pub fn stuck_to_entity_system(
-    mut followers: Query<(&StuckTo, &mut MapPosition), Without<ChildOf>>,
-    targets: Query<&MapPosition, Without<StuckTo>>,
+    mut followers: Query<(&StuckTo, &mut WorldPosition), Without<ChildOf>>,
+    targets: Query<&WorldPosition, Without<StuckTo>>,
 ) {
     for (stuck_to, mut follower_pos) in followers.iter_mut() {
         // Try to get the target's position
@@ -60,14 +60,14 @@ mod tests {
     fn stuckto_follows_target_both_axes() {
         let mut world = World::new();
 
-        let target = world.spawn((MapPosition::new(100.0, 50.0),)).id();
+        let target = world.spawn((WorldPosition::new(100.0, 50.0),)).id();
         let follower = world
-            .spawn((MapPosition::new(0.0, 0.0), StuckTo::new(target)))
+            .spawn((WorldPosition::new(0.0, 0.0), StuckTo::new(target)))
             .id();
 
         tick_stuckto(&mut world);
 
-        let pos = world.get::<MapPosition>(follower).unwrap();
+        let pos = world.get::<WorldPosition>(follower).unwrap();
         assert!(approx_eq(pos.pos.x, 100.0));
         assert!(approx_eq(pos.pos.y, 50.0));
     }
@@ -76,14 +76,17 @@ mod tests {
     fn stuckto_follows_target_x_only() {
         let mut world = World::new();
 
-        let target = world.spawn((MapPosition::new(100.0, 50.0),)).id();
+        let target = world.spawn((WorldPosition::new(100.0, 50.0),)).id();
         let follower = world
-            .spawn((MapPosition::new(0.0, 25.0), StuckTo::follow_x_only(target)))
+            .spawn((
+                WorldPosition::new(0.0, 25.0),
+                StuckTo::follow_x_only(target),
+            ))
             .id();
 
         tick_stuckto(&mut world);
 
-        let pos = world.get::<MapPosition>(follower).unwrap();
+        let pos = world.get::<WorldPosition>(follower).unwrap();
         assert!(approx_eq(pos.pos.x, 100.0));
         assert!(approx_eq(pos.pos.y, 25.0)); // Y unchanged
     }
@@ -92,14 +95,17 @@ mod tests {
     fn stuckto_follows_target_y_only() {
         let mut world = World::new();
 
-        let target = world.spawn((MapPosition::new(100.0, 50.0),)).id();
+        let target = world.spawn((WorldPosition::new(100.0, 50.0),)).id();
         let follower = world
-            .spawn((MapPosition::new(30.0, 0.0), StuckTo::follow_y_only(target)))
+            .spawn((
+                WorldPosition::new(30.0, 0.0),
+                StuckTo::follow_y_only(target),
+            ))
             .id();
 
         tick_stuckto(&mut world);
 
-        let pos = world.get::<MapPosition>(follower).unwrap();
+        let pos = world.get::<WorldPosition>(follower).unwrap();
         assert!(approx_eq(pos.pos.x, 30.0)); // X unchanged
         assert!(approx_eq(pos.pos.y, 50.0));
     }
@@ -108,17 +114,17 @@ mod tests {
     fn stuckto_applies_offset() {
         let mut world = World::new();
 
-        let target = world.spawn((MapPosition::new(100.0, 100.0),)).id();
+        let target = world.spawn((WorldPosition::new(100.0, 100.0),)).id();
         let follower = world
             .spawn((
-                MapPosition::new(0.0, 0.0),
+                WorldPosition::new(0.0, 0.0),
                 StuckTo::new(target).with_offset(Vec2 { x: 10.0, y: -20.0 }),
             ))
             .id();
 
         tick_stuckto(&mut world);
 
-        let pos = world.get::<MapPosition>(follower).unwrap();
+        let pos = world.get::<WorldPosition>(follower).unwrap();
         assert!(approx_eq(pos.pos.x, 110.0));
         assert!(approx_eq(pos.pos.y, 80.0));
     }
@@ -130,12 +136,12 @@ mod tests {
         // Create a fake entity ID that doesn't exist
         let fake_target = Entity::from_bits(99999);
         let follower = world
-            .spawn((MapPosition::new(50.0, 50.0), StuckTo::new(fake_target)))
+            .spawn((WorldPosition::new(50.0, 50.0), StuckTo::new(fake_target)))
             .id();
 
         tick_stuckto(&mut world);
 
-        let pos = world.get::<MapPosition>(follower).unwrap();
+        let pos = world.get::<WorldPosition>(follower).unwrap();
         assert!(approx_eq(pos.pos.x, 50.0)); // Unchanged
         assert!(approx_eq(pos.pos.y, 50.0));
     }
@@ -147,14 +153,14 @@ mod tests {
         let mut world = World::new();
 
         // Target entity
-        let target = world.spawn((MapPosition::new(200.0, 200.0),)).id();
+        let target = world.spawn((WorldPosition::new(200.0, 200.0),)).id();
 
         // Follower that has both StuckTo AND ChildOf — should be skipped by StuckTo system
-        let parent = world.spawn((MapPosition::new(0.0, 0.0),)).id();
+        let parent = world.spawn((WorldPosition::new(0.0, 0.0),)).id();
 
         let follower = world
             .spawn((
-                MapPosition::new(10.0, 10.0),
+                WorldPosition::new(10.0, 10.0),
                 StuckTo::new(target),
                 ChildOf(parent),
             ))
@@ -164,7 +170,7 @@ mod tests {
         tick_stuckto(&mut world);
 
         // Position should NOT have been updated to target's position
-        let pos = world.get::<MapPosition>(follower).unwrap();
+        let pos = world.get::<WorldPosition>(follower).unwrap();
         assert!(
             approx_eq(pos.pos.x, 10.0),
             "Follower with ChildOf should not be moved by StuckTo, got x={}",

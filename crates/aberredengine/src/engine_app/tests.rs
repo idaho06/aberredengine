@@ -8,8 +8,8 @@ use raylib::ffi::TraceLogLevel;
 use super::builder::EngineBuilder;
 use super::logic_thread::run_sim_tick;
 use super::logic_world::register_persistent_system;
-use aberred_core::components::mapposition::MapPosition;
 use aberred_core::components::persistent::Persistent;
+use aberred_core::components::world_position::WorldPosition;
 use aberred_core::error::EngineError;
 use aberred_core::events::scene::{SceneEntered, SceneExited};
 use aberred_core::protocol::raw_input::ImguiCaptureState;
@@ -321,7 +321,7 @@ fn snapshot_publish_reuses_buffer_capacity_and_shrinks_correctly() {
         MapSpriteEntry {
             entity: Entity::from_raw_u32(id).unwrap(),
             sprite: Sprite::new("", 0.0, 0.0),
-            position: MapPosition::new(0.0, 0.0),
+            position: WorldPosition::new(0.0, 0.0),
             z_index: ZIndex(0.0),
             scale: None,
             rotation: None,

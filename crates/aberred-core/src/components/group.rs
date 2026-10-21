@@ -15,7 +15,7 @@
 //! ```ignore
 //! commands.spawn((
 //!     Group::new("player"),
-//!     MapPosition::new(400.0, 700.0),
+//!     WorldPosition::new(400.0, 700.0),
 //!     Sprite { /* ... */ },
 //! ));
 //! ```

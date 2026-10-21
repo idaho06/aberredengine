@@ -30,7 +30,6 @@ pub use aberred_core::components::guiinteractable::GuiInteractable;
 pub use aberred_core::components::guioffset::GuiOffset;
 pub use aberred_core::components::guiwindow::GuiWindow;
 pub use aberred_core::components::inputcontrolled::{AccelerationControlled, InputControlled};
-pub use aberred_core::components::mapposition::MapPosition;
 pub use aberred_core::components::menu::{Menu, MenuAction, MenuActions};
 pub use aberred_core::components::particleemitter::{EmitterShape, ParticleEmitter, TtlSpec};
 pub use aberred_core::components::persistent::Persistent;
@@ -47,6 +46,7 @@ pub use aberred_core::components::stuckto::StuckTo;
 pub use aberred_core::components::tilemap::TileMap;
 pub use aberred_core::components::timer::{Timer, TimerMode};
 pub use aberred_core::components::tween::{Easing, LoopMode, Tween};
+pub use aberred_core::components::world_position::WorldPosition;
 pub use aberred_core::components::zindex::ZIndex;
 
 pub use aberred_core::events::animation::AnimationFinished;

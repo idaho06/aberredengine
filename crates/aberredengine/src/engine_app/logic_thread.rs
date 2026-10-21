@@ -644,7 +644,7 @@ mod tests {
 
     use tempfile::NamedTempFile;
 
-    use aberred_core::components::mapposition::MapPosition;
+    use aberred_core::components::world_position::WorldPosition;
     use aberred_core::protocol::raw_input::{ImguiCaptureState, RawDeviceSnapshot};
     use aberred_core::protocol::replay::{
         REPLAY_FORMAT_VERSION, REPLAY_MAGIC, ReplayEntry, ReplayHeader,
@@ -1086,12 +1086,12 @@ mod tests {
         world.insert_resource(WorldSignals::default());
         world.insert_resource(WorldTime::default());
         world.insert_resource(SimRng::from_seed(1));
-        let entity = world.spawn(MapPosition::new(1.0, 2.0)).id();
+        let entity = world.spawn(WorldPosition::new(1.0, 2.0)).id();
 
         let stale_checkpoint_hash = hash_world_state(&world);
         world
             .entity_mut(entity)
-            .get_mut::<MapPosition>()
+            .get_mut::<WorldPosition>()
             .unwrap()
             .set_x(99.0);
         let expected_final_hash = hash_world_state(&world);

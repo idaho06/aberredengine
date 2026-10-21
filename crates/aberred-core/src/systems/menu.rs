@@ -13,11 +13,11 @@ use std::sync::Arc;
 
 use crate::components::dynamictext::DynamicText;
 use crate::components::group::Group;
-use crate::components::mapposition::MapPosition;
 use crate::components::menu::{Menu, MenuAction, MenuActions};
 use crate::components::screenposition::ScreenPosition;
 use crate::components::signals::Signals;
 use crate::components::sprite::Sprite;
+use crate::components::world_position::WorldPosition;
 use crate::components::zindex::ZIndex;
 use crate::events::input::InputActionChanged;
 use crate::events::menu::MenuSelected;
@@ -46,21 +46,21 @@ fn insert_menu_zindex(ecmd: &mut EntityCommands) {
     ecmd.insert(ZIndex(MENU_Z_INDEX));
 }
 
-/// Inserts [`ScreenPosition`] or [`MapPosition`] depending on `use_screen_space`.
+/// Inserts [`ScreenPosition`] or [`WorldPosition`] depending on `use_screen_space`.
 fn set_menu_position(ecmd: &mut EntityCommands, use_screen_space: bool, pos: Vec2) {
     if use_screen_space {
         ecmd.insert(ScreenPosition::from_vec(pos));
     } else {
-        ecmd.insert(MapPosition::from_vec(pos));
+        ecmd.insert(WorldPosition::from_vec(pos));
     }
 }
 
-/// Removes [`ScreenPosition`] or [`MapPosition`] depending on `use_screen_space`.
+/// Removes [`ScreenPosition`] or [`WorldPosition`] depending on `use_screen_space`.
 fn clear_menu_position(ecmd: &mut EntityCommands, use_screen_space: bool) {
     if use_screen_space {
         ecmd.remove::<ScreenPosition>();
     } else {
-        ecmd.remove::<MapPosition>();
+        ecmd.remove::<WorldPosition>();
     }
 }
 
@@ -712,13 +712,13 @@ mod tests {
     }
 
     #[test]
-    fn world_space_menu_uses_map_position() {
+    fn world_space_menu_uses_world_position() {
         let mut menu = five_items();
         menu.use_screen_space = false;
         let (world, menu) = spawn_menu(menu);
         let first = item(&world, menu, 0);
         assert_eq!(
-            world.get::<MapPosition>(first).unwrap().pos,
+            world.get::<WorldPosition>(first).unwrap().pos,
             Vec2::new(100.0, 50.0)
         );
         assert!(world.get::<ScreenPosition>(first).is_none());

@@ -3,7 +3,7 @@
 //! When a root entity loses its last child, `propagate_transforms` stops
 //! updating its `GlobalTransform2D`; `cleanup_orphaned_global_transforms`
 //! removes the stale component so world-position lookups fall back to the
-//! live `MapPosition`. Collision detection reads those world positions, so
+//! live `WorldPosition`. Collision detection reads those world positions, so
 //! a child collides where its parent places it, not at its local offset.
 
 use bevy_ecs::hierarchy::{ChildOf, Children};
@@ -12,7 +12,7 @@ use bevy_ecs::system::RunSystemOnce;
 
 use aberred_core::components::boxcollider::BoxCollider;
 use aberred_core::components::globaltransform2d::GlobalTransform2D;
-use aberred_core::components::mapposition::MapPosition;
+use aberred_core::components::world_position::WorldPosition;
 use aberred_core::events::collision::BoxOverlap;
 use aberred_core::math::Vec2;
 use aberred_core::systems::collision_detector::collision_detector;
@@ -40,7 +40,7 @@ fn tick_propagate_and_cleanup(world: &mut World) {
 /// 6. propagate_transforms runs — skips player (no Children).
 ///    GT is now stale at (200, 0).
 /// 7. cleanup_orphaned_global_transforms runs — removes stale GT.
-/// 8. resolve_world_pos must now return MapPosition (300, 0),
+/// 8. resolve_world_pos must now return WorldPosition (300, 0),
 ///    not the stale GT (200, 0).
 #[test]
 fn stale_gt_removed_after_child_despawn() {
@@ -50,11 +50,11 @@ fn stale_gt_removed_after_child_despawn() {
     let mut world = World::new();
 
     // 1. Spawn player at (100, 0)
-    let player = world.spawn(MapPosition::new(100.0, 0.0)).id();
+    let player = world.spawn(WorldPosition::new(100.0, 0.0)).id();
 
     // 2. Attach a hitbox child — world.flush() makes Bevy add Children to player
     let hitbox = world
-        .spawn((MapPosition::new(0.0, 0.0), ChildOf(player)))
+        .spawn((WorldPosition::new(0.0, 0.0), ChildOf(player)))
         .id();
     world.flush();
 
@@ -73,7 +73,7 @@ fn stale_gt_removed_after_child_despawn() {
     );
 
     // 3. Move player to (200, 0) and run propagation to keep GT in sync
-    world.get_mut::<MapPosition>(player).unwrap().pos.x = 200.0;
+    world.get_mut::<WorldPosition>(player).unwrap().pos.x = 200.0;
     tick_propagate_and_cleanup(&mut world);
 
     {
@@ -95,7 +95,7 @@ fn stale_gt_removed_after_child_despawn() {
     );
 
     // 5. Move player to (300, 0) — GT is now stale at (200, 0)
-    world.get_mut::<MapPosition>(player).unwrap().pos.x = 300.0;
+    world.get_mut::<WorldPosition>(player).unwrap().pos.x = 300.0;
 
     // 6. Run propagate without cleanup to confirm the bug exists:
     //    GT is NOT updated (player not in RootsQuery)
@@ -122,15 +122,15 @@ fn stale_gt_removed_after_child_despawn() {
         "Stale GT should be removed by cleanup after child despawn"
     );
 
-    // 8. resolve_world_pos must now return MapPosition (300, 0)
+    // 8. resolve_world_pos must now return WorldPosition (300, 0)
     let mut state =
-        SystemState::<(Query<&MapPosition>, Query<&GlobalTransform2D>)>::new(&mut world);
+        SystemState::<(Query<&WorldPosition>, Query<&GlobalTransform2D>)>::new(&mut world);
     let (positions, global_transforms) = state.get(&world).expect("Hierarchy queries should fetch");
     let resolved = resolve_world_pos(&positions, &global_transforms, player).unwrap();
 
     assert!(
         approx_eq(resolved.x, 300.0),
-        "resolve_world_pos should return live MapPosition 300 after GT removal, got {}",
+        "resolve_world_pos should return live WorldPosition 300 after GT removal, got {}",
         resolved.x
     );
     assert!(
@@ -174,14 +174,17 @@ fn collision_uses_world_position_for_child_entities() {
 
     // Parent at (200, 200)
     let parent = world
-        .spawn((MapPosition::new(200.0, 200.0), GlobalTransform2D::default()))
+        .spawn((
+            WorldPosition::new(200.0, 200.0),
+            GlobalTransform2D::default(),
+        ))
         .id();
 
     // Child with local position (0, 0), but parent is at (200, 200)
     // After propagation, child world position = (200, 200)
     let child = world
         .spawn((
-            MapPosition::new(0.0, 0.0),
+            WorldPosition::new(0.0, 0.0),
             BoxCollider::new(20.0, 20.0),
             ChildOf(parent),
             GlobalTransform2D::default(),
@@ -195,7 +198,10 @@ fn collision_uses_world_position_for_child_entities() {
 
     // Independent entity at (205, 205) — overlaps with child's world position
     let other = world
-        .spawn((MapPosition::new(205.0, 205.0), BoxCollider::new(20.0, 20.0)))
+        .spawn((
+            WorldPosition::new(205.0, 205.0),
+            BoxCollider::new(20.0, 20.0),
+        ))
         .id();
 
     // Run collision detection
@@ -224,12 +230,15 @@ fn collision_no_false_positive_from_local_position() {
 
     // Parent at (500, 500)
     let parent = world
-        .spawn((MapPosition::new(500.0, 500.0), GlobalTransform2D::default()))
+        .spawn((
+            WorldPosition::new(500.0, 500.0),
+            GlobalTransform2D::default(),
+        ))
         .id();
 
     // Child with local position (5, 5) — world position = (505, 505)
     world.spawn((
-        MapPosition::new(5.0, 5.0),
+        WorldPosition::new(5.0, 5.0),
         BoxCollider::new(10.0, 10.0),
         ChildOf(parent),
         GlobalTransform2D::default(),
@@ -241,7 +250,7 @@ fn collision_no_false_positive_from_local_position() {
     tick_propagate(&mut world);
 
     // Independent entity at (10, 10) — near child's LOCAL position but far from WORLD position
-    world.spawn((MapPosition::new(10.0, 10.0), BoxCollider::new(10.0, 10.0)));
+    world.spawn((WorldPosition::new(10.0, 10.0), BoxCollider::new(10.0, 10.0)));
 
     // Run collision detection
     tick_collision(&mut world);
@@ -257,21 +266,21 @@ fn collision_no_false_positive_from_local_position() {
 ///
 /// After a child is despawned, the parent's stale GT must be cleaned up
 /// before collision detection so that collider rects use the correct,
-/// live MapPosition rather than the frozen world position from when the
+/// live WorldPosition rather than the frozen world position from when the
 /// entity was last a hierarchy root.
 #[test]
-fn collision_uses_live_map_position_after_child_despawn() {
+fn collision_uses_live_world_position_after_child_despawn() {
     let mut world = World::new();
     setup_collision_world(&mut world);
 
     // Spawn player at (0, 0) — will become a hierarchy root
     let player = world
-        .spawn((MapPosition::new(0.0, 0.0), BoxCollider::new(20.0, 20.0)))
+        .spawn((WorldPosition::new(0.0, 0.0), BoxCollider::new(20.0, 20.0)))
         .id();
 
     // Attach a hitbox child → player gains Children
     let hitbox = world
-        .spawn((MapPosition::new(0.0, 0.0), ChildOf(player)))
+        .spawn((WorldPosition::new(0.0, 0.0), ChildOf(player)))
         .id();
     world.flush();
 
@@ -280,18 +289,18 @@ fn collision_uses_live_map_position_after_child_despawn() {
     tick_propagate_and_cleanup(&mut world);
 
     // Move player far away to (500, 500) — no overlap with origin
-    world.get_mut::<MapPosition>(player).unwrap().pos = Vec2 { x: 500.0, y: 500.0 };
+    world.get_mut::<WorldPosition>(player).unwrap().pos = Vec2 { x: 500.0, y: 500.0 };
     tick_propagate_and_cleanup(&mut world); // GT updated to (500, 500)
 
     // Despawn hitbox → Children removed from player; GT is now stale at (500, 500)
     world.despawn(hitbox);
 
     // Move player back to origin (0, 0)
-    world.get_mut::<MapPosition>(player).unwrap().pos = Vec2 { x: 0.0, y: 0.0 };
+    world.get_mut::<WorldPosition>(player).unwrap().pos = Vec2 { x: 0.0, y: 0.0 };
 
     // Spawn a sensor at origin — should collide with player if position is correct
     let sensor = world
-        .spawn((MapPosition::new(5.0, 5.0), BoxCollider::new(20.0, 20.0)))
+        .spawn((WorldPosition::new(5.0, 5.0), BoxCollider::new(20.0, 20.0)))
         .id();
 
     // Run the full pipeline: propagate → cleanup → collision
@@ -309,7 +318,7 @@ fn collision_uses_live_map_position_after_child_despawn() {
 
     assert!(
         has_collision,
-        "Player at live MapPosition (0,0) should collide with sensor at (5,5) — \
+        "Player at live WorldPosition (0,0) should collide with sensor at (5,5) — \
          stale GT at (500,500) must not prevent detection"
     );
 }

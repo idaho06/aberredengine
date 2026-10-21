@@ -7,7 +7,7 @@
 //! # Positioning
 //!
 //! Position the text using one of:
-//! - [`MapPosition`](super::mapposition::MapPosition) for world-space (moves with camera)
+//! - [`WorldPosition`](super::world_position::WorldPosition) for world-space (moves with camera)
 //! - [`ScreenPosition`](super::screenposition::ScreenPosition) for UI/screen-space (fixed on screen)
 //!
 //! # Reactive Updates

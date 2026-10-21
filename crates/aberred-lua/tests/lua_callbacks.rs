@@ -11,11 +11,11 @@ use aberred_core::components::boxcollider::BoxCollider;
 use aberred_core::components::collision::CollisionRule;
 use aberred_core::components::group::Group;
 use aberred_core::components::guiinteractable::GuiInteractable;
-use aberred_core::components::mapposition::MapPosition;
 use aberred_core::components::phase::Phase;
 use aberred_core::components::signals::Signals;
 use aberred_core::components::timer::{Timer, TimerMode};
 use aberred_core::components::ttl::Ttl;
+use aberred_core::components::world_position::WorldPosition;
 use aberred_core::events::animation::AnimationFinished;
 use aberred_core::events::collision::BoxOverlap;
 use aberred_core::events::gui_interactable::GuiClicked;
@@ -122,7 +122,7 @@ fn collision_pipeline_triggers_lua_side_effects() {
     let a = world
         .spawn((
             Group::new("player"),
-            MapPosition::new(0.0, 0.0),
+            WorldPosition::new(0.0, 0.0),
             BoxCollider::new(10.0, 10.0),
             Signals::default(),
         ))
@@ -130,7 +130,7 @@ fn collision_pipeline_triggers_lua_side_effects() {
     let b = world
         .spawn((
             Group::new("enemy"),
-            MapPosition::new(5.0, 0.0),
+            WorldPosition::new(5.0, 0.0),
             BoxCollider::new(10.0, 10.0),
         ))
         .id();
@@ -184,14 +184,14 @@ fn collision_callback_error_still_drains_queued_commands() {
     let a = world
         .spawn((
             Group::new("player"),
-            MapPosition::new(0.0, 0.0),
+            WorldPosition::new(0.0, 0.0),
             BoxCollider::new(10.0, 10.0),
             Signals::default(),
         ))
         .id();
     world.spawn((
         Group::new("enemy"),
-        MapPosition::new(5.0, 0.0),
+        WorldPosition::new(5.0, 0.0),
         BoxCollider::new(10.0, 10.0),
     ));
     add_lua_collision_observers(&mut world);
@@ -458,14 +458,14 @@ fn collision_callback_spawn_then_clone_same_drain() {
     let _a = world
         .spawn((
             Group::new("shooter"),
-            MapPosition::new(0.0, 0.0),
+            WorldPosition::new(0.0, 0.0),
             BoxCollider::new(10.0, 10.0),
         ))
         .id();
     let _b = world
         .spawn((
             Group::new("target"),
-            MapPosition::new(5.0, 0.0),
+            WorldPosition::new(5.0, 0.0),
             BoxCollider::new(10.0, 10.0),
         ))
         .id();
@@ -503,14 +503,14 @@ fn collision_callback_phase_plus_signal_all_processed() {
     let a = world
         .spawn((
             Group::new("hero"),
-            MapPosition::new(0.0, 0.0),
+            WorldPosition::new(0.0, 0.0),
             BoxCollider::new(10.0, 10.0),
             Phase::new("idle"),
         ))
         .id();
     world.spawn((
         Group::new("hazard"),
-        MapPosition::new(5.0, 0.0),
+        WorldPosition::new(5.0, 0.0),
         BoxCollider::new(10.0, 10.0),
     ));
     add_lua_collision_observers(&mut world);
@@ -565,13 +565,13 @@ fn collision_started_despawn_prevents_ongoing_callback() {
 
     world.spawn((
         Group::new("hero"),
-        MapPosition::new(0.0, 0.0),
+        WorldPosition::new(0.0, 0.0),
         BoxCollider::new(10.0, 10.0),
     ));
     let b = world
         .spawn((
             Group::new("enemy"),
-            MapPosition::new(5.0, 0.0),
+            WorldPosition::new(5.0, 0.0),
             BoxCollider::new(10.0, 10.0),
         ))
         .id();
@@ -761,13 +761,13 @@ fn timer_callback_gets_ctx_and_input_and_drains_its_commands() {
 #[test]
 fn tween_finished_callback_gets_ctx_and_input_and_drains_its_commands() {
     let mut world = make_lua_callback_world(0.0);
-    world.add_observer(lua_tween_finished_observer::<MapPosition>);
+    world.add_observer(lua_tween_finished_observer::<WorldPosition>);
     load_lua(&world, ENTITY_CALLBACK_SRC);
     let entity = world
-        .spawn(LuaOnTweenFinished::<MapPosition>::new("on_done"))
+        .spawn(LuaOnTweenFinished::<WorldPosition>::new("on_done"))
         .id();
 
-    world.trigger(TweenFinished::<MapPosition>::new(entity));
+    world.trigger(TweenFinished::<WorldPosition>::new(entity));
     world.flush();
 
     assert_entity_callback_ran(&world, entity);

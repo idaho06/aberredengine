@@ -25,7 +25,6 @@ use aberred_core::components::entityshader::EntityShader;
 use aberred_core::components::globaltransform2d::GlobalTransform2D;
 use aberred_core::components::guiinteractable::{GuiInteractable, GuiWidgetState};
 use aberred_core::components::guiprogressbar::GuiProgressBar;
-use aberred_core::components::mapposition::MapPosition;
 use aberred_core::components::phase::Phase;
 use aberred_core::components::rigidbody::RigidBody;
 use aberred_core::components::rotation::Rotation;
@@ -39,6 +38,7 @@ use aberred_core::components::timer::Timer;
 use aberred_core::components::tint::Tint;
 use aberred_core::components::ttl::Ttl;
 use aberred_core::components::tween::{Tween, TweenValue};
+use aberred_core::components::world_position::WorldPosition;
 use aberred_core::systems::propagate_transforms::ComputeInitialGlobalTransform;
 use bevy_ecs::system::EntityCommand;
 
@@ -408,11 +408,11 @@ fn process_tween_cmd(cmd: EntityCmd, commands: &mut Commands) {
         } => insert_tween(
             commands,
             entity_id,
-            MapPosition::from_vec(Vec2 {
+            WorldPosition::from_vec(Vec2 {
                 x: from_x,
                 y: from_y,
             }),
-            MapPosition::from_vec(Vec2 { x: to_x, y: to_y }),
+            WorldPosition::from_vec(Vec2 { x: to_x, y: to_y }),
             &config,
         ),
         EntityCmd::InsertTweenRotation {
@@ -449,7 +449,7 @@ fn process_tween_cmd(cmd: EntityCmd, commands: &mut Commands) {
             to_y,
             config,
         } => {
-            // Unlike MapPosition/Rotation/Scale, ScreenPosition is not
+            // Unlike WorldPosition/Rotation/Scale, ScreenPosition is not
             // guaranteed to already exist — its presence/absence is the GUI
             // visibility toggle, so a hidden entity has none. Insert it
             // (seeded at `from`) alongside the tween in the same batch.
@@ -467,7 +467,7 @@ fn process_tween_cmd(cmd: EntityCmd, commands: &mut Commands) {
         }
         EntityCmd::RemoveTweenPosition { entity_id } => {
             queue_on_entity(commands, entity_id, |mut e| {
-                e.remove::<Tween<MapPosition>>();
+                e.remove::<Tween<WorldPosition>>();
             });
         }
         EntityCmd::RemoveTweenRotation { entity_id } => {
@@ -596,7 +596,7 @@ fn shader_set_uniform(cmd: EntityCmd, commands: &mut Commands) {
 fn process_transform_cmd(cmd: EntityCmd, commands: &mut Commands) {
     match cmd {
         EntityCmd::SetPosition { entity_id, x, y } => {
-            queue_on_component::<MapPosition>(commands, entity_id, move |pos| {
+            queue_on_component::<WorldPosition>(commands, entity_id, move |pos| {
                 pos.pos = Vec2 { x, y };
             });
         }
@@ -663,7 +663,7 @@ fn process_hierarchy_cmd(cmd: EntityCmd, commands: &mut Commands) {
             queue_on_entity(commands, entity_id, |mut e| {
                 // Snap to the world transform before detaching.
                 if let Some(gt) = e.get::<GlobalTransform2D>().copied() {
-                    if let Some(mut pos) = e.get_mut::<MapPosition>() {
+                    if let Some(mut pos) = e.get_mut::<WorldPosition>() {
                         pos.pos = gt.position;
                     }
                     e.insert((
@@ -1019,8 +1019,8 @@ mod tests {
     #[test]
     fn insert_remove_cmds_after_same_batch_despawn_are_silent_noops() {
         let mut world = World::new();
-        let doomed = world.spawn(MapPosition::new(0.0, 0.0)).id();
-        let parent = world.spawn(MapPosition::new(0.0, 0.0)).id();
+        let doomed = world.spawn(WorldPosition::new(0.0, 0.0)).id();
+        let parent = world.spawn(WorldPosition::new(0.0, 0.0)).id();
 
         let mut batch = vec![EntityCmd::Despawn {
             entity_id: doomed.to_bits(),
@@ -1047,7 +1047,7 @@ mod tests {
                 GuiProgressBar::new(10.0, 2.0, 5.0, 10.0),
                 Animation::new("walk"),
                 test_sprite("walk_sheet"),
-                MapPosition::new(0.0, 0.0),
+                WorldPosition::new(0.0, 0.0),
                 ScreenPosition::from_vec(Vec2::ZERO),
                 CameraTarget::default(),
             ))
@@ -1221,8 +1221,8 @@ mod tests {
     #[test]
     fn insert_remove_cmds_for_entity_despawned_in_a_prior_frame_are_skipped() {
         let mut world = World::new();
-        let doomed = world.spawn(MapPosition::new(0.0, 0.0)).id();
-        let parent = world.spawn(MapPosition::new(0.0, 0.0)).id();
+        let doomed = world.spawn(WorldPosition::new(0.0, 0.0)).id();
+        let parent = world.spawn(WorldPosition::new(0.0, 0.0)).id();
         run_entity_cmd(
             &mut world,
             EntityCmd::Despawn {
@@ -1246,8 +1246,8 @@ mod tests {
     #[test]
     fn set_parent_places_child_at_its_world_transform_immediately() {
         let mut world = World::new();
-        let parent = world.spawn(MapPosition::new(10.0, 5.0)).id();
-        let child = world.spawn(MapPosition::new(1.0, 2.0)).id();
+        let parent = world.spawn(WorldPosition::new(10.0, 5.0)).id();
+        let child = world.spawn(WorldPosition::new(1.0, 2.0)).id();
 
         run_entity_cmd(
             &mut world,
@@ -1271,9 +1271,9 @@ mod tests {
     #[test]
     fn two_set_parents_onto_one_parent_in_a_batch_place_both_children() {
         let mut world = World::new();
-        let parent = world.spawn(MapPosition::new(10.0, 5.0)).id();
-        let first = world.spawn(MapPosition::new(1.0, 2.0)).id();
-        let second = world.spawn(MapPosition::new(2.0, 3.0)).id();
+        let parent = world.spawn(WorldPosition::new(10.0, 5.0)).id();
+        let first = world.spawn(WorldPosition::new(1.0, 2.0)).id();
+        let second = world.spawn(WorldPosition::new(2.0, 3.0)).id();
 
         run_entity_cmds(
             &mut world,
@@ -1291,8 +1291,8 @@ mod tests {
     #[test]
     fn set_parent_then_remove_parent_keeps_the_world_position() {
         let mut world = World::new();
-        let parent = world.spawn(MapPosition::new(10.0, 5.0)).id();
-        let child = world.spawn(MapPosition::new(1.0, 2.0)).id();
+        let parent = world.spawn(WorldPosition::new(10.0, 5.0)).id();
+        let child = world.spawn(WorldPosition::new(1.0, 2.0)).id();
 
         run_entity_cmds(
             &mut world,
@@ -1310,7 +1310,7 @@ mod tests {
         assert!(world.get::<ChildOf>(child).is_none());
         assert!(world.get::<GlobalTransform2D>(child).is_none());
         assert_eq!(
-            world.get::<MapPosition>(child).unwrap().pos,
+            world.get::<WorldPosition>(child).unwrap().pos,
             Vec2::new(11.0, 7.0),
             "detaching keeps the world position it had as a child"
         );
@@ -1319,8 +1319,8 @@ mod tests {
     #[test]
     fn set_parent_onto_parent_despawned_same_batch_leaves_child_unparented() {
         let mut world = World::new();
-        let child = world.spawn(MapPosition::new(0.0, 0.0)).id();
-        let parent = world.spawn(MapPosition::new(0.0, 0.0)).id();
+        let child = world.spawn(WorldPosition::new(0.0, 0.0)).id();
+        let parent = world.spawn(WorldPosition::new(0.0, 0.0)).id();
 
         run_entity_cmds(
             &mut world,
@@ -1346,8 +1346,8 @@ mod tests {
     #[test]
     fn set_parent_from_dead_child_leaves_parent_untouched() {
         let mut world = World::new();
-        let child = world.spawn(MapPosition::new(0.0, 0.0)).id();
-        let parent = world.spawn(MapPosition::new(0.0, 0.0)).id();
+        let child = world.spawn(WorldPosition::new(0.0, 0.0)).id();
+        let parent = world.spawn(WorldPosition::new(0.0, 0.0)).id();
         run_entity_cmd(
             &mut world,
             EntityCmd::Despawn {
@@ -1467,7 +1467,7 @@ mod tests {
     #[test]
     fn query_mutation_cmds_never_insert_missing_components() {
         let mut world = World::new();
-        let e = world.spawn(MapPosition::new(0.0, 0.0)).id();
+        let e = world.spawn(WorldPosition::new(0.0, 0.0)).id();
         let id = e.to_bits();
 
         run_entity_cmds(
@@ -1864,9 +1864,9 @@ mod tests {
     #[test]
     fn release_stuckto_restores_stored_velocity_as_rigidbody() {
         let mut world = World::new();
-        let target = world.spawn(MapPosition::new(0.0, 0.0)).id();
+        let target = world.spawn(WorldPosition::new(0.0, 0.0)).id();
         let e = world
-            .spawn((MapPosition::new(0.0, 0.0), RigidBody::new()))
+            .spawn((WorldPosition::new(0.0, 0.0), RigidBody::new()))
             .id();
         let id = e.to_bits();
 
@@ -1901,7 +1901,7 @@ mod tests {
 
     /// An entity stuck to a fresh target, with an optional stored velocity.
     fn spawn_stuck(world: &mut World, stored_velocity: Option<Vec2>) -> Entity {
-        let target = world.spawn(MapPosition::new(0.0, 0.0)).id();
+        let target = world.spawn(WorldPosition::new(0.0, 0.0)).id();
         let mut stuck = StuckTo::new(target);
         stuck.stored_velocity = stored_velocity;
         world.spawn(stuck).id()
@@ -1973,7 +1973,7 @@ mod tests {
     #[test]
     fn insert_stuckto_then_release_in_one_batch_restores_stored_velocity() {
         let mut world = World::new();
-        let target = world.spawn(MapPosition::new(0.0, 0.0)).id();
+        let target = world.spawn(WorldPosition::new(0.0, 0.0)).id();
         let e = world.spawn(RigidBody::new()).id();
         let id = e.to_bits();
 
@@ -2012,7 +2012,7 @@ mod tests {
         let mut world = World::new();
         world.init_resource::<MenuDespawnCalls>();
         let mut signals = WorldSignals::default();
-        let menu = world.spawn(MapPosition::new(0.0, 0.0)).id();
+        let menu = world.spawn(WorldPosition::new(0.0, 0.0)).id();
         let mut systems_store = SystemsStore::default();
         systems_store.insert_entity_system(
             hook_keys::MENU_DESPAWN,

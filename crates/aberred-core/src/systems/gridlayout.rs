@@ -2,7 +2,7 @@
 //!
 //! The [`gridlayout_spawn_system`] processes newly added [`GridLayout`]
 //! components, loads their JSON data, and spawns child entities for each
-//! cell. Spawned entities receive [`MapPosition`], [`Sprite`], [`BoxCollider`],
+//! cell. Spawned entities receive [`WorldPosition`], [`Sprite`], [`BoxCollider`],
 //! [`Signals`], [`Group`], and [`ZIndex`] components based on the layout data.
 //!
 //! # JSON Format
@@ -35,9 +35,9 @@ use bevy_ecs::prelude::*;
 use crate::components::boxcollider::BoxCollider;
 use crate::components::gridlayout::{GridLayout, GridLayoutData, GridValue};
 use crate::components::group::Group;
-use crate::components::mapposition::MapPosition;
 use crate::components::signals::Signals;
 use crate::components::sprite::Sprite;
+use crate::components::world_position::WorldPosition;
 use crate::components::zindex::ZIndex;
 use log::{error, info};
 
@@ -90,7 +90,7 @@ pub fn gridlayout_spawn_system(
 
             commands.spawn((
                 Group::new(&grid_layout.group),
-                MapPosition::new(x, y),
+                WorldPosition::new(x, y),
                 ZIndex(grid_layout.z_index),
                 Sprite {
                     tex_key: Arc::from(cell.texture_key.clone()),
@@ -158,7 +158,7 @@ mod tests {
 
     fn cells(world: &mut World) -> Vec<(Vec2, String)> {
         let mut out: Vec<(Vec2, String)> = world
-            .query::<(&MapPosition, &Sprite)>()
+            .query::<(&WorldPosition, &Sprite)>()
             .iter(world)
             .map(|(p, s)| (p.pos, s.tex_key.to_string()))
             .collect();

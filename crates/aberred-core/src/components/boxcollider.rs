@@ -4,7 +4,7 @@
 //! attached to entities for collision detection. The collider is defined by a
 //! size, an offset from the entity's pivot, and an origin point.
 //!
-//! Use in combination with [`MapPosition`](super::mapposition::MapPosition)
+//! Use in combination with [`WorldPosition`](super::world_position::WorldPosition)
 //! to compute world-space AABBs for overlap testing.
 //!
 //! # Coordinate System
@@ -31,7 +31,7 @@ use crate::math::Rect;
 /// The collider is defined by a `size` (width, height), an `offset` from the
 /// entity's pivot, and an `origin` representing that pivot relative to the
 /// collider's local top-left. World AABBs can be computed using
-/// [`MapPosition`](super::mapposition::MapPosition) as the pivot position.
+/// [`WorldPosition`](super::world_position::WorldPosition) as the pivot position.
 #[derive(Debug, Clone, Copy, PartialEq, Component)]
 pub struct BoxCollider {
     /// Size of the box in world units.
@@ -39,7 +39,7 @@ pub struct BoxCollider {
     /// Offset from the entity's pivot (positive moves the box down-right).
     pub offset: Vec2,
     /// Pivot point relative to the collider's local top-left (usually the same as Sprite.origin).
-    /// MapPosition represents this pivot; AABB is computed from (position - origin + offset).
+    /// WorldPosition represents this pivot; AABB is computed from (position - origin + offset).
     pub origin: Vec2,
     // pub is_trigger: bool, // maybe we will use this
 }
@@ -69,7 +69,7 @@ impl BoxCollider {
     /// Returns (min, max) of the collider AABB for a given entity position.
     /// Handles negative size by normalizing to proper min/max.
     pub fn aabb(&self, position: Vec2) -> (Vec2, Vec2) {
-        // World-space min corner from MapPosition (pivot) minus origin, plus collider offset
+        // World-space min corner from WorldPosition (pivot) minus origin, plus collider offset
         let p0 = position - self.origin + self.offset;
         let p1 = p0 + self.size;
         let min = Vec2::new(p0.x.min(p1.x), p0.y.min(p1.y));

@@ -14,9 +14,9 @@ use bevy_ecs::hierarchy::{ChildOf, Children};
 use bevy_ecs::prelude::*;
 
 use crate::components::globaltransform2d::GlobalTransform2D;
-use crate::components::mapposition::MapPosition;
 use crate::components::rotation::Rotation;
 use crate::components::scale::Scale;
+use crate::components::world_position::WorldPosition;
 use crate::systems::transform_compose::{Transform2D, compose_transform};
 
 type RootsQuery<'w, 's> = Query<
@@ -24,7 +24,7 @@ type RootsQuery<'w, 's> = Query<
     's,
     (
         Entity,
-        &'static MapPosition,
+        &'static WorldPosition,
         Option<&'static Rotation>,
         Option<&'static Scale>,
         &'static Children,
@@ -36,7 +36,7 @@ type ChildrenQuery<'w, 's> = Query<
     'w,
     's,
     (
-        &'static MapPosition,
+        &'static WorldPosition,
         Option<&'static Rotation>,
         Option<&'static Scale>,
         Option<&'static Children>,
@@ -148,8 +148,8 @@ fn propagate_children(
 /// When a root entity loses its last child, Bevy removes [`Children`] but
 /// leaves its [`GlobalTransform2D`] in place. [`propagate_transforms`] stops
 /// updating it, so `resolve_world_pos` returns the frozen world position
-/// instead of the live [`MapPosition`]. This system removes the orphaned
-/// component so that standalone entities always resolve to [`MapPosition`].
+/// instead of the live [`WorldPosition`]. This system removes the orphaned
+/// component so that standalone entities always resolve to [`WorldPosition`].
 ///
 /// Must run **after** [`propagate_transforms`] and **before** collision
 /// detection.
@@ -169,7 +169,7 @@ pub fn cleanup_orphaned_global_transforms(
 /// Queue it via [`EntityCommands::queue`] immediately after giving an entity
 /// its [`ChildOf`] component. It reads the parent's current
 /// [`GlobalTransform2D`] via [`world_scope`](bevy_ecs::world::EntityWorldMut::world_scope) and composes it with the child's
-/// local [`MapPosition`], [`Rotation`], and [`Scale`] to produce the correct
+/// local [`WorldPosition`], [`Rotation`], and [`Scale`] to produce the correct
 /// world-space transform on the very first frame the entity exists — avoiding
 /// the one-frame flash at world origin caused by `GlobalTransform2D::default()`.
 ///
@@ -192,7 +192,7 @@ impl bevy_ecs::system::EntityCommand for ComputeInitialGlobalTransform {
         // Extract child's local components. All are Copy so the borrows end
         // immediately and don't conflict with the world_scope call below.
         let pos = entity
-            .get::<MapPosition>()
+            .get::<WorldPosition>()
             .map(|p| p.pos)
             .unwrap_or(Vec2 { x: 0.0, y: 0.0 });
         let local_rot = entity.get::<Rotation>().map(|r| r.degrees).unwrap_or(0.0);
@@ -217,7 +217,7 @@ impl bevy_ecs::system::EntityCommand for ComputeInitialGlobalTransform {
                         return None;
                     }
 
-                    let parent_pos = world.get::<MapPosition>(parent_entity)?.pos;
+                    let parent_pos = world.get::<WorldPosition>(parent_entity)?.pos;
                     let parent_rot = world
                         .get::<Rotation>(parent_entity)
                         .map(|r| r.degrees)
@@ -266,7 +266,7 @@ mod tests {
 
         let root = world
             .spawn((
-                MapPosition::new(100.0, 50.0),
+                WorldPosition::new(100.0, 50.0),
                 Rotation { degrees: 45.0 },
                 Scale::new(2.0, 2.0),
                 GlobalTransform2D::default(),
@@ -291,12 +291,15 @@ mod tests {
         let mut world = World::new();
 
         let parent = world
-            .spawn((MapPosition::new(100.0, 100.0), GlobalTransform2D::default()))
+            .spawn((
+                WorldPosition::new(100.0, 100.0),
+                GlobalTransform2D::default(),
+            ))
             .id();
 
         let child = world
             .spawn((
-                MapPosition::new(40.0, 0.0),
+                WorldPosition::new(40.0, 0.0),
                 ChildOf(parent),
                 GlobalTransform2D::default(),
             ))
@@ -329,7 +332,7 @@ mod tests {
 
         let parent = world
             .spawn((
-                MapPosition::new(100.0, 100.0),
+                WorldPosition::new(100.0, 100.0),
                 Rotation { degrees: 90.0 },
                 GlobalTransform2D::default(),
             ))
@@ -337,7 +340,7 @@ mod tests {
 
         let child = world
             .spawn((
-                MapPosition::new(40.0, 0.0),
+                WorldPosition::new(40.0, 0.0),
                 ChildOf(parent),
                 GlobalTransform2D::default(),
             ))
@@ -371,7 +374,7 @@ mod tests {
 
         let parent = world
             .spawn((
-                MapPosition::new(100.0, 100.0),
+                WorldPosition::new(100.0, 100.0),
                 Scale::new(2.0, 2.0),
                 GlobalTransform2D::default(),
             ))
@@ -379,7 +382,7 @@ mod tests {
 
         let child = world
             .spawn((
-                MapPosition::new(40.0, 0.0),
+                WorldPosition::new(40.0, 0.0),
                 ChildOf(parent),
                 GlobalTransform2D::default(),
             ))
@@ -410,7 +413,7 @@ mod tests {
 
         let parent = world
             .spawn((
-                MapPosition::new(0.0, 0.0),
+                WorldPosition::new(0.0, 0.0),
                 Rotation { degrees: 90.0 },
                 Scale::new(2.0, 1.0),
                 GlobalTransform2D::default(),
@@ -419,7 +422,7 @@ mod tests {
 
         let child = world
             .spawn((
-                MapPosition::new(10.0, 0.0),
+                WorldPosition::new(10.0, 0.0),
                 ChildOf(parent),
                 GlobalTransform2D::default(),
             ))
@@ -450,12 +453,12 @@ mod tests {
         let mut world = World::new();
 
         let root = world
-            .spawn((MapPosition::new(100.0, 0.0), GlobalTransform2D::default()))
+            .spawn((WorldPosition::new(100.0, 0.0), GlobalTransform2D::default()))
             .id();
 
         let child = world
             .spawn((
-                MapPosition::new(50.0, 0.0),
+                WorldPosition::new(50.0, 0.0),
                 ChildOf(root),
                 GlobalTransform2D::default(),
             ))
@@ -463,7 +466,7 @@ mod tests {
 
         let grandchild = world
             .spawn((
-                MapPosition::new(10.0, 0.0),
+                WorldPosition::new(10.0, 0.0),
                 ChildOf(child),
                 GlobalTransform2D::default(),
             ))
@@ -511,7 +514,7 @@ mod tests {
 
         let parent = world
             .spawn((
-                MapPosition::new(50.0, 25.0),
+                WorldPosition::new(50.0, 25.0),
                 Rotation { degrees: 30.0 },
                 Scale::new(3.0, 2.0),
                 GlobalTransform2D::default(),
@@ -520,7 +523,7 @@ mod tests {
 
         // Need at least one child for parent to have Children component
         world.spawn((
-            MapPosition::new(0.0, 0.0),
+            WorldPosition::new(0.0, 0.0),
             ChildOf(parent),
             GlobalTransform2D::default(),
         ));
@@ -551,7 +554,7 @@ mod tests {
 
         let parent = world
             .spawn((
-                MapPosition::new(0.0, 0.0),
+                WorldPosition::new(0.0, 0.0),
                 Rotation { degrees: 0.0 },
                 Scale::new(2.0, 2.0),
                 GlobalTransform2D::default(),
@@ -560,7 +563,7 @@ mod tests {
 
         let child = world
             .spawn((
-                MapPosition::new(10.0, 0.0),
+                WorldPosition::new(10.0, 0.0),
                 Rotation { degrees: 45.0 },
                 Scale::new(0.5, 0.5),
                 ChildOf(parent),
@@ -590,10 +593,10 @@ mod tests {
     fn propagate_inserts_missing_globaltransform2d_via_commands() {
         let mut world = World::new();
 
-        let parent = world.spawn((MapPosition::new(100.0, 0.0),)).id();
+        let parent = world.spawn((WorldPosition::new(100.0, 0.0),)).id();
 
         let child = world
-            .spawn((MapPosition::new(10.0, 0.0), ChildOf(parent)))
+            .spawn((WorldPosition::new(10.0, 0.0), ChildOf(parent)))
             .id();
 
         world.flush();
@@ -633,7 +636,7 @@ mod tests {
         // Entity with a GlobalTransform2D but no hierarchy relationship
         let entity = world
             .spawn((
-                MapPosition::new(10.0, 20.0),
+                WorldPosition::new(10.0, 20.0),
                 GlobalTransform2D {
                     position: Vec2 { x: 999.0, y: 999.0 },
                     rotation_degrees: 0.0,
@@ -659,9 +662,9 @@ mod tests {
 
         // Parent with a child — has Children, so cleanup must leave its GT alone
         let parent = world
-            .spawn((MapPosition::new(50.0, 0.0), GlobalTransform2D::default()))
+            .spawn((WorldPosition::new(50.0, 0.0), GlobalTransform2D::default()))
             .id();
-        world.spawn((MapPosition::new(0.0, 0.0), ChildOf(parent)));
+        world.spawn((WorldPosition::new(0.0, 0.0), ChildOf(parent)));
         world.flush(); // Bevy populates Children on parent
 
         assert!(
@@ -684,10 +687,10 @@ mod tests {
         let mut world = World::new();
 
         // Child entity: has both ChildOf and GT — cleanup must not touch it
-        let parent = world.spawn(MapPosition::new(0.0, 0.0)).id();
+        let parent = world.spawn(WorldPosition::new(0.0, 0.0)).id();
         let child = world
             .spawn((
-                MapPosition::new(10.0, 0.0),
+                WorldPosition::new(10.0, 0.0),
                 ChildOf(parent),
                 GlobalTransform2D::default(),
             ))
@@ -709,15 +712,15 @@ mod tests {
         let mut world = World::new();
 
         // Standalone entity with no GT — cleanup should leave it untouched
-        let entity = world.spawn(MapPosition::new(5.0, 5.0)).id();
+        let entity = world.spawn(WorldPosition::new(5.0, 5.0)).id();
 
         world
             .run_system_once(cleanup_orphaned_global_transforms)
             .expect("cleanup_orphaned_global_transforms should run");
 
-        // MapPosition should still be there, and no GT should have appeared
+        // WorldPosition should still be there, and no GT should have appeared
         assert!(world.get::<GlobalTransform2D>(entity).is_none());
-        let pos = world.get::<MapPosition>(entity).unwrap();
+        let pos = world.get::<WorldPosition>(entity).unwrap();
         assert!(approx_eq(pos.pos.x, 5.0));
     }
 
@@ -730,7 +733,7 @@ mod tests {
             .map(|i| {
                 world
                     .spawn((
-                        MapPosition::new(i as f32 * 10.0, 0.0),
+                        WorldPosition::new(i as f32 * 10.0, 0.0),
                         GlobalTransform2D {
                             position: Vec2 {
                                 x: 999.0 + i as f32,

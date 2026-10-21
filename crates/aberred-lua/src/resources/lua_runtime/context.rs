@@ -8,7 +8,7 @@
 //!
 //! The context table contains:
 //! - Core identity: `id`, `group`
-//! - Position: `pos` (MapPosition) or `screen_pos` (ScreenPosition)
+//! - Position: `pos` (WorldPosition) or `screen_pos` (ScreenPosition)
 //! - Physics: `vel`, `speed_sq`, `frozen` (from RigidBody)
 //! - Transform: `rotation`, `scale`
 //! - Collision: `rect` (BoxCollider AABB)

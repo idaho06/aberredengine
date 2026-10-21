@@ -375,7 +375,7 @@ impl LuaRuntime {
                         "number",
                         false,
                         Some(
-                            "Cursor X in world-space (after camera transform, matches MapPosition)",
+                            "Cursor X in world-space (after camera transform, matches WorldPosition)",
                         ),
                     ),
                     (
@@ -383,7 +383,7 @@ impl LuaRuntime {
                         "number",
                         false,
                         Some(
-                            "Cursor Y in world-space (after camera transform, matches MapPosition)",
+                            "Cursor Y in world-space (after camera transform, matches WorldPosition)",
                         ),
                     ),
                     (

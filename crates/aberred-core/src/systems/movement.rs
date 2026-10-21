@@ -10,15 +10,15 @@
 use crate::math::Vec2;
 use bevy_ecs::prelude::*;
 
-use crate::components::mapposition::MapPosition;
 use crate::components::rigidbody::RigidBody;
 use crate::components::signals::Signals;
+use crate::components::world_position::WorldPosition;
 use crate::protocol::audio::AudioCmd;
 use crate::resources::screensize::ScreenSize;
 use crate::resources::signal_keys as sk;
 use crate::resources::worldtime::WorldTime;
 
-/// Apply acceleration forces and velocity to `MapPosition` using the frame's delta time.
+/// Apply acceleration forces and velocity to `WorldPosition` using the frame's delta time.
 ///
 /// This system performs physics integration in the following order:
 /// 1. Skip if entity is frozen
@@ -31,7 +31,7 @@ use crate::resources::worldtime::WorldTime;
 pub fn movement(
     mut query: Query<(
         Entity,
-        &mut MapPosition,
+        &mut WorldPosition,
         &mut RigidBody,
         Option<&mut Signals>,
     )>,
@@ -126,12 +126,12 @@ mod tests {
         let mut rb = RigidBody::new();
         rb.velocity = Vec2 { x: 10.0, y: 0.0 };
 
-        let entity = world.spawn((MapPosition::new(0.0, 0.0), rb)).id();
+        let entity = world.spawn((WorldPosition::new(0.0, 0.0), rb)).id();
 
         update_world_time(&mut world, 0.5);
         tick_movement(&mut world);
 
-        let pos = world.get::<MapPosition>(entity).unwrap();
+        let pos = world.get::<WorldPosition>(entity).unwrap();
         assert!(approx_eq(pos.pos.x, 5.0));
         assert!(approx_eq(pos.pos.y, 0.0));
     }
@@ -142,13 +142,13 @@ mod tests {
         let mut rb = RigidBody::new();
         rb.add_force("thrust", Vec2 { x: 2.0, y: 0.0 });
 
-        let entity = world.spawn((MapPosition::new(0.0, 0.0), rb)).id();
+        let entity = world.spawn((WorldPosition::new(0.0, 0.0), rb)).id();
 
         update_world_time(&mut world, 1.0);
         tick_movement(&mut world);
 
         let rb = world.get::<RigidBody>(entity).unwrap();
-        let pos = world.get::<MapPosition>(entity).unwrap();
+        let pos = world.get::<WorldPosition>(entity).unwrap();
         assert!(approx_eq(rb.velocity.x, 2.0));
         assert!(approx_eq(rb.velocity.y, 0.0));
         assert!(approx_eq(pos.pos.x, 2.0));
@@ -162,7 +162,7 @@ mod tests {
         rb.velocity = Vec2 { x: 3.0, y: 4.0 };
 
         let entity = world
-            .spawn((MapPosition::new(0.0, 0.0), rb, Signals::default()))
+            .spawn((WorldPosition::new(0.0, 0.0), rb, Signals::default()))
             .id();
 
         update_world_time(&mut world, 1.0);
@@ -183,12 +183,14 @@ mod tests {
         let mut signals = Signals::default().with_flag(sk::MOVING);
         signals.set_scalar(sk::SPEED_SQ, 123.0);
 
-        let entity = world.spawn((MapPosition::new(1.0, 1.0), rb, signals)).id();
+        let entity = world
+            .spawn((WorldPosition::new(1.0, 1.0), rb, signals))
+            .id();
 
         update_world_time(&mut world, 1.0);
         tick_movement(&mut world);
 
-        let pos = world.get::<MapPosition>(entity).unwrap();
+        let pos = world.get::<WorldPosition>(entity).unwrap();
         let signals = world.get::<Signals>(entity).unwrap();
         assert!(approx_eq(pos.pos.x, 1.0));
         assert!(approx_eq(pos.pos.y, 1.0));
@@ -202,12 +204,12 @@ mod tests {
         let mut rb = RigidBody::new();
         rb.velocity = Vec2 { x: 100.0, y: 0.0 };
 
-        let entity = world.spawn((MapPosition::new(0.0, 0.0), rb)).id();
+        let entity = world.spawn((WorldPosition::new(0.0, 0.0), rb)).id();
 
         update_world_time(&mut world, 1.0);
         tick_movement(&mut world);
 
-        let pos = world.get::<MapPosition>(entity).unwrap();
+        let pos = world.get::<WorldPosition>(entity).unwrap();
         assert!(approx_eq(pos.pos.x, 0.0));
         assert!(approx_eq(pos.pos.y, 0.0));
     }
@@ -219,12 +221,12 @@ mod tests {
         let mut rb = RigidBody::new();
         rb.velocity = Vec2 { x: 10.0, y: 0.0 };
 
-        let entity = world.spawn((MapPosition::new(0.0, 0.0), rb)).id();
+        let entity = world.spawn((WorldPosition::new(0.0, 0.0), rb)).id();
 
         update_world_time(&mut world, 0.5);
         tick_movement(&mut world);
 
-        let pos = world.get::<MapPosition>(entity).unwrap();
+        let pos = world.get::<WorldPosition>(entity).unwrap();
         assert!(approx_eq(pos.pos.x, 10.0));
     }
 }

@@ -132,7 +132,7 @@ mod textures {
         };
 
         commands.spawn((
-            MapPosition::new(100.0, 200.0),
+            WorldPosition::new(100.0, 200.0),
             Sprite::new("player", width as f32, height as f32).centered(),
             ZIndex(1.0),
         ));
@@ -265,7 +265,7 @@ mod per_entity_shaders {
         let mut shader = EntityShader::new("glow");
         shader.set_uniform("uIntensity", UniformValue::Float(0.8));
         commands.spawn((
-            // MapPosition, Sprite, ZIndex, … as in Section 7
+            // WorldPosition, Sprite, ZIndex, … as in Section 7
             shader,
         ));
     }
@@ -316,19 +316,19 @@ mod tilemaps {
     fn spawn_tilemaps(mut commands: Commands) { // GLUE
     use aberredengine::prelude::*;
 
-    // Minimal — tiles appear at world origin (default MapPosition inserted automatically)
+    // Minimal — tiles appear at world origin (default WorldPosition inserted automatically)
     commands.spawn(TileMap::new("assets/tilemaps/level01"));
 
     // Positioned and scaled
     commands.spawn((
         TileMap::new("assets/tilemaps/level01"),
-        MapPosition::new(100.0, 200.0),
+        WorldPosition::new(100.0, 200.0),
         Scale::new(2.0, 2.0),
     ));
     } // GLUE
 
     fn move_tilemap(mut commands: Commands, tilemap_root: Entity, new_x: f32, new_y: f32) { // GLUE
-    commands.entity(tilemap_root).insert(MapPosition::new(new_x, new_y));
+    commands.entity(tilemap_root).insert(WorldPosition::new(new_x, new_y));
     } // GLUE
 
     fn register() -> EngineBuilder { // GLUE
@@ -399,7 +399,7 @@ mod following_an_entity {
 
     fn follow_player(mut commands: Commands, mut follow: ResMut<CameraFollowConfig>) {
         commands.spawn((
-            MapPosition::new(100.0, 200.0),
+            WorldPosition::new(100.0, 200.0),
             // … sprite, physics, etc. …
             CameraTarget::new(1).with_zoom(2.0),
         ));

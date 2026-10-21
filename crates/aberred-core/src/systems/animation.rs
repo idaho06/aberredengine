@@ -22,9 +22,9 @@ use crate::math::Vec2;
 use bevy_ecs::prelude::*;
 
 use crate::components::animation::{Animation, AnimationController, CmpOp, Condition};
-use crate::components::mapposition::MapPosition;
 use crate::components::signals::Signals;
 use crate::components::sprite::Sprite;
+use crate::components::world_position::WorldPosition;
 use crate::events::animation::AnimationFinished;
 use crate::resources::animationstore::AnimationStore;
 use crate::resources::signal_keys as sk;
@@ -45,7 +45,7 @@ use crate::resources::worldtime::WorldTime;
 pub fn animation(
     mut query: Query<
         (Entity, &mut Animation, &mut Sprite, Option<&mut Signals>),
-        With<MapPosition>,
+        With<WorldPosition>,
     >,
     animation_store: Res<AnimationStore>,
     texture_dims: Res<TextureDimsStore>,
@@ -911,7 +911,7 @@ mod tests {
                     finished: false,
                 },
                 make_sprite(),
-                MapPosition::new(0.0, 0.0),
+                WorldPosition::new(0.0, 0.0),
             ))
             .id();
 
@@ -995,7 +995,7 @@ mod tests {
             flip_h: false,
             flip_v: false,
         };
-        let make_pos = || MapPosition::new(0.0, 0.0);
+        let make_pos = || WorldPosition::new(0.0, 0.0);
 
         // Entity A: non-looped "death" already at its last valid frame (index 3).
         // The tick will try to advance to 4, clamp back to 3, and — with the bug — break
@@ -1098,7 +1098,7 @@ mod tests {
                     finished: false,
                 },
                 make_sprite(),
-                MapPosition::new(0.0, 0.0),
+                WorldPosition::new(0.0, 0.0),
                 Signals::default(),
             ))
             .id();
@@ -1499,7 +1499,7 @@ mod tests {
                     finished: false,
                 },
                 make_sprite("sheet"),
-                MapPosition::new(0.0, 0.0),
+                WorldPosition::new(0.0, 0.0),
             ))
             .id();
 
@@ -1594,7 +1594,7 @@ mod tests {
                     finished: false,
                 },
                 make_sprite("nonexistent"),
-                MapPosition::new(0.0, 0.0),
+                WorldPosition::new(0.0, 0.0),
             ))
             .id();
 

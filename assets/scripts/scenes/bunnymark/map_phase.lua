@@ -1,5 +1,5 @@
 -- scenes/bunnymark/map_phase.lua
--- Bunnymark variant: MapPosition + per-entity Phase callback.
+-- Bunnymark variant: WorldPosition + per-entity Phase callback.
 -- The engine calls on_update for each bunny entity individually each frame.
 -- Velocity state lives in a module-level table keyed by entity ID.
 
@@ -110,11 +110,11 @@ M._callbacks = {
 -- ─── Spawn ────────────────────────────────────────────────────────────────────
 
 function M.spawn()
-    engine.log_debug("Spawning Bunnymark MapPosition+Phase...")
+    engine.log_debug("Spawning Bunnymark WorldPosition+Phase...")
     engine.stop_all_music()
     C.setup()
     C.spawn_hud("MAP+PHASE")
-    engine.log_debug("Bunnymark MapPosition+Phase ready!")
+    engine.log_debug("Bunnymark WorldPosition+Phase ready!")
 end
 
 return M

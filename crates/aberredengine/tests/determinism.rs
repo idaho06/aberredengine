@@ -23,7 +23,7 @@ use aberredengine::bevy_ecs::prelude::*;
 use aberredengine::core::components::boxcollider::BoxCollider;
 use aberredengine::core::components::collision::CollisionRule;
 use aberredengine::core::components::group::Group;
-use aberredengine::core::components::mapposition::MapPosition;
+use aberredengine::core::components::world_position::WorldPosition;
 use aberredengine::core::events::collision::CollisionOngoing;
 use aberredengine::core::events::scene::SceneEntered;
 use aberredengine::core::protocol::raw_input::RawDeviceSnapshot;
@@ -72,7 +72,7 @@ fn scenario_driver(
             let a = commands
                 .spawn((
                     Group::new("a"),
-                    MapPosition::new(0.0, 0.0),
+                    WorldPosition::new(0.0, 0.0),
                     BoxCollider::new(10.0, 10.0),
                 ))
                 .id();
@@ -82,7 +82,7 @@ fn scenario_driver(
             let b = commands
                 .spawn((
                     Group::new("b"),
-                    MapPosition::new(2.0, 2.0),
+                    WorldPosition::new(2.0, 2.0),
                     BoxCollider::new(10.0, 10.0),
                 ))
                 .id();
@@ -100,7 +100,7 @@ fn scenario_driver(
             let c = commands
                 .spawn((
                     Group::new("a"),
-                    MapPosition::new(500.0, 500.0),
+                    WorldPosition::new(500.0, 500.0),
                     BoxCollider::new(10.0, 10.0),
                 ))
                 .id();
@@ -120,7 +120,7 @@ fn scenario_driver(
             let d = commands
                 .spawn((
                     Group::new("b"),
-                    MapPosition::new(1000.0, 1000.0),
+                    WorldPosition::new(1000.0, 1000.0),
                     BoxCollider::new(10.0, 10.0),
                 ))
                 .id();
@@ -679,7 +679,7 @@ fn golden_scenario_final_hash(seed: u64) -> u64 {
         .expect("build should succeed");
     tw.world.spawn((
         Group::new("golden"),
-        MapPosition::new(1.0, 2.0),
+        WorldPosition::new(1.0, 2.0),
         BoxCollider::new(4.0, 4.0),
     ));
 
@@ -744,7 +744,7 @@ fn world_after_setup_of(setup_ticks: u32) -> TestWorld {
             |_: On<SceneEntered>, mut commands: Commands| {
                 let mut body = RigidBody::new();
                 body.velocity = Vec2::new(30.0, 0.0);
-                commands.spawn((MapPosition::new(0.0, 0.0), body));
+                commands.spawn((WorldPosition::new(0.0, 0.0), body));
             },
         )
         .build()

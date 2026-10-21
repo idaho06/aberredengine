@@ -58,7 +58,6 @@ use crate::resources::lua_runtime::{
 use aberred_core::components::animation::Animation;
 use aberred_core::components::boxcollider::BoxCollider;
 use aberred_core::components::globaltransform2d::GlobalTransform2D;
-use aberred_core::components::mapposition::MapPosition;
 use aberred_core::components::rigidbody::RigidBody;
 use aberred_core::components::rotation::Rotation;
 use aberred_core::components::scale::Scale;
@@ -67,6 +66,7 @@ use aberred_core::components::signals::Signals;
 use aberred_core::components::sprite::Sprite;
 use aberred_core::components::timer::Timer;
 use aberred_core::components::tween::{Tween, TweenValue};
+use aberred_core::components::world_position::WorldPosition;
 use aberred_core::protocol::audio::AudioCmd;
 use aberred_core::resources::systemsstore::SystemsStore;
 
@@ -262,7 +262,7 @@ pub(crate) fn tween_finished_callback<T: TweenValue>(
 /// `EntityWorldMut` work), so every component a ctx reads lives here.
 #[derive(SystemParam)]
 pub struct ContextQueries<'w, 's> {
-    pub positions: Query<'w, 's, &'static MapPosition>,
+    pub positions: Query<'w, 's, &'static WorldPosition>,
     pub screen_positions: Query<'w, 's, &'static ScreenPosition>,
     pub rigid_bodies: Query<'w, 's, &'static RigidBody>,
     pub sprites: Query<'w, 's, &'static Sprite>,

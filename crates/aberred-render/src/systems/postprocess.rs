@@ -6,9 +6,9 @@ use rustc_hash::FxHashMap;
 
 use crate::resources::rendertarget::RenderTarget;
 use crate::resources::shaderstore::ShaderStore;
-use aberred_core::components::mapposition::MapPosition;
 use aberred_core::components::rotation::Rotation;
 use aberred_core::components::scale::Scale;
+use aberred_core::components::world_position::WorldPosition;
 use aberred_core::resources::postprocessshader::PostProcessShader;
 use aberred_core::resources::screensize::ScreenSize;
 use aberred_core::resources::uniformvalue::UniformValue;
@@ -458,7 +458,7 @@ pub(super) fn set_entity_uniforms(
     shader: &mut Shader,
     locations: &mut FxHashMap<String, i32>,
     entity: Entity,
-    pos: &MapPosition,
+    pos: &WorldPosition,
     rotation: Option<&Rotation>,
     scale: Option<&Scale>,
     size: Vector2,

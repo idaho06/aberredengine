@@ -94,7 +94,7 @@ pub enum TtlSpec {
 ///
 /// - `templates` - Entity IDs to clone (resolved from WorldSignals keys)
 /// - `shape` - Point or rectangle emission area
-/// - `offset` - Offset from owner's MapPosition
+/// - `offset` - Offset from owner's WorldPosition
 /// - `particles_per_emission` - Particles spawned per emission event
 /// - `emissions_per_second` - Emission frequency (0 or negative = disabled)
 /// - `emissions_remaining` - Emissions left before stopping (0 = stopped)
@@ -109,7 +109,7 @@ pub struct ParticleEmitter {
     pub templates: Vec<Entity>,
     /// Emission area shape.
     pub shape: EmitterShape,
-    /// Offset from owner's MapPosition.
+    /// Offset from owner's WorldPosition.
     pub offset: Vec2,
     /// Number of particles spawned per emission event.
     pub particles_per_emission: u32,

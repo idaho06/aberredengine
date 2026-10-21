@@ -523,8 +523,8 @@ pub(crate) fn lua_global<T: mlua::FromLua>(world: &World, name: &str) -> T {
 mod tests {
     use super::*;
     use aberred_core::components::animation::Animation;
-    use aberred_core::components::mapposition::MapPosition;
     use aberred_core::components::sprite::Sprite;
+    use aberred_core::components::world_position::WorldPosition;
     use aberred_core::math::Vec2;
     use bevy_ecs::message::Messages;
     use bevy_ecs::system::{RunSystemOnce, SystemState};
@@ -570,10 +570,10 @@ mod tests {
         run_drain_common_commands(world);
     }
 
-    /// Every entity's `MapPosition`, other than `except`'s.
+    /// Every entity's `WorldPosition`, other than `except`'s.
     fn positions_except(world: &mut World, except: Entity) -> Vec<Vec2> {
         world
-            .query::<(Entity, &MapPosition)>()
+            .query::<(Entity, &WorldPosition)>()
             .iter(world)
             .filter(|(e, _)| *e != except)
             .map(|(_, p)| p.pos)
@@ -582,7 +582,7 @@ mod tests {
 
     /// A template at (1, 2), registered as `"tpl"`.
     fn spawn_registered_template(world: &mut World) -> Entity {
-        let tpl = world.spawn(MapPosition::new(1.0, 2.0)).id();
+        let tpl = world.spawn(WorldPosition::new(1.0, 2.0)).id();
         world
             .resource_mut::<WorldSignals>()
             .register_entity("tpl", tpl);
@@ -599,7 +599,7 @@ mod tests {
              engine.clone('a'):build()",
         );
 
-        let mut positions = world.query::<&MapPosition>();
+        let mut positions = world.query::<&WorldPosition>();
         assert_eq!(
             positions.iter(&world).map(|p| p.pos).collect::<Vec<_>>(),
             vec![Vec2::new(1.0, 2.0); 2]
@@ -629,7 +629,7 @@ mod tests {
     #[test]
     fn register_entity_then_clone_in_one_script_clones() {
         let mut world = new_drain_test_world();
-        let tpl = world.spawn(MapPosition::new(1.0, 2.0)).id();
+        let tpl = world.spawn(WorldPosition::new(1.0, 2.0)).id();
 
         exec_and_drain(
             &mut world,

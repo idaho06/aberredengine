@@ -5,8 +5,6 @@ use super::builder::EngineBuilder;
 use super::logic_thread::LogicInit;
 use super::registrar::ObserverRegistrar;
 use aberred_audio::systems::setup_audio;
-#[cfg(feature = "lua")]
-use aberred_core::components::mapposition::MapPosition;
 use aberred_core::components::persistent::Persistent;
 #[cfg(feature = "lua")]
 use aberred_core::components::rotation::Rotation;
@@ -14,6 +12,8 @@ use aberred_core::components::rotation::Rotation;
 use aberred_core::components::scale::Scale;
 #[cfg(feature = "lua")]
 use aberred_core::components::screenposition::ScreenPosition;
+#[cfg(feature = "lua")]
+use aberred_core::components::world_position::WorldPosition;
 use aberred_core::error::EngineError;
 use aberred_core::events::gamestate::GameStateChanged;
 use aberred_core::events::gamestate::game_state_changed_observer;
@@ -366,7 +366,7 @@ impl EngineBuilder {
             ) {
                 world.spawn((Observer::new(lua_tween_finished_observer::<T>), Persistent));
             }
-            spawn_tween_finished_observer::<MapPosition>(world);
+            spawn_tween_finished_observer::<WorldPosition>(world);
             spawn_tween_finished_observer::<Rotation>(world);
             spawn_tween_finished_observer::<Scale>(world);
             spawn_tween_finished_observer::<ScreenPosition>(world);

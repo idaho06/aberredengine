@@ -73,9 +73,9 @@ function M.spawn()
         :with_group("bunnymark_menu")
         :with_menu(
             {
-                { id = "map_loop",    label = "MapPosition  + Lua Loop" },
+                { id = "map_loop",    label = "WorldPosition  + Lua Loop" },
                 { id = "screen_loop", label = "ScreenPosition + Lua Loop" },
-                { id = "map_phase",   label = "MapPosition  + Phase Callback" },
+                { id = "map_phase",   label = "WorldPosition  + Phase Callback" },
                 { id = "screen_phase",label = "ScreenPosition + Phase Callback" },
             },
             16 + 8,

@@ -14,7 +14,7 @@ use bevy_ecs::prelude::*;
 
 use crate::components::cameratarget::CameraTarget;
 use crate::components::globaltransform2d::GlobalTransform2D;
-use crate::components::mapposition::MapPosition;
+use crate::components::world_position::WorldPosition;
 use crate::resources::camera2d::MainCamera;
 use crate::resources::camerafollowconfig::{CameraFollowConfig, EasingCurve, FollowMode};
 use crate::resources::screensize::ScreenSize;
@@ -33,7 +33,7 @@ pub fn camera_follow_system(
     targets: Query<(
         Entity,
         &CameraTarget,
-        &MapPosition,
+        &WorldPosition,
         Option<&GlobalTransform2D>,
     )>,
     mut camera: ResMut<MainCamera>,

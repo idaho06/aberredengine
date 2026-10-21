@@ -19,7 +19,6 @@ use aberred_core::components::dynamictext::DynamicText;
 use aberred_core::components::entityshader::EntityShader;
 use aberred_core::components::group::Group;
 use aberred_core::components::guioffset::GuiOffset;
-use aberred_core::components::mapposition::MapPosition;
 use aberred_core::components::persistent::Persistent;
 use aberred_core::components::phase::Phase;
 use aberred_core::components::rigidbody::RigidBody;
@@ -34,6 +33,7 @@ use aberred_core::components::stuckto::StuckTo;
 use aberred_core::components::tilemap::TileMap;
 use aberred_core::components::tint::Tint;
 use aberred_core::components::ttl::Ttl;
+use aberred_core::components::world_position::WorldPosition;
 use aberred_core::components::zindex::ZIndex;
 use aberred_core::math::Color;
 
@@ -195,7 +195,7 @@ fn apply_transform_components(
     transform: TransformComponents,
 ) {
     if let Some((x, y)) = transform.position {
-        entity_commands.insert(MapPosition::new(x, y));
+        entity_commands.insert(WorldPosition::new(x, y));
     }
     if let Some((x, y)) = transform.screen_position {
         entity_commands.insert(ScreenPosition::new(x, y));
@@ -339,17 +339,17 @@ fn apply_animation_components(
     }
     if let Some(td) = tween_position {
         entity_commands.insert(super::build_tween(
-            MapPosition::from_vec(Vec2 {
+            WorldPosition::from_vec(Vec2 {
                 x: td.from_x,
                 y: td.from_y,
             }),
-            MapPosition::from_vec(Vec2 {
+            WorldPosition::from_vec(Vec2 {
                 x: td.to_x,
                 y: td.to_y,
             }),
             &td.config,
         ));
-        entity_commands.queue_silenced(super::tween_finished_callback::<MapPosition>(&td.config));
+        entity_commands.queue_silenced(super::tween_finished_callback::<WorldPosition>(&td.config));
     }
     if let Some(td) = tween_screen_position {
         entity_commands.insert(super::build_tween(
@@ -717,7 +717,7 @@ mod tests {
     #[test]
     fn clone_of_despawned_source_skips_and_cleans_registry() {
         let mut world = World::new();
-        let source = world.spawn(MapPosition::new(1.0, 2.0)).id();
+        let source = world.spawn(WorldPosition::new(1.0, 2.0)).id();
         world.despawn(source);
 
         let mut world_signals = WorldSignals::default();
@@ -812,7 +812,7 @@ mod tests {
     #[test]
     fn clone_of_live_source_spawns_new_entity() {
         let mut world = World::new();
-        let source = world.spawn(MapPosition::new(1.0, 2.0)).id();
+        let source = world.spawn(WorldPosition::new(1.0, 2.0)).id();
 
         let mut world_signals = WorldSignals::default();
         world_signals.register_entity("tpl", source);
@@ -834,7 +834,7 @@ mod tests {
         system_state.apply(&mut world);
 
         // Source entity plus the newly cloned entity should both exist.
-        let mut query = world.query::<&MapPosition>();
+        let mut query = world.query::<&WorldPosition>();
         assert_eq!(query.iter(&world).count(), 2);
     }
 
@@ -871,7 +871,11 @@ mod tests {
     fn clone_overrides_win_and_source_is_untouched() {
         let mut world = World::new();
         let source = world
-            .spawn((MapPosition::new(1.0, 2.0), Group::new("enemy"), ZIndex(3.0)))
+            .spawn((
+                WorldPosition::new(1.0, 2.0),
+                Group::new("enemy"),
+                ZIndex(3.0),
+            ))
             .id();
         let mut world_signals = WorldSignals::default();
         world_signals.register_entity("tpl", source);
@@ -887,7 +891,7 @@ mod tests {
         );
 
         assert_eq!(
-            world.get::<MapPosition>(clone).unwrap().pos,
+            world.get::<WorldPosition>(clone).unwrap().pos,
             Vec2::new(10.0, 20.0)
         );
         assert_eq!(world.get::<Group>(clone).unwrap().0, "boss");
@@ -897,7 +901,7 @@ mod tests {
             "components without an override are cloned"
         );
         assert_eq!(
-            world.get::<MapPosition>(source).unwrap().pos,
+            world.get::<WorldPosition>(source).unwrap().pos,
             Vec2::new(1.0, 2.0)
         );
         assert_eq!(world.get::<Group>(source).unwrap().0, "enemy");
@@ -953,7 +957,7 @@ mod tests {
     #[test]
     fn clone_register_as_stores_the_clone_not_the_source() {
         let mut world = World::new();
-        let source = world.spawn(MapPosition::new(0.0, 0.0)).id();
+        let source = world.spawn(WorldPosition::new(0.0, 0.0)).id();
         let mut world_signals = WorldSignals::default();
         world_signals.register_entity("tpl", source);
 
@@ -974,7 +978,7 @@ mod tests {
     #[test]
     fn clone_of_unregistered_key_spawns_nothing() {
         let mut world = World::new();
-        world.spawn(MapPosition::new(0.0, 0.0));
+        world.spawn(WorldPosition::new(0.0, 0.0));
         let mut world_signals = WorldSignals::default();
         let before = world.entities().count_spawned();
 
@@ -1084,7 +1088,7 @@ mod tests {
     fn lua_spawn_applies_transform_components() {
         let mut world = World::new();
         let mut signals = WorldSignals::default();
-        let target = world.spawn(MapPosition::new(0.0, 0.0)).id();
+        let target = world.spawn(WorldPosition::new(0.0, 0.0)).id();
         let script = format!(
             "engine.spawn():with_position(1, 2):with_screen_position(3, 4):with_rotation(45)\
              :with_scale(2, 3):with_stuckto({}, true, false):with_stuckto_offset(5, 6)\
@@ -1094,7 +1098,7 @@ mod tests {
         let e = spawn_from_lua(&mut world, &mut signals, &script);
 
         assert_eq!(
-            world.get::<MapPosition>(e).unwrap().pos,
+            world.get::<WorldPosition>(e).unwrap().pos,
             Vec2::new(1.0, 2.0)
         );
         assert_eq!(
@@ -1116,7 +1120,7 @@ mod tests {
     fn lua_spawn_with_parent_inserts_childof_and_gui_offset() {
         let mut world = World::new();
         let mut signals = WorldSignals::default();
-        let parent = world.spawn(MapPosition::new(10.0, 0.0)).id();
+        let parent = world.spawn(WorldPosition::new(10.0, 0.0)).id();
         let script = format!(
             "engine.spawn():with_position(1, 0):with_parent({}):with_gui_offset(3, 4)\
              :with_camera_target(1, 2.5):build()",
@@ -1142,7 +1146,7 @@ mod tests {
         assert!(world.get::<ChildOf>(e).is_none());
         assert!(world.get::<StuckTo>(e).is_none());
         assert_eq!(
-            world.get::<MapPosition>(e).unwrap().pos,
+            world.get::<WorldPosition>(e).unwrap().pos,
             Vec2::new(1.0, 2.0)
         );
     }
@@ -1222,7 +1226,7 @@ mod tests {
              :build()",
         );
 
-        let pos = world.get::<Tween<MapPosition>>(e).unwrap();
+        let pos = world.get::<Tween<WorldPosition>>(e).unwrap();
         assert_eq!(
             (pos.from.pos, pos.to.pos),
             (Vec2::ZERO, Vec2::new(10.0, 20.0))
@@ -1246,7 +1250,7 @@ mod tests {
 
         assert_eq!(
             &*world
-                .get::<LuaOnTweenFinished<MapPosition>>(e)
+                .get::<LuaOnTweenFinished<WorldPosition>>(e)
                 .unwrap()
                 .callback,
             "pos_done"
@@ -1422,7 +1426,7 @@ mod tests {
         use aberred_core::components::menu::{Menu, MenuAction, MenuActions};
         let mut world = World::new();
         let mut signals = WorldSignals::default();
-        let cursor = world.spawn(MapPosition::new(0.0, 0.0)).id();
+        let cursor = world.spawn(WorldPosition::new(0.0, 0.0)).id();
         signals.register_entity("cursor", cursor);
 
         let e = spawn_from_lua(
@@ -1556,7 +1560,7 @@ mod tests {
         use aberred_core::components::particleemitter::{EmitterShape, ParticleEmitter, TtlSpec};
         let mut world = World::new();
         let mut signals = WorldSignals::default();
-        let spark = world.spawn(MapPosition::new(0.0, 0.0)).id();
+        let spark = world.spawn(WorldPosition::new(0.0, 0.0)).id();
         signals.register_entity("spark", spark);
 
         let e = spawn_from_lua(

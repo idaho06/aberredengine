@@ -8,7 +8,7 @@ mod timers {
 
     // Spawn an entity with a 2-second repeating timer and a per-entity observer
     commands
-        .spawn((MapPosition::new(0.0, 0.0), Timer::new(2.0)))
+        .spawn((WorldPosition::new(0.0, 0.0), Timer::new(2.0)))
         .observe(on_timer_fired);
 
     fn on_timer_fired(ev: On<TimerFired>, mut signals: ResMut<WorldSignals>) {
@@ -22,11 +22,11 @@ mod timers {
 
     fn on_spawner_timer(
         ev: On<TimerFired>,
-        spawners: Query<&MapPosition, With<Spawner>>,
+        spawners: Query<&WorldPosition, With<Spawner>>,
         mut commands: Commands,
     ) {
         let Ok(pos) = spawners.get(ev.entity) else { return };
-        commands.spawn(MapPosition::new(pos.pos.x, pos.pos.y));
+        commands.spawn(WorldPosition::new(pos.pos.x, pos.pos.y));
     }
 
     fn register(builder: EngineBuilder) -> EngineBuilder { // GLUE
@@ -64,7 +64,7 @@ mod phase_state_machines {
     fn spawn_player(mut commands: Commands) {
         commands.spawn((
             Player,
-            MapPosition::new(100.0, 200.0),
+            WorldPosition::new(100.0, 200.0),
             RigidBody::default(),
             // ... sprite, collider, etc ...
             Phase::new("idle"),
@@ -275,7 +275,7 @@ mod tween_finished_event {
     use aberredengine::prelude::*;
 
     fn on_move_tween_done(
-        trigger: On<TweenFinished<MapPosition>>,
+        trigger: On<TweenFinished<WorldPosition>>,
         mut commands: Commands,
     ) {
         // Despawn the entity whose move tween just finished

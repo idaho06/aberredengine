@@ -32,13 +32,13 @@ use aberred_core::components::guiinteractable::GuiInteractable;
 use aberred_core::components::guilabel::GuiLabel;
 use aberred_core::components::guiprogressbar::GuiProgressBar;
 use aberred_core::components::guiwindow::GuiWindow;
-use aberred_core::components::mapposition::MapPosition;
 use aberred_core::components::rotation::Rotation;
 use aberred_core::components::scale::Scale;
 use aberred_core::components::screenposition::ScreenPosition;
 use aberred_core::components::shadow::Shadow;
 use aberred_core::components::sprite::Sprite;
 use aberred_core::components::tint::Tint;
+use aberred_core::components::world_position::WorldPosition;
 use aberred_core::components::zindex::ZIndex;
 use aberred_core::resources::drawable_snapshot::{
     GuiButtonEntry, GuiLabelEntry, GuiProgressBarEntry, GuiWindowEntry, MapSpriteEntry,
@@ -251,7 +251,7 @@ pub fn reconcile_map_texts(world: &mut World, entries: &[MapTextEntry]) {
 }
 
 /// Reconcile the render world's screen-sprite mirror entities against this
-/// snapshot tick's `ScreenSpriteEntry` list. Simpler than the map-space
+/// snapshot tick's `ScreenSpriteEntry` list. Simpler than the world-space
 /// categories: screen space has no `Scale`/`Rotation`/`EntityShader`/
 /// `GlobalTransform2D`/velocity concept (mirrors `ScreenSpriteEntry`'s own
 /// reduced field set).
@@ -408,7 +408,7 @@ pub fn reconcile_gui_progress_bars(world: &mut World, entries: &[GuiProgressBarE
 type MirrorMapSpriteQueryData = (
     &'static SimMirror,
     &'static Sprite,
-    &'static MapPosition,
+    &'static WorldPosition,
     &'static ZIndex,
     Option<&'static Scale>,
     Option<&'static Rotation>,
@@ -422,7 +422,7 @@ type MirrorMapSpriteQueryData = (
 type MirrorMapTextQueryData = (
     &'static SimMirror,
     &'static DynamicText,
-    &'static MapPosition,
+    &'static WorldPosition,
     &'static ZIndex,
     Option<&'static EntityShader>,
     Option<&'static Tint>,
@@ -532,7 +532,7 @@ mod mirror_tests {
         MapSpriteEntry {
             entity,
             sprite: Sprite::new("test", 16.0, 16.0),
-            position: MapPosition::from_vec(Vec2::new(1.0, 2.0)),
+            position: WorldPosition::from_vec(Vec2::new(1.0, 2.0)),
             z_index: ZIndex(z_index),
             scale: None,
             rotation: None,
@@ -753,7 +753,7 @@ mod mirror_tests {
         MapTextEntry {
             entity,
             text: DynamicText::new("hi", "font", 16.0, aberred_core::math::Color::WHITE),
-            position: MapPosition::from_vec(Vec2::new(1.0, 2.0)),
+            position: WorldPosition::from_vec(Vec2::new(1.0, 2.0)),
             z_index: ZIndex(z_index),
             shader: None,
             tint: None,

@@ -18,13 +18,13 @@ use crate::components::animation::Animation;
 use crate::components::boxcollider::BoxCollider;
 use crate::components::dynamictext::DynamicText;
 use crate::components::group::Group;
-use crate::components::mapposition::MapPosition;
 use crate::components::particleemitter::{EmitterShape, ParticleEmitter, TtlSpec};
 use crate::components::rotation::Rotation;
 use crate::components::scale::Scale;
 use crate::components::sprite::Sprite;
 use crate::components::tilemap::TileMap;
 use crate::components::tint::Tint;
+use crate::components::world_position::WorldPosition;
 use crate::components::zindex::ZIndex;
 use crate::events::spawnmap::{MapSpawned, SpawnMapRequested};
 use crate::math::Color;
@@ -132,7 +132,7 @@ fn spawn_entity(commands: &mut Commands, def: &EntityDef) -> Entity {
     let entity = ec.id();
 
     if let Some([x, y]) = def.position {
-        ec.insert(MapPosition::new(x, y));
+        ec.insert(WorldPosition::new(x, y));
     }
     if let Some(ref s) = def.sprite {
         ec.insert(Sprite {
@@ -175,7 +175,7 @@ fn spawn_entity(commands: &mut Commands, def: &EntityDef) -> Entity {
         );
         if def.position.is_none() {
             log::warn!(
-                "spawn_entity: entity {} has BoxCollider but no position — excluded from collision detection (collision_detector requires MapPosition)",
+                "spawn_entity: entity {} has BoxCollider but no position — excluded from collision detection (collision_detector requires WorldPosition)",
                 entity.to_bits(),
             );
         }
@@ -418,7 +418,7 @@ mod tests {
             other => panic!("expected RenderAssetCmd::Font, got {other:?}"),
         }
 
-        let mut position_query = world.query::<&MapPosition>();
+        let mut position_query = world.query::<&WorldPosition>();
         assert_eq!(position_query.iter(&world).count(), 1);
     }
 
@@ -522,7 +522,7 @@ mod tests {
         let (hero, other) = (entities[0], entities[1]);
 
         assert_eq!(
-            world.get::<MapPosition>(hero).unwrap().pos,
+            world.get::<WorldPosition>(hero).unwrap().pos,
             Vec2::new(1.0, 2.0)
         );
         let s = world.get::<Sprite>(hero).unwrap();
@@ -560,7 +560,7 @@ mod tests {
             world.get::<TileMap>(other).unwrap().path,
             "assets/tilemaps/x"
         );
-        assert!(world.get::<MapPosition>(other).is_none());
+        assert!(world.get::<WorldPosition>(other).is_none());
         assert!(world.get::<Group>(other).is_none());
     }
 
@@ -688,7 +688,7 @@ mod tests {
             .get_entity("thing")
             .unwrap();
         assert_eq!(
-            world.get::<MapPosition>(thing).unwrap().pos,
+            world.get::<WorldPosition>(thing).unwrap().pos,
             Vec2::new(4.0, 5.0)
         );
     }

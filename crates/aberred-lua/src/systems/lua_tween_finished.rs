@@ -7,7 +7,7 @@
 //!
 //! Entities without `LuaOnTweenFinished<T>` are silently skipped. Register
 //! one monomorphized instance of this observer per tweened type
-//! (`MapPosition`, `Rotation`, `Scale`, `ScreenPosition`).
+//! (`WorldPosition`, `Rotation`, `Scale`, `ScreenPosition`).
 //!
 //! # Lua callback signature
 //!

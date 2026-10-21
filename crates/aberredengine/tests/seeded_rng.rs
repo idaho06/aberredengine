@@ -11,10 +11,10 @@
 
 use aberredengine::bevy_ecs::prelude::*;
 use aberredengine::core::components::emittedparticle::EmittedParticle;
-use aberredengine::core::components::mapposition::MapPosition;
 use aberredengine::core::components::particleemitter::ParticleEmitter;
 use aberredengine::core::components::rigidbody::RigidBody;
 use aberredengine::core::components::ttl::Ttl;
+use aberredengine::core::components::world_position::WorldPosition;
 use aberredengine::test_support::TestWorldBuilder;
 
 mod common;
@@ -43,7 +43,7 @@ fn scenario_driver(
         // Tick 1: spawn the particle template.
         1 => {
             let t = commands
-                .spawn((MapPosition::new(0.0, 0.0), RigidBody::new()))
+                .spawn((WorldPosition::new(0.0, 0.0), RigidBody::new()))
                 .id();
             *template = Some(t);
         }
@@ -54,7 +54,7 @@ fn scenario_driver(
         2 => {
             let t = template.expect("template spawned on tick 1");
             commands.spawn((
-                MapPosition::new(0.0, 0.0),
+                WorldPosition::new(0.0, 0.0),
                 ParticleEmitter {
                     templates: vec![t],
                     shape: aberredengine::core::components::particleemitter::EmitterShape::Rect {
@@ -90,7 +90,7 @@ fn run_scenario(seed: u64) -> Vec<ParticleSample> {
 
     let mut samples: Vec<ParticleSample> = tw
         .world
-        .query::<(&MapPosition, &RigidBody, Option<&Ttl>, &EmittedParticle)>()
+        .query::<(&WorldPosition, &RigidBody, Option<&Ttl>, &EmittedParticle)>()
         .iter(&tw.world)
         .map(|(pos, rb, ttl, _)| ParticleSample {
             pos: (pos.pos.x, pos.pos.y),

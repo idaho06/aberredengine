@@ -168,12 +168,12 @@ fn screen_space_gui_hierarchy_is_ignored_by_propagate_transforms() {
 
     assert!(
         world.get::<GlobalTransform2D>(window).is_none(),
-        "screen-space GUI root has no MapPosition, so propagate_transforms's \
+        "screen-space GUI root has no WorldPosition, so propagate_transforms's \
          RootsQuery must not match it"
     );
     assert!(
         world.get::<GlobalTransform2D>(button).is_none(),
-        "screen-space GUI child has no MapPosition, so propagate_transforms's \
+        "screen-space GUI child has no WorldPosition, so propagate_transforms's \
          ChildrenQuery must not match it"
     );
 }
