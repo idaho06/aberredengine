@@ -335,7 +335,7 @@ Collision callbacks process commands from their own dedicated queues, which are 
 - `engine.collision_entity_set_velocity()` instead of `engine.entity_set_velocity()`
 - `engine.collision_entity_despawn()` instead of `engine.entity_despawn()`
 - `engine.collision_entity_signal_set_flag()` instead of `engine.entity_signal_set_flag()`
-- `engine.collision_entity_signal_clear_flag()` instead of `engine.entity_signal_clear_flag()`
+- `engine.collision_entity_signal_remove_flag()` instead of `engine.entity_signal_remove_flag()`
 - `engine.collision_entity_signal_set_integer()` instead of `engine.entity_signal_set_integer()`
 - `engine.collision_entity_signal_set_scalar()` instead of `engine.entity_signal_set_scalar()`
 - `engine.collision_entity_signal_set_string()` instead of `engine.entity_signal_set_string()`
@@ -373,7 +373,7 @@ Collision callbacks process commands from their own dedicated queues, which are 
 - `engine.collision_entity_shader_set_int()` instead of `engine.entity_shader_set_int()`
 - `engine.collision_entity_shader_set_vec2()` instead of `engine.entity_shader_set_vec2()`
 - `engine.collision_entity_shader_set_vec4()` instead of `engine.entity_shader_set_vec4()`
-- `engine.collision_entity_shader_clear_uniform()` instead of `engine.entity_shader_clear_uniform()`
+- `engine.collision_entity_shader_remove_uniform()` instead of `engine.entity_shader_remove_uniform()`
 - `engine.collision_entity_shader_clear_uniforms()` instead of `engine.entity_shader_clear_uniforms()`
 - `engine.collision_entity_set_tint()` instead of `engine.entity_set_tint()`
 - `engine.collision_entity_remove_tint()` instead of `engine.entity_remove_tint()`
@@ -3144,12 +3144,12 @@ Set flag on entity's Signals component.
 engine.entity_signal_set_flag(player_id, "sticky")
 ```
 
-### `engine.entity_signal_clear_flag(entity_id, flag)`
+### `engine.entity_signal_remove_flag(entity_id, flag)`
 
-Clear flag on entity's Signals component.
+Remove a flag from an entity's Signals component.
 
 ```lua
-engine.entity_signal_clear_flag(player_id, "sticky")
+engine.entity_signal_remove_flag(player_id, "sticky")
 ```
 
 ### `engine.entity_signal_toggle_flag(entity_id, flag)`
@@ -3169,12 +3169,12 @@ engine.entity_signal_set_integer(player_id, "hp", 3)
 engine.entity_signal_set_integer(enemy_id, "damage", 10)
 ```
 
-### `engine.entity_signal_clear_integer(entity_id, key)`
+### `engine.entity_signal_remove_integer(entity_id, key)`
 
-Clear an integer signal on entity.
+Remove an integer signal from an entity.
 
 ```lua
-engine.entity_signal_clear_integer(enemy_id, "damage")
+engine.entity_signal_remove_integer(enemy_id, "damage")
 ```
 
 ### `engine.entity_signal_set_scalar(entity_id, key, value)`
@@ -3185,12 +3185,12 @@ Set floating-point signal on entity.
 engine.entity_signal_set_scalar(player_id, "speed", 150.5)
 ```
 
-### `engine.entity_signal_clear_scalar(entity_id, key)`
+### `engine.entity_signal_remove_scalar(entity_id, key)`
 
-Clear a floating-point signal on entity.
+Remove a floating-point signal from an entity.
 
 ```lua
-engine.entity_signal_clear_scalar(player_id, "speed")
+engine.entity_signal_remove_scalar(player_id, "speed")
 ```
 
 ### `engine.entity_signal_set_string(entity_id, key, value)`
@@ -3201,12 +3201,12 @@ Set string signal on entity.
 engine.entity_signal_set_string(player_id, "state", "running")
 ```
 
-### `engine.entity_signal_clear_string(entity_id, key)`
+### `engine.entity_signal_remove_string(entity_id, key)`
 
-Clear a string signal on entity.
+Remove a string signal from an entity.
 
 ```lua
-engine.entity_signal_clear_string(player_id, "state")
+engine.entity_signal_remove_string(player_id, "state")
 ```
 
 ### `engine.entity_insert_lua_timer(entity_id, duration, callback)`
@@ -3246,7 +3246,7 @@ end
 
 -- Timer callback: runs once
 function remove_invulnerability(ctx, input)
-    engine.entity_signal_clear_flag(ctx.id, "invulnerable")
+    engine.entity_signal_remove_flag(ctx.id, "invulnerable")
     engine.play_sound("powerup_end")
     engine.log_info("Invulnerability expired for entity " .. ctx.id)
 end
@@ -4159,9 +4159,9 @@ function on_player_powerup(ctx)
 end
 ```
 
-#### `engine.collision_entity_signal_clear_flag(entity_id, flag)`
+#### `engine.collision_entity_signal_remove_flag(entity_id, flag)`
 
-Clear a flag on an entity's Signals component during collision handling.
+Remove a flag from an entity's Signals component during collision handling.
 
 **Parameters:**
 
@@ -4171,7 +4171,7 @@ Clear a flag on an entity's Signals component during collision handling.
 ```lua
 function on_player_debuff_zone(ctx)
     local player_id = ctx.a.id
-    engine.collision_entity_signal_clear_flag(player_id, "shield_active")
+    engine.collision_entity_signal_remove_flag(player_id, "shield_active")
 end
 ```
 
@@ -4340,13 +4340,13 @@ function on_player_speed_boost(ctx)
 end
 ```
 
-#### `engine.collision_entity_signal_clear_scalar(entity_id, key)`
+#### `engine.collision_entity_signal_remove_scalar(entity_id, key)`
 
-Clear a floating-point signal on an entity's Signals component during collision handling.
+Remove a floating-point signal from an entity's Signals component during collision handling.
 
 ```lua
 function on_player_speed_reset(ctx)
-    engine.collision_entity_signal_clear_scalar(ctx.a.id, "speed_multiplier")
+    engine.collision_entity_signal_remove_scalar(ctx.a.id, "speed_multiplier")
 end
 ```
 
@@ -4367,23 +4367,23 @@ function on_player_color_change(ctx)
 end
 ```
 
-#### `engine.collision_entity_signal_clear_string(entity_id, key)`
+#### `engine.collision_entity_signal_remove_string(entity_id, key)`
 
-Clear a string signal on an entity's Signals component during collision handling.
+Remove a string signal from an entity's Signals component during collision handling.
 
 ```lua
 function on_player_color_reset(ctx)
-    engine.collision_entity_signal_clear_string(ctx.a.id, "color")
+    engine.collision_entity_signal_remove_string(ctx.a.id, "color")
 end
 ```
 
-#### `engine.collision_entity_signal_clear_integer(entity_id, key)`
+#### `engine.collision_entity_signal_remove_integer(entity_id, key)`
 
-Clear an integer signal on an entity's Signals component during collision handling.
+Remove an integer signal from an entity's Signals component during collision handling.
 
 ```lua
 function on_player_reset_hits(ctx)
-    engine.collision_entity_signal_clear_integer(ctx.a.id, "combo_hits")
+    engine.collision_entity_signal_remove_integer(ctx.a.id, "combo_hits")
 end
 ```
 
@@ -5285,7 +5285,7 @@ function player_sticky_update(ctx, input, dt)
 end
 
 function player_glowing_enter(ctx, input)
-    engine.entity_signal_clear_flag(ctx.id, "sticky")
+    engine.entity_signal_remove_flag(ctx.id, "sticky")
     engine.entity_set_animation(ctx.id, "vaus_glowing")
 end
 
@@ -5382,8 +5382,8 @@ engine.post_process_set_vec2("uOffset", 0.1, 0.2)
 -- Set vec4 uniform
 engine.post_process_set_vec4("uTint", 1.0, 0.8, 0.6, 1.0)
 
--- Clear a single uniform
-engine.post_process_clear_uniform("uIntensity")
+-- Remove a single uniform
+engine.post_process_remove_uniform("uIntensity")
 
 -- Clear all uniforms
 engine.post_process_clear_uniforms()
@@ -5516,8 +5516,8 @@ engine.entity_shader_set_vec2(entity_id, "uOffset", 10.0, 20.0)
 -- Set vec4 uniform (color, etc.)
 engine.entity_shader_set_vec4(entity_id, "uColor", 1.0, 0.0, 0.0, 1.0)
 
--- Clear a single uniform
-engine.entity_shader_clear_uniform(entity_id, "uIntensity")
+-- Remove a single uniform
+engine.entity_shader_remove_uniform(entity_id, "uIntensity")
 
 -- Clear all uniforms
 engine.entity_shader_clear_uniforms(entity_id)
@@ -5543,7 +5543,7 @@ Available collision variants:
 - `engine.collision_entity_shader_set_int(entity_id, name, value)`
 - `engine.collision_entity_shader_set_vec2(entity_id, name, x, y)`
 - `engine.collision_entity_shader_set_vec4(entity_id, name, x, y, z, w)`
-- `engine.collision_entity_shader_clear_uniform(entity_id, name)`
+- `engine.collision_entity_shader_remove_uniform(entity_id, name)`
 - `engine.collision_entity_shader_clear_uniforms(entity_id)`
 
 ### Standard Uniforms

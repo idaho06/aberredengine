@@ -47,12 +47,12 @@ end
 local function update_facing_direction(id, input)
     if input.digital.left.pressed and not input.digital.right.pressed then
         log_debug(string.format("update_facing_direction id=%d -> LEFT", id))
-        engine.entity_signal_clear_flag(id, "facing_right")
+        engine.entity_signal_remove_flag(id, "facing_right")
         engine.entity_signal_set_flag(id, "facing_left")
         engine.entity_set_sprite_flip(id, true, false)
     elseif input.digital.right.pressed and not input.digital.left.pressed then
         log_debug(string.format("update_facing_direction id=%d -> RIGHT", id))
-        engine.entity_signal_clear_flag(id, "facing_left")
+        engine.entity_signal_remove_flag(id, "facing_left")
         engine.entity_signal_set_flag(id, "facing_right")
         engine.entity_set_sprite_flip(id, false, false)
     end
@@ -118,10 +118,10 @@ local function on_update_sidescroller_level01(input, dt)
 
     local player_id = engine.get_entity("player")
     if player_id then
-        engine.entity_signal_clear_flag(player_id, "on_ground")
-        engine.entity_signal_clear_flag(player_id, "touching_wall_left")
-        engine.entity_signal_clear_flag(player_id, "touching_wall_right")
-        engine.entity_signal_clear_flag(player_id, "touching_ceiling")
+        engine.entity_signal_remove_flag(player_id, "on_ground")
+        engine.entity_signal_remove_flag(player_id, "touching_wall_left")
+        engine.entity_signal_remove_flag(player_id, "touching_wall_right")
+        engine.entity_signal_remove_flag(player_id, "touching_ceiling")
         log_debug(string.format(
             "on_update: cleared flags for player_id=%d dt=%.4f", player_id, dt))
     end
@@ -197,7 +197,7 @@ end
 local function player_running_on_exit(ctx)
     log_debug(string.format("player_running_on_exit id=%d pos=(%.1f,%.1f) vel=(%.1f,%.1f)",
         ctx.id, ctx.pos.x, ctx.pos.y, ctx.vel.x, ctx.vel.y))
-    engine.entity_signal_clear_flag(ctx.id, "running")
+    engine.entity_signal_remove_flag(ctx.id, "running")
 end
 
 --- Called when entering the walking phase.
@@ -269,7 +269,7 @@ end
 local function player_walking_on_exit(ctx)
     log_debug(string.format("player_walking_on_exit id=%d pos=(%.1f,%.1f) vel=(%.1f,%.1f)",
         ctx.id, ctx.pos.x, ctx.pos.y, ctx.vel.x, ctx.vel.y))
-    engine.entity_signal_clear_flag(ctx.id, "walking")
+    engine.entity_signal_remove_flag(ctx.id, "walking")
 end
 
 --- Called when entering the falling phase.
@@ -313,7 +313,7 @@ end
 local function player_falling_on_exit(ctx)
     log_debug(string.format("player_falling_on_exit id=%d pos=(%.1f,%.1f) vel=(%.1f,%.1f)",
         ctx.id, ctx.pos.x, ctx.pos.y, ctx.vel.x, ctx.vel.y))
-    engine.entity_signal_clear_flag(ctx.id, "falling")
+    engine.entity_signal_remove_flag(ctx.id, "falling")
 end
 
 --- Called when entering the jumping phase.
@@ -361,7 +361,7 @@ end
 local function player_jumping_on_exit(ctx)
     log_debug(string.format("player_jumping_on_exit id=%d pos=(%.1f,%.1f) vel=(%.1f,%.1f)",
         ctx.id, ctx.pos.x, ctx.pos.y, ctx.vel.x, ctx.vel.y))
-    engine.entity_signal_clear_flag(ctx.id, "jumping")
+    engine.entity_signal_remove_flag(ctx.id, "jumping")
 end
 
 --- Called when entering the idle phase.
@@ -463,7 +463,7 @@ local function player_attack_on_update(ctx, input, dt)
     end
     if anim_ended then
         log_debug("player_attack_on_update: animation_ended -> idle")
-        engine.entity_signal_clear_flag(ctx.id, "animation_ended")
+        engine.entity_signal_remove_flag(ctx.id, "animation_ended")
         return "idle"
     end
 end
@@ -473,7 +473,7 @@ end
 local function player_attack_on_exit(ctx)
     log_debug(string.format("player_attack_on_exit id=%d pos=(%.1f,%.1f) vel=(%.1f,%.1f)",
         ctx.id, ctx.pos.x, ctx.pos.y, ctx.vel.x, ctx.vel.y))
-    engine.entity_signal_clear_flag(ctx.id, "attack")
+    engine.entity_signal_remove_flag(ctx.id, "attack")
     -- engine.entity_unfreeze(ctx.id)
     -- Despawn the hitbox child
     local hitbox_id = engine.get_entity("attack_hitbox")
@@ -561,8 +561,8 @@ local function collision_solid_player(ctx)
             "collision_solid_player: ground snap pos_y %.1f -> %.1f vel_y %.1f -> 0",
             ctx.b.pos.y, snap_y, ctx.b.vel.y))
         engine.collision_entity_signal_set_flag(ctx.b.id, "on_ground")
-        engine.collision_entity_signal_clear_flag(ctx.b.id, "falling")
-        engine.collision_entity_signal_clear_flag(ctx.b.id, "jumping")
+        engine.collision_entity_signal_remove_flag(ctx.b.id, "falling")
+        engine.collision_entity_signal_remove_flag(ctx.b.id, "jumping")
         local vel = ctx.b.vel
         engine.collision_entity_set_velocity(ctx.b.id, vel.x, 0)
         engine.collision_entity_set_position(ctx.b.id, ctx.b.pos.x, snap_y)

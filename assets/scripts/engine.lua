@@ -786,14 +786,14 @@ function engine.collision_entity_set_tint(entity_id, r, g, b, a) end
 ---@param vy number
 function engine.collision_entity_set_velocity(entity_id, vx, vy) end
 
----Clear a uniform on entity shader
----@param entity_id integer
----@param name string
-function engine.collision_entity_shader_clear_uniform(entity_id, name) end
-
 ---Clear all uniforms on entity shader
 ---@param entity_id integer
 function engine.collision_entity_shader_clear_uniforms(entity_id) end
+
+---Remove a uniform from an entity shader
+---@param entity_id integer
+---@param name string
+function engine.collision_entity_shader_remove_uniform(entity_id, name) end
 
 ---Set a float uniform on entity shader
 ---@param entity_id integer
@@ -823,25 +823,25 @@ function engine.collision_entity_shader_set_vec2(entity_id, name, x, y) end
 ---@param w number
 function engine.collision_entity_shader_set_vec4(entity_id, name, x, y, z, w) end
 
----Clear a flag on an entity's signals
+---Remove a flag from an entity's signals
 ---@param entity_id integer
 ---@param flag string
-function engine.collision_entity_signal_clear_flag(entity_id, flag) end
+function engine.collision_entity_signal_remove_flag(entity_id, flag) end
 
----Clear an integer signal on an entity
+---Remove an integer signal from an entity
 ---@param entity_id integer
 ---@param key string
-function engine.collision_entity_signal_clear_integer(entity_id, key) end
+function engine.collision_entity_signal_remove_integer(entity_id, key) end
 
----Clear a scalar signal on an entity
+---Remove a scalar signal from an entity
 ---@param entity_id integer
 ---@param key string
-function engine.collision_entity_signal_clear_scalar(entity_id, key) end
+function engine.collision_entity_signal_remove_scalar(entity_id, key) end
 
----Clear a string signal on an entity
+---Remove a string signal from an entity
 ---@param entity_id integer
 ---@param key string
-function engine.collision_entity_signal_clear_string(entity_id, key) end
+function engine.collision_entity_signal_remove_string(entity_id, key) end
 
 ---Set a flag on an entity's signals
 ---@param entity_id integer
@@ -1163,14 +1163,14 @@ function engine.entity_set_tint(entity_id, r, g, b, a) end
 ---@param vy number
 function engine.entity_set_velocity(entity_id, vx, vy) end
 
----Clear a uniform on entity shader
----@param entity_id integer
----@param name string
-function engine.entity_shader_clear_uniform(entity_id, name) end
-
 ---Clear all uniforms on entity shader
 ---@param entity_id integer
 function engine.entity_shader_clear_uniforms(entity_id) end
+
+---Remove a uniform from an entity shader
+---@param entity_id integer
+---@param name string
+function engine.entity_shader_remove_uniform(entity_id, name) end
 
 ---Set a float uniform on entity shader
 ---@param entity_id integer
@@ -1200,25 +1200,25 @@ function engine.entity_shader_set_vec2(entity_id, name, x, y) end
 ---@param w number
 function engine.entity_shader_set_vec4(entity_id, name, x, y, z, w) end
 
----Clear a flag on an entity's signals
+---Remove a flag from an entity's signals
 ---@param entity_id integer
 ---@param flag string
-function engine.entity_signal_clear_flag(entity_id, flag) end
+function engine.entity_signal_remove_flag(entity_id, flag) end
 
----Clear an integer signal on an entity
+---Remove an integer signal from an entity
 ---@param entity_id integer
 ---@param key string
-function engine.entity_signal_clear_integer(entity_id, key) end
+function engine.entity_signal_remove_integer(entity_id, key) end
 
----Clear a scalar signal on an entity
+---Remove a scalar signal from an entity
 ---@param entity_id integer
 ---@param key string
-function engine.entity_signal_clear_scalar(entity_id, key) end
+function engine.entity_signal_remove_scalar(entity_id, key) end
 
----Clear a string signal on an entity
+---Remove a string signal from an entity
 ---@param entity_id integer
 ---@param key string
-function engine.entity_signal_clear_string(entity_id, key) end
+function engine.entity_signal_remove_string(entity_id, key) end
 
 ---Set a flag on an entity's signals
 ---@param entity_id integer
@@ -1469,12 +1469,12 @@ function engine.get_vsync() end
 ---@param fs_path string|nil
 function engine.load_shader(id, vs_path, fs_path) end
 
----Clear a uniform on post-process shader
----@param name string
-function engine.post_process_clear_uniform(name) end
-
 ---Clear all uniforms on post-process shader
 function engine.post_process_clear_uniforms() end
+
+---Remove a uniform from the post-process shader
+---@param name string
+function engine.post_process_remove_uniform(name) end
 
 ---Set a float uniform on post-process shader
 ---@param name string

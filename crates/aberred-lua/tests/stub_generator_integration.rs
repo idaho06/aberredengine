@@ -487,7 +487,7 @@ fn meta_functions_complete() {
             "load_shader", "post_process_shader",
             "post_process_set_float", "post_process_set_int",
             "post_process_set_vec2", "post_process_set_vec4",
-            "post_process_clear_uniform", "post_process_clear_uniforms",
+            "post_process_remove_uniform", "post_process_clear_uniforms",
             -- animation
             "register_animation",
             -- collision context
@@ -512,16 +512,16 @@ fn meta_functions_complete() {
         local entity_cmds = {
             "entity_despawn", "entity_menu_despawn", "entity_set_velocity",
             "entity_set_position", "entity_freeze", "entity_unfreeze",
-            "entity_signal_set_flag", "entity_signal_clear_flag", "entity_signal_toggle_flag",
+            "entity_signal_set_flag", "entity_signal_remove_flag", "entity_signal_toggle_flag",
             "entity_insert_lua_timer", "entity_insert_lua_timer_once", "entity_remove_lua_timer",
             "entity_insert_ttl", "entity_set_rotation", "entity_set_scale",
             "entity_set_speed", "entity_set_friction", "entity_set_max_speed",
             "entity_insert_tween_position", "entity_insert_tween_rotation",
             "entity_insert_tween_scale", "entity_remove_tween_position",
             "entity_remove_tween_rotation", "entity_remove_tween_scale",
-            "entity_signal_set_scalar", "entity_signal_clear_scalar",
-            "entity_signal_set_string", "entity_signal_clear_string",
-            "entity_signal_set_integer", "entity_signal_clear_integer",
+            "entity_signal_set_scalar", "entity_signal_remove_scalar",
+            "entity_signal_set_string", "entity_signal_remove_string",
+            "entity_signal_set_integer", "entity_signal_remove_integer",
             "entity_add_force", "entity_remove_force",
             "entity_set_force_enabled", "entity_set_force_value",
             "release_stuckto", "entity_insert_stuckto",
@@ -530,7 +530,7 @@ fn meta_functions_complete() {
             "entity_set_tint", "entity_remove_tint",
             "entity_shader_set_float", "entity_shader_set_int",
             "entity_shader_set_vec2", "entity_shader_set_vec4",
-            "entity_shader_clear_uniform", "entity_shader_clear_uniforms",
+            "entity_shader_remove_uniform", "entity_shader_clear_uniforms",
         }
 
         -- Check regular entity commands exist

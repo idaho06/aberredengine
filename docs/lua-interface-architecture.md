@@ -472,7 +472,7 @@ Both are registered in `engine_api/signal.rs`: `request_scene(name)` queues `Sig
 - `load_shader`
 - `post_process_shader`
 - `post_process_set_float`, `post_process_set_int`, `post_process_set_vec2`, `post_process_set_vec4`
-- `post_process_clear_uniform`, `post_process_clear_uniforms`
+- `post_process_remove_uniform`, `post_process_clear_uniforms`
 
 #### GUI Theming
 
@@ -504,12 +504,12 @@ All are registered in `engine_api/render.rs` and queue into `gui_theme_commands`
 - `entity_insert_tween_screen_position`, `entity_remove_tween_screen_position`
 - `entity_insert_stuckto`, `release_stuckto`
 - `entity_signal_set_scalar`, `entity_signal_set_integer`, `entity_signal_set_string`, `entity_signal_set_flag`
-- `entity_signal_clear_scalar`, `entity_signal_clear_integer`, `entity_signal_clear_string`, `entity_signal_clear_flag`
+- `entity_signal_remove_scalar`, `entity_signal_remove_integer`, `entity_signal_remove_string`, `entity_signal_remove_flag`
 - `entity_signal_toggle_flag`
 - `entity_despawn`, `entity_menu_despawn`
 - `entity_set_shader`, `entity_remove_shader`
 - `entity_shader_set_float`, `entity_shader_set_int`, `entity_shader_set_vec2`, `entity_shader_set_vec4`
-- `entity_shader_clear_uniform`, `entity_shader_clear_uniforms`
+- `entity_shader_remove_uniform`, `entity_shader_clear_uniforms`
 - `entity_set_tint`, `entity_remove_tint`
 - `entity_set_shadow`, `entity_remove_shadow`
 - `entity_set_parent`, `entity_remove_parent`

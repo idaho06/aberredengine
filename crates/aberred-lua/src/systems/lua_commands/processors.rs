@@ -338,8 +338,8 @@ pub fn process_render_command(
                 );
             }
         }
-        RenderCmd::ClearPostProcessUniform { name } => {
-            post_process.clear_uniform(&name);
+        RenderCmd::RemovePostProcessUniform { name } => {
+            post_process.remove_uniform(&name);
         }
         RenderCmd::ClearPostProcessUniforms => {
             post_process.clear_uniforms();

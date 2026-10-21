@@ -1115,7 +1115,7 @@ fn disable_post_processing(mut post: ResMut<PostProcessShader>) {
 }
 ```
 
-- Every shader in the chain gets the same uniforms: the standard ones (`uTime`, `uDeltaTime`, `uFrame`, `uResolution`, `uWindowResolution`, `uLetterbox`, as in the table above; `uLetterbox` is the letterboxed window rectangle on the last pass and the full game-resolution rectangle on earlier passes), then yours from `set_uniform`. `set_uniform` returns `true` for a reserved name; don't use those. `clear_uniform(name)` and `clear_uniforms()` remove yours.
+- Every shader in the chain gets the same uniforms: the standard ones (`uTime`, `uDeltaTime`, `uFrame`, `uResolution`, `uWindowResolution`, `uLetterbox`, as in the table above; `uLetterbox` is the letterboxed window rectangle on the last pass and the full game-resolution rectangle on earlier passes), then yours from `set_uniform`. `set_uniform` returns `true` for a reserved name; don't use those. `remove_uniform(name)` and `clear_uniforms()` remove yours.
 - A key that isn't loaded, or failed to load, is skipped with a warning; the rest of the chain still runs.
 - The resource survives scene switches: reset the chain yourself when a scene shouldn't keep it.
 

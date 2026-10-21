@@ -67,8 +67,8 @@ impl PostProcessShader {
         is_reserved
     }
 
-    /// Clears a single user uniform by name.
-    pub fn clear_uniform(&mut self, name: &str) {
+    /// Removes a single user uniform by name.
+    pub fn remove_uniform(&mut self, name: &str) {
         self.uniforms.remove(name);
     }
 

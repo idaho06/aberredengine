@@ -154,11 +154,11 @@ impl LuaRuntime {
             engine,
             self.lua,
             meta_fns,
-            "post_process_clear_uniform",
+            "post_process_remove_uniform",
             render_commands,
             |name| String,
-            RenderCmd::ClearPostProcessUniform { name },
-            desc = "Clear a uniform on post-process shader",
+            RenderCmd::RemovePostProcessUniform { name },
+            desc = "Remove a uniform from the post-process shader",
             cat = "render",
             params = [("name", "string")]
         );
@@ -578,7 +578,7 @@ mod tests {
         let (post, _) = apply_script(
             "engine.post_process_set_float('amp', 1.5) engine.post_process_set_int('mode', 2) \
              engine.post_process_set_vec2('dir', 1, 0) engine.post_process_set_vec4('tint', 1, 0.5, 0.25, 1) \
-             engine.post_process_set_float('uTime', 9) engine.post_process_clear_uniform('dir')",
+             engine.post_process_set_float('uTime', 9) engine.post_process_remove_uniform('dir')",
         );
         assert_eq!(post.uniforms.get("amp"), Some(&UniformValue::Float(1.5)));
         assert_eq!(post.uniforms.get("mode"), Some(&UniformValue::Int(2)));

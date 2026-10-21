@@ -305,7 +305,7 @@ end
 --- Player glowing phase: clear sticky, keep glowing animation
 local function player_glowing_enter(ctx, input)
     engine.log_debug("Player entering glowing phase")
-    engine.entity_signal_clear_flag(ctx.id, "sticky")
+    engine.entity_signal_remove_flag(ctx.id, "sticky")
     engine.entity_set_animation(ctx.id, "arkanoid-vaus_glowing")
 end
 

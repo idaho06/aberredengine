@@ -131,14 +131,14 @@ pub fn process_entity_commands(
             | EntityCmd::SetForceValue { .. }) => process_physics_cmd(cmd, commands),
 
             cmd @ (EntityCmd::SignalSetFlag { .. }
-            | EntityCmd::SignalClearFlag { .. }
+            | EntityCmd::SignalRemoveFlag { .. }
             | EntityCmd::SignalToggleFlag { .. }
             | EntityCmd::SignalSetScalar { .. }
-            | EntityCmd::SignalClearScalar { .. }
+            | EntityCmd::SignalRemoveScalar { .. }
             | EntityCmd::SignalSetString { .. }
-            | EntityCmd::SignalClearString { .. }
+            | EntityCmd::SignalRemoveString { .. }
             | EntityCmd::SignalSetInteger { .. }
-            | EntityCmd::SignalClearInteger { .. }) => process_signal_cmd(cmd, commands),
+            | EntityCmd::SignalRemoveInteger { .. }) => process_signal_cmd(cmd, commands),
 
             cmd @ (EntityCmd::RestartAnimation { .. }
             | EntityCmd::SetAnimation { .. }
@@ -158,7 +158,7 @@ pub fn process_entity_commands(
             | EntityCmd::ShaderSetInt { .. }
             | EntityCmd::ShaderSetVec2 { .. }
             | EntityCmd::ShaderSetVec4 { .. }
-            | EntityCmd::ShaderClearUniform { .. }
+            | EntityCmd::ShaderRemoveUniform { .. }
             | EntityCmd::ShaderClearUniforms { .. }
             | EntityCmd::SetTint { .. }
             | EntityCmd::RemoveTint { .. }
@@ -307,7 +307,7 @@ fn process_signal_cmd(cmd: EntityCmd, commands: &mut Commands) {
         EntityCmd::SignalSetFlag { entity_id, flag } => {
             queue_on_component::<Signals>(commands, entity_id, move |s| s.set_flag(flag));
         }
-        EntityCmd::SignalClearFlag { entity_id, flag } => {
+        EntityCmd::SignalRemoveFlag { entity_id, flag } => {
             queue_on_component::<Signals>(commands, entity_id, move |s| {
                 s.remove_flag(&flag);
             });
@@ -322,7 +322,7 @@ fn process_signal_cmd(cmd: EntityCmd, commands: &mut Commands) {
         } => {
             queue_on_component::<Signals>(commands, entity_id, move |s| s.set_scalar(key, value));
         }
-        EntityCmd::SignalClearScalar { entity_id, key } => {
+        EntityCmd::SignalRemoveScalar { entity_id, key } => {
             queue_on_component::<Signals>(commands, entity_id, move |s| {
                 s.remove_scalar(&key);
             });
@@ -334,7 +334,7 @@ fn process_signal_cmd(cmd: EntityCmd, commands: &mut Commands) {
         } => {
             queue_on_component::<Signals>(commands, entity_id, move |s| s.set_string(key, value));
         }
-        EntityCmd::SignalClearString { entity_id, key } => {
+        EntityCmd::SignalRemoveString { entity_id, key } => {
             queue_on_component::<Signals>(commands, entity_id, move |s| {
                 s.remove_string(&key);
             });
@@ -346,7 +346,7 @@ fn process_signal_cmd(cmd: EntityCmd, commands: &mut Commands) {
         } => {
             queue_on_component::<Signals>(commands, entity_id, move |s| s.set_integer(key, value));
         }
-        EntityCmd::SignalClearInteger { entity_id, key } => {
+        EntityCmd::SignalRemoveInteger { entity_id, key } => {
             queue_on_component::<Signals>(commands, entity_id, move |s| {
                 s.remove_integer(&key);
             });
@@ -512,7 +512,7 @@ fn process_shader_cmd(cmd: EntityCmd, commands: &mut Commands) {
         | EntityCmd::ShaderSetInt { .. }
         | EntityCmd::ShaderSetVec2 { .. }
         | EntityCmd::ShaderSetVec4 { .. }) => shader_set_uniform(cmd, commands),
-        EntityCmd::ShaderClearUniform { entity_id, name } => {
+        EntityCmd::ShaderRemoveUniform { entity_id, name } => {
             queue_on_component::<EntityShader>(commands, entity_id, move |shader| {
                 shader.uniforms_mut().remove(name.as_str());
             });
@@ -1063,7 +1063,7 @@ mod tests {
                     entity_id: id,
                     flag: "f".into(),
                 },
-                EntityCmd::SignalClearFlag {
+                EntityCmd::SignalRemoveFlag {
                     entity_id: id,
                     flag: "f".into(),
                 },
@@ -1076,7 +1076,7 @@ mod tests {
                     key: "s".into(),
                     value: 1.0,
                 },
-                EntityCmd::SignalClearScalar {
+                EntityCmd::SignalRemoveScalar {
                     entity_id: id,
                     key: "s".into(),
                 },
@@ -1085,7 +1085,7 @@ mod tests {
                     key: "t".into(),
                     value: "v".into(),
                 },
-                EntityCmd::SignalClearString {
+                EntityCmd::SignalRemoveString {
                     entity_id: id,
                     key: "t".into(),
                 },
@@ -1094,7 +1094,7 @@ mod tests {
                     key: "i".into(),
                     value: 1,
                 },
-                EntityCmd::SignalClearInteger {
+                EntityCmd::SignalRemoveInteger {
                     entity_id: id,
                     key: "i".into(),
                 },
@@ -1513,7 +1513,7 @@ mod tests {
                     entity_id: id,
                     flag: "cleared".into(),
                 },
-                EntityCmd::SignalClearFlag {
+                EntityCmd::SignalRemoveFlag {
                     entity_id: id,
                     flag: "cleared".into(),
                 },
@@ -1531,7 +1531,7 @@ mod tests {
                     key: "s_gone".into(),
                     value: 1.0,
                 },
-                EntityCmd::SignalClearScalar {
+                EntityCmd::SignalRemoveScalar {
                     entity_id: id,
                     key: "s_gone".into(),
                 },
@@ -1545,7 +1545,7 @@ mod tests {
                     key: "i_gone".into(),
                     value: 1,
                 },
-                EntityCmd::SignalClearInteger {
+                EntityCmd::SignalRemoveInteger {
                     entity_id: id,
                     key: "i_gone".into(),
                 },
@@ -1559,7 +1559,7 @@ mod tests {
                     key: "n_gone".into(),
                     value: "x".into(),
                 },
-                EntityCmd::SignalClearString {
+                EntityCmd::SignalRemoveString {
                     entity_id: id,
                     key: "n_gone".into(),
                 },
@@ -1754,7 +1754,7 @@ mod tests {
                     z: 0.25,
                     w: 1.0,
                 },
-                EntityCmd::ShaderClearUniform {
+                EntityCmd::ShaderRemoveUniform {
                     entity_id: id,
                     name: "dir".into(),
                 },
@@ -1836,7 +1836,7 @@ mod tests {
                 set_shader(id, "wave"),
                 set_float(id, "a", 1.0),
                 set_float(id, "b", 2.0),
-                EntityCmd::ShaderClearUniform {
+                EntityCmd::ShaderRemoveUniform {
                     entity_id: id,
                     name: "a".into(),
                 },

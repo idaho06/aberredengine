@@ -41,8 +41,8 @@ pub enum RenderCmd {
     SetPostProcessShader { ids: Option<Vec<String>> },
     /// Set a uniform value on the post-process shader
     SetPostProcessUniform { name: String, value: UniformValue },
-    /// Clear a single uniform from the post-process shader
-    ClearPostProcessUniform { name: String },
+    /// Remove a single uniform from the post-process shader
+    RemovePostProcessUniform { name: String },
     /// Clear all uniforms from the post-process shader
     ClearPostProcessUniforms,
     /// Set the named theme's window panel nine-patch in `GuiThemeStore`
@@ -220,8 +220,8 @@ pub enum EntityCmd {
     ReleaseStuckTo { entity_id: u64 },
     /// Set a flag on an entity's Signals component
     SignalSetFlag { entity_id: u64, flag: String },
-    /// Clear a flag on an entity's Signals component
-    SignalClearFlag { entity_id: u64, flag: String },
+    /// Remove a flag from an entity's Signals component
+    SignalRemoveFlag { entity_id: u64, flag: String },
     /// Toggle a flag on an entity's Signals component
     SignalToggleFlag { entity_id: u64, flag: String },
     /// Set entity velocity (RigidBody)
@@ -328,16 +328,16 @@ pub enum EntityCmd {
         key: String,
         value: f32,
     },
-    /// Clear a scalar signal on an entity's Signals component
-    SignalClearScalar { entity_id: u64, key: String },
+    /// Remove a scalar signal from an entity's Signals component
+    SignalRemoveScalar { entity_id: u64, key: String },
     /// Set a string signal on an entity's Signals component
     SignalSetString {
         entity_id: u64,
         key: String,
         value: String,
     },
-    /// Clear a string signal on an entity's Signals component
-    SignalClearString { entity_id: u64, key: String },
+    /// Remove a string signal from an entity's Signals component
+    SignalRemoveString { entity_id: u64, key: String },
     /// Add or update a named force on the entity's RigidBody
     AddForce {
         entity_id: u64,
@@ -392,8 +392,8 @@ pub enum EntityCmd {
         key: String,
         value: i32,
     },
-    /// Clear an integer signal on an entity's Signals component
-    SignalClearInteger { entity_id: u64, key: String },
+    /// Remove an integer signal from an entity's Signals component
+    SignalRemoveInteger { entity_id: u64, key: String },
     /// Insert a Ttl (time-to-live) component
     InsertTtl { entity_id: u64, seconds: f32 },
     /// Set or replace entity shader
@@ -428,8 +428,8 @@ pub enum EntityCmd {
         z: f32,
         w: f32,
     },
-    /// Clear a single uniform from entity shader
-    ShaderClearUniform { entity_id: u64, name: String },
+    /// Remove a single uniform from the entity shader
+    ShaderRemoveUniform { entity_id: u64, name: String },
     /// Clear all uniforms from entity shader
     ShaderClearUniforms { entity_id: u64 },
     /// Set or replace entity tint color
