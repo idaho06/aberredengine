@@ -49,16 +49,16 @@ pub fn game_state_changed_observer(
     if let (Some(next_game_state), Some(game_state)) =
         (next_game_state.as_deref_mut(), game_state.as_deref_mut())
     {
-        // Clone the requested state first so we don't keep an immutable borrow while mutating.
-        match next_game_state.get().cloned() {
+        // Copy the requested state out so no immutable borrow is held while mutating.
+        match next_game_state.get().copied() {
             Some(new_state) => {
-                let old_state = game_state.get().clone();
+                let old_state = *game_state.get();
                 info!(
                     "Transitioning from {:?} to {:?}",
                     game_state.get(),
                     new_state
                 );
-                game_state.set(new_state.clone());
+                game_state.set(new_state);
                 next_game_state.reset();
                 debug!("Calling on_state_exit()");
                 on_state_exit(&old_state, &mut commands, &systems_store);
@@ -156,7 +156,7 @@ mod tests {
     }
 
     fn next(world: &World) -> Option<GameState> {
-        world.resource::<NextGameState>().get().cloned()
+        world.resource::<NextGameState>().get().copied()
     }
 
     #[test]

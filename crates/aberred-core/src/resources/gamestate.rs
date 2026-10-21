@@ -8,7 +8,7 @@
 use bevy_ecs::prelude::Resource;
 
 /// Discrete high-level states the game can be in.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum GameState {
     #[default]
     None,

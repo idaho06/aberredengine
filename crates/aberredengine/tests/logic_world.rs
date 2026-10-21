@@ -1352,7 +1352,7 @@ fn asset_loaded_observers_see_the_texture_dims() {
 }
 
 fn state(tw: &TestWorld) -> GameState {
-    tw.world.resource::<CurrentGameState>().get().clone()
+    *tw.world.resource::<CurrentGameState>().get()
 }
 
 /// A `TestWorld` whose setup hook queues one texture and one sound, ticked
