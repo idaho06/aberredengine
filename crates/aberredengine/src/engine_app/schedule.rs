@@ -60,7 +60,7 @@ use aberred_render::systems::render_system;
 #[cfg(feature = "lua")]
 use aberred_lua::systems::lua_mapspawn::process_lua_map_commands;
 #[cfg(feature = "lua")]
-use aberred_lua::systems::lua_phase::lua_phase_update_system;
+use aberred_lua::systems::lua_phase::lua_phase_callbacks_system;
 #[cfg(feature = "lua")]
 use aberred_lua::systems::lua_setup_entity::lua_setup_entity_system;
 
@@ -164,7 +164,7 @@ pub(crate) struct LateUserSystems;
 impl EngineBuilder {
     /// Registers the systems a game without Lua needs in place of the Lua
     /// plugin's: the `PostCollision` pair (`update_group_counts_system` +
-    /// `animation_controller`, with no `lua_phase_update_system` edges).
+    /// `animation_controller`, with no `lua_phase_callbacks_system` edges).
     /// Called from both the `has_lua` else-arm and the
     /// `#[cfg(not(feature = "lua"))]` block in `build_logic_schedules`.
     fn add_non_lua_systems(sim: &mut Schedule) {
@@ -453,17 +453,17 @@ impl EngineBuilder {
         if has_lua {
             sim.add_systems(
                 update_group_counts_system
-                    .before(lua_phase_update_system)
+                    .before(lua_phase_callbacks_system)
                     .in_set(SimSet::PostCollision),
             );
             sim.add_systems(
-                lua_phase_update_system
+                lua_phase_callbacks_system
                     .run_if(state_is_playing)
                     .in_set(SimSet::PostCollision),
             );
             sim.add_systems(
                 animation_controller
-                    .after(lua_phase_update_system)
+                    .after(lua_phase_callbacks_system)
                     .in_set(SimSet::PostCollision),
             );
             // A queued map/asset load is drained after on_update_<scene> has

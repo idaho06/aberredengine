@@ -2,7 +2,7 @@
 //!
 //! Core `phase_system` drives every `Phase` at the start of the tick. The Lua
 //! observers only queue its `PhaseEntered` / `PhaseExited` triggers into
-//! [`LuaPhaseEvents`]; [`lua_phase_update_system`] calls the entity's Lua
+//! [`LuaPhaseEvents`]; [`lua_phase_callbacks_system`] calls the entity's Lua
 //! callbacks (`crate::components::lua_on_phase`) later in the tick, after
 //! collision, in Playing only. All three are registered only in games that run
 //! a Lua script.
@@ -21,7 +21,7 @@ use crate::systems::lua_commands::{
 use aberred_core::components::phase::Phase;
 use aberred_core::events::phase::{PhaseEntered, PhaseExited};
 
-/// Queues `PhaseEntered` for [`lua_phase_update_system`], which calls the
+/// Queues `PhaseEntered` for [`lua_phase_callbacks_system`], which calls the
 /// entity's [`LuaOnPhaseEntered`] callback.
 pub fn lua_phase_entered_observer(trigger: On<PhaseEntered>, mut events: ResMut<LuaPhaseEvents>) {
     let ev = trigger.event();
@@ -32,7 +32,7 @@ pub fn lua_phase_entered_observer(trigger: On<PhaseEntered>, mut events: ResMut<
     });
 }
 
-/// Queues `PhaseExited` for [`lua_phase_update_system`], which calls the
+/// Queues `PhaseExited` for [`lua_phase_callbacks_system`], which calls the
 /// entity's [`LuaOnPhaseExited`] callback.
 pub fn lua_phase_exited_observer(trigger: On<PhaseExited>, mut events: ResMut<LuaPhaseEvents>) {
     let ev = trigger.event();
@@ -58,7 +58,7 @@ pub fn lua_phase_exited_observer(trigger: On<PhaseExited>, mut events: ResMut<Lu
 /// tick and an update's return beats its entity's enter return. Returning the
 /// phase the entity is in is a no-op. Core `phase_system` applies `next` on
 /// the next tick.
-pub fn lua_phase_update_system(
+pub fn lua_phase_callbacks_system(
     entered: Query<&LuaOnPhaseEntered>,
     exited: Query<&LuaOnPhaseExited>,
     updates: Query<(Entity, &LuaOnPhaseUpdate), With<Phase>>,
@@ -66,7 +66,7 @@ pub fn lua_phase_update_system(
     mut p: LuaDispatch,
     mut returns: Local<Vec<(Entity, String)>>,
 ) {
-    aberred_core::tracy::tracy_span!("lua_phase_update");
+    aberred_core::tracy::tracy_span!("lua_phase_callbacks");
     if updates.is_empty() && entered.is_empty() && exited.is_empty() {
         // No Lua phase callbacks: the queued events are all Rust-only.
         events.0.clear();
@@ -435,8 +435,8 @@ mod tests {
 
     fn run_update(world: &mut World) {
         world
-            .run_system_once(lua_phase_update_system)
-            .expect("lua_phase_update_system");
+            .run_system_once(lua_phase_callbacks_system)
+            .expect("lua_phase_callbacks_system");
     }
 
     #[test]

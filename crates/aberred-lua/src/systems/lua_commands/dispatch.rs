@@ -9,7 +9,7 @@
 //! function, then drain the commands it queued (the collision observers drain
 //! the collision-scoped queues).
 //!
-//! `lua_phase_update_system` (`crate::systems::lua_phase`) batches like
+//! `lua_phase_callbacks_system` (`crate::systems::lua_phase`) batches like
 //! `lua_setup_entity_system` (one signal refresh, one drain per run) but
 //! passes one shared input table, the event's phase fields and `dt`, so it
 //! builds ctx with [`build_ctx_or_log`] and calls Lua itself instead of going

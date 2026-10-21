@@ -369,7 +369,7 @@ fn resolve_input_table(
 /// `SimSet::Bookkeeping`, i.e. *after* `Movement`/`Transforms` (so
 /// `camera_follow_system` has already updated `Camera2DRes` for this tick)
 /// and after `Collision`/`PostCollision` (so `collision_detector`/
-/// `lua_phase_update_system` have already run). This restores the ordering guarantee the pre-thread-split engine
+/// `lua_phase_callbacks_system` have already run). This restores the ordering guarantee the pre-thread-split engine
 /// had via an explicit `.after(camera_follow_system)` constraint on its
 /// single `lua_plugin::update` ("ensures Lua reads current-frame camera
 /// state") -- scene logic that reads `engine.get_camera()`/
@@ -380,7 +380,7 @@ fn resolve_input_table(
 /// too, since `collision_detector` only ever *sets* them on overlap and never
 /// clears them -- something has to reset them exactly once per tick, or a
 /// flag would survive after the corresponding overlap ends. Clearing here
-/// (after this tick's `collision_detector`/`lua_phase_update_system` have already
+/// (after this tick's `collision_detector`/`lua_phase_callbacks_system` have already
 /// consumed the fresh flags) is equivalent to clearing before next tick's
 /// `collision_detector` runs: nothing between here and then reads these
 /// flags, so "before this tick's detection" and "after this tick's

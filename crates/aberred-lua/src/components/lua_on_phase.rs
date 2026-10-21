@@ -10,7 +10,7 @@
 //!   already the new phase; `ctx.previous_phase` is the exited one.
 //! - [`LuaOnPhaseUpdate`]: `fn(ctx, input, dt)`, once per sim tick.
 //!
-//! [`lua_phase_update_system`](crate::systems::lua_phase::lua_phase_update_system)
+//! [`lua_phase_callbacks_system`](crate::systems::lua_phase::lua_phase_callbacks_system)
 //! calls all three after the tick's collision, while the game is playing.
 //!
 //! A string returned by an enter or update callback requests that phase (sets

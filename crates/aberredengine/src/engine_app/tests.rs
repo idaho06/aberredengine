@@ -52,7 +52,7 @@ use aberred_core::systems::timer::update_timers;
 #[cfg(feature = "lua")]
 use aberred_core::systems::window::detect_window_resize;
 #[cfg(feature = "lua")]
-use aberred_lua::systems::lua_phase::lua_phase_update_system;
+use aberred_lua::systems::lua_phase::lua_phase_callbacks_system;
 
 #[test]
 fn test_builder_default() {
@@ -405,18 +405,18 @@ fn test_builder_with_lua() {
 fn test_build_logic_schedules_without_lua_runtime_omits_lua_only_systems() {
     let (ids, _) = logic_schedule_type_ids(false);
     assert!(
-        !ids.contains(&IntoSystem::into_system(lua_phase_update_system).system_type()),
-        "lua_phase_update_system should be absent when has_lua is false"
+        !ids.contains(&IntoSystem::into_system(lua_phase_callbacks_system).system_type()),
+        "lua_phase_callbacks_system should be absent when has_lua is false"
     );
 }
 
-/// With Lua, `lua_phase_update_system` runs after `update_group_counts_system`
+/// With Lua, `lua_phase_callbacks_system` runs after `update_group_counts_system`
 /// and before `animation_controller`.
 #[cfg(feature = "lua")]
 #[test]
-fn test_build_logic_schedules_with_lua_orders_lua_phase_update_in_post_collision() {
+fn test_build_logic_schedules_with_lua_orders_lua_phase_callbacks_in_post_collision() {
     let (ids, _) = logic_schedule_type_ids(true);
-    let index = sim_index(&ids, lua_phase_update_system);
+    let index = sim_index(&ids, lua_phase_callbacks_system);
     assert!(sim_index(&ids, update_group_counts_system) < index);
     assert!(index < sim_index(&ids, animation_controller));
 }
@@ -504,7 +504,7 @@ fn test_build_logic_schedules_runs_phase_system_first() {
     assert!(phase < sim_index(&ids, collision_detector));
 }
 
-/// With Lua, `lua_phase_update_system` runs in `SimSet::PostCollision`: after
+/// With Lua, `lua_phase_callbacks_system` runs in `SimSet::PostCollision`: after
 /// the collision and GUI sets, before `Lifecycle` and before `lua_plugin::update`.
 #[cfg(feature = "lua")]
 #[test]
@@ -512,7 +512,7 @@ fn test_build_logic_schedules_with_lua_keeps_lua_phase_in_post_collision() {
     let (ids, _) = logic_schedule_type_ids(true);
     let after = sim_index(&ids, collision_detector).max(sim_index(&ids, gui_hit_test_system));
     let before = sim_index(&ids, animation).min(sim_index(&ids, aberred_lua::lua_plugin::update));
-    let index = sim_index(&ids, lua_phase_update_system);
+    let index = sim_index(&ids, lua_phase_callbacks_system);
     assert!(
         after < index && index < before,
         "must stay in SimSet::PostCollision"
