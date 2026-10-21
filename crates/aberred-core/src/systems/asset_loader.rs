@@ -60,7 +60,7 @@ impl std::error::Error for AssetError {}
 /// `AssetLoader` holds the writers for [`RenderAssetCmd`] and [`AudioCmd`], so
 /// a system that takes it must not also take `MessageWriter<RenderAssetCmd>`
 /// or `MessageWriter<AudioCmd>`. Bevy rejects such a system at startup with a
-/// conflicting-access panic. The same goes for `ResMut<GameState>` and
+/// conflicting-access panic. The same goes for `ResMut<CurrentGameState>` and
 /// `ResMut<LoadedAssets>`, which it reads. Use
 /// [`audio`](Self::audio) and [`render`](Self::render) to write any other
 /// command, e.g. `assets.audio().write(AudioCmd::PlayFx { id: "jump".into() })`.
@@ -224,7 +224,7 @@ fn queues(verdict: Verdict, target: Option<(AssetKind, &str)>) -> Result<bool, A
 mod tests {
     use super::*;
     use crate::resources::fontmetrics::test_support::lowercase_alphabet_metrics;
-    use crate::resources::gamestate::GameState;
+    use crate::resources::gamestate::CurrentGameState;
     use crate::resources::loaded_assets::LoadedAssets;
     use crate::systems::tilemap::tilemap_texture_key;
     use bevy_ecs::system::RunSystemOnce;
@@ -235,7 +235,7 @@ mod tests {
         world.insert_resource(Messages::<AudioCmd>::default());
         world.insert_resource(TextureDimsStore::default());
         world.insert_resource(FontMetricsStore::default());
-        world.init_resource::<GameState>();
+        world.init_resource::<CurrentGameState>();
         world.init_resource::<LoadedAssets>();
         world
     }

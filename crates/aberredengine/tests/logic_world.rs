@@ -40,7 +40,7 @@ use aberredengine::core::protocol::render_assets::RenderAssetCmd;
 use aberredengine::core::protocol::render_logic::{LogicMsg, RenderMsg};
 use aberredengine::core::protocol::tick_input::TickInput;
 use aberredengine::core::resources::fontmetrics::{FontMetrics, GlyphMetrics};
-use aberredengine::core::resources::gamestate::{GameState, GameStates, NextGameState};
+use aberredengine::core::resources::gamestate::{CurrentGameState, GameStates, NextGameState};
 use aberredengine::core::resources::input::InputState;
 use aberredengine::core::resources::input_bindings::MouseButton;
 use aberredengine::core::resources::loaded_assets::LoadedAssets;
@@ -635,7 +635,7 @@ fn add_system_runs_once_per_tick_only_while_playing() {
     let count_at_quit = tw.world.resource::<Counter>().0;
     tw.tick(3, DT);
     assert!(matches!(
-        tw.world.resource::<GameState>().get(),
+        tw.world.resource::<CurrentGameState>().get(),
         GameStates::Quitting
     ));
     assert_eq!(
@@ -821,7 +821,7 @@ fn quit_request_quits_a_rust_only_game_exactly_once() {
     tw.tick(5, DT);
 
     assert_eq!(
-        *tw.world.resource::<GameState>().get(),
+        *tw.world.resource::<CurrentGameState>().get(),
         GameStates::Quitting
     );
     assert_eq!(render_quits(&tw), 1, "quit_game runs exactly once");
@@ -840,7 +840,7 @@ fn a_quit_requested_during_setup_applies_at_once() {
     tw.tick(2, DT);
 
     assert_eq!(
-        *tw.world.resource::<GameState>().get(),
+        *tw.world.resource::<CurrentGameState>().get(),
         GameStates::Quitting
     );
     assert_eq!(render_quits(&tw), 1);
@@ -1167,7 +1167,10 @@ fn loading_scene_is_active_while_setup_waits_for_assets() {
     let mut tw = loading_scene_world(|builder| builder);
 
     tw.tick(3, DT);
-    assert_eq!(*tw.world.resource::<GameState>().get(), GameStates::Setup);
+    assert_eq!(
+        *tw.world.resource::<CurrentGameState>().get(),
+        GameStates::Setup
+    );
     assert_eq!(
         tw.world.resource::<SceneLog>().0,
         ["enter loading (entity loading) from None"]
@@ -1184,7 +1187,10 @@ fn loading_scene_is_active_while_setup_waits_for_assets() {
     let loading_ticks = tw.world.resource::<SceneTicks>().0;
     tw.tick(2, DT);
 
-    assert_eq!(*tw.world.resource::<GameState>().get(), GameStates::Playing);
+    assert_eq!(
+        *tw.world.resource::<CurrentGameState>().get(),
+        GameStates::Playing
+    );
     assert_eq!(
         tw.world.resource::<SceneLog>().0,
         [
@@ -1346,7 +1352,7 @@ fn asset_loaded_observers_see_the_texture_dims() {
 }
 
 fn state(tw: &TestWorld) -> GameStates {
-    tw.world.resource::<GameState>().get().clone()
+    tw.world.resource::<CurrentGameState>().get().clone()
 }
 
 /// A `TestWorld` whose setup hook queues one texture and one sound, ticked
@@ -1864,7 +1870,7 @@ function on_update_menu(input, dt) engine.request_quit() end
     tw.tick(5, DT);
 
     assert_eq!(
-        *tw.world.resource::<GameState>().get(),
+        *tw.world.resource::<CurrentGameState>().get(),
         GameStates::Quitting
     );
     assert_eq!(render_quits(&tw), 1, "quit_game runs exactly once");
@@ -2863,7 +2869,10 @@ fn late_scene_system_runs_in_the_loading_scene_during_setup() {
 
     tw.tick(3, DT);
 
-    assert_eq!(*tw.world.resource::<GameState>().get(), GameStates::Setup);
+    assert_eq!(
+        *tw.world.resource::<CurrentGameState>().get(),
+        GameStates::Setup
+    );
     assert_eq!(tw.world.resource::<LateTicks>().0, 3);
     assert_eq!(tw.world.resource::<SceneTicks>().0, 3);
 }

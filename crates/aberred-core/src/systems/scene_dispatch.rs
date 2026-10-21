@@ -34,7 +34,7 @@ use crate::math::{Color, Vec2};
 use crate::resources::appstate::AppState;
 use crate::resources::camera2d::Camera2D;
 use crate::resources::collision_contacts::CollisionContacts;
-use crate::resources::gamestate::{GameState, GameStates, NextGameState};
+use crate::resources::gamestate::{CurrentGameState, GameStates, NextGameState};
 use crate::resources::group::TrackedGroups;
 use crate::resources::next_scene::NextScene;
 use crate::resources::scenemanager::SceneManager;
@@ -181,7 +181,7 @@ pub fn scene_switch_system(world: &mut World, state: &mut SystemState<SceneTeard
     let scene_name: Arc<str> = scene_name.into();
     let scene_manager = world.resource::<SceneManager>();
     let in_setup = world
-        .get_resource::<GameState>()
+        .get_resource::<CurrentGameState>()
         .is_some_and(|state| *state.get() == GameStates::Setup);
     if in_setup && scene_manager.loading_scene.as_deref() != Some(&*scene_name) {
         warn!(
@@ -308,7 +308,7 @@ pub fn in_scene(name: &str) -> impl FnMut(Option<Res<SceneManager>>) -> bool + C
 /// scene that can be entered is the loading scene, so nothing is skipped there.
 pub fn past_scene_entry(
     scene_manager: Option<Res<SceneManager>>,
-    state: Option<Res<GameState>>,
+    state: Option<Res<CurrentGameState>>,
     time: Option<Res<WorldTime>>,
 ) -> bool {
     let playing = state.is_some_and(|state| *state.get() == GameStates::Playing);
@@ -599,7 +599,7 @@ mod tests {
     #[test]
     fn no_switch_away_from_the_loading_scene_during_setup() {
         let (mut world, menu_entity) = world_in_menu_switching_to("level");
-        let mut state = GameState::new();
+        let mut state = CurrentGameState::new();
         state.set(GameStates::Setup);
         world.insert_resource(state);
         record_scene_events(&mut world);
@@ -655,7 +655,7 @@ mod tests {
     #[test]
     fn past_scene_entry_is_false_on_the_entry_tick() {
         let (mut world, _) = world_in_menu_switching_to("level");
-        let mut state = GameState::new();
+        let mut state = CurrentGameState::new();
         state.set(GameStates::Playing);
         world.insert_resource(state);
         world.insert_resource(WorldTime {
@@ -766,7 +766,7 @@ mod tests {
     #[test]
     fn on_demand_switch_during_setup_registers_nothing() {
         let mut world = on_demand_world_switching_to("level");
-        let mut state = GameState::new();
+        let mut state = CurrentGameState::new();
         state.set(GameStates::Setup);
         world.insert_resource(state);
 

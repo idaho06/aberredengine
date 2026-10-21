@@ -16,7 +16,7 @@ use crate::protocol::asset_kind::AssetKind;
 use crate::protocol::audio::AudioCmd;
 use crate::protocol::render_assets::RenderAssetCmd;
 use crate::resources::deterministic_mode::DeterministicMode;
-use crate::resources::gamestate::{GameState, GameStates};
+use crate::resources::gamestate::{CurrentGameState, GameStates};
 use crate::resources::loaded_assets::LoadedAssets;
 use crate::resources::warn_once::first_seen;
 
@@ -155,7 +155,7 @@ impl Verdict {
 #[derive(SystemParam)]
 pub struct AssetGate<'w> {
     deterministic: Option<Res<'w, DeterministicMode>>,
-    state: Res<'w, GameState>,
+    state: Res<'w, CurrentGameState>,
     loaded: Res<'w, LoadedAssets>,
 }
 

@@ -57,7 +57,7 @@ use aberred_core::protocol::tick_input::TickInput;
 use aberred_core::resources::drawable_snapshot::DrawableSnapshot;
 use aberred_core::resources::fontmetrics::FontMetrics;
 use aberred_core::resources::gameconfig::GameConfig;
-use aberred_core::resources::gamestate::{GameState, GameStates};
+use aberred_core::resources::gamestate::{CurrentGameState, GameStates};
 use aberred_core::resources::systemsstore as hook_keys;
 use aberred_core::systems::time::update_world_time;
 
@@ -371,7 +371,7 @@ impl TestWorld {
         }
     }
 
-    /// Tick with `dt` until [`GameState`] reaches [`GameStates::Playing`],
+    /// Tick with `dt` until [`CurrentGameState`] reaches [`GameStates::Playing`],
     /// or panic after `max_ticks` ticks without reaching it. Useful for
     /// consumer tests that don't want to reason about exact Setup/EnterPlay
     /// transition timing -- pass a generous bound (a handful of ticks is
@@ -379,7 +379,7 @@ impl TestWorld {
     pub fn tick_to_play(&mut self, dt: f32, max_ticks: u32) {
         for _ in 0..max_ticks {
             if matches!(
-                self.world.resource::<GameState>().get(),
+                self.world.resource::<CurrentGameState>().get(),
                 GameStates::Playing
             ) {
                 return;
@@ -388,7 +388,7 @@ impl TestWorld {
         }
         assert!(
             matches!(
-                self.world.resource::<GameState>().get(),
+                self.world.resource::<CurrentGameState>().get(),
                 GameStates::Playing
             ),
             "TestWorld did not reach GameStates::Playing within {max_ticks} ticks"
@@ -540,7 +540,7 @@ mod tests {
         let mut tw = TestWorld::new();
         tw.tick_to_play(1.0 / 60.0, 8);
         assert!(matches!(
-            tw.world.resource::<GameState>().get(),
+            tw.world.resource::<CurrentGameState>().get(),
             GameStates::Playing
         ));
     }

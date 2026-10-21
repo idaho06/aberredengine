@@ -725,7 +725,7 @@ fn golden_replay_rust_scene_matches_checked_in_trail() {
 
 use aberredengine::core::components::rigidbody::RigidBody;
 use aberredengine::core::math::Vec2;
-use aberredengine::core::resources::gamestate::{GameState, GameStates};
+use aberredengine::core::resources::gamestate::{CurrentGameState, GameStates};
 use aberredengine::core::resources::worldtime::WorldTime;
 use aberredengine::core::systems::asset_loader::AssetLoader;
 
@@ -753,7 +753,7 @@ fn world_after_setup_of(setup_ticks: u32) -> TestWorld {
     tw.deliver_texture_dims("player", 8, 8);
     tw.tick(1, DT);
     assert_eq!(
-        tw.world.resource::<GameState>().get(),
+        tw.world.resource::<CurrentGameState>().get(),
         &GameStates::Playing,
         "Setup ends on the tick that sees the last reply"
     );

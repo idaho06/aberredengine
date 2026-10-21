@@ -2,14 +2,14 @@
 //!
 //! Systems can request a change to the high-level [`GameStates`] by updating
 //! [`NextGameState`]. Emitting a [`GameStateChangedEvent`] then triggers the
-//! observer in this module, which applies the transition to [`GameState`]
+//! observer in this module, which applies the transition to [`CurrentGameState`]
 //! and invokes the appropriate enter/exit systems stored in
 //! [`crate::resources::systemsstore::SystemsStore`].
 //!
 //! This decouples the intent to change state from the mechanics of running
 //! setup/teardown systems and avoids borrowing conflicts.
 use crate::resources::gamestate::NextGameStates::{Pending, Unchanged};
-use crate::resources::gamestate::{GameState, GameStates, NextGameState};
+use crate::resources::gamestate::{CurrentGameState, GameStates, NextGameState};
 use crate::resources::systemsstore as hook_keys;
 use crate::resources::systemsstore::SystemsStore;
 use bevy_ecs::observer::On;
@@ -21,7 +21,7 @@ use log::{debug, info, warn};
 ///
 /// Emitting this event causes [`observe_gamestate_change_event`] to read
 /// [`NextGameState`]. If it contains [`Pending`], the observer updates the
-/// authoritative [`GameState`], runs exit/enter hooks, and clears the pending
+/// authoritative [`CurrentGameState`], runs exit/enter hooks, and clears the pending
 /// value; if it is [`Unchanged`], nothing happens.
 #[derive(Event, Debug, Clone, Copy)]
 pub struct GameStateChangedEvent {}
@@ -30,7 +30,7 @@ pub struct GameStateChangedEvent {}
 ///
 /// Contract
 /// - Reads the intention from [`NextGameState`].
-/// - If pending, copies the new value into [`GameState`], then:
+/// - If pending, copies the new value into [`CurrentGameState`], then:
 ///   - calls state-specific exit hooks for the previous state
 ///   - calls state-specific enter hooks for the new state
 ///   - resets [`NextGameState`] to [`Unchanged`]
@@ -42,11 +42,11 @@ pub fn observe_gamestate_change_event(
     _trigger: On<GameStateChangedEvent>,
     mut commands: Commands, // for spawning/despawning entities and triggering events
     mut next_game_state: Option<ResMut<NextGameState>>,
-    mut game_state: Option<ResMut<GameState>>,
+    mut game_state: Option<ResMut<CurrentGameState>>,
     systems_store: Res<SystemsStore>,
 ) {
     // This observer is triggered when a GameStateChangedEvent is fired.
-    // It checks the NextGameState resource and updates the GameState resource accordingly.
+    // It checks the NextGameState resource and updates the CurrentGameState resource accordingly.
     debug!("GameStateChangedEvent triggered");
 
     if let (Some(next_game_state), Some(game_state)) =
@@ -143,7 +143,7 @@ mod tests {
     /// `setup` hook registered in its [`SystemsStore`].
     fn world_with_setup(setup: Option<fn(ResMut<NextGameState>)>) -> World {
         let mut world = World::new();
-        world.insert_resource(GameState::new());
+        world.insert_resource(CurrentGameState::new());
         world.insert_resource(NextGameState::new());
         world.add_observer(observe_gamestate_change_event);
         let mut store = SystemsStore::new();
@@ -168,7 +168,10 @@ mod tests {
     fn setup_without_a_hook_requests_playing() {
         let mut world = world_with_setup(None);
         enter(&mut world, GameStates::Setup);
-        assert_eq!(world.resource::<GameState>().get(), &GameStates::Setup);
+        assert_eq!(
+            world.resource::<CurrentGameState>().get(),
+            &GameStates::Setup
+        );
         assert_eq!(next(&world), Pending(GameStates::Playing));
     }
 
@@ -197,7 +200,10 @@ mod tests {
     fn entering_playing_without_an_enter_play_hook_is_a_no_op() {
         let mut world = world_with_setup(None);
         enter(&mut world, GameStates::Playing);
-        assert_eq!(world.resource::<GameState>().get(), &GameStates::Playing);
+        assert_eq!(
+            world.resource::<CurrentGameState>().get(),
+            &GameStates::Playing
+        );
         assert_eq!(next(&world), Unchanged);
     }
 }

@@ -2370,7 +2370,7 @@ All resources are accessed as Bevy ECS system parameters. Use `Res<T>` / `ResMut
 | `GameConfigDefaults` | `Res` | Read-only snapshot (`.0: GameConfig`) of `GameConfig` as loaded at startup, before any runtime mutation — use to restore a field to its loaded default (e.g. window title after a map override) without needing your own capture-resource |
 | `InputState` | `Res` | Input state — bound actions via `input.action(InputAction::X)` and the raw `mouse_left_button` are `BoolState { active, just_pressed, just_released }`; analog fields (`scroll_y`, `mouse_x/y`, `mouse_world_x/y`) are `f32`; pad 0 is `gamepad_connected` / `gamepad_axes` |
 | `InputBindings` | `ResMut` | Runtime key/mouse binding map (`InputAction` → `Vec<InputBinding>`). Modify to rebind actions at runtime — takes effect the very next sim tick. |
-| `GameState` | `Res` | Current state: `None → Setup → Playing → Quitting` |
+| `CurrentGameState` | `Res` | Current state: `None → Setup → Playing → Quitting` |
 | `NextGameState` | `ResMut` | Request state transitions, e.g. `.set(GameStates::Quitting)` |
 | `NextScene` | `ResMut` | Request a scene switch with `.set(name)`; `scene_switch_poll` takes it late in the tick (`SimSet::Lifecycle`) |
 | `PostProcessShader` | `ResMut` | Shader chain + uniforms (reserved: `uTime`, `uDeltaTime`, `uResolution`, `uFrame`, `uWindowResolution`, `uLetterbox`) |

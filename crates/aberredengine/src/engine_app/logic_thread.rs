@@ -23,7 +23,7 @@ use aberred_core::resources::debugoverlayconfig::DebugOverlayConfig;
 use aberred_core::resources::deterministic_mode::DeterministicMode;
 use aberred_core::resources::fontmetrics::FontMetricsStore;
 use aberred_core::resources::gameconfig::GameConfig;
-use aberred_core::resources::gamestate::{GameState, GameStates};
+use aberred_core::resources::gamestate::{CurrentGameState, GameStates};
 use aberred_core::resources::input::InputState;
 use aberred_core::resources::loaded_assets::LoadedAssets;
 use aberred_core::resources::rawinput::ImguiCaptureMirror;
@@ -143,7 +143,10 @@ pub(crate) fn run_sim_tick(world: &mut World, sim: &mut Schedule) {
 /// recorded, played or checkpointed. `finish_setup` flips the state at the
 /// end of a tick, so the first `Playing` tick is a whole one.
 pub(crate) fn in_envelope(world: &World) -> bool {
-    matches!(world.resource::<GameState>().get(), GameStates::Playing)
+    matches!(
+        world.resource::<CurrentGameState>().get(),
+        GameStates::Playing
+    )
 }
 
 /// Keeps live input out of deterministic Setup ticks (see [`in_envelope`]).
@@ -845,7 +848,7 @@ mod tests {
         world.init_resource::<TextureDimsStore>();
         world.init_resource::<DebugOverlayConfig>();
         world.init_resource::<ReplayRuntimeState>();
-        world.init_resource::<GameState>();
+        world.init_resource::<CurrentGameState>();
         world
     }
 

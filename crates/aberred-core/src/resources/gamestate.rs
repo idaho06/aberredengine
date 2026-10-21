@@ -31,20 +31,20 @@ pub enum NextGameStates {
 
 /// Authoritative current game state.
 #[derive(Resource, Debug, Clone, PartialEq, Eq, Hash)]
-pub struct GameState {
+pub struct CurrentGameState {
     current: GameStates,
 }
 
-impl Default for GameState {
+impl Default for CurrentGameState {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl GameState {
+impl CurrentGameState {
     /// Create a new state initialized to [`GameStates::None`].
     pub fn new() -> Self {
-        GameState {
+        CurrentGameState {
             current: GameStates::None,
         }
     }
@@ -113,7 +113,7 @@ mod tests {
 
     #[test]
     fn states_start_idle_and_pending_resets_to_unchanged() {
-        assert_eq!(GameState::default().get(), &GameStates::None);
+        assert_eq!(CurrentGameState::default().get(), &GameStates::None);
 
         let mut next = NextGameState::default();
         assert_eq!(next.get(), &NextGameStates::Unchanged);

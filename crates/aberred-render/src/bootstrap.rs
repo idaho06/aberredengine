@@ -131,7 +131,7 @@ pub fn setup_render_world(
 /// Build the render thread's single per-frame schedule: every
 /// per-frame step is a system in this chain. `apply_gameconfig_changes`
 /// has no `run_if(state_is_playing)` gate — the render world has no
-/// `GameState`; the snapshot's config is seeded with the real loaded
+/// `CurrentGameState`; the snapshot's config is seeded with the real loaded
 /// config at startup, so early application is a no-op, not a downgrade.
 pub fn build_render_schedule(world: &mut World) -> Result<Schedule, EngineError> {
     let mut schedule = Schedule::default();

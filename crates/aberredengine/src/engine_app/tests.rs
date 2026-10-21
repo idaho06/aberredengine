@@ -20,7 +20,7 @@ use aberred_core::protocol::render_logic::{LogicMsg, RenderMsg};
 use aberred_core::protocol::snapshot::SnapshotPublisher;
 use aberred_core::resources::drawable_snapshot::DrawableSnapshot;
 use aberred_core::resources::gameconfig::GameConfig;
-use aberred_core::resources::gamestate::{GameState, GameStates};
+use aberred_core::resources::gamestate::{CurrentGameState, GameStates};
 use aberred_core::resources::input::InputState;
 use aberred_core::resources::signal_keys as sk;
 use aberred_core::resources::systemsstore::SystemsStore;
@@ -910,10 +910,12 @@ fn with_lua_combines_with_add_system() {
 fn runs_outside_and_while_playing(mut schedule: Schedule) -> (u32, u32) {
     let mut world = World::new();
     world.init_resource::<Ran>();
-    world.init_resource::<GameState>();
+    world.init_resource::<CurrentGameState>();
     schedule.run(&mut world);
     let outside = world.resource::<Ran>().0;
-    world.resource_mut::<GameState>().set(GameStates::Playing);
+    world
+        .resource_mut::<CurrentGameState>()
+        .set(GameStates::Playing);
     schedule.run(&mut world);
     (outside, world.resource::<Ran>().0 - outside)
 }

@@ -33,7 +33,7 @@ use aberred_core::resources::deterministic_mode::DeterministicMode;
 use aberred_core::resources::drawable_snapshot::DrawableSnapshot;
 use aberred_core::resources::fontmetrics::{FontMetricsStore, FontMetricsWarnCache};
 use aberred_core::resources::gameconfig::GameConfigDefaults;
-use aberred_core::resources::gamestate::{GameState, GameStates, NextGameState};
+use aberred_core::resources::gamestate::{CurrentGameState, GameStates, NextGameState};
 use aberred_core::resources::group::TrackedGroups;
 use aberred_core::resources::guiinputstate::GuiInputState;
 use aberred_core::resources::guitheme::{GuiThemeStore, GuiThemeWarnCache};
@@ -176,7 +176,7 @@ impl EngineBuilder {
             setup_audio(&mut world, audio_hz);
         }
 
-        world.insert_resource(GameState::new());
+        world.insert_resource(CurrentGameState::new());
         world.insert_resource(NextGameState::new());
         world.insert_resource(NextScene::default());
         world.insert_resource(FontMetricsStore::default());

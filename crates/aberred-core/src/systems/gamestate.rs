@@ -15,7 +15,7 @@ use crate::events::gamestate::GameStateChangedEvent;
 use crate::protocol::endpoints::RenderTx;
 use crate::protocol::render_logic::RenderMsg;
 use crate::resources::collision_contacts::CollisionContacts;
-use crate::resources::gamestate::{GameState, GameStates, NextGameState, NextGameStates};
+use crate::resources::gamestate::{CurrentGameState, GameStates, NextGameState, NextGameStates};
 use crate::resources::pending_assets::PendingAssets;
 use bevy_ecs::prelude::*;
 use log::info;
@@ -28,7 +28,7 @@ use log::info;
 pub fn check_pending_state(
     mut commands: Commands,
     next_state: Res<NextGameState>,
-    state: Res<GameState>,
+    state: Res<CurrentGameState>,
 ) {
     if matches!(next_state.get(), NextGameStates::Pending(_)) && !ends_setup(&state, &next_state) {
         commands.trigger(GameStateChangedEvent {});
@@ -42,7 +42,7 @@ pub fn check_pending_state(
 pub fn finish_setup(
     mut commands: Commands,
     next_state: Res<NextGameState>,
-    state: Res<GameState>,
+    state: Res<CurrentGameState>,
     pending: Res<PendingAssets>,
 ) {
     if ends_setup(&state, &next_state) && pending.is_empty() {
@@ -51,19 +51,19 @@ pub fn finish_setup(
 }
 
 /// Whether the pending request is the `Setup` → `Playing` transition.
-fn ends_setup(state: &GameState, next_state: &NextGameState) -> bool {
+fn ends_setup(state: &CurrentGameState, next_state: &NextGameState) -> bool {
     *state.get() == GameStates::Setup
         && *next_state.get() == NextGameStates::Pending(GameStates::Playing)
 }
 
 /// Returns true when the current game state is `Playing`.
-pub fn state_is_playing(state: Res<GameState>) -> bool {
+pub fn state_is_playing(state: Res<CurrentGameState>) -> bool {
     matches!(state.get(), GameStates::Playing)
 }
 
 /// Returns true in the states a scene can be active in: `Setup` (the loading
 /// scene) and `Playing`. Scene systems run under this plus `in_scene`.
-pub fn state_runs_scenes(state: Res<GameState>) -> bool {
+pub fn state_runs_scenes(state: Res<CurrentGameState>) -> bool {
     matches!(state.get(), GameStates::Setup | GameStates::Playing)
 }
 
@@ -100,9 +100,9 @@ mod tests {
     #[test]
     fn state_runs_scenes_holds_in_setup_and_playing_only() {
         let mut world = World::new();
-        world.init_resource::<GameState>();
+        world.init_resource::<CurrentGameState>();
         let mut runs_in = |state| {
-            world.resource_mut::<GameState>().set(state);
+            world.resource_mut::<CurrentGameState>().set(state);
             world.run_system_once(state_runs_scenes).unwrap()
         };
         assert!(!runs_in(GameStates::None));
@@ -131,11 +131,11 @@ mod tests {
     #[derive(Resource, Default)]
     struct ChangedCount(u32);
 
-    /// World with `GameState`, the given `NextGameState`, and an observer
+    /// World with `CurrentGameState`, the given `NextGameState`, and an observer
     /// counting `GameStateChangedEvent` into `ChangedCount`.
     fn world_with_next_state(next: NextGameState) -> World {
         let mut world = World::new();
-        world.init_resource::<GameState>();
+        world.init_resource::<CurrentGameState>();
         world.insert_resource(next);
         world.init_resource::<PendingAssets>();
         world.init_resource::<ChangedCount>();
@@ -175,7 +175,9 @@ mod tests {
         let mut requested = NextGameState::new();
         requested.set(next);
         let mut world = world_with_next_state(requested);
-        world.resource_mut::<GameState>().set(GameStates::Setup);
+        world
+            .resource_mut::<CurrentGameState>()
+            .set(GameStates::Setup);
         if loading {
             world
                 .resource_mut::<PendingAssets>()
