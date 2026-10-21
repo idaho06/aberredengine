@@ -6,6 +6,7 @@ Complete reference for game developers using Lua scripting in Aberred Engine.
 
 - [Getting Started](#getting-started)
 - [Script Execution Flow](#script-execution-flow)
+  - [Rust Events and Lua Callbacks](#4-rust-events-and-lua-callbacks)
 - [Logging Functions](#logging-functions)
 - [Input System](#input-system)
   - [Input Rebinding](#input-rebinding)
@@ -393,6 +394,30 @@ Collision callbacks process commands from their own dedicated queues, which are 
 - Entity/Spawn commands work but can cause performance issues
 - **Avoid spawning entities in update loops** - prefer `on_scene_enter`, phase callbacks, or collision callbacks
 - Use `on_update` primarily for input handling and signal updates
+
+### 4. Rust Events and Lua Callbacks
+
+Every per-entity Lua callback answers a Rust event of the same name: Rust code observes the event, a Lua script
+attaches a `LuaOn<Event>` component with the matching `:with_lua_<event>(callback)` builder method. Both run when
+the event fires.
+
+| Rust event | Lua callback component | Spawn builder method | Callback signature |
+|---|---|---|---|
+| `CollisionStarted` | `LuaOnCollision.started` | `:with_lua_collision_started(callback)` | `fn(ctx)` |
+| `CollisionOngoing` | `LuaOnCollision.ongoing` | `:with_lua_collision_rule(group_a, group_b, ongoing)` | `fn(ctx)` |
+| `CollisionEnded` | `LuaOnCollision.ended` | `:with_lua_collision_ended(callback)` | `fn(ctx)` (ids and groups only) |
+| `GuiClicked` | `LuaOnGuiClicked` | `:with_lua_gui_clicked(callback)` | `fn(ctx)` (`ctx.entity_id`) |
+| `MenuSelected` | `LuaOnMenuSelected` | `:with_lua_menu_selected(callback)` | `fn(ctx)` (`menu_id`, `item_id`, `item_index`) |
+| `AnimationFinished` | `LuaOnAnimationFinished` | `:with_lua_animation_finished(callback)` | `fn(ctx, input)` |
+| `TweenFinished<T>` | `LuaOnTweenFinished<T>` | `:with_lua_tween_{position,rotation,scale,screen_position}_finished(callback)` | `fn(ctx, input)` |
+| `TimerFired` | `LuaOnTimerFired` | `:with_lua_timer(duration, callback)` / `:with_lua_timer_once(duration, callback)` | `fn(ctx, input)` |
+| `PhaseEntered` | `LuaOnPhaseEntered` | `:with_lua_phase_entered(callback)` | `fn(ctx, input) -> phase?` |
+| `PhaseExited` | `LuaOnPhaseExited` | `:with_lua_phase_exited(callback)` | `fn(ctx)` |
+| (none: a Rust system reads `Phase`) | `LuaOnPhaseUpdate` | `:with_lua_phase_update(callback)` | `fn(ctx, input, dt) -> phase?` |
+
+Details: [Collision Handling](#collision-handling), [GUI Widgets](#gui-widgets), [Menu Components](#menu-components),
+[LuaOnAnimationFinished Component](#luaonanimationfinished-component), [Tween Components](#tween-components),
+[Additional Components](#additional-components) (timers, collision rules), [Phase Component](#phase-component).
 
 ---
 
