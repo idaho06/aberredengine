@@ -15,7 +15,7 @@ use crate::events::gamestate::GameStateChangedEvent;
 use crate::protocol::endpoints::RenderTx;
 use crate::protocol::render_logic::RenderMsg;
 use crate::resources::collision_contacts::CollisionContacts;
-use crate::resources::gamestate::{CurrentGameState, GameState, NextGameState, NextGameStates};
+use crate::resources::gamestate::{CurrentGameState, GameState, NextGameState};
 use crate::resources::pending_assets::PendingAssets;
 use bevy_ecs::prelude::*;
 use log::info;
@@ -30,7 +30,7 @@ pub fn check_pending_state(
     next_state: Res<NextGameState>,
     state: Res<CurrentGameState>,
 ) {
-    if matches!(next_state.get(), NextGameStates::Pending(_)) && !ends_setup(&state, &next_state) {
+    if next_state.get().is_some() && !ends_setup(&state, &next_state) {
         commands.trigger(GameStateChangedEvent {});
     }
 }
@@ -52,8 +52,7 @@ pub fn finish_setup(
 
 /// Whether the pending request is the `Setup` → `Playing` transition.
 fn ends_setup(state: &CurrentGameState, next_state: &NextGameState) -> bool {
-    *state.get() == GameState::Setup
-        && *next_state.get() == NextGameStates::Pending(GameState::Playing)
+    *state.get() == GameState::Setup && next_state.get() == Some(&GameState::Playing)
 }
 
 /// Returns true when the current game state is `Playing`.
@@ -166,7 +165,7 @@ mod tests {
         assert_eq!(world.resource::<ChangedCount>().0, 1);
         // Clearing the pending value is the observer's job, not this system's.
         let ns = world.resource::<NextGameState>();
-        assert_eq!(*ns.get(), NextGameStates::Pending(GameState::Playing));
+        assert_eq!(ns.get(), Some(&GameState::Playing));
     }
 
     /// A world in `Setup` with `next` requested and, if `loading`, one
@@ -200,8 +199,8 @@ mod tests {
         world.run_system_once(finish_setup).unwrap();
         assert_eq!(world.resource::<ChangedCount>().0, 0, "still loading");
         assert_eq!(
-            *world.resource::<NextGameState>().get(),
-            NextGameStates::Pending(GameState::Playing),
+            world.resource::<NextGameState>().get(),
+            Some(&GameState::Playing),
             "the request is kept, not dropped"
         );
 
@@ -235,6 +234,6 @@ mod tests {
 
         assert_eq!(world.resource::<ChangedCount>().0, 0);
         let ns = world.resource::<NextGameState>();
-        assert_eq!(*ns.get(), NextGameStates::Unchanged);
+        assert_eq!(ns.get(), None);
     }
 }

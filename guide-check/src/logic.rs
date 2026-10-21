@@ -176,7 +176,7 @@ mod tests {
     use super::define_your_own_systemparam_bundle::Game;
     use aberredengine::bevy_ecs::message::Messages;
     use aberredengine::bevy_ecs::system::RunSystemOnce;
-    use aberredengine::core::resources::gamestate::{GameState, NextGameState, NextGameStates};
+    use aberredengine::core::resources::gamestate::{GameState, NextGameState};
     use aberredengine::prelude::*;
     use aberredengine::test_support::TestWorld;
 
@@ -195,10 +195,10 @@ mod tests {
         assert!(tw.world.resource::<WorldSignals>().has_flag("bundle_ran"));
         let queued: Vec<AudioCmd> = tw.world.resource_mut::<Messages<AudioCmd>>().drain().collect();
         assert!(queued.iter().any(|c| matches!(c, AudioCmd::PlayFx { id } if id == "jump")));
-        assert!(matches!(
+        assert_eq!(
             tw.world.resource::<NextGameState>().get(),
-            NextGameStates::Pending(GameState::Quitting)
-        ));
+            Some(&GameState::Quitting)
+        );
     }
 
     #[test]

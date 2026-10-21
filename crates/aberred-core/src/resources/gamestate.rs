@@ -18,17 +18,6 @@ pub enum GameState {
     Quitting,
 }
 
-/// Representation of a requested next state.
-///
-/// Use [`NextGameState::set`] to mark a transition as pending; an observer
-/// will later apply it and reset the value to [`NextGameStates::Unchanged`].
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Default)]
-pub enum NextGameStates {
-    #[default]
-    Unchanged,
-    Pending(GameState),
-}
-
 /// Authoritative current game state.
 #[derive(Resource, Debug, Clone, PartialEq, Eq, Hash)]
 pub struct CurrentGameState {
@@ -62,9 +51,12 @@ impl CurrentGameState {
 }
 
 /// Intent to change to a new game state.
+///
+/// Use [`NextGameState::set`] to mark a transition as pending; an observer
+/// later applies it and clears the request.
 #[derive(Resource, Debug, Clone, PartialEq, Eq, Hash)]
 pub struct NextGameState {
-    next: NextGameStates,
+    next: Option<GameState>,
 }
 
 impl Default for NextGameState {
@@ -74,23 +66,21 @@ impl Default for NextGameState {
 }
 
 impl NextGameState {
-    /// Create a new value initialized to [`NextGameStates::Unchanged`].
+    /// Create a new value with no transition requested.
     pub fn new() -> Self {
-        NextGameState {
-            next: NextGameStates::Unchanged,
-        }
+        NextGameState { next: None }
     }
 
-    /// Get the current transition request.
-    pub fn get(&self) -> &NextGameStates {
-        &self.next
+    /// The requested next state, or `None` when no transition is pending.
+    pub fn get(&self) -> Option<&GameState> {
+        self.next.as_ref()
     }
 
     /// Request a transition to `next` by marking it as pending.
     ///
     /// An observer will apply the transition and clear the request.
     pub fn set(&mut self, next: GameState) {
-        self.next = NextGameStates::Pending(next);
+        self.next = Some(next);
         // The system `check_pending_state` will handle the state change event emission.
     }
 
@@ -98,12 +88,12 @@ impl NextGameState {
     /// pending quit wins over a scene request
     /// (`NextScene::switch_due`).
     pub fn quit_requested(&self) -> bool {
-        self.next == NextGameStates::Pending(GameState::Quitting)
+        self.next == Some(GameState::Quitting)
     }
 
-    /// Reset to [`NextGameStates::Unchanged`].
+    /// Clear the transition request.
     pub fn reset(&mut self) {
-        self.next = NextGameStates::Unchanged;
+        self.next = None;
     }
 }
 
@@ -116,10 +106,10 @@ mod tests {
         assert_eq!(CurrentGameState::default().get(), &GameState::None);
 
         let mut next = NextGameState::default();
-        assert_eq!(next.get(), &NextGameStates::Unchanged);
+        assert_eq!(next.get(), None);
         next.set(GameState::Playing);
-        assert_eq!(next.get(), &NextGameStates::Pending(GameState::Playing));
+        assert_eq!(next.get(), Some(&GameState::Playing));
         next.reset();
-        assert_eq!(next.get(), &NextGameStates::Unchanged);
+        assert_eq!(next.get(), None);
     }
 }

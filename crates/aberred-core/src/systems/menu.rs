@@ -576,7 +576,6 @@ pub fn menu_selection_observer(
 mod tests {
     use super::*;
     use crate::math::{Color, Vec2};
-    use crate::resources::gamestate::NextGameStates;
     use crate::resources::worldsignals::WorldSignals;
     use bevy_ecs::message::Messages;
     use bevy_ecs::system::RunSystemOnce;
@@ -1020,10 +1019,7 @@ mod tests {
         select(&mut world, menu, "play");
         assert_eq!(world.resource::<NextScene>().get(), Some("level01"));
 
-        assert_eq!(
-            world.resource::<NextGameState>().get(),
-            &NextGameStates::Unchanged
-        );
+        assert_eq!(world.resource::<NextGameState>().get(), None);
         select(&mut world, menu, "quit");
         assert!(world.resource::<NextGameState>().quit_requested());
     }
@@ -1036,10 +1032,7 @@ mod tests {
         select(&mut world, with_actions, "play");
         select(&mut world, without, "play");
         assert!(!world.resource::<NextScene>().is_pending());
-        assert_eq!(
-            world.resource::<NextGameState>().get(),
-            &NextGameStates::Unchanged
-        );
+        assert_eq!(world.resource::<NextGameState>().get(), None);
     }
 
     #[test]

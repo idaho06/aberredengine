@@ -8,7 +8,6 @@
 //!
 //! This decouples the intent to change state from the mechanics of running
 //! setup/teardown systems and avoids borrowing conflicts.
-use crate::resources::gamestate::NextGameStates::{Pending, Unchanged};
 use crate::resources::gamestate::{CurrentGameState, GameState, NextGameState};
 use crate::resources::systemsstore as hook_keys;
 use crate::resources::systemsstore::SystemsStore;
@@ -20,9 +19,9 @@ use log::{debug, info, warn};
 /// applied.
 ///
 /// Emitting this event causes [`observe_gamestate_change_event`] to read
-/// [`NextGameState`]. If it contains [`Pending`], the observer updates the
-/// authoritative [`CurrentGameState`], runs exit/enter hooks, and clears the pending
-/// value; if it is [`Unchanged`], nothing happens.
+/// [`NextGameState`]. If a transition is pending, the observer updates the
+/// authoritative [`CurrentGameState`], runs exit/enter hooks, and clears the
+/// request; otherwise nothing happens.
 #[derive(Event, Debug, Clone, Copy)]
 pub struct GameStateChangedEvent {}
 
@@ -33,7 +32,7 @@ pub struct GameStateChangedEvent {}
 /// - If pending, copies the new value into [`CurrentGameState`], then:
 ///   - calls state-specific exit hooks for the previous state
 ///   - calls state-specific enter hooks for the new state
-///   - resets [`NextGameState`] to [`Unchanged`]
+///   - clears the [`NextGameState`] request
 /// - If any required resource is missing, logs a diagnostic and returns.
 ///
 /// The enter hooks are executed by looking up system IDs in
@@ -52,10 +51,9 @@ pub fn observe_gamestate_change_event(
     if let (Some(next_game_state), Some(game_state)) =
         (next_game_state.as_deref_mut(), game_state.as_deref_mut())
     {
-        // Clone the next state value first so we don't keep an immutable borrow while mutating.
-        let next_state_value = next_game_state.get().clone();
-        match next_state_value {
-            Pending(new_state) => {
+        // Clone the requested state first so we don't keep an immutable borrow while mutating.
+        match next_game_state.get().cloned() {
+            Some(new_state) => {
                 let old_state = game_state.get().clone();
                 info!(
                     "Transitioning from {:?} to {:?}",
@@ -70,7 +68,7 @@ pub fn observe_gamestate_change_event(
                 let systems_store = systems_store.as_ref();
                 on_state_enter(&new_state, &mut commands, systems_store);
             }
-            Unchanged => {
+            None => {
                 debug!("No state change pending.");
             }
         }
@@ -118,7 +116,7 @@ fn on_state_enter(state: &GameState, commands: &mut Commands, systems_store: &Sy
 /// [`NextGameState`] alone when the setup hook already requested a state.
 fn request_playing_if_unchanged(world: &mut World) {
     let mut next = world.resource_mut::<NextGameState>();
-    if *next.get() == Unchanged {
+    if next.get().is_none() {
         next.set(GameState::Playing);
     }
 }
@@ -137,7 +135,6 @@ fn on_state_exit(state: &GameState, _commands: &mut Commands, _systems_store: &S
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::resources::gamestate::NextGameStates;
 
     /// A world with the state resources, the observer, and (if given) a
     /// `setup` hook registered in its [`SystemsStore`].
@@ -160,8 +157,8 @@ mod tests {
         world.flush();
     }
 
-    fn next(world: &World) -> NextGameStates {
-        world.resource::<NextGameState>().get().clone()
+    fn next(world: &World) -> Option<GameState> {
+        world.resource::<NextGameState>().get().cloned()
     }
 
     #[test]
@@ -172,28 +169,28 @@ mod tests {
             world.resource::<CurrentGameState>().get(),
             &GameState::Setup
         );
-        assert_eq!(next(&world), Pending(GameState::Playing));
+        assert_eq!(next(&world), Some(GameState::Playing));
     }
 
     #[test]
     fn setup_hook_that_sets_nothing_requests_playing() {
         let mut world = world_with_setup(Some(|_| {}));
         enter(&mut world, GameState::Setup);
-        assert_eq!(next(&world), Pending(GameState::Playing));
+        assert_eq!(next(&world), Some(GameState::Playing));
     }
 
     #[test]
     fn setup_hook_that_requests_another_state_wins() {
         let mut world = world_with_setup(Some(|mut next| next.set(GameState::Quitting)));
         enter(&mut world, GameState::Setup);
-        assert_eq!(next(&world), Pending(GameState::Quitting));
+        assert_eq!(next(&world), Some(GameState::Quitting));
     }
 
     #[test]
     fn setup_hook_that_requests_playing_itself_is_unaffected() {
         let mut world = world_with_setup(Some(|mut next| next.set(GameState::Playing)));
         enter(&mut world, GameState::Setup);
-        assert_eq!(next(&world), Pending(GameState::Playing));
+        assert_eq!(next(&world), Some(GameState::Playing));
     }
 
     #[test]
@@ -204,6 +201,6 @@ mod tests {
             world.resource::<CurrentGameState>().get(),
             &GameState::Playing
         );
-        assert_eq!(next(&world), Unchanged);
+        assert_eq!(next(&world), None);
     }
 }
