@@ -954,7 +954,7 @@ fn removing_an_unloaded_texture_during_deterministic_play_is_a_no_op() {
 // --- tilemaps in deterministic play -----------------------------------------
 
 use aberredengine::core::components::sprite::Sprite;
-use aberredengine::core::components::tilemap::TileMap;
+use aberredengine::core::components::tilemap::Tilemap;
 use aberredengine::core::systems::tilemap::tilemap_texture_key;
 
 const TILEMAP_DIR: &str = "assets/tilemaps/sidescroller_test01";
@@ -973,7 +973,7 @@ fn world_spawning_a_tilemap(preload: bool) -> TestWorld {
         .on_scene_enter(
             sk::MAIN_SCENE,
             |_: On<SceneEntered>, mut commands: Commands| {
-                commands.spawn(TileMap::new(TILEMAP_DIR));
+                commands.spawn(Tilemap::new(TILEMAP_DIR));
             },
         )
         .build()

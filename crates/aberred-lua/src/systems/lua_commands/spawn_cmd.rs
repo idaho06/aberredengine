@@ -30,7 +30,7 @@ use aberred_core::components::signalbinding::SignalBinding;
 use aberred_core::components::signals::Signals;
 use aberred_core::components::sprite::Sprite;
 use aberred_core::components::stuckto::StuckTo;
-use aberred_core::components::tilemap::TileMap;
+use aberred_core::components::tilemap::Tilemap;
 use aberred_core::components::tint::Tint;
 use aberred_core::components::ttl::Ttl;
 use aberred_core::components::world_position::WorldPosition;
@@ -84,7 +84,7 @@ pub(super) fn apply_components(
         entity_commands.insert(Ttl::new(seconds));
     }
     if let Some(path) = cmd.tilemap_path {
-        entity_commands.insert(TileMap::new(path));
+        entity_commands.insert(Tilemap::new(path));
     }
     if let Some(window) = cmd.gui_window {
         entity_commands.insert(window);

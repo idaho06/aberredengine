@@ -43,7 +43,7 @@ pub use aberred_core::components::signalbinding::SignalBinding;
 pub use aberred_core::components::signals::Signals;
 pub use aberred_core::components::sprite::Sprite;
 pub use aberred_core::components::stuckto::StuckTo;
-pub use aberred_core::components::tilemap::TileMap;
+pub use aberred_core::components::tilemap::Tilemap;
 pub use aberred_core::components::timer::{Timer, TimerMode};
 pub use aberred_core::components::tween::{Easing, LoopMode, Tween};
 pub use aberred_core::components::world_position::WorldPosition;

@@ -22,7 +22,7 @@ use crate::components::particleemitter::{EmitterShape, ParticleEmitter, TtlSpec}
 use crate::components::rotation::Rotation;
 use crate::components::scale::Scale;
 use crate::components::sprite::Sprite;
-use crate::components::tilemap::TileMap;
+use crate::components::tilemap::Tilemap;
 use crate::components::tint::Tint;
 use crate::components::world_position::WorldPosition;
 use crate::components::zindex::ZIndex;
@@ -207,7 +207,7 @@ fn spawn_entity(commands: &mut Commands, def: &EntityDef) -> Entity {
         ec.insert(Scale::new(sx, sy));
     }
     if let Some(ref p) = def.tilemap_path {
-        ec.insert(TileMap::new(p));
+        ec.insert(Tilemap::new(p));
     }
     if let Some([r, g, b, a]) = def.tint {
         ec.insert(Tint::new(r, g, b, a));
@@ -557,7 +557,7 @@ mod tests {
         );
         assert_eq!(text.color, Color::new(5, 6, 7, 8));
         assert_eq!(
-            world.get::<TileMap>(other).unwrap().path,
+            world.get::<Tilemap>(other).unwrap().path,
             "assets/tilemaps/x"
         );
         assert!(world.get::<WorldPosition>(other).is_none());

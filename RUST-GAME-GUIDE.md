@@ -1147,17 +1147,17 @@ assets/tilemaps/level01/
 └── level01.txt    # JSON: { tile_size, map_width, map_height, layers: [{ name, positions: [{ x, y, id }] }] }
 ```
 
-Spawn a tilemap by attaching the `TileMap` component to any entity. `tilemap_spawn_system` reacts to `Added<TileMap>`, loads the PNG + JSON from disk, and spawns all tile entities as `ChildOf` children of the root entity. The entire tilemap then moves, scales, and rotates as one unit:
+Spawn a tilemap by attaching the `Tilemap` component to any entity. `tilemap_spawn_system` reacts to `Added<Tilemap>`, loads the PNG + JSON from disk, and spawns all tile entities as `ChildOf` children of the root entity. The entire tilemap then moves, scales, and rotates as one unit:
 
 ```rust
 use aberredengine::prelude::*;
 
 // Minimal — tiles appear at world origin (default WorldPosition inserted automatically)
-commands.spawn(TileMap::new("assets/tilemaps/level01"));
+commands.spawn(Tilemap::new("assets/tilemaps/level01"));
 
 // Positioned and scaled
 commands.spawn((
-    TileMap::new("assets/tilemaps/level01"),
+    Tilemap::new("assets/tilemaps/level01"),
     WorldPosition::new(100.0, 200.0),
     Scale::new(2.0, 2.0),
 ));
@@ -1180,7 +1180,7 @@ engine.spawn()
     :build()
 ```
 
-The atlas texture is stored in `TextureStore` under `"tilemap:"` plus the directory path (`"tilemap:assets/tilemaps/level01"` above; `tilemap_texture_key(path)` in `aberredengine::core::systems::tilemap` computes it), and loaded once per key, so two `TileMap` entities pointing to the same directory share one GPU texture. Directories with the same name in different places get separate atlases, and the prefix keeps the key apart from your own texture keys. Tile entities are in `Group("tiles")` and get `ZIndex` values automatically based on layer order (first layer most negative, last layer least negative).
+The atlas texture is stored in `TextureStore` under `"tilemap:"` plus the directory path (`"tilemap:assets/tilemaps/level01"` above; `tilemap_texture_key(path)` in `aberredengine::core::systems::tilemap` computes it), and loaded once per key, so two `Tilemap` entities pointing to the same directory share one GPU texture. Directories with the same name in different places get separate atlases, and the prefix keeps the key apart from your own texture keys. Tile entities are in `Group("tiles")` and get `ZIndex` values automatically based on layer order (first layer most negative, last layer least negative).
 
 Tile entities carry only `Group`, `Sprite`, `WorldPosition`, `ZIndex` and `ChildOf` — **no `BoxCollider`**. Collision detection needs a `BoxCollider` on both entities, so a `CollisionRule` on `"tiles"` never fires until your game adds colliders. One way is a system that gives every newly spawned tile a sprite-sized collider:
 
@@ -2346,7 +2346,7 @@ A load finishes at a wall-clock time, so a deterministic game can't change its l
 - `AssetLoader::load_*` ([Section 6](#6-loading-assets)) for a key that is already loaded returns `Ok` and does nothing. For a key that isn't, it returns `Err(AssetError::AssetChangeDuringDeterministicPlay { .. })` and queues nothing.
 - A command written through a raw `MessageWriter<RenderAssetCmd>`/`MessageWriter<AudioCmd>` (or `assets.render()`/`assets.audio()`) has no result to return. A new load, or a removal, rename or unload of a loaded asset, is dropped and logged as an error, and panics in debug builds. Commands that change nothing (reloading a loaded key, removing one that isn't loaded) are dropped silently.
 - Texture filter changes and audio playback work as usual.
-- Engine features that load on the fly follow the same rule. Load each tilemap's atlas in Setup with `assets.load_tilemap(dir)` (same `dir` as its `TileMap`), spawn maps whose assets were loaded in Setup, and keep menus on dynamic text (the default; `with_dynamic_text(false)` rasterizes labels into new textures).
+- Engine features that load on the fly follow the same rule. Load each tilemap's atlas in Setup with `assets.load_tilemap(dir)` (same `dir` as its `Tilemap`), spawn maps whose assets were loaded in Setup, and keep menus on dynamic text (the default; `with_dynamic_text(false)` rasterizes labels into new textures).
 
 ---
 

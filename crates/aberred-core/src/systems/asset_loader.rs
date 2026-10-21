@@ -130,7 +130,7 @@ impl<'w> AssetLoader<'w> {
     }
 
     /// Queues the atlas texture of the tilemap directory at `dir`, under the
-    /// key a `TileMap` spawned from the same `dir` uses
+    /// key a `Tilemap` spawned from the same `dir` uses
     /// (`tilemap_texture_key`). A deterministic game calls this in `Setup`
     /// for every tilemap it spawns while `Playing`; any other game can let
     /// the spawn load it.

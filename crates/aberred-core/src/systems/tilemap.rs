@@ -14,7 +14,7 @@ use serde::Deserialize;
 
 use crate::components::group::Group;
 use crate::components::sprite::Sprite;
-use crate::components::tilemap::TileMap;
+use crate::components::tilemap::Tilemap;
 use crate::components::world_position::WorldPosition;
 use crate::components::zindex::ZIndex;
 use crate::protocol::render_assets::RenderAssetCmd;
@@ -40,7 +40,7 @@ pub struct TileLayer {
 
 /// Tilemap metadata and layer data, as parsed from Tilesetter 2.1.0 JSON.
 #[derive(Debug, Deserialize)]
-pub struct Tilemap {
+pub struct TilemapData {
     pub tile_size: u32,
     pub map_width: u32,
     pub map_height: u32,
@@ -117,8 +117,8 @@ fn read_png_dimensions(mut reader: impl Read, path: &str) -> Result<(i32, i32), 
 /// Load tilemap JSON and read atlas PNG dimensions, CPU-only (no GL context
 /// required). `path` is a directory; the last path segment is
 /// used as the stem for `<stem>.png` (texture) and `<stem>.txt` (JSON
-/// data). Returns the parsed [`Tilemap`] and the atlas's pixel dimensions.
-pub fn load_tilemap_data(path: &str) -> Result<(Tilemap, i32, i32), String> {
+/// data). Returns the parsed [`TilemapData`] and the atlas's pixel dimensions.
+pub fn load_tilemap_data(path: &str) -> Result<(TilemapData, i32, i32), String> {
     let path = normalize_tilemap_dir(path);
     let dirname = path_stem(path);
     let json_path = format!("{}/{}.txt", path, dirname);
@@ -130,7 +130,7 @@ pub fn load_tilemap_data(path: &str) -> Result<(Tilemap, i32, i32), String> {
 
     let json_string = std::fs::read_to_string(&json_path)
         .map_err(|err| format!("Failed to load tilemap JSON '{}': {err}", json_path))?;
-    let tilemap: Tilemap = serde_json::from_str(&json_string)
+    let tilemap: TilemapData = serde_json::from_str(&json_string)
         .map_err(|err| format!("Failed to parse tilemap JSON '{}': {err}", json_path))?;
 
     Ok((tilemap, tex_w, tex_h))
@@ -151,7 +151,7 @@ pub fn spawn_tiles(
     tilemap_tex_key: impl Into<String>,
     tex_width: i32,
     tex_height: i32,
-    tilemap: &Tilemap,
+    tilemap: &TilemapData,
     parent: Option<Entity>,
 ) {
     let tilemap_tex_key: Arc<str> = Arc::from(tilemap_tex_key.into());
@@ -225,7 +225,7 @@ pub fn spawn_tiles(
     }
 }
 
-/// Watches for newly added [`TileMap`] components, loads the tilemap data
+/// Watches for newly added [`Tilemap`] components, loads the tilemap data
 /// (CPU-only), queues the atlas texture upload via
 /// [`RenderAssetCmd::TilemapTexture`], and spawns tile entities as
 /// `ChildOf` children of the root entity.
@@ -234,7 +234,7 @@ pub fn spawn_tiles(
 /// so that [`crate::systems::propagate_transforms`] can compute child transforms.
 pub fn tilemap_spawn_system(
     mut commands: Commands,
-    query: Query<(Entity, &TileMap, Has<WorldPosition>), Added<TileMap>>,
+    query: Query<(Entity, &Tilemap, Has<WorldPosition>), Added<Tilemap>>,
     mut render_asset_cmd_writer: MessageWriter<RenderAssetCmd>,
 ) {
     for (entity, tilemap_comp, has_map_pos) in query.iter() {
@@ -290,8 +290,8 @@ mod tests {
         assert!(!tilemap.layers.is_empty());
     }
 
-    fn tilemap(tile_size: u32, layers: &[&[(u32, u32, u32)]]) -> Tilemap {
-        Tilemap {
+    fn tilemap(tile_size: u32, layers: &[&[(u32, u32, u32)]]) -> TilemapData {
+        TilemapData {
             tile_size,
             map_width: 0,
             map_height: 0,
@@ -309,7 +309,12 @@ mod tests {
         }
     }
 
-    fn run_spawn_tiles(world: &mut World, tex: (i32, i32), map: &Tilemap, parent: Option<Entity>) {
+    fn run_spawn_tiles(
+        world: &mut World,
+        tex: (i32, i32),
+        map: &TilemapData,
+        parent: Option<Entity>,
+    ) {
         let mut state = bevy_ecs::system::SystemState::<Commands>::new(world);
         {
             let mut commands = state.get_mut(world).unwrap();
@@ -448,7 +453,7 @@ mod tests {
     #[test]
     fn system_requests_the_atlas_texture_and_parents_tiles_to_the_root() {
         let mut world = World::new();
-        let root = world.spawn(TileMap::new(FIXTURE_DIR)).id();
+        let root = world.spawn(Tilemap::new(FIXTURE_DIR)).id();
         let cmds = run_system(&mut world);
 
         assert!(matches!(
@@ -474,7 +479,7 @@ mod tests {
     fn system_keeps_an_existing_root_position() {
         let mut world = World::new();
         let root = world
-            .spawn((TileMap::new(FIXTURE_DIR), WorldPosition::new(100.0, 50.0)))
+            .spawn((Tilemap::new(FIXTURE_DIR), WorldPosition::new(100.0, 50.0)))
             .id();
         run_system(&mut world);
         assert_eq!(
@@ -487,7 +492,7 @@ mod tests {
     fn system_with_missing_tilemap_spawns_and_requests_nothing() {
         let mut world = World::new();
         let root = world
-            .spawn(TileMap::new("assets/tilemaps/does_not_exist"))
+            .spawn(Tilemap::new("assets/tilemaps/does_not_exist"))
             .id();
         assert!(run_system(&mut world).is_empty());
         // Entity counts are unreliable here (bevy registers resources/systems as entities).
@@ -510,7 +515,7 @@ mod tests {
         );
 
         let mut world = World::new();
-        world.spawn(TileMap::new(format!("{FIXTURE_DIR}//")));
+        world.spawn(Tilemap::new(format!("{FIXTURE_DIR}//")));
         let cmds = run_system(&mut world);
         assert!(matches!(
             cmds.as_slice(),
@@ -541,8 +546,8 @@ mod tests {
         assert_ne!(key_a, key_b, "each directory gets its own atlas");
 
         let mut world = World::new();
-        let root_a = world.spawn(TileMap::new(path_a)).id();
-        let root_b = world.spawn(TileMap::new(path_b)).id();
+        let root_a = world.spawn(Tilemap::new(path_a)).id();
+        let root_b = world.spawn(Tilemap::new(path_b)).id();
         assert_eq!(run_system(&mut world).len(), 2, "one atlas upload per map");
 
         let tiles = in_group(&mut world, TILES_GROUP);

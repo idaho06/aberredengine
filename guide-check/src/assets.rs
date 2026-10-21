@@ -317,11 +317,11 @@ mod tilemaps {
     use aberredengine::prelude::*;
 
     // Minimal — tiles appear at world origin (default WorldPosition inserted automatically)
-    commands.spawn(TileMap::new("assets/tilemaps/level01"));
+    commands.spawn(Tilemap::new("assets/tilemaps/level01"));
 
     // Positioned and scaled
     commands.spawn((
-        TileMap::new("assets/tilemaps/level01"),
+        Tilemap::new("assets/tilemaps/level01"),
         WorldPosition::new(100.0, 200.0),
         Scale::new(2.0, 2.0),
     ));

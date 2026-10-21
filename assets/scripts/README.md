@@ -926,7 +926,7 @@ behaves identically to queuing it from any other callback.
 | `z_index` | number | Render order |
 | `rotation_deg` | number | Initial rotation in degrees |
 | `scale` | `[x, y]` | Initial scale |
-| `tilemap_path` | string | Path for `TileMap` component |
+| `tilemap_path` | string | Path for `Tilemap` component |
 | `registered_as` | string | Register entity in WorldSignals under this key |
 | `tint` | `[r, g, b, a]` | Color tint (0–255 per channel) |
 | `lua_setup` | string | One-shot Lua setup callback (see [LuaSetup Component](#luasetup-component)) |

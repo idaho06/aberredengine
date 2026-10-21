@@ -123,7 +123,7 @@ pub struct EntityDef {
     /// Scale `[x, y]` (maps to [`crate::components::scale::Scale`]).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub scale: Option<[f32; 2]>,
-    /// If set, spawns a [`crate::components::tilemap::TileMap`] component with this directory path.
+    /// If set, spawns a [`crate::components::tilemap::Tilemap`] component with this directory path.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tilemap_path: Option<String>,
     /// If set, registers the spawned entity in `WorldSignals.entities` under this key.
