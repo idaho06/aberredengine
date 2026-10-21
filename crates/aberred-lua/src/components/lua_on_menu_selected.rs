@@ -1,6 +1,6 @@
 //! Lua callback component fired when one of a menu's items is confirmed.
 //!
-//! [`lua_menu_selection_observer`](crate::systems::lua_menu::lua_menu_selection_observer)
+//! [`lua_menu_selected_observer`](crate::systems::lua_menu_selected::lua_menu_selected_observer)
 //! calls the named function when the menu triggers `MenuSelected`. A Lua menu
 //! with a callback gets no `MenuActions`: the callback handles every item.
 //!

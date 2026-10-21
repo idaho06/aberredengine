@@ -73,11 +73,11 @@ use aberred_lua::systems::lua_animation_finished::lua_animation_finished_observe
 #[cfg(feature = "lua")]
 use aberred_lua::systems::lua_collision::lua_collision_rule_added_observer;
 #[cfg(feature = "lua")]
-use aberred_lua::systems::lua_gui_interactable_click::lua_gui_interactable_click_observer;
+use aberred_lua::systems::lua_gui_clicked::lua_gui_clicked_observer;
 #[cfg(feature = "lua")]
 use aberred_lua::systems::lua_mapspawn::lua_map_spawned_observer;
 #[cfg(feature = "lua")]
-use aberred_lua::systems::lua_menu::lua_menu_selection_observer;
+use aberred_lua::systems::lua_menu_selected::lua_menu_selected_observer;
 #[cfg(feature = "lua")]
 use aberred_lua::systems::lua_phase::{lua_phase_entered_observer, lua_phase_exited_observer};
 #[cfg(feature = "lua")]
@@ -356,11 +356,8 @@ impl EngineBuilder {
             world.spawn((Observer::new(lua_scene_entered_observer), Persistent));
             world.spawn((Observer::new(lua_phase_entered_observer), Persistent));
             world.spawn((Observer::new(lua_phase_exited_observer), Persistent));
-            world.spawn((Observer::new(lua_menu_selection_observer), Persistent));
-            world.spawn((
-                Observer::new(lua_gui_interactable_click_observer),
-                Persistent,
-            ));
+            world.spawn((Observer::new(lua_menu_selected_observer), Persistent));
+            world.spawn((Observer::new(lua_gui_clicked_observer), Persistent));
             world.spawn((Observer::new(lua_animation_finished_observer), Persistent));
             world.spawn((Observer::new(lua_map_spawned_observer), Persistent));
 

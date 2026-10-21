@@ -1,6 +1,6 @@
 //! Lua callback component fired when a clickable GUI widget is clicked.
 //!
-//! [`lua_gui_interactable_click_observer`](crate::systems::lua_gui_interactable_click::lua_gui_interactable_click_observer)
+//! [`lua_gui_clicked_observer`](crate::systems::lua_gui_clicked::lua_gui_clicked_observer)
 //! calls the named function when the widget triggers `GuiClicked`.
 //!
 //! # Lua callback signature

@@ -2,8 +2,8 @@
 //!
 //! Bundles the params and steps shared by `lua_timer_fired_observer`,
 //! `lua_setup_entity_system`, `lua_animation_finished_observer`,
-//! `lua_tween_finished_observer`, `lua_gui_interactable_click_observer`,
-//! `lua_menu_selection_observer`, and the Lua collision observers: sync the
+//! `lua_tween_finished_observer`, `lua_gui_clicked_observer`,
+//! `lua_menu_selected_observer`, and the Lua collision observers: sync the
 //! signal cache, build the callback's arguments (an entity context and
 //! optional input table, or a custom context table), call the named Lua
 //! function, then drain the commands it queued (the collision observers drain

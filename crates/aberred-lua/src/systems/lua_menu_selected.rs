@@ -1,6 +1,6 @@
 //! Lua menu selection callbacks.
 //!
-//! [`lua_menu_selection_observer`] calls a menu's [`LuaOnMenuSelected`]
+//! [`lua_menu_selected_observer`] calls a menu's [`LuaOnMenuSelected`]
 //! callback (a Lua function name) when one of its items is confirmed. A Lua menu with a
 //! callback is spawned without `MenuActions`. The engine registers this
 //! observer only when a Lua script is set.
@@ -12,16 +12,16 @@ use bevy_ecs::prelude::*;
 
 /// Calls the selected menu's [`LuaOnMenuSelected`] callback with a ctx table of
 /// `menu_id`, `item_id` and `item_index`.
-pub fn lua_menu_selection_observer(
+pub fn lua_menu_selected_observer(
     trigger: On<MenuSelected>,
     menus: Query<&LuaOnMenuSelected>,
     mut p: LuaDispatch,
 ) {
     let event = trigger.event();
-    let Ok(on_select) = menus.get(event.entity) else {
+    let Ok(callback) = menus.get(event.entity) else {
         return;
     };
-    dispatch_custom_and_drain(&mut p, &on_select.callback, "Menu", |lua| {
+    dispatch_custom_and_drain(&mut p, &callback.callback, "Menu", |lua| {
         let ctx = lua.create_table()?;
         ctx.set("menu_id", event.entity.to_bits())?;
         ctx.set("item_id", event.item_id.as_str())?;
@@ -55,7 +55,7 @@ mod tests {
             .expect("failed to load Lua function");
         world.insert_non_send(lua);
         world.add_observer(menu_selection_observer);
-        world.add_observer(lua_menu_selection_observer);
+        world.add_observer(lua_menu_selected_observer);
         world
     }
 

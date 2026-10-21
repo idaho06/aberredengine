@@ -2,18 +2,18 @@
 //!
 //! See the crate root doc comment for the sim/logic-world boundary this
 //! crate sits at. When the game runs a Lua script, `lua_mapspawn`'s observer
-//! runs after core's `spawn_map_observer`, and `lua_menu`'s observer runs
+//! runs after core's `spawn_map_observer`, and `lua_menu_selected`'s observer runs
 //! alongside core's `menu_selection_observer`.
-//! `lua_gui_interactable_click`'s observer calls a clicked widget's Lua
+//! `lua_gui_clicked`'s observer calls a clicked widget's Lua
 //! callback, and `lua_timer_fired`'s observer calls the Lua function of a
 //! timer fired by core's `update_timers`.
 
 pub mod lua_animation_finished;
 pub mod lua_collision;
 pub mod lua_commands;
-pub mod lua_gui_interactable_click;
+pub mod lua_gui_clicked;
 pub mod lua_mapspawn;
-pub mod lua_menu;
+pub mod lua_menu_selected;
 pub mod lua_phase;
 pub mod lua_scene;
 pub mod lua_setup_entity;

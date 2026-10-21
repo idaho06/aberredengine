@@ -1,6 +1,6 @@
-//! Lua GUI interactable click dispatch.
+//! Lua GUI click callbacks.
 //!
-//! [`lua_gui_interactable_click_observer`] is spawned only in games that run
+//! [`lua_gui_clicked_observer`] is spawned only in games that run
 //! a Lua script. It calls the clicked widget's [`LuaOnGuiClicked`] callback;
 //! Rust code observes the same `GuiClicked` event directly.
 
@@ -11,16 +11,16 @@ use bevy_ecs::prelude::*;
 
 /// Reacts to `GuiClicked` by calling the widget's [`LuaOnGuiClicked`] callback
 /// with a `{ entity_id }` table. A widget without one is skipped.
-pub fn lua_gui_interactable_click_observer(
+pub fn lua_gui_clicked_observer(
     trigger: On<GuiClicked>,
-    on_clicks: Query<&LuaOnGuiClicked>,
+    callbacks: Query<&LuaOnGuiClicked>,
     mut p: LuaDispatch,
 ) {
     let entity = trigger.event().entity;
-    let Ok(on_click) = on_clicks.get(entity) else {
+    let Ok(callback) = callbacks.get(entity) else {
         return;
     };
-    dispatch_custom_and_drain(&mut p, &on_click.callback, "GUI interactable", |lua| {
+    dispatch_custom_and_drain(&mut p, &callback.callback, "GUI interactable", |lua| {
         let ctx = lua.create_table()?;
         ctx.set("entity_id", entity.to_bits())?;
         Ok(ctx)
@@ -38,7 +38,7 @@ mod tests {
         let mut world = World::new();
         init_dispatch_resources(&mut world);
         world.insert_non_send(LuaRuntime::new().expect("LuaRuntime::new"));
-        world.spawn(Observer::new(lua_gui_interactable_click_observer));
+        world.spawn(Observer::new(lua_gui_clicked_observer));
         world.flush();
         world
     }

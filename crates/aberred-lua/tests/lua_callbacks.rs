@@ -45,8 +45,8 @@ use aberred_lua::components::lua_on_tween_finished::LuaOnTweenFinished;
 use aberred_lua::resources::lua_runtime::LuaRuntime;
 use aberred_lua::systems::lua_animation_finished::lua_animation_finished_observer;
 use aberred_lua::systems::lua_collision::lua_collision_rule_added_observer;
-use aberred_lua::systems::lua_gui_interactable_click::lua_gui_interactable_click_observer;
-use aberred_lua::systems::lua_menu::lua_menu_selection_observer;
+use aberred_lua::systems::lua_gui_clicked::lua_gui_clicked_observer;
+use aberred_lua::systems::lua_menu_selected::lua_menu_selected_observer;
 use aberred_lua::systems::lua_timer_fired::{lua_timer_fired_observer, lua_timer_removed_observer};
 use aberred_lua::systems::lua_tween_finished::lua_tween_finished_observer;
 
@@ -644,7 +644,7 @@ fn lua_global<T: mlua::FromLua>(world: &World, name: &str) -> T {
 #[test]
 fn click_callback_reads_signals_written_since_the_last_dispatch() {
     let mut world = make_lua_callback_world(0.0);
-    world.add_observer(lua_gui_interactable_click_observer);
+    world.add_observer(lua_gui_clicked_observer);
     load_lua(
         &world,
         "function on_click(ctx) seen_score = engine.get_scalar('score') end",
@@ -668,7 +668,7 @@ fn click_callback_reads_signals_written_since_the_last_dispatch() {
 #[test]
 fn click_callback_queued_commands_apply_in_the_same_dispatch() {
     let mut world = make_lua_callback_world(0.0);
-    world.add_observer(lua_gui_interactable_click_observer);
+    world.add_observer(lua_gui_clicked_observer);
     load_lua(
         &world,
         "function on_click(ctx) engine.set_flag('clicked') end",
@@ -689,7 +689,7 @@ fn click_callback_queued_commands_apply_in_the_same_dispatch() {
 #[test]
 fn menu_callback_reads_signals_and_applies_queued_commands_in_the_same_dispatch() {
     let mut world = make_lua_callback_world(0.0);
-    world.add_observer(lua_menu_selection_observer);
+    world.add_observer(lua_menu_selected_observer);
     load_lua(
         &world,
         "function on_select(ctx) seen_score = engine.get_scalar('score'); engine.set_flag('selected') end",

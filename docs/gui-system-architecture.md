@@ -652,7 +652,7 @@ described below.
 `EntityEvent` targeted at the clicked widget. Rust code observes it, either per widget with
 `.observe(handler)` on the widget entity or globally with `EngineBuilder::add_observer`.
 
-In a game that runs a Lua script, `lua_gui_interactable_click_observer` (`aberred-lua`) also
+In a game that runs a Lua script, `lua_gui_clicked_observer` (`aberred-lua`) also
 reacts to it and calls the function named by the widget's `LuaOnGuiClicked` component, if it has one. A missing
 Lua function only warns. Rust observers run either way.
 
@@ -1015,7 +1015,7 @@ The following are gated on `feature = "lua"`:
 - `engine.set_gui_theme_*` / `engine.entity_set_gui_disabled` Lua API calls
 - The `gui_theme_commands` queue in `LuaAppData`
 - `GuiButton::with_lua_callback`, `GuiImage::with_lua_callback` constructors
-- `lua_gui_interactable_click_observer` (`aberred-lua`), spawned only in games that run a Lua script
+- `lua_gui_clicked_observer` (`aberred-lua`), spawned only in games that run a Lua script
 
 Rust-only games (built with `default-features = false`) get the full component and system stack
 and configure everything via `ResMut<GuiThemeStore>` and direct component spawning.
