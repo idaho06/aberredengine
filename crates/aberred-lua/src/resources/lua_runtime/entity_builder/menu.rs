@@ -178,16 +178,16 @@ pub(super) fn register<M: LuaUserDataMethods<LuaEntityBuilder>>(
     builder_method!(
         methods,
         meta,
-        "with_menu_callback",
+        "with_lua_menu_selected",
         "Set Lua callback for menu selection",
         [("callback", "string")],
         |_, this: &mut LuaEntityBuilder, callback: String| {
             let Some(ref mut menu) = this.cmd.menu else {
                 return Err(LuaError::runtime(
-                    "with_menu_callback() requires with_menu() first",
+                    "with_lua_menu_selected() requires with_menu() first",
                 ));
             };
-            menu.on_select_callback = Some(callback);
+            menu.lua_on_menu_selected = Some(callback);
             Ok(())
         }
     );
@@ -271,7 +271,7 @@ mod tests {
                 "with_menu_action_request_quit('i')",
                 "with_menu_action_request_quit",
             ),
-            ("with_menu_callback('cb')", "with_menu_callback"),
+            ("with_lua_menu_selected('cb')", "with_lua_menu_selected"),
             ("with_menu_visible_count(3)", "with_menu_visible_count"),
         ] {
             assert_runtime_error(
@@ -330,13 +330,13 @@ mod tests {
             ":with_menu_dynamic_text(true)\
              :with_menu_cursor('cursor')\
              :with_menu_selection_sound('blip')\
-             :with_menu_callback('on_menu')\
+             :with_lua_menu_selected('on_menu')\
              :with_menu_visible_count(3)",
         );
         assert_eq!(menu.dynamic_text, Some(true));
         assert_eq!(menu.cursor_entity_key.as_deref(), Some("cursor"));
         assert_eq!(menu.selection_change_sound.as_deref(), Some("blip"));
-        assert_eq!(menu.on_select_callback.as_deref(), Some("on_menu"));
+        assert_eq!(menu.lua_on_menu_selected.as_deref(), Some("on_menu"));
         assert_eq!(menu.visible_count, Some(3));
     }
 }

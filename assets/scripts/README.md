@@ -219,7 +219,7 @@ return M
    - Collision callbacks (names in `:with_lua_collision_rule()` / `:with_lua_collision_started()` / `:with_lua_collision_ended()`)
    - Phase callbacks (names in `:with_lua_phase_entered()` / `:with_lua_phase_exited()` / `:with_lua_phase_update()` or `engine.entity_insert_lua_phase_*()`)
    - Timer callbacks (names in `:with_lua_timer()` / `:with_lua_timer_once()`)
-   - Menu callbacks (names in `:with_menu_callback()`)
+   - Menu callbacks (names in `:with_lua_menu_selected()`)
    - LuaSetup callbacks (names in `:with_lua_setup()` or map file `"lua_setup"` field)
    - Animation finished callbacks (names in `:with_lua_animation_finished()` or map file `"on_animation_finished"` field)
 
@@ -1508,7 +1508,7 @@ Define a quit-request action (requires `:with_menu()`).
 :with_menu_action_request_quit("quit")
 ```
 
-#### `:with_menu_callback(callback_name)`
+#### `:with_lua_menu_selected(callback)`
 
 Set a Lua callback function for menu selection (requires `:with_menu()`).
 
@@ -1530,7 +1530,7 @@ engine.spawn()
     }, 16, 64, "arcade", 16, 24, true)
     :with_menu_colors(255, 255, 0, 255, 255, 255, 255, 255)
     :with_menu_cursor("menu_cursor")
-    :with_menu_callback("on_main_menu_select")
+    :with_lua_menu_selected("on_main_menu_select")
     :build()
 
 -- Callback function (global) — takes one ctx table, not three positional args
@@ -2241,13 +2241,13 @@ Start the position tween from the end and play it in reverse (requires `:with_tw
 :with_tween_position_backwards()
 ```
 
-#### `:with_tween_position_on_finished(fn_name)`
+#### `:with_lua_tween_position_finished(callback)`
 
 Attach a one-shot callback fired when the tween stops playing (requires `:with_tween_position()`). Fires once for `"once"` mode (or an immediate zero-duration snap); never fires for `"loop"` or `"ping_pong"`. Callback signature: `fn(ctx, input)`.
 
 ```lua
 :with_tween_position(0, -100, 0, 0, 2.0)
-:with_tween_position_on_finished("on_move_done")
+:with_lua_tween_position_finished("on_move_done")
 
 function on_move_done(ctx, input)
     engine.log_info("Entity " .. ctx.id .. " finished moving")
@@ -2287,13 +2287,13 @@ Start the rotation tween from the end and play it in reverse (requires `:with_tw
 :with_tween_rotation_backwards()
 ```
 
-#### `:with_tween_rotation_on_finished(fn_name)`
+#### `:with_lua_tween_rotation_finished(callback)`
 
-Attach a one-shot callback fired when the tween stops playing (requires `:with_tween_rotation()`). Same semantics as `:with_tween_position_on_finished`. Callback signature: `fn(ctx, input)`.
+Attach a one-shot callback fired when the tween stops playing (requires `:with_tween_rotation()`). Same semantics as `:with_lua_tween_position_finished`. Callback signature: `fn(ctx, input)`.
 
 ```lua
 :with_tween_rotation(0, 360, 3.0)
-:with_tween_rotation_on_finished("on_spin_done")
+:with_lua_tween_rotation_finished("on_spin_done")
 ```
 
 #### `:with_tween_scale(from_x, from_y, to_x, to_y, duration)`
@@ -2329,13 +2329,13 @@ Start scale tween from the end and play in reverse (requires `:with_tween_scale(
 :with_tween_scale_backwards()  -- Now starts at 1.0, goes to 0.5
 ```
 
-#### `:with_tween_scale_on_finished(fn_name)`
+#### `:with_lua_tween_scale_finished(callback)`
 
-Attach a one-shot callback fired when the tween stops playing (requires `:with_tween_scale()`). Same semantics as `:with_tween_position_on_finished`. Callback signature: `fn(ctx, input)`.
+Attach a one-shot callback fired when the tween stops playing (requires `:with_tween_scale()`). Same semantics as `:with_lua_tween_position_finished`. Callback signature: `fn(ctx, input)`.
 
 ```lua
 :with_tween_scale(0, 0, 1, 1, 0.5)
-:with_tween_scale_on_finished("on_grow_done")
+:with_lua_tween_scale_finished("on_grow_done")
 ```
 
 ---
@@ -2383,11 +2383,11 @@ Start from the end and play in reverse (requires `:with_tween_screen_position()`
 :with_tween_screen_position_backwards()  -- Starts at (20, 50), slides to (-200, 50)
 ```
 
-#### `:with_tween_screen_position_on_finished(fn_name)`
+#### `:with_lua_tween_screen_position_finished(callback)`
 
 Attach a one-shot callback fired when the tween stops playing (requires `:with_tween_screen_position()`). Fires once for `"once"` mode; never fires for `"loop"` or `"ping_pong"`. Callback signature: `fn(ctx, input)`.
 
-A common pattern: use the `on_finished` callback to call `engine.entity_remove_screen_position` after a hide-tween, which removes `ScreenPosition` and fully hides the widget:
+A common pattern: use the finished callback to call `engine.entity_remove_screen_position` after a hide-tween, which removes `ScreenPosition` and fully hides the widget:
 
 ```lua
 -- Spawn a panel that slides in, then call a callback when visible
@@ -2395,7 +2395,7 @@ engine.spawn()
     :with_gui_window(200, 80)
     :with_tween_screen_position(-200, 50, 20, 50, 0.3)
     :with_tween_screen_position_easing("cubic_out")
-    :with_tween_screen_position_on_finished("on_panel_visible")
+    :with_lua_tween_screen_position_finished("on_panel_visible")
     :with_zindex(10)
     :build()
 
@@ -2403,7 +2403,7 @@ function on_panel_visible(ctx, input)
     -- Panel is now in view
 end
 
--- Later, hide it by sliding out with on_finished removing ScreenPosition
+-- Later, hide it by sliding out with a finished callback removing ScreenPosition
 local function hide_panel(panel_id)
     engine.entity_insert_tween_screen_position(panel_id, 20, 50, -200, 50, 0.3, "cubic_in", "once", false, "on_panel_hidden")
 end
@@ -3282,7 +3282,7 @@ Insert TTL component on entity at runtime.
 engine.entity_insert_ttl(enemy_id, 30.0)
 ```
 
-### `engine.entity_insert_tween_position(entity_id, from_x, from_y, to_x, to_y, duration, easing, loop_mode, backwards, on_finished?)`
+### `engine.entity_insert_tween_position(entity_id, from_x, from_y, to_x, to_y, duration, easing, loop_mode, backwards, callback?)`
 
 Add or replace TweenPosition component at runtime to animate entity movement.
 
@@ -3295,7 +3295,7 @@ Add or replace TweenPosition component at runtime to animate entity movement.
 - `easing` - Easing function (string): "linear", "quad_in", "quad_out", "quad_in_out", "cubic_in", "cubic_out", "cubic_in_out"
 - `loop_mode` - Loop behavior (string): "once", "loop", "ping_pong"
 - `backwards` - Start the tween from the end and play in reverse (boolean, default false)
-- `on_finished` - Optional Lua function name, called once when the tween stops playing (`"once"` mode, or an immediate zero-duration snap); never fires for `"loop"`/`"ping_pong"`. Omit for no callback — existing 8-arg call sites keep working unchanged.
+- `callback` - Optional Lua function name, called once when the tween stops playing (`"once"` mode, or an immediate zero-duration snap); never fires for `"loop"`/`"ping_pong"`. Omit for no callback — existing 8-arg call sites keep working unchanged.
 
 **Example:**
 
@@ -3308,7 +3308,7 @@ engine.entity_insert_tween_position(entity_id, -100, 0, 100, 0, 2.0, "quad_out",
 engine.entity_insert_tween_position(entity_id, -100, 0, 100, 0, 2.0, "quad_out", "once", false, "on_slide_done")
 ```
 
-### `engine.entity_insert_tween_rotation(entity_id, from, to, duration, easing, loop_mode, backwards, on_finished?)`
+### `engine.entity_insert_tween_rotation(entity_id, from, to, duration, easing, loop_mode, backwards, callback?)`
 
 Add or replace TweenRotation component at runtime to animate entity rotation.
 
@@ -3321,7 +3321,7 @@ Add or replace TweenRotation component at runtime to animate entity rotation.
 - `easing` - Easing function (string): "linear", "quad_in", "quad_out", "quad_in_out", "cubic_in", "cubic_out", "cubic_in_out"
 - `loop_mode` - Loop behavior (string): "once", "loop", "ping_pong"
 - `backwards` - Start the tween from the end and play in reverse (boolean, default false)
-- `on_finished` - Optional Lua function name, called once when the tween stops playing. Same semantics as `entity_insert_tween_position`'s `on_finished`.
+- `callback` - Optional Lua function name, called once when the tween stops playing. Same semantics as `entity_insert_tween_position`'s `callback`.
 
 **Example:**
 
@@ -3331,7 +3331,7 @@ local entity_id = engine.get_entity("spinner")
 engine.entity_insert_tween_rotation(entity_id, 0, 360, 3.0, "linear", "loop", false)
 ```
 
-### `engine.entity_insert_tween_scale(entity_id, from_x, from_y, to_x, to_y, duration, easing, loop_mode, backwards, on_finished?)`
+### `engine.entity_insert_tween_scale(entity_id, from_x, from_y, to_x, to_y, duration, easing, loop_mode, backwards, callback?)`
 
 Add or replace TweenScale component at runtime to animate entity scaling.
 
@@ -3344,7 +3344,7 @@ Add or replace TweenScale component at runtime to animate entity scaling.
 - `easing` - Easing function (string): "linear", "quad_in", "quad_out", "quad_in_out", "cubic_in", "cubic_out", "cubic_in_out"
 - `loop_mode` - Loop behavior (string): "once", "loop", "ping_pong"
 - `backwards` - Start tween from end and play in reverse (boolean, default false)
-- `on_finished` - Optional Lua function name, called once when the tween stops playing. Same semantics as `entity_insert_tween_position`'s `on_finished`.
+- `callback` - Optional Lua function name, called once when the tween stops playing. Same semantics as `entity_insert_tween_position`'s `callback`.
 
 **Example:**
 
@@ -3405,9 +3405,9 @@ function on_menu_close()
 end
 ```
 
-### `engine.entity_insert_tween_screen_position(entity_id, from_x, from_y, to_x, to_y, duration, easing, loop_mode, backwards, on_finished)`
+### `engine.entity_insert_tween_screen_position(entity_id, from_x, from_y, to_x, to_y, duration, easing, loop_mode, backwards, callback)`
 
-Add or replace `TweenScreenPosition` at runtime to animate screen-space position. Unlike the other tween insert functions, this one also inserts `ScreenPosition` on the entity if absent, seeded at `(from_x, from_y)`. The optional `on_finished` trailing argument (a Lua callback name string or nil) fires once when a `"once"` tween finishes — `"loop"` and `"ping_pong"` never fire it. Existing call sites with 9 positional args continue to work without the `on_finished` arg.
+Add or replace `TweenScreenPosition` at runtime to animate screen-space position. Unlike the other tween insert functions, this one also inserts `ScreenPosition` on the entity if absent, seeded at `(from_x, from_y)`. The optional `callback` trailing argument (a Lua callback name string or nil) fires once when a `"once"` tween finishes — `"loop"` and `"ping_pong"` never fire it. Existing call sites with 9 positional args continue to work without the `callback` arg.
 
 **Parameters:**
 
@@ -3418,7 +3418,7 @@ Add or replace `TweenScreenPosition` at runtime to animate screen-space position
 - `easing` - Easing function: "linear", "quad_in", "quad_out", "quad_in_out", "cubic_in", "cubic_out", "cubic_in_out"
 - `loop_mode` - Loop behavior: "once", "loop", "ping_pong"
 - `backwards` - Start from end and play in reverse (boolean)
-- `on_finished` - Optional callback name; fires once when tween ends (omit or pass nil for none)
+- `callback` - Optional callback name; fires once when tween ends (omit or pass nil for none)
 
 **Example:**
 
@@ -3434,12 +3434,12 @@ end
 
 There is currently no `engine.entity_remove_tween_screen_position(entity_id)` function — unlike
 `position`/`rotation`/`scale`, the screen-position tween family has no runtime remove counterpart
-yet. To stop a screen-position tween early, use its `on_finished` callback (see above) or drive
+yet. To stop a screen-position tween early, use its finished callback (see above) or drive
 the visual result you want via a second `entity_insert_tween_screen_position` call instead.
 
 ### `engine.entity_remove_screen_position(entity_id)`
 
-Remove `ScreenPosition` from an entity. GUI widget visibility is controlled by the presence or absence of `ScreenPosition` (rather than a visibility flag), so removing it hides the widget without despawning it. Pair with the `on_finished` arg of `entity_insert_tween_screen_position` for animated hide:
+Remove `ScreenPosition` from an entity. GUI widget visibility is controlled by the presence or absence of `ScreenPosition` (rather than a visibility flag), so removing it hides the widget without despawning it. Pair with the `callback` arg of `entity_insert_tween_screen_position` for animated hide:
 
 ```lua
 function on_panel_hidden(ctx, input)
@@ -4456,7 +4456,7 @@ function on_player_hit(ctx)
 end
 ```
 
-#### `engine.collision_entity_insert_tween_position(entity_id, from_x, from_y, to_x, to_y, duration, easing, loop_mode, backwards, on_finished?)`
+#### `engine.collision_entity_insert_tween_position(entity_id, from_x, from_y, to_x, to_y, duration, easing, loop_mode, backwards, callback?)`
 
 Add or replace TweenPosition component during collision handling.
 
@@ -4469,7 +4469,7 @@ Add or replace TweenPosition component during collision handling.
 - `easing` - Easing function: "linear", "quad_in", "quad_out", "quad_in_out", "cubic_in", "cubic_out", "cubic_in_out"
 - `loop_mode` - Loop behavior: "once", "loop", "ping_pong"
 - `backwards` - Start the tween from the end and play in reverse (boolean, default false)
-- `on_finished` - Optional Lua function name, called once when the tween stops playing. Omit for no callback.
+- `callback` - Optional Lua function name, called once when the tween stops playing. Omit for no callback.
 
 ```lua
 function on_player_bounce_pad(ctx)
@@ -4479,7 +4479,7 @@ function on_player_bounce_pad(ctx)
 end
 ```
 
-#### `engine.collision_entity_insert_tween_rotation(entity_id, from, to, duration, easing, loop_mode, backwards, on_finished?)`
+#### `engine.collision_entity_insert_tween_rotation(entity_id, from, to, duration, easing, loop_mode, backwards, callback?)`
 
 Add or replace TweenRotation component during collision handling.
 
@@ -4492,7 +4492,7 @@ Add or replace TweenRotation component during collision handling.
 - `easing` - Easing function
 - `loop_mode` - Loop behavior
 - `backwards` - Start the tween from the end and play in reverse (boolean, default false)
-- `on_finished` - Optional Lua function name, called once when the tween stops playing. Omit for no callback.
+- `callback` - Optional Lua function name, called once when the tween stops playing. Omit for no callback.
 
 ```lua
 function on_player_spin_powerup(ctx)
@@ -4501,7 +4501,7 @@ function on_player_spin_powerup(ctx)
 end
 ```
 
-#### `engine.collision_entity_insert_tween_scale(entity_id, from_x, from_y, to_x, to_y, duration, easing, loop_mode, backwards, on_finished?)`
+#### `engine.collision_entity_insert_tween_scale(entity_id, from_x, from_y, to_x, to_y, duration, easing, loop_mode, backwards, callback?)`
 
 Add or replace TweenScale component during collision handling.
 
@@ -4514,7 +4514,7 @@ Add or replace TweenScale component during collision handling.
 - `easing` - Easing function
 - `loop_mode` - Loop behavior
 - `backwards` - Start tween from end and play in reverse (boolean, default false)
-- `on_finished` - Optional Lua function name, called once when the tween stops playing. Omit for no callback.
+- `callback` - Optional Lua function name, called once when the tween stops playing. Omit for no callback.
 
 ```lua
 function on_player_grow_powerup(ctx)
@@ -4688,7 +4688,7 @@ function on_player_explosion(ctx)
 end
 ```
 
-#### `engine.collision_entity_insert_tween_screen_position(entity_id, from_x, from_y, to_x, to_y, duration, easing, loop_mode, backwards, on_finished)`
+#### `engine.collision_entity_insert_tween_screen_position(entity_id, from_x, from_y, to_x, to_y, duration, easing, loop_mode, backwards, callback)`
 
 Add or replace `TweenScreenPosition` during collision handling. Also inserts `ScreenPosition` if absent (seeded at `from`). See `engine.entity_insert_tween_screen_position` in [Entity Commands](#entity-commands) for parameter details.
 
@@ -4703,7 +4703,7 @@ end
 
 There is currently no `engine.collision_entity_remove_tween_screen_position(entity_id)` — same gap
 as the non-collision `engine.entity_remove_tween_screen_position` (see [Entity
-Commands](#entity-commands)). Use the `on_finished` callback or a second insert call instead.
+Commands](#entity-commands)). Use the finished callback or a second insert call instead.
 
 #### `engine.collision_entity_remove_screen_position(entity_id)`
 

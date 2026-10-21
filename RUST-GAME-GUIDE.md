@@ -1950,8 +1950,8 @@ EngineBuilder::new()
     // …
 ```
 
-**Lua consumers (Lua builds only):** attach `LuaOnTweenFinished<T>::new("fn_name")` to the entity (or use the matching
-`:with_tween_{position,rotation,scale,screen_position}_on_finished("fn_name")` builder method). The Lua
+**Lua consumers (Lua builds only):** attach `LuaOnTweenFinished<T>::new("on_done")` to the entity (or use the matching
+`:with_lua_tween_{position,rotation,scale,screen_position}_finished("on_done")` builder method). The Lua
 callback signature is `fn(ctx, input)` — the same as the animation-finished and timer/phase callbacks.
 
 ### GUI widgets

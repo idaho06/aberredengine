@@ -26,12 +26,12 @@ use aberred_core::events::tween::TweenFinished;
 
 pub fn lua_tween_finished_observer<T: TweenValue>(
     trigger: On<TweenFinished<T>>,
-    on_finished_query: Query<&LuaOnTweenFinished<T>>,
+    callbacks: Query<&LuaOnTweenFinished<T>>,
     mut p: LuaDispatch,
 ) {
     let entity = trigger.event().entity;
 
-    let Ok(callback) = on_finished_query.get(entity) else {
+    let Ok(callback) = callbacks.get(entity) else {
         return;
     };
     dispatch_and_drain(&mut p, entity, &callback.callback, "on_tween_finished");

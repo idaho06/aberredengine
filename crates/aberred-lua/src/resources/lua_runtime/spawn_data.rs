@@ -288,7 +288,7 @@ pub struct MenuData {
     /// (item_id, action)
     pub actions: Vec<(String, MenuAction)>,
     /// Optional Lua callback invoked when any item is selected.
-    pub on_select_callback: Option<String>,
+    pub lua_on_menu_selected: Option<String>,
     /// Maximum number of visible items (None = show all, enables scrolling).
     pub visible_count: Option<usize>,
 }

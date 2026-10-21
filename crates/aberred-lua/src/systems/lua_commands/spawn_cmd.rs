@@ -536,10 +536,10 @@ fn apply_ui_components(
         if let Some(count) = menu_data.visible_count {
             menu_component = menu_component.with_visible_count(count);
         }
-        if let Some(callback) = menu_data.on_select_callback {
+        if let Some(callback) = menu_data.lua_on_menu_selected {
             if !menu_data.actions.is_empty() {
                 warn!(
-                    "Menu has both with_menu_callback('{callback}') and menu actions; \
+                    "Menu has both with_lua_menu_selected('{callback}') and menu actions; \
                      the callback handles selection and the actions are discarded"
                 );
             }
@@ -1215,10 +1215,10 @@ mod tests {
             &mut signals,
             "engine.spawn()\
              :with_tween_position(0, 0, 10, 20, 1):with_tween_position_easing('quad_in')\
-             :with_tween_position_loop('ping_pong'):with_tween_position_on_finished('pos_done')\
+             :with_tween_position_loop('ping_pong'):with_lua_tween_position_finished('pos_done')\
              :with_tween_screen_position(1, 2, 3, 4, 2)\
              :with_tween_rotation(0, 90, 3):with_tween_rotation_backwards()\
-             :with_tween_scale(1, 1, 2, 2, 4):with_tween_scale_on_finished('scale_done')\
+             :with_tween_scale(1, 1, 2, 2, 4):with_lua_tween_scale_finished('scale_done')\
              :build()",
         );
 
@@ -1494,7 +1494,7 @@ mod tests {
     }
 
     #[test]
-    fn lua_menu_callback_becomes_lua_on_menu_select_without_menu_actions() {
+    fn lua_menu_selected_becomes_lua_on_menu_selected_without_menu_actions() {
         use aberred_core::components::menu::MenuActions;
         let mut world = World::new();
         let mut signals = WorldSignals::default();
@@ -1503,7 +1503,7 @@ mod tests {
             &mut world,
             &mut signals,
             "engine.spawn():with_menu({ {id='play', label='Play'} }, 0, 0, 'arcade', 16, 24, true)\
-             :with_menu_callback('on_menu')\
+             :with_lua_menu_selected('on_menu')\
              :with_menu_action_request_scene('play', 'level01'):build()",
         );
 

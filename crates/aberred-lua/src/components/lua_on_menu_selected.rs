@@ -17,7 +17,7 @@
 //! ```lua
 //! engine.spawn()
 //!     :with_menu({ { id = "play", label = "Play" } }, 100, 80, "arcade", 24, 30, true)
-//!     :with_menu_callback("on_main_menu_select")
+//!     :with_lua_menu_selected("on_main_menu_select")
 //!     :build()
 //! ```
 

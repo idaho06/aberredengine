@@ -440,7 +440,7 @@ macro_rules! define_entity_cmds {
                 desc = "Insert a time-to-live component on an entity",
                 params = [("entity_id", "integer"), ("seconds", "number")]),
             ("entity_insert_tween_position",
-                |(entity_id, from_x, from_y, to_x, to_y, duration, easing, loop_mode, backwards, on_finished)|
+                |(entity_id, from_x, from_y, to_x, to_y, duration, easing, loop_mode, backwards, callback)|
                 (u64, f32, f32, f32, f32, f32, String, String, bool, Option<String>),
                 EntityCmd::InsertTweenPosition {
                     entity_id, from_x, from_y, to_x, to_y,
@@ -449,16 +449,16 @@ macro_rules! define_entity_cmds {
                         easing: $crate::resources::lua_runtime::spawn_data::checked_easing(easing)?,
                         loop_mode: $crate::resources::lua_runtime::spawn_data::checked_loop_mode(loop_mode)?,
                         backwards,
-                        callback: on_finished.unwrap_or_default(),
+                        callback: callback.unwrap_or_default(),
                     },
                 },
                 desc = "Insert a position tween on an entity",
                 params = [("entity_id", "integer"), ("from_x", "number"), ("from_y", "number"),
                           ("to_x", "number"), ("to_y", "number"), ("duration", "number"),
                           ("easing", "string"), ("loop_mode", "string"), ("backwards", "boolean"),
-                          ("on_finished", "string")]),
+                          ("callback", "string")]),
             ("entity_insert_tween_rotation",
-                |(entity_id, from, to, duration, easing, loop_mode, backwards, on_finished)|
+                |(entity_id, from, to, duration, easing, loop_mode, backwards, callback)|
                 (u64, f32, f32, f32, String, String, bool, Option<String>),
                 EntityCmd::InsertTweenRotation {
                     entity_id, from, to,
@@ -467,15 +467,15 @@ macro_rules! define_entity_cmds {
                         easing: $crate::resources::lua_runtime::spawn_data::checked_easing(easing)?,
                         loop_mode: $crate::resources::lua_runtime::spawn_data::checked_loop_mode(loop_mode)?,
                         backwards,
-                        callback: on_finished.unwrap_or_default(),
+                        callback: callback.unwrap_or_default(),
                     },
                 },
                 desc = "Insert a rotation tween on an entity",
                 params = [("entity_id", "integer"), ("from", "number"), ("to", "number"),
                           ("duration", "number"), ("easing", "string"), ("loop_mode", "string"),
-                          ("backwards", "boolean"), ("on_finished", "string")]),
+                          ("backwards", "boolean"), ("callback", "string")]),
             ("entity_insert_tween_scale",
-                |(entity_id, from_x, from_y, to_x, to_y, duration, easing, loop_mode, backwards, on_finished)|
+                |(entity_id, from_x, from_y, to_x, to_y, duration, easing, loop_mode, backwards, callback)|
                 (u64, f32, f32, f32, f32, f32, String, String, bool, Option<String>),
                 EntityCmd::InsertTweenScale {
                     entity_id, from_x, from_y, to_x, to_y,
@@ -484,16 +484,16 @@ macro_rules! define_entity_cmds {
                         easing: $crate::resources::lua_runtime::spawn_data::checked_easing(easing)?,
                         loop_mode: $crate::resources::lua_runtime::spawn_data::checked_loop_mode(loop_mode)?,
                         backwards,
-                        callback: on_finished.unwrap_or_default(),
+                        callback: callback.unwrap_or_default(),
                     },
                 },
                 desc = "Insert a scale tween on an entity",
                 params = [("entity_id", "integer"), ("from_x", "number"), ("from_y", "number"),
                           ("to_x", "number"), ("to_y", "number"), ("duration", "number"),
                           ("easing", "string"), ("loop_mode", "string"), ("backwards", "boolean"),
-                          ("on_finished", "string")]),
+                          ("callback", "string")]),
             ("entity_insert_tween_screen_position",
-                |(entity_id, from_x, from_y, to_x, to_y, duration, easing, loop_mode, backwards, on_finished)|
+                |(entity_id, from_x, from_y, to_x, to_y, duration, easing, loop_mode, backwards, callback)|
                 (u64, f32, f32, f32, f32, f32, String, String, bool, Option<String>),
                 EntityCmd::InsertTweenScreenPosition {
                     entity_id, from_x, from_y, to_x, to_y,
@@ -502,14 +502,14 @@ macro_rules! define_entity_cmds {
                         easing: $crate::resources::lua_runtime::spawn_data::checked_easing(easing)?,
                         loop_mode: $crate::resources::lua_runtime::spawn_data::checked_loop_mode(loop_mode)?,
                         backwards,
-                        callback: on_finished.unwrap_or_default(),
+                        callback: callback.unwrap_or_default(),
                     },
                 },
                 desc = "Insert a screen-position tween on an entity (also inserts ScreenPosition itself if missing)",
                 params = [("entity_id", "integer"), ("from_x", "number"), ("from_y", "number"),
                           ("to_x", "number"), ("to_y", "number"), ("duration", "number"),
                           ("easing", "string"), ("loop_mode", "string"), ("backwards", "boolean"),
-                          ("on_finished", "string")]),
+                          ("callback", "string")]),
             ("entity_remove_tween_position", |entity_id| u64, EntityCmd::RemoveTweenPosition { entity_id },
                 desc = "Remove position tween from an entity",
                 params = [("entity_id", "integer")]),

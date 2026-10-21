@@ -84,13 +84,13 @@ pub(super) fn register<M: LuaUserDataMethods<LuaEntityBuilder>>(
     builder_method!(
         methods,
         meta,
-        "with_tween_position_on_finished",
+        "with_lua_tween_position_finished",
         "Set a Lua callback to call when the position tween finishes",
         [("callback", "string")],
         |_, this: &mut LuaEntityBuilder, callback: String| {
             let Some(ref mut tween) = this.cmd.tween_position else {
                 return Err(LuaError::runtime(
-                    "with_tween_position_on_finished() requires with_tween_position() first",
+                    "with_lua_tween_position_finished() requires with_tween_position() first",
                 ));
             };
             tween.config.callback = callback;
@@ -178,13 +178,13 @@ pub(super) fn register<M: LuaUserDataMethods<LuaEntityBuilder>>(
     builder_method!(
         methods,
         meta,
-        "with_tween_screen_position_on_finished",
+        "with_lua_tween_screen_position_finished",
         "Set a Lua callback to call when the screen position tween finishes",
         [("callback", "string")],
         |_, this: &mut LuaEntityBuilder, callback: String| {
             let Some(ref mut tween) = this.cmd.tween_screen_position else {
                 return Err(LuaError::runtime(
-                    "with_tween_screen_position_on_finished() requires with_tween_screen_position() first",
+                    "with_lua_tween_screen_position_finished() requires with_tween_screen_position() first",
                 ));
             };
             tween.config.callback = callback;
@@ -262,13 +262,13 @@ pub(super) fn register<M: LuaUserDataMethods<LuaEntityBuilder>>(
     builder_method!(
         methods,
         meta,
-        "with_tween_rotation_on_finished",
+        "with_lua_tween_rotation_finished",
         "Set a Lua callback to call when the rotation tween finishes",
         [("callback", "string")],
         |_, this: &mut LuaEntityBuilder, callback: String| {
             let Some(ref mut tween) = this.cmd.tween_rotation else {
                 return Err(LuaError::runtime(
-                    "with_tween_rotation_on_finished() requires with_tween_rotation() first",
+                    "with_lua_tween_rotation_finished() requires with_tween_rotation() first",
                 ));
             };
             tween.config.callback = callback;
@@ -356,13 +356,13 @@ pub(super) fn register<M: LuaUserDataMethods<LuaEntityBuilder>>(
     builder_method!(
         methods,
         meta,
-        "with_tween_scale_on_finished",
+        "with_lua_tween_scale_finished",
         "Set a Lua callback to call when the scale tween finishes",
         [("callback", "string")],
         |_, this: &mut LuaEntityBuilder, callback: String| {
             let Some(ref mut tween) = this.cmd.tween_scale else {
                 return Err(LuaError::runtime(
-                    "with_tween_scale_on_finished() requires with_tween_scale() first",
+                    "with_lua_tween_scale_finished() requires with_tween_scale() first",
                 ));
             };
             tween.config.callback = callback;
@@ -393,13 +393,13 @@ mod tests {
     #[test]
     fn tween_modifiers_require_their_own_tween_first() {
         for kind in KINDS {
-            for (suffix, args) in [
-                ("easing", "'quad_in'"),
-                ("loop", "'loop'"),
-                ("backwards", ""),
-                ("on_finished", "'cb'"),
+            for (prefix, suffix, args) in [
+                ("with_tween", "easing", "'quad_in'"),
+                ("with_tween", "loop", "'loop'"),
+                ("with_tween", "backwards", ""),
+                ("with_lua_tween", "finished", "'cb'"),
             ] {
-                let method = format!("with_tween_{kind}_{suffix}");
+                let method = format!("{prefix}_{kind}_{suffix}");
                 let msg = format!("{method}() requires with_tween_{kind}() first");
                 assert_runtime_error(&format!("engine.spawn():{method}({args})"), &msg);
                 // A different tween kind being present does not satisfy the guard.
@@ -463,7 +463,7 @@ mod tests {
             let (easing, loop_mode) = values(kind);
             chain.push_str(&format!(
                 ":{}:with_tween_{kind}_easing('{easing}'):with_tween_{kind}_loop('{loop_mode}')\
-                 :with_tween_{kind}_on_finished('{kind}_done')",
+                 :with_lua_tween_{kind}_finished('{kind}_done')",
                 base_call(kind)
             ));
         }

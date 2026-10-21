@@ -76,7 +76,7 @@ crates/aberred-lua/src/resources/lua_runtime/
 │   ├── sprite.rs        # with_sprite*, with_tint, with_shadow, with_animation*, with_lua_animation_finished, with_zindex
 │   ├── gui.rs            # with_gui_window/button/label/image/progress_bar/offset/theme_key and their per-state offset variants
 │   ├── menu.rs           # with_menu and its with_menu_* configuration methods
-│   ├── tween.rs          # with_tween_position/rotation/scale/screen_position and their *_easing/*_loop/*_backwards/*_on_finished variants
+│   ├── tween.rs          # with_tween_position/rotation/scale/screen_position and their *_easing/*_loop/*_backwards variants, with_lua_tween_*_finished
 │   └── behavior.rs       # with_phase, with_lua_phase_entered, with_lua_phase_exited, with_lua_phase_update, with_lua_timer, with_lua_timer_once, with_lua_collision_rule, with_lua_collision_started, with_lua_collision_ended, with_lua_setup, with_signal*, with_group, with_persistent, with_grid_layout, with_tilemap, with_particle_emitter, with_mouse_controlled, with_text
 ├── engine_api/          # engine.* API registration, split by category
 │   ├── mod.rs          # Re-exports, module declarations
@@ -335,7 +335,7 @@ A Lua collision rule is a plain core `CollisionRule` plus a `LuaOnCollision { st
 
 ### Menu Selection and GUI Interactable Click Dispatch
 
-`lua_menu_selection_observer` (`lua_menu.rs`) runs alongside `aberred-core`'s `menu_selection_observer` in games that run a Lua script. It calls the menu's Lua callback (its `LuaOnMenuSelected` component, set via `:with_menu_callback()`; a missing function only warns). A Lua menu with a callback is spawned without `MenuActions`, so core's observer has nothing to run for it. Rust code observes the `MenuSelected` event on the menu entity, which fires for every selection regardless. `lua_gui_interactable_click_observer` (`lua_gui_interactable_click.rs`) is likewise spawned only in games that run a Lua script. It calls the widget's Lua callback (its `LuaOnGuiClicked` component, set via the `callback_name` argument to `with_gui_button`/`with_gui_image`; a missing function only warns). Rust code observes the `GuiClicked` event on the widget entity. Both observers run through `LuaDispatch` (`dispatch_custom_and_drain`): the signal cache is refreshed before the call and the commands the callback queued are drained right after it. They build a small ad-hoc context table rather than using the pooled `EntityCtxTables`/`CollisionCtxTables` (these fire far less often than phase/timer/collision callbacks, so pooling isn't worth the complexity) — the menu callback's table carries `menu_id`/`item_id`/`item_index`; the GUI interactable callback's carries just `entity_id` — and calls the named function with that single table as its only argument (no `input`).
+`lua_menu_selection_observer` (`lua_menu.rs`) runs alongside `aberred-core`'s `menu_selection_observer` in games that run a Lua script. It calls the menu's Lua callback (its `LuaOnMenuSelected` component, set via `:with_lua_menu_selected()`; a missing function only warns). A Lua menu with a callback is spawned without `MenuActions`, so core's observer has nothing to run for it. Rust code observes the `MenuSelected` event on the menu entity, which fires for every selection regardless. `lua_gui_interactable_click_observer` (`lua_gui_interactable_click.rs`) is likewise spawned only in games that run a Lua script. It calls the widget's Lua callback (its `LuaOnGuiClicked` component, set via the `callback_name` argument to `with_gui_button`/`with_gui_image`; a missing function only warns). Rust code observes the `GuiClicked` event on the widget entity. Both observers run through `LuaDispatch` (`dispatch_custom_and_drain`): the signal cache is refreshed before the call and the commands the callback queued are drained right after it. They build a small ad-hoc context table rather than using the pooled `EntityCtxTables`/`CollisionCtxTables` (these fire far less often than phase/timer/collision callbacks, so pooling isn't worth the complexity) — the menu callback's table carries `menu_id`/`item_id`/`item_index`; the GUI interactable callback's carries just `entity_id` — and calls the named function with that single table as its only argument (no `input`).
 
 ### Stub and `.luarc.json` Generation
 
@@ -517,7 +517,7 @@ All are registered in `engine_api/render.rs` and queue into `gui_theme_commands`
 - `entity_set_gui_disabled` — enable/disable a `GuiButton`/`GuiImage` (cosmetic: `gui_hit_test_system` stops promoting it and skips its click callback)
 - `entity_set_gui_progress`, `entity_set_gui_progress_max` — set/re-clamp a `GuiProgressBar`'s value
 
-The four `entity_insert_tween_*` commands (`position`/`rotation`/`scale`/`screen_position`) all accept a trailing `on_finished` callback-name string (empty string = no callback); when non-empty, the handler inserts a `LuaOnTweenFinished<T>` component (`T` being the tweened `MapPosition`/`Rotation`/`Scale`/`ScreenPosition`) on the entity, fired once by the corresponding `lua_tween_finished_observer::<T>` when `TweenFinished<T>` triggers.
+The four `entity_insert_tween_*` commands (`position`/`rotation`/`scale`/`screen_position`) all accept a trailing `callback` function-name string (empty string = no callback); when non-empty, the handler inserts a `LuaOnTweenFinished<T>` component (`T` being the tweened `MapPosition`/`Rotation`/`Scale`/`ScreenPosition`) on the entity, fired once by the corresponding `lua_tween_finished_observer::<T>` when `TweenFinished<T>` triggers.
 
 #### Collision Context Functions
 
@@ -613,7 +613,7 @@ with_menu
 with_menu_action_request_quit
 with_menu_action_request_scene
 with_menu_action_show_submenu
-with_menu_callback
+with_lua_menu_selected
 with_menu_colors
 with_menu_cursor
 with_menu_dynamic_text
@@ -628,22 +628,22 @@ with_tween_position
 with_tween_position_backwards
 with_tween_position_easing
 with_tween_position_loop
-with_tween_position_on_finished
+with_lua_tween_position_finished
 with_tween_rotation
 with_tween_rotation_backwards
 with_tween_rotation_easing
 with_tween_rotation_loop
-with_tween_rotation_on_finished
+with_lua_tween_rotation_finished
 with_tween_scale
 with_tween_scale_backwards
 with_tween_scale_easing
 with_tween_scale_loop
-with_tween_scale_on_finished
+with_lua_tween_scale_finished
 with_tween_screen_position
 with_tween_screen_position_backwards
 with_tween_screen_position_easing
 with_tween_screen_position_loop
-with_tween_screen_position_on_finished
+with_lua_tween_screen_position_finished
 ```
 
 **Behavior / misc** (`behavior.rs`)
@@ -726,7 +726,7 @@ engine.spawn()
 
 Menus can optionally invoke a Lua callback when an item is selected.
 
-- Set the callback via `:with_menu_callback("callback_name")`.
+- Set the callback via `:with_lua_menu_selected(callback)`.
 - When a callback is set, `MenuActions` are ignored (the callback takes full control).
 
 The callback receives three arguments:

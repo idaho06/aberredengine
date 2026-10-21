@@ -20,7 +20,7 @@
 //! ```lua
 //! engine.spawn()
 //!     :with_tween_screen_position(0, 400, 0, 100, 1.0)
-//!     :with_tween_screen_position_on_finished("on_window_shown")
+//!     :with_lua_tween_screen_position_finished("on_window_shown")
 //!     :build()
 //! ```
 

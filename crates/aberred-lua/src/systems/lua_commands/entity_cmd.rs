@@ -2274,7 +2274,7 @@ mod tests {
 
     #[test]
     fn insert_tween_screen_position_without_callback_clears_stale_callback_from_prior_insert() {
-        // Regression test: a hide-tween with an on_finished callback,
+        // Regression test: a hide-tween with a finished callback,
         // followed later by a callback-less show-tween on the same entity
         // (the gui_demo.lua Show/Hide pattern), must not leave the hide
         // callback attached — otherwise it fires again when the unrelated

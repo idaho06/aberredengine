@@ -126,7 +126,7 @@ function M.spawn()
         )
         :with_menu_cursor("menu_cursor")
         :with_menu_selection_sound("option")
-        :with_menu_callback("on_showcase_menu_select")
+        :with_lua_menu_selected("on_showcase_menu_select")
         :build()
 
     -- Black background fill

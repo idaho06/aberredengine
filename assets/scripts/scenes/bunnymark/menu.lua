@@ -87,7 +87,7 @@ function M.spawn()
         )
         :with_menu_cursor("bunnymark_menu_cursor")
         :with_menu_selection_sound("option")
-        :with_menu_callback("on_bunnymark_menu_select")
+        :with_lua_menu_selected("on_bunnymark_menu_select")
         :build()
 
     engine.log_debug("Bunnymark sub-menu entities queued!")
