@@ -12,8 +12,8 @@
 use crate::math::Vec2;
 use bevy_ecs::prelude::*;
 
-use crate::components::cameratarget::CameraTarget;
-use crate::components::globaltransform2d::GlobalTransform2D;
+use crate::components::camera_target::CameraTarget;
+use crate::components::global_transform2d::GlobalTransform2D;
 use crate::components::world_position::WorldPosition;
 use crate::resources::camera2d::MainCamera;
 use crate::resources::camerafollowconfig::{CameraFollowConfig, EasingCurve, FollowMode};

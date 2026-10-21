@@ -5,7 +5,7 @@
 //! component will have their [`WorldPosition`]
 //! updated based on the mouse's world-space position.
 
-use crate::components::inputcontrolled::MouseControlled;
+use crate::components::input_controlled::MouseControlled;
 use crate::components::world_position::WorldPosition;
 use crate::resources::input::InputState;
 use bevy_ecs::prelude::*;

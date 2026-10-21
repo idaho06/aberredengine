@@ -12,8 +12,8 @@
 use crate::math::Vec2;
 use bevy_ecs::prelude::*;
 
-use crate::components::guiimage::GuiImage;
-use crate::components::guiinteractable::{GuiInteractable, GuiWidgetState};
+use crate::components::gui_image::GuiImage;
+use crate::components::gui_interactable::{GuiInteractable, GuiWidgetState};
 use crate::components::sprite::Sprite;
 
 /// Resolves the atlas offset for `image` at the given `state`, falling back
@@ -46,8 +46,8 @@ pub fn gui_image_state_sync_system(mut query: Query<(&GuiImage, &GuiInteractable
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::components::screenposition::ScreenPosition;
-    use crate::components::zindex::ZIndex;
+    use crate::components::screen_position::ScreenPosition;
+    use crate::components::z_index::ZIndex;
     use bevy_ecs::system::RunSystemOnce;
 
     fn tick<M>(world: &mut World, system: impl IntoSystem<(), (), M>) {

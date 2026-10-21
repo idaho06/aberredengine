@@ -7,10 +7,10 @@
 use bevy_ecs::prelude::*;
 use bevy_ecs::system::RunSystemOnce;
 
-use aberred_core::components::boxcollider::BoxCollider;
+use aberred_core::components::box_collider::BoxCollider;
 use aberred_core::components::collision::CollisionRule;
 use aberred_core::components::group::Group;
-use aberred_core::components::guiinteractable::GuiInteractable;
+use aberred_core::components::gui_interactable::GuiInteractable;
 use aberred_core::components::phase::Phase;
 use aberred_core::components::signals::Signals;
 use aberred_core::components::timer::{Timer, TimerMode};

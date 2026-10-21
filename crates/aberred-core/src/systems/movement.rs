@@ -10,7 +10,7 @@
 use crate::math::Vec2;
 use bevy_ecs::prelude::*;
 
-use crate::components::rigidbody::RigidBody;
+use crate::components::rigid_body::RigidBody;
 use crate::components::signals::Signals;
 use crate::components::world_position::WorldPosition;
 use crate::protocol::audio::AudioCmd;

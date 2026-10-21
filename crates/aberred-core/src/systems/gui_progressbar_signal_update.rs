@@ -7,7 +7,7 @@
 
 use bevy_ecs::prelude::*;
 
-use crate::components::guiprogressbar::GuiProgressBar;
+use crate::components::gui_progress_bar::GuiProgressBar;
 use crate::resources::worldsignals::WorldSignals;
 
 pub fn gui_progressbar_signal_update_system(
@@ -38,7 +38,7 @@ mod tests {
     use crate::testing::approx_eq;
     use bevy_ecs::system::RunSystemOnce;
 
-    use crate::components::guiprogressbar::GuiProgressBar;
+    use crate::components::gui_progress_bar::GuiProgressBar;
     use crate::resources::worldsignals::WorldSignals;
 
     fn tick<M>(world: &mut World, system: impl IntoSystem<(), (), M>) {

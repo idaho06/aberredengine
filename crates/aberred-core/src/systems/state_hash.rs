@@ -18,15 +18,15 @@ use crate::math::Vec2;
 use bevy_ecs::prelude::*;
 
 use crate::components::animation::Animation;
-use crate::components::boxcollider::BoxCollider;
-use crate::components::globaltransform2d::GlobalTransform2D;
+use crate::components::box_collider::BoxCollider;
+use crate::components::global_transform2d::GlobalTransform2D;
 use crate::components::group::Group;
 use crate::components::phase::Phase;
 use crate::components::position2d::{Position2D, PositionSpace};
-use crate::components::rigidbody::RigidBody;
+use crate::components::rigid_body::RigidBody;
 use crate::components::rotation::Rotation;
 use crate::components::scale::Scale;
-use crate::components::screenposition::ScreenPosition;
+use crate::components::screen_position::ScreenPosition;
 use crate::components::signals::Signals;
 use crate::components::timer::{Timer, TimerMode};
 use crate::components::ttl::Ttl;
@@ -182,7 +182,7 @@ pub fn hash_world_state(world: &World) -> u64 {
             hash_sorted_map(
                 h,
                 c.forces.iter(),
-                |h, force: &crate::components::rigidbody::AccelerationForce| {
+                |h, force: &crate::components::rigid_body::AccelerationForce| {
                     hash_vector2(h, force.value);
                     h.write_bool(force.enabled);
                 },

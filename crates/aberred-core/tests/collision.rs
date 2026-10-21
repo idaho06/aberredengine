@@ -9,7 +9,7 @@
 
 use bevy_ecs::prelude::*;
 
-use aberred_core::components::boxcollider::BoxCollider;
+use aberred_core::components::box_collider::BoxCollider;
 use aberred_core::components::collision::{BoxSide, CollisionRule};
 use aberred_core::components::group::Group;
 use aberred_core::components::world_position::WorldPosition;

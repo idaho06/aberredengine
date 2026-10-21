@@ -17,7 +17,7 @@ use crate::resources::uniformvalue::UniformValue;
 ///
 /// # Example
 /// ```
-/// # use aberred_core::components::entityshader::EntityShader;
+/// # use aberred_core::components::entity_shader::EntityShader;
 /// # use aberred_core::resources::uniformvalue::UniformValue;
 /// // Apply an "inverse" shader to an entity
 /// let shader = EntityShader::new("inverse");

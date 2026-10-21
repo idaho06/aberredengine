@@ -3,7 +3,7 @@
 //! `GuiButton` carries the spawn-time data for a themed button (size,
 //! caption, disabled state, theme). Hit-testing and click
 //! dispatch run on a co-located `GuiInteractable` component (see
-//! `guiinteractable.rs`), inserted by `gui_button_spawn_system`
+//! `gui_interactable.rs`), inserted by `gui_button_spawn_system`
 //! (`systems/gui_spawn.rs`) reacting on `Added<GuiButton>` — mirrors how
 //! `Menu` carries its own item data and `menu_spawn_system` reacts on
 //! `Added<Menu>`. Querying `GuiButton` alone without `GuiInteractable` is

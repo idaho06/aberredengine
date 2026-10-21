@@ -7,8 +7,8 @@
 use aberred_core::math::Vec2;
 use bevy_ecs::prelude::*;
 
-use aberred_core::components::cameratarget::CameraTarget;
-use aberred_core::components::globaltransform2d::GlobalTransform2D;
+use aberred_core::components::camera_target::CameraTarget;
+use aberred_core::components::global_transform2d::GlobalTransform2D;
 use aberred_core::components::world_position::WorldPosition;
 use aberred_core::math::Rect;
 use aberred_core::resources::camera2d::{Camera2D, MainCamera};

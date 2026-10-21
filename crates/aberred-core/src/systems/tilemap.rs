@@ -16,7 +16,7 @@ use crate::components::group::Group;
 use crate::components::sprite::Sprite;
 use crate::components::tilemap::Tilemap;
 use crate::components::world_position::WorldPosition;
-use crate::components::zindex::ZIndex;
+use crate::components::z_index::ZIndex;
 use crate::protocol::render_assets::RenderAssetCmd;
 use crate::systems::propagate_transforms::ComputeInitialGlobalTransform;
 
@@ -352,7 +352,7 @@ mod tests {
     }
 
     #[test]
-    fn spawn_tiles_places_tiles_by_coordinate_with_layer_zindex_and_parent() {
+    fn spawn_tiles_places_tiles_by_coordinate_with_layer_z_index_and_parent() {
         let mut world = World::new();
         let root = world.spawn(WorldPosition::new(0.0, 0.0)).id();
         let map = tilemap(16, &[&[(0, 0, 0), (2, 1, 5)], &[(1, 0, 3)]]);

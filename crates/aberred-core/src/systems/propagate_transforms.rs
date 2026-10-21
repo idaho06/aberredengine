@@ -13,7 +13,7 @@ use crate::math::Vec2;
 use bevy_ecs::hierarchy::{ChildOf, Children};
 use bevy_ecs::prelude::*;
 
-use crate::components::globaltransform2d::GlobalTransform2D;
+use crate::components::global_transform2d::GlobalTransform2D;
 use crate::components::rotation::Rotation;
 use crate::components::scale::Scale;
 use crate::components::world_position::WorldPosition;

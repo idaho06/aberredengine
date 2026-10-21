@@ -4,11 +4,11 @@
 //! They are collected in the `SpawnCmd` struct and processed by Rust systems.
 
 use crate::components::lua_on_collision::LuaOnCollision;
-use aberred_core::components::guibutton::GuiButton;
-use aberred_core::components::guiimage::GuiImage;
-use aberred_core::components::guilabel::GuiLabel;
-use aberred_core::components::guiprogressbar::GuiProgressBar;
-use aberred_core::components::guiwindow::GuiWindow;
+use aberred_core::components::gui_button::GuiButton;
+use aberred_core::components::gui_image::GuiImage;
+use aberred_core::components::gui_label::GuiLabel;
+use aberred_core::components::gui_progress_bar::GuiProgressBar;
+use aberred_core::components::gui_window::GuiWindow;
 use aberred_core::components::menu::MenuAction;
 use aberred_core::components::timer::TimerMode;
 use aberred_core::components::tween::{Easing, LoopMode};

@@ -17,25 +17,25 @@ use crate::math::Vec2;
 use bevy_ecs::prelude::*;
 use bevy_ecs::system::SystemParam;
 
-use crate::components::boxcollider::BoxCollider;
-use crate::components::dynamictext::DynamicText;
-use crate::components::entityshader::EntityShader;
-use crate::components::globaltransform2d::GlobalTransform2D;
-use crate::components::guibutton::GuiButton;
-use crate::components::guiinteractable::GuiInteractable;
-use crate::components::guilabel::GuiLabel;
-use crate::components::guiprogressbar::GuiProgressBar;
-use crate::components::guiwindow::GuiWindow;
-use crate::components::rigidbody::RigidBody;
+use crate::components::box_collider::BoxCollider;
+use crate::components::dynamic_text::DynamicText;
+use crate::components::entity_shader::EntityShader;
+use crate::components::global_transform2d::GlobalTransform2D;
+use crate::components::gui_button::GuiButton;
+use crate::components::gui_interactable::GuiInteractable;
+use crate::components::gui_label::GuiLabel;
+use crate::components::gui_progress_bar::GuiProgressBar;
+use crate::components::gui_window::GuiWindow;
+use crate::components::rigid_body::RigidBody;
 use crate::components::rotation::Rotation;
 use crate::components::scale::Scale;
-use crate::components::screenposition::ScreenPosition;
+use crate::components::screen_position::ScreenPosition;
 use crate::components::shadow::Shadow;
 use crate::components::signals::Signals;
 use crate::components::sprite::Sprite;
 use crate::components::tint::Tint;
 use crate::components::world_position::WorldPosition;
-use crate::components::zindex::ZIndex;
+use crate::components::z_index::ZIndex;
 use crate::protocol::stats::ThreadStats;
 use crate::resources::appstate::AppState;
 use crate::resources::camera2d::{Camera2D, MainCamera};
@@ -677,8 +677,8 @@ pub fn build_drawable_snapshot(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::components::guiinteractable::GuiWidgetState;
-    use crate::components::guiprogressbar::ProgressBarDirection;
+    use crate::components::gui_interactable::GuiWidgetState;
+    use crate::components::gui_progress_bar::ProgressBarDirection;
     use crate::math::Color;
     use crate::math::Vec2;
     use bevy_ecs::system::RunSystemOnce;
@@ -751,8 +751,8 @@ mod tests {
 
     #[test]
     fn captures_global_transform_for_map_sprites_and_texts() {
-        use crate::components::dynamictext::DynamicText;
-        use crate::components::globaltransform2d::GlobalTransform2D;
+        use crate::components::dynamic_text::DynamicText;
+        use crate::components::global_transform2d::GlobalTransform2D;
         let gt = GlobalTransform2D {
             position: Vec2::new(30.0, 40.0),
             rotation_degrees: 90.0,

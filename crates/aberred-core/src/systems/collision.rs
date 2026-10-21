@@ -14,9 +14,9 @@
 use bevy_ecs::prelude::*;
 use bevy_ecs::system::SystemParam;
 
-use crate::components::boxcollider::BoxCollider;
+use crate::components::box_collider::BoxCollider;
 use crate::components::collision::{BoxSides, get_colliding_sides};
-use crate::components::globaltransform2d::GlobalTransform2D;
+use crate::components::global_transform2d::GlobalTransform2D;
 use crate::components::group::Group;
 use crate::components::world_position::WorldPosition;
 use crate::math::Rect;

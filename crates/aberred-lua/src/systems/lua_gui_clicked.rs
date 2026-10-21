@@ -32,7 +32,7 @@ mod tests {
     use super::*;
     use crate::resources::lua_runtime::LuaRuntime;
     use crate::systems::lua_commands::init_dispatch_resources;
-    use aberred_core::components::guiinteractable::GuiInteractable;
+    use aberred_core::components::gui_interactable::GuiInteractable;
 
     fn setup_world() -> World {
         let mut world = World::new();

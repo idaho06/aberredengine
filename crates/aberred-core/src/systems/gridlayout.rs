@@ -24,21 +24,21 @@
 //!
 //! # Related
 //!
-//! - [`crate::components::gridlayout::GridLayout`] – the trigger component
-//! - [`crate::components::gridlayout::GridLayoutData`] – the parsed JSON structure
+//! - [`crate::components::grid_layout::GridLayout`] – the trigger component
+//! - [`crate::components::grid_layout::GridLayoutData`] – the parsed JSON structure
 
 use std::sync::Arc;
 
 use crate::math::Vec2;
 use bevy_ecs::prelude::*;
 
-use crate::components::boxcollider::BoxCollider;
-use crate::components::gridlayout::{GridLayout, GridLayoutData, GridValue};
+use crate::components::box_collider::BoxCollider;
+use crate::components::grid_layout::{GridLayout, GridLayoutData, GridValue};
 use crate::components::group::Group;
 use crate::components::signals::Signals;
 use crate::components::sprite::Sprite;
 use crate::components::world_position::WorldPosition;
-use crate::components::zindex::ZIndex;
+use crate::components::z_index::ZIndex;
 use log::{error, info};
 
 /// System that processes GridLayout components and spawns child entities accordingly.

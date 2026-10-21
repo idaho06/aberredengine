@@ -5,14 +5,14 @@
 //! systems.
 //!
 //! For screen-space UI elements, see
-//! [`ScreenPosition`](super::screenposition::ScreenPosition).
+//! [`ScreenPosition`](super::screen_position::ScreenPosition).
 
 use crate::components::position2d::{Position2D, WorldSpace};
 
 /// World-space position (pivot) for an entity.
 ///
 /// This position commonly represents the pivot used by other components such
-/// as [`Sprite`](super::sprite::Sprite) and [`BoxCollider`](super::boxcollider::BoxCollider)
+/// as [`Sprite`](super::sprite::Sprite) and [`BoxCollider`](super::box_collider::BoxCollider)
 /// to compute rendering and collision bounds.
 pub type WorldPosition = Position2D<WorldSpace>;
 

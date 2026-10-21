@@ -12,9 +12,9 @@ use aberred_core::math::Vec2;
 use bevy_ecs::hierarchy::ChildOf;
 use bevy_ecs::prelude::*;
 
-use aberred_core::components::globaltransform2d::GlobalTransform2D;
-use aberred_core::components::guioffset::GuiOffset;
-use aberred_core::components::screenposition::ScreenPosition;
+use aberred_core::components::global_transform2d::GlobalTransform2D;
+use aberred_core::components::gui_offset::GuiOffset;
+use aberred_core::components::screen_position::ScreenPosition;
 use aberred_core::systems::gui_layout::gui_layout_system;
 use aberred_core::systems::propagate_transforms::propagate_transforms;
 use aberred_core::testing::approx_eq;

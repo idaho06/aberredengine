@@ -8,23 +8,23 @@
 #![cfg(feature = "test-support")]
 
 use aberredengine::bevy_ecs::prelude::*;
-use aberredengine::core::components::boxcollider::BoxCollider;
+use aberredengine::core::components::box_collider::BoxCollider;
 use aberredengine::core::components::collision::{BoxSides, CollisionRule};
-use aberredengine::core::components::dynamictext::DynamicText;
-use aberredengine::core::components::emittedparticle::EmittedParticle;
+use aberredengine::core::components::dynamic_text::DynamicText;
+use aberredengine::core::components::emitted_particle::EmittedParticle;
 use aberredengine::core::components::group::Group;
-use aberredengine::core::components::guiinteractable::GuiInteractable;
+use aberredengine::core::components::gui_interactable::GuiInteractable;
 use aberredengine::core::components::menu::{Menu, MenuAction, MenuActions};
-use aberredengine::core::components::particleemitter::ParticleEmitter;
+use aberredengine::core::components::particle_emitter::ParticleEmitter;
 use aberredengine::core::components::phase::Phase;
-use aberredengine::core::components::rigidbody::RigidBody;
+use aberredengine::core::components::rigid_body::RigidBody;
 use aberredengine::core::components::scene::SceneName;
-use aberredengine::core::components::screenposition::ScreenPosition;
+use aberredengine::core::components::screen_position::ScreenPosition;
 use aberredengine::core::components::signals::Signals;
 use aberredengine::core::components::sprite::Sprite;
 use aberredengine::core::components::timer::Timer;
 use aberredengine::core::components::world_position::WorldPosition;
-use aberredengine::core::components::zindex::ZIndex;
+use aberredengine::core::components::z_index::ZIndex;
 use aberredengine::core::events::asset::{AssetLoadFailed, AssetLoaded};
 use aberredengine::core::events::collision::{CollisionEnded, CollisionOngoing, CollisionStarted};
 use aberredengine::core::events::gui_interactable::GuiClicked;

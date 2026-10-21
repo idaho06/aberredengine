@@ -314,7 +314,7 @@ fn snapshot_triple_buffer_round_trips_across_a_thread() {
 #[test]
 fn snapshot_publish_reuses_buffer_capacity_and_shrinks_correctly() {
     use aberred_core::components::sprite::Sprite;
-    use aberred_core::components::zindex::ZIndex;
+    use aberred_core::components::z_index::ZIndex;
     use aberred_core::resources::drawable_snapshot::MapSpriteEntry;
 
     fn sprite_entry(id: u32) -> MapSpriteEntry {

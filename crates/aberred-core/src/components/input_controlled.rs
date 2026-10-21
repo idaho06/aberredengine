@@ -62,7 +62,7 @@ pub struct MouseControlled {
 /// provides acceleration values that accumulate into velocity over time,
 /// creating smooth, physics-like movement with momentum.
 ///
-/// Requires a [`RigidBody`](super::rigidbody::RigidBody) with appropriate
+/// Requires a [`RigidBody`](super::rigid_body::RigidBody) with appropriate
 /// `friction` and optionally `max_speed` configured for best results.
 #[derive(Component, Clone, Copy, Debug)]
 pub struct AccelerationControlled {

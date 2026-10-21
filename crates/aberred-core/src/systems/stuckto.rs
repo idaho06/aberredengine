@@ -17,7 +17,7 @@
 use bevy_ecs::hierarchy::ChildOf;
 use bevy_ecs::prelude::*;
 
-use crate::components::stuckto::StuckTo;
+use crate::components::stuck_to::StuckTo;
 use crate::components::world_position::WorldPosition;
 
 /// Updates positions of entities with `StuckTo` to follow their targets.

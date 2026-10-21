@@ -7,8 +7,8 @@
 use crate::math::Vec2;
 use bevy_ecs::prelude::*;
 
-use crate::components::inputcontrolled::InputControlled;
-use crate::components::rigidbody::RigidBody;
+use crate::components::input_controlled::InputControlled;
+use crate::components::rigid_body::RigidBody;
 use crate::resources::input::InputAction;
 use crate::resources::input::InputState;
 

@@ -1,6 +1,6 @@
 //! Signal binding component for reactive UI updates.
 //!
-//! This module provides a declarative way to bind [`DynamicText`](super::dynamictext::DynamicText)
+//! This module provides a declarative way to bind [`DynamicText`](super::dynamic_text::DynamicText)
 //! components to signal values, enabling automatic text updates when signals change.
 //!
 //! # Signal Sources
@@ -53,7 +53,7 @@ pub enum SignalSource {
     Entity(Entity),
 }
 
-/// Binds a [`DynamicText`](super::dynamictext::DynamicText) to a signal value.
+/// Binds a [`DynamicText`](super::dynamic_text::DynamicText) to a signal value.
 ///
 /// When attached to an entity with a `DynamicText` component, the
 /// [`update_world_signals_binding_system`](crate::systems::signalbinding::update_world_signals_binding_system)
@@ -106,7 +106,7 @@ impl SignalBinding {
     /// # Example
     ///
     /// ```
-    /// # use aberred_core::components::signalbinding::SignalBinding;
+    /// # use aberred_core::components::signal_binding::SignalBinding;
     /// let binding = SignalBinding::new("score").with_format("Score: {}");
     /// assert_eq!(binding.format.as_deref(), Some("Score: {}"));
     /// ```

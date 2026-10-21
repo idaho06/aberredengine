@@ -20,20 +20,20 @@ use bevy_ecs::prelude::*;
 use crate::components::lua_on_phase::{LuaOnPhaseEntered, LuaOnPhaseExited, LuaOnPhaseUpdate};
 use crate::components::lua_on_timer_fired::LuaOnTimerFired;
 use aberred_core::components::animation::Animation;
-use aberred_core::components::cameratarget::CameraTarget;
-use aberred_core::components::entityshader::EntityShader;
-use aberred_core::components::globaltransform2d::GlobalTransform2D;
-use aberred_core::components::guiinteractable::{GuiInteractable, GuiWidgetState};
-use aberred_core::components::guiprogressbar::GuiProgressBar;
+use aberred_core::components::camera_target::CameraTarget;
+use aberred_core::components::entity_shader::EntityShader;
+use aberred_core::components::global_transform2d::GlobalTransform2D;
+use aberred_core::components::gui_interactable::{GuiInteractable, GuiWidgetState};
+use aberred_core::components::gui_progress_bar::GuiProgressBar;
 use aberred_core::components::phase::Phase;
-use aberred_core::components::rigidbody::RigidBody;
+use aberred_core::components::rigid_body::RigidBody;
 use aberred_core::components::rotation::Rotation;
 use aberred_core::components::scale::Scale;
-use aberred_core::components::screenposition::ScreenPosition;
+use aberred_core::components::screen_position::ScreenPosition;
 use aberred_core::components::shadow::Shadow;
 use aberred_core::components::signals::Signals;
 use aberred_core::components::sprite::Sprite;
-use aberred_core::components::stuckto::StuckTo;
+use aberred_core::components::stuck_to::StuckTo;
 use aberred_core::components::timer::Timer;
 use aberred_core::components::tint::Tint;
 use aberred_core::components::ttl::Ttl;
@@ -869,7 +869,7 @@ mod tests {
 
         // Allocation behavior (no reallocated `Arc<str>` key on a repeat write) is
         // covered at the unit level by `EntityShader::set_uniform`'s own test
-        // (components/entityshader.rs); this integration test only needs to prove
+        // (components/entity_shader.rs); this integration test only needs to prove
         // the command correctly reaches the target entity's shader.
         let shader = world.get::<EntityShader>(entity).unwrap();
         assert_eq!(shader.uniforms.len(), 1);

@@ -19,7 +19,7 @@ use bevy_ecs::prelude::Component;
 use crate::components::position2d::{Position2D, PositionSpace};
 use crate::components::rotation::Rotation;
 use crate::components::scale::Scale;
-use crate::components::screenposition::ScreenPosition;
+use crate::components::screen_position::ScreenPosition;
 use crate::components::world_position::WorldPosition;
 
 /// Determines how a tween behaves when it reaches the end.

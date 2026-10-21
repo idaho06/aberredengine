@@ -20,7 +20,7 @@
 #![cfg(feature = "test-support")]
 
 use aberredengine::bevy_ecs::prelude::*;
-use aberredengine::core::components::boxcollider::BoxCollider;
+use aberredengine::core::components::box_collider::BoxCollider;
 use aberredengine::core::components::collision::CollisionRule;
 use aberredengine::core::components::group::Group;
 use aberredengine::core::components::world_position::WorldPosition;
@@ -723,7 +723,7 @@ fn golden_replay_rust_scene_matches_checked_in_trail() {
 
 // --- the deterministic envelope starts at the first Playing tick ----------
 
-use aberredengine::core::components::rigidbody::RigidBody;
+use aberredengine::core::components::rigid_body::RigidBody;
 use aberredengine::core::math::Vec2;
 use aberredengine::core::resources::gamestate::{CurrentGameState, GameState};
 use aberredengine::core::resources::worldtime::WorldTime;

@@ -22,15 +22,15 @@ use crate::math::Vec2;
 use bevy_ecs::prelude::*;
 use log::{error, warn};
 
-use crate::components::dynamictext::DynamicText;
-use crate::components::guibutton::GuiButton;
-use crate::components::guiimage::GuiImage;
-use crate::components::guiinteractable::GuiInteractable;
-use crate::components::guilabel::GuiLabel;
-use crate::components::guioffset::GuiOffset;
-use crate::components::signalbinding::SignalBinding;
+use crate::components::dynamic_text::DynamicText;
+use crate::components::gui_button::GuiButton;
+use crate::components::gui_image::GuiImage;
+use crate::components::gui_interactable::GuiInteractable;
+use crate::components::gui_label::GuiLabel;
+use crate::components::gui_offset::GuiOffset;
+use crate::components::signal_binding::SignalBinding;
 use crate::components::sprite::Sprite;
-use crate::components::zindex::ZIndex;
+use crate::components::z_index::ZIndex;
 use crate::resources::guitheme::{GuiTheme, GuiThemeStore, GuiThemeWarnCache};
 
 /// Spawns a themed caption child entity for a `GuiButton`/`GuiLabel`,
@@ -193,9 +193,9 @@ mod tests {
     use bevy_ecs::system::RunSystemOnce;
 
     use super::*;
-    use crate::components::guiinteractable::GuiWidgetState;
-    use crate::components::guiwindow::GuiWindow;
-    use crate::components::screenposition::ScreenPosition;
+    use crate::components::gui_interactable::GuiWidgetState;
+    use crate::components::gui_window::GuiWindow;
+    use crate::components::screen_position::ScreenPosition;
     use crate::math::Color;
     use crate::testing::approx_eq;
 
@@ -243,14 +243,14 @@ mod tests {
             .get::<GuiInteractable>(button_entity)
             .expect("gui_button_spawn_system should insert GuiInteractable");
 
-        let (caption_parent, caption_text, caption_zindex) = world
+        let (caption_parent, caption_text, caption_z_index) = world
             .query::<(&ChildOf, &DynamicText, &ZIndex)>()
             .iter(&world)
             .next()
             .expect("caption child entity should be spawned");
         assert_eq!(caption_parent.parent(), button_entity);
         assert_eq!(&*caption_text.text, "Start");
-        assert_eq!(caption_zindex.0, 5.0);
+        assert_eq!(caption_z_index.0, 5.0);
         assert_eq!(&*caption_text.font, "test_font");
         assert_eq!(caption_text.font_size, 18.0);
         assert_eq!(caption_text.color, Color::new(1, 2, 3, 255));
@@ -345,14 +345,14 @@ mod tests {
 
         tick(&mut world, gui_label_spawn_system);
 
-        let (caption_parent, caption_text, caption_zindex) = world
+        let (caption_parent, caption_text, caption_z_index) = world
             .query::<(&ChildOf, &DynamicText, &ZIndex)>()
             .iter(&world)
             .next()
             .expect("caption child entity should be spawned");
         assert_eq!(caption_parent.parent(), label_entity);
         assert_eq!(&*caption_text.text, "Hello, GUI!");
-        assert_eq!(caption_zindex.0, 5.0);
+        assert_eq!(caption_z_index.0, 5.0);
         assert_eq!(&*caption_text.font, "test_font");
         assert_eq!(caption_text.font_size, 18.0);
         assert_eq!(caption_text.color, Color::new(1, 2, 3, 255));

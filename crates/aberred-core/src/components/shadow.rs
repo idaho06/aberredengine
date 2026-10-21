@@ -6,7 +6,7 @@ use crate::math::Color;
 /// Drop shadow component for rendering sprites and text.
 ///
 /// When attached to an entity with a [`Sprite`](crate::components::sprite::Sprite)
-/// or [`DynamicText`](crate::components::dynamictext::DynamicText), draws a
+/// or [`DynamicText`](crate::components::dynamic_text::DynamicText), draws a
 /// shadow pre-pass at `position + offset` before the main draw. The shadow
 /// always uses `color` directly and bypasses entity shaders.
 ///

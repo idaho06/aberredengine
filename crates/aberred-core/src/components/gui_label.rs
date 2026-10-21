@@ -1,10 +1,10 @@
 //! Static themed GUI label.
 //!
 //! [`GuiLabel`] carries its own size and caption text — its caption is a
-//! separate child [`DynamicText`](super::dynamictext::DynamicText) entity
+//! separate child [`DynamicText`](super::dynamic_text::DynamicText) entity
 //! (`ChildOf` + `GuiOffset`), spawned by `gui_label_spawn_system`
 //! (`systems/gui_spawn.rs`) reacting on `Added<GuiLabel>` — the same
-//! composition pattern [`GuiButton`](super::guibutton::GuiButton)'s caption
+//! composition pattern [`GuiButton`](super::gui_button::GuiButton)'s caption
 //! uses, minus any interaction state: a label is never hit-tested.
 
 use std::sync::Arc;

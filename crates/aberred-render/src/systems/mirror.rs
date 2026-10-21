@@ -24,22 +24,22 @@ use crate::components::mirror::{
     MirrorMapText, MirrorScreenSprite, MirrorScreenText, MirrorVelocity, SimMirror,
 };
 use crate::resources::sim_id_map::SimIdMap;
-use aberred_core::components::dynamictext::DynamicText;
-use aberred_core::components::entityshader::EntityShader;
-use aberred_core::components::globaltransform2d::GlobalTransform2D;
-use aberred_core::components::guibutton::GuiButton;
-use aberred_core::components::guiinteractable::GuiInteractable;
-use aberred_core::components::guilabel::GuiLabel;
-use aberred_core::components::guiprogressbar::GuiProgressBar;
-use aberred_core::components::guiwindow::GuiWindow;
+use aberred_core::components::dynamic_text::DynamicText;
+use aberred_core::components::entity_shader::EntityShader;
+use aberred_core::components::global_transform2d::GlobalTransform2D;
+use aberred_core::components::gui_button::GuiButton;
+use aberred_core::components::gui_interactable::GuiInteractable;
+use aberred_core::components::gui_label::GuiLabel;
+use aberred_core::components::gui_progress_bar::GuiProgressBar;
+use aberred_core::components::gui_window::GuiWindow;
 use aberred_core::components::rotation::Rotation;
 use aberred_core::components::scale::Scale;
-use aberred_core::components::screenposition::ScreenPosition;
+use aberred_core::components::screen_position::ScreenPosition;
 use aberred_core::components::shadow::Shadow;
 use aberred_core::components::sprite::Sprite;
 use aberred_core::components::tint::Tint;
 use aberred_core::components::world_position::WorldPosition;
-use aberred_core::components::zindex::ZIndex;
+use aberred_core::components::z_index::ZIndex;
 use aberred_core::resources::drawable_snapshot::{
     GuiButtonEntry, GuiLabelEntry, GuiProgressBarEntry, GuiWindowEntry, MapSpriteEntry,
     MapTextEntry, ScreenSpriteEntry, ScreenTextEntry,
@@ -500,7 +500,7 @@ pub struct MirrorQueries<'w, 's> {
 #[cfg(test)]
 mod mirror_tests {
     use super::*;
-    use aberred_core::components::guiinteractable::GuiWidgetState;
+    use aberred_core::components::gui_interactable::GuiWidgetState;
     use aberred_core::math::Vec2;
     use std::sync::Arc;
 

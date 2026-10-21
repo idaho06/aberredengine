@@ -42,7 +42,7 @@
 //! - [`aberred_core::systems::collision_detector`] – pure Rust collision detection
 //! - [`crate::components::lua_on_collision::LuaOnCollision`] – names a rule's Lua callbacks
 //! - [`aberred_core::systems::collision_rule::collision_rule_observer`] – matches rules, triggers the events
-//! - [`aberred_core::components::boxcollider::BoxCollider`] – axis-aligned collider
+//! - [`aberred_core::components::box_collider::BoxCollider`] – axis-aligned collider
 
 use bevy_ecs::prelude::*;
 use bevy_ecs::system::SystemParam;

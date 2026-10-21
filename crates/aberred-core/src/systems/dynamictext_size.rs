@@ -9,7 +9,7 @@ use bevy_ecs::prelude::*;
 
 use log::{debug, warn};
 
-use crate::components::dynamictext::DynamicText;
+use crate::components::dynamic_text::DynamicText;
 use crate::resources::fontmetrics::{FontMetricsStore, FontMetricsWarnCache};
 
 /// Recalculates the cached size for any [`DynamicText`] that was added or changed.
@@ -47,7 +47,7 @@ mod tests {
     use super::*;
     use bevy_ecs::system::RunSystemOnce;
 
-    use crate::components::dynamictext::DynamicText;
+    use crate::components::dynamic_text::DynamicText;
     use crate::math::Color;
     use crate::resources::fontmetrics::test_support::lowercase_alphabet_metrics;
 

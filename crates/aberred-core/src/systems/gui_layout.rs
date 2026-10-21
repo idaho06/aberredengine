@@ -22,8 +22,8 @@ use crate::math::Vec2;
 use bevy_ecs::hierarchy::{ChildOf, Children};
 use bevy_ecs::prelude::*;
 
-use crate::components::guioffset::GuiOffset;
-use crate::components::screenposition::ScreenPosition;
+use crate::components::gui_offset::GuiOffset;
+use crate::components::screen_position::ScreenPosition;
 
 type RootsQuery<'w, 's> =
     Query<'w, 's, (Option<&'static ScreenPosition>, &'static Children), Without<GuiOffset>>;

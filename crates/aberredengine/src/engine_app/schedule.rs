@@ -5,7 +5,7 @@ use super::builder::EngineBuilder;
 use super::registrar::UpdateRegistrar;
 use aberred_core::components::rotation::Rotation;
 use aberred_core::components::scale::Scale;
-use aberred_core::components::screenposition::ScreenPosition;
+use aberred_core::components::screen_position::ScreenPosition;
 use aberred_core::components::world_position::WorldPosition;
 use aberred_core::error::EngineError;
 use aberred_core::resources::drawable_snapshot::build_drawable_snapshot;
@@ -112,7 +112,7 @@ pub enum SimSet {
     /// `PhaseExited`. It runs before every later group, so a transition
     /// requested anywhere in a tick (system or observer) applies on the next.
     Phases,
-    /// One-shot spawns reacting to `Added<T>` (menu/gridlayout/tilemap) and
+    /// One-shot spawns reacting to `Added<T>` (menu/grid_layout/tilemap) and
     /// game-state transitions (`check_pending_state`; `Setup` → `Playing`
     /// is applied at the end of `Bookkeeping` instead).
     Spawn,

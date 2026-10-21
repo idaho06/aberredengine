@@ -8,11 +8,11 @@
 //!
 //! Position the text using one of:
 //! - [`WorldPosition`](super::world_position::WorldPosition) for world-space (moves with camera)
-//! - [`ScreenPosition`](super::screenposition::ScreenPosition) for UI/screen-space (fixed on screen)
+//! - [`ScreenPosition`](super::screen_position::ScreenPosition) for UI/screen-space (fixed on screen)
 //!
 //! # Reactive Updates
 //!
-//! Combine with [`SignalBinding`](super::signalbinding::SignalBinding) to automatically
+//! Combine with [`SignalBinding`](super::signal_binding::SignalBinding) to automatically
 //! update text content when signal values change (e.g., score, lives).
 //!
 //! # Example
@@ -34,7 +34,7 @@
 //!
 //! # Related
 //!
-//! - [`crate::components::signalbinding::SignalBinding`] – binds text to signal values
+//! - [`crate::components::signal_binding::SignalBinding`] – binds text to signal values
 //! - `aberred_render::resources::fontstore::FontStore` – font registry
 
 use std::sync::Arc;

@@ -56,12 +56,12 @@ use crate::resources::lua_runtime::{
     SpawnCmd, TweenConfig,
 };
 use aberred_core::components::animation::Animation;
-use aberred_core::components::boxcollider::BoxCollider;
-use aberred_core::components::globaltransform2d::GlobalTransform2D;
-use aberred_core::components::rigidbody::RigidBody;
+use aberred_core::components::box_collider::BoxCollider;
+use aberred_core::components::global_transform2d::GlobalTransform2D;
+use aberred_core::components::rigid_body::RigidBody;
 use aberred_core::components::rotation::Rotation;
 use aberred_core::components::scale::Scale;
-use aberred_core::components::screenposition::ScreenPosition;
+use aberred_core::components::screen_position::ScreenPosition;
 use aberred_core::components::signals::Signals;
 use aberred_core::components::sprite::Sprite;
 use aberred_core::components::timer::Timer;

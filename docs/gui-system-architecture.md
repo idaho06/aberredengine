@@ -213,7 +213,7 @@ engine.spawn()
 
 **Rust:**
 ```rust
-use aberredengine::core::components::{guiwindow::GuiWindow, screenposition::ScreenPosition, zindex::ZIndex};
+use aberredengine::core::components::{gui_window::GuiWindow, screen_position::ScreenPosition, z_index::ZIndex};
 use aberredengine::core::math::Vec2;
 
 ctx.commands.spawn((
@@ -887,13 +887,13 @@ use aberredengine::engine_app::{EngineBuilder, SceneDescriptor};
 use aberredengine::core::{
     math::{Color, Rect, Vec2},
     components::{
-        guibutton::GuiButton,
-        guilabel::GuiLabel,
-        guiinteractable::GuiInteractable,
-        guiwindow::GuiWindow,
-        guioffset::GuiOffset,
-        screenposition::ScreenPosition,
-        zindex::ZIndex,
+        gui_button::GuiButton,
+        gui_label::GuiLabel,
+        gui_interactable::GuiInteractable,
+        gui_window::GuiWindow,
+        gui_offset::GuiOffset,
+        screen_position::ScreenPosition,
+        z_index::ZIndex,
     },
     resources::{guitheme::*, next_scene::NextScene},
     systems::GameCtx,

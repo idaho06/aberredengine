@@ -27,8 +27,8 @@ impl<'a> SignalStr<'a> {
     }
 }
 
-use crate::components::dynamictext::DynamicText;
-use crate::components::signalbinding::{SignalBinding, SignalSource};
+use crate::components::dynamic_text::DynamicText;
+use crate::components::signal_binding::{SignalBinding, SignalSource};
 use crate::components::signals::Signals;
 use crate::resources::worldsignals::WorldSignals;
 use bevy_ecs::change_detection::DetectChangesMut;

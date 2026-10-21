@@ -23,10 +23,10 @@ use crate::math::Vec2;
 use bevy_ecs::prelude::*;
 use fastrand::Rng;
 
-use crate::components::emittedparticle::EmittedParticle;
-use crate::components::globaltransform2d::GlobalTransform2D;
-use crate::components::particleemitter::{EmitterShape, ParticleEmitter, TtlSpec};
-use crate::components::rigidbody::RigidBody;
+use crate::components::emitted_particle::EmittedParticle;
+use crate::components::global_transform2d::GlobalTransform2D;
+use crate::components::particle_emitter::{EmitterShape, ParticleEmitter, TtlSpec};
+use crate::components::rigid_body::RigidBody;
 use crate::components::rotation::Rotation;
 use crate::components::ttl::Ttl;
 use crate::components::world_position::WorldPosition;

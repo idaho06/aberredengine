@@ -11,7 +11,7 @@ use aberred_core::components::rotation::Rotation;
 #[cfg(feature = "lua")]
 use aberred_core::components::scale::Scale;
 #[cfg(feature = "lua")]
-use aberred_core::components::screenposition::ScreenPosition;
+use aberred_core::components::screen_position::ScreenPosition;
 #[cfg(feature = "lua")]
 use aberred_core::components::world_position::WorldPosition;
 use aberred_core::error::EngineError;

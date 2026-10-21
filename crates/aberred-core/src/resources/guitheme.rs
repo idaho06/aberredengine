@@ -2,9 +2,9 @@
 //!
 //! [`GuiTheme`] carries a `panel` nine-patch (used by `GuiWindow`), an
 //! optional `button` skin (used by `GuiButton`, one nine-patch per
-//! [`GuiWidgetState`](crate::components::guiinteractable::GuiWidgetState)), and an
+//! [`GuiWidgetState`](crate::components::gui_interactable::GuiWidgetState)), and an
 //! optional `label` nine-patch (used by
-//! [`GuiLabel`](crate::components::guilabel::GuiLabel)).
+//! [`GuiLabel`](crate::components::gui_label::GuiLabel)).
 //!
 //! `button`/`label` are `Option` so a theme can define panels only and leave
 //! button/label styling unset.

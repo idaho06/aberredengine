@@ -4,7 +4,7 @@
 //! types, logic-side game code can use it too, e.g. to hit-test the mouse
 //! against what is actually drawn, without touching the render crate.
 
-use crate::components::globaltransform2d::GlobalTransform2D;
+use crate::components::global_transform2d::GlobalTransform2D;
 use crate::components::rotation::Rotation;
 use crate::components::scale::Scale;
 use crate::components::sprite::Sprite;

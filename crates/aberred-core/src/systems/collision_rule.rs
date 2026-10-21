@@ -22,7 +22,7 @@
 //!
 //! - [`crate::systems::collision_detector`] – collision detection
 //! - [`crate::components::collision::CollisionRule`] – group-pair rule
-//! - [`crate::components::boxcollider::BoxCollider`] – axis-aligned collider
+//! - [`crate::components::box_collider::BoxCollider`] – axis-aligned collider
 //! - [`crate::events::collision`] – `BoxOverlap`, `CollisionOngoing` and the contact events
 
 use bevy_ecs::prelude::*;

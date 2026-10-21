@@ -20,7 +20,7 @@
 //!
 //! ```
 //! # use bevy_ecs::prelude::*;
-//! # use aberred_core::components::stuckto::StuckTo;
+//! # use aberred_core::components::stuck_to::StuckTo;
 //! # use aberred_core::components::timer::Timer;
 //! # use aberred_core::math::Vec2;
 //! # use aberred_core::events::timer::TimerFired;

@@ -10,9 +10,9 @@
 #![cfg(feature = "test-support")]
 
 use aberredengine::bevy_ecs::prelude::*;
-use aberredengine::core::components::emittedparticle::EmittedParticle;
-use aberredengine::core::components::particleemitter::ParticleEmitter;
-use aberredengine::core::components::rigidbody::RigidBody;
+use aberredengine::core::components::emitted_particle::EmittedParticle;
+use aberredengine::core::components::particle_emitter::ParticleEmitter;
+use aberredengine::core::components::rigid_body::RigidBody;
 use aberredengine::core::components::ttl::Ttl;
 use aberredengine::core::components::world_position::WorldPosition;
 use aberredengine::test_support::TestWorldBuilder;
@@ -57,7 +57,7 @@ fn scenario_driver(
                 WorldPosition::new(0.0, 0.0),
                 ParticleEmitter {
                     templates: vec![t],
-                    shape: aberredengine::core::components::particleemitter::EmitterShape::Rect {
+                    shape: aberredengine::core::components::particle_emitter::EmitterShape::Rect {
                         width: 40.0,
                         height: 40.0,
                     },
@@ -67,7 +67,7 @@ fn scenario_driver(
                     initial_emissions_remaining: 20,
                     arc_degrees: (-45.0, 45.0),
                     speed_range: (10.0, 200.0),
-                    ttl: aberredengine::core::components::particleemitter::TtlSpec::Range {
+                    ttl: aberredengine::core::components::particle_emitter::TtlSpec::Range {
                         min: 0.5,
                         max: 3.0,
                     },

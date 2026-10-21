@@ -13,28 +13,28 @@ use crate::components::lua_on_phase::{LuaOnPhaseEntered, LuaOnPhaseExited, LuaOn
 use crate::components::lua_on_timer_fired::LuaOnTimerFired;
 use crate::components::luasetup::LuaSetup;
 use aberred_core::components::animation::{Animation, AnimationController};
-use aberred_core::components::boxcollider::BoxCollider;
-use aberred_core::components::cameratarget::CameraTarget;
-use aberred_core::components::dynamictext::DynamicText;
-use aberred_core::components::entityshader::EntityShader;
+use aberred_core::components::box_collider::BoxCollider;
+use aberred_core::components::camera_target::CameraTarget;
+use aberred_core::components::dynamic_text::DynamicText;
+use aberred_core::components::entity_shader::EntityShader;
 use aberred_core::components::group::Group;
-use aberred_core::components::guioffset::GuiOffset;
+use aberred_core::components::gui_offset::GuiOffset;
 use aberred_core::components::persistent::Persistent;
 use aberred_core::components::phase::Phase;
-use aberred_core::components::rigidbody::RigidBody;
+use aberred_core::components::rigid_body::RigidBody;
 use aberred_core::components::rotation::Rotation;
 use aberred_core::components::scale::Scale;
-use aberred_core::components::screenposition::ScreenPosition;
+use aberred_core::components::screen_position::ScreenPosition;
 use aberred_core::components::shadow::Shadow;
-use aberred_core::components::signalbinding::SignalBinding;
+use aberred_core::components::signal_binding::SignalBinding;
 use aberred_core::components::signals::Signals;
 use aberred_core::components::sprite::Sprite;
-use aberred_core::components::stuckto::StuckTo;
+use aberred_core::components::stuck_to::StuckTo;
 use aberred_core::components::tilemap::Tilemap;
 use aberred_core::components::tint::Tint;
 use aberred_core::components::ttl::Ttl;
 use aberred_core::components::world_position::WorldPosition;
-use aberred_core::components::zindex::ZIndex;
+use aberred_core::components::z_index::ZIndex;
 use aberred_core::math::Color;
 
 use crate::resources::lua_runtime::{
@@ -553,11 +553,11 @@ fn apply_ui_components(
         }
     }
     if let Some((path, group, z_index)) = grid_layout {
-        use aberred_core::components::gridlayout::GridLayout;
+        use aberred_core::components::grid_layout::GridLayout;
         entity_commands.insert(GridLayout::new(path, group, z_index));
     }
     if let Some((follow_x, follow_y)) = mouse_controlled {
-        use aberred_core::components::inputcontrolled::MouseControlled;
+        use aberred_core::components::input_controlled::MouseControlled;
         entity_commands.insert(MouseControlled { follow_x, follow_y });
     }
 }
@@ -572,7 +572,7 @@ fn apply_particle_emitter(
     };
 
     use crate::resources::lua_runtime::{ParticleEmitterShapeData, ParticleTtlData};
-    use aberred_core::components::particleemitter::{EmitterShape, ParticleEmitter, TtlSpec};
+    use aberred_core::components::particle_emitter::{EmitterShape, ParticleEmitter, TtlSpec};
 
     // Resolve template keys to Entity IDs
     let mut templates = Vec::new();
@@ -1394,8 +1394,8 @@ mod tests {
 
     #[test]
     fn lua_spawn_applies_text_grid_and_mouse_components() {
-        use aberred_core::components::gridlayout::GridLayout;
-        use aberred_core::components::inputcontrolled::MouseControlled;
+        use aberred_core::components::grid_layout::GridLayout;
+        use aberred_core::components::input_controlled::MouseControlled;
         let mut world = World::new();
         let mut signals = WorldSignals::default();
         let e = spawn_from_lua(
@@ -1557,7 +1557,7 @@ mod tests {
 
     #[test]
     fn lua_spawn_particle_emitter_resolves_registered_templates_only() {
-        use aberred_core::components::particleemitter::{EmitterShape, ParticleEmitter, TtlSpec};
+        use aberred_core::components::particle_emitter::{EmitterShape, ParticleEmitter, TtlSpec};
         let mut world = World::new();
         let mut signals = WorldSignals::default();
         let spark = world.spawn(WorldPosition::new(0.0, 0.0)).id();

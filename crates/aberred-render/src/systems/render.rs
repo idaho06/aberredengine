@@ -26,21 +26,21 @@ use super::math::{
 use crate::components::mirror::SimMirror;
 use crate::resources::fontstore::FontStore;
 use crate::resources::imgui_bridge::ImguiBridge;
-use aberred_core::components::dynamictext::DynamicText;
-use aberred_core::components::entityshader::EntityShader;
-use aberred_core::components::guibutton::GuiButton;
-use aberred_core::components::guiinteractable::{GuiInteractable, GuiWidgetState};
-use aberred_core::components::guilabel::GuiLabel;
-use aberred_core::components::guiprogressbar::{GuiProgressBar, ProgressBarDirection};
-use aberred_core::components::guiwindow::GuiWindow;
+use aberred_core::components::dynamic_text::DynamicText;
+use aberred_core::components::entity_shader::EntityShader;
+use aberred_core::components::gui_button::GuiButton;
+use aberred_core::components::gui_interactable::{GuiInteractable, GuiWidgetState};
+use aberred_core::components::gui_label::GuiLabel;
+use aberred_core::components::gui_progress_bar::{GuiProgressBar, ProgressBarDirection};
+use aberred_core::components::gui_window::GuiWindow;
 use aberred_core::components::rotation::Rotation;
 use aberred_core::components::scale::Scale;
-use aberred_core::components::screenposition::ScreenPosition;
+use aberred_core::components::screen_position::ScreenPosition;
 use aberred_core::components::shadow::Shadow;
 use aberred_core::components::sprite::Sprite;
 use aberred_core::components::tint::Tint;
 use aberred_core::components::world_position::WorldPosition;
-use aberred_core::components::zindex::ZIndex;
+use aberred_core::components::z_index::ZIndex;
 use aberred_core::math::Vec2;
 use aberred_core::resources::debugoverlayconfig::DebugOverlayConfig;
 use aberred_core::resources::guitheme::{
@@ -1424,7 +1424,7 @@ mod needs_imgui_tests {
 #[cfg(test)]
 mod screen_draw_buffer_tests {
     use super::*;
-    use aberred_core::components::screenposition::ScreenPosition;
+    use aberred_core::components::screen_position::ScreenPosition;
 
     fn sprite_item(z: f32) -> ScreenDrawItem {
         sprite_item_with_entity(z, Entity::from_raw_u32(0).unwrap())
@@ -1538,7 +1538,7 @@ mod screen_draw_buffer_tests {
     }
 
     #[test]
-    fn sorts_mixed_items_by_ascending_zindex() {
+    fn sorts_mixed_items_by_ascending_z_index() {
         let buffer = vec![sprite_item(5.0), text_item(-2.0), sprite_item(0.0)];
         let sorted = sort(buffer);
         let zs: Vec<f32> = sorted.iter().map(|i| i.z_index().0).collect();
@@ -1546,7 +1546,7 @@ mod screen_draw_buffer_tests {
     }
 
     #[test]
-    fn equal_zindex_ties_break_with_text_on_top() {
+    fn equal_z_index_ties_break_with_text_on_top() {
         let buffer = vec![sprite_item(1.0), text_item(1.0)];
         let sorted = sort(buffer);
         assert!(matches!(sorted[0], ScreenDrawItem::Sprite(_)));
@@ -1554,7 +1554,7 @@ mod screen_draw_buffer_tests {
     }
 
     #[test]
-    fn equal_zindex_tie_break_is_independent_of_insertion_order() {
+    fn equal_z_index_tie_break_is_independent_of_insertion_order() {
         // The tie-break is encoded in `variant_rank`, not insertion order, so
         // it must hold even when texts are pushed before sprites.
         let buffer = vec![text_item(1.0), sprite_item(1.0)];
@@ -1564,7 +1564,7 @@ mod screen_draw_buffer_tests {
     }
 
     #[test]
-    fn equal_zindex_and_variant_ties_break_ascending_by_entity() {
+    fn equal_z_index_and_variant_ties_break_ascending_by_entity() {
         // Two sprites at the same z_index (so variant_rank ties too) must
         // order deterministically by Entity's own Ord impl, since mirror
         // query iteration order carries no ordering guarantee.
@@ -1589,7 +1589,7 @@ mod screen_draw_buffer_tests {
     }
 
     #[test]
-    fn equal_zindex_and_variant_ties_break_ascending_by_entity_for_text() {
+    fn equal_z_index_and_variant_ties_break_ascending_by_entity_for_text() {
         let mut entities: Vec<Entity> = [9, 3]
             .into_iter()
             .map(|i| Entity::from_raw_u32(i).unwrap())

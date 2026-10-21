@@ -481,7 +481,7 @@ fn entity_ord_agrees_with_to_bits() {
 }
 
 // `ChildOf` is used for lifecycle only in GUI widgets (`gui_layout.rs`,
-// `guioffset.rs`): despawning a parent must cascade-despawn its whole subtree.
+// `gui_offset.rs`): despawning a parent must cascade-despawn its whole subtree.
 #[test]
 fn cascade_despawn_removes_children() {
     let mut world = World::new();

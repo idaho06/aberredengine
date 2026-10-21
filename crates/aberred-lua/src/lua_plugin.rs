@@ -695,7 +695,7 @@ mod tests {
 
     #[test]
     fn clone_register_as_then_spawn_reading_the_key_finds_it() {
-        use aberred_core::components::particleemitter::ParticleEmitter;
+        use aberred_core::components::particle_emitter::ParticleEmitter;
         let mut world = new_drain_test_world();
         spawn_registered_template(&mut world);
 

@@ -13,7 +13,7 @@ use crate::math::Color;
 /// When attached to an entity with a [`Sprite`](crate::components::sprite::Sprite),
 /// the tint color replaces `Color::WHITE` in draw calls.
 ///
-/// When attached to an entity with [`DynamicText`](crate::components::dynamictext::DynamicText),
+/// When attached to an entity with [`DynamicText`](crate::components::dynamic_text::DynamicText),
 /// the tint color is multiplied with the text's existing color.
 #[derive(Component, Clone, Debug, Copy, PartialEq)]
 pub struct Tint {

@@ -11,14 +11,14 @@
 
 use std::sync::Arc;
 
-use crate::components::dynamictext::DynamicText;
+use crate::components::dynamic_text::DynamicText;
 use crate::components::group::Group;
 use crate::components::menu::{Menu, MenuAction, MenuActions};
-use crate::components::screenposition::ScreenPosition;
+use crate::components::screen_position::ScreenPosition;
 use crate::components::signals::Signals;
 use crate::components::sprite::Sprite;
 use crate::components::world_position::WorldPosition;
-use crate::components::zindex::ZIndex;
+use crate::components::z_index::ZIndex;
 use crate::events::input::InputActionChanged;
 use crate::events::menu::MenuSelected;
 use crate::math::Vec2;
@@ -42,7 +42,7 @@ const MENU_Z_INDEX: f32 = 23.0;
 /// Inserts the [`ZIndex`] every menu element needs to render, in either space.
 /// Single source of truth for this requirement, so every menu element type
 /// uses the same render layer.
-fn insert_menu_zindex(ecmd: &mut EntityCommands) {
+fn insert_menu_z_index(ecmd: &mut EntityCommands) {
     ecmd.insert(ZIndex(MENU_Z_INDEX));
 }
 
@@ -165,7 +165,7 @@ pub fn menu_spawn_system(
             }
 
             // Add to ALL items, visible or not (needed once they become visible).
-            insert_menu_zindex(&mut ecmd);
+            insert_menu_z_index(&mut ecmd);
 
             // Only add position component for visible items
             let is_visible = i >= scroll_offset && i < visible_end;
@@ -200,7 +200,7 @@ pub fn menu_spawn_system(
             ));
             top_cmd.insert(Group::new(format!("menu_{}", entity)));
             // Add always (needed once the indicator becomes visible).
-            insert_menu_zindex(&mut top_cmd);
+            insert_menu_z_index(&mut top_cmd);
             let top_indicator = top_cmd.id();
             // Position only if needed (scroll_offset > 0)
             if scroll_offset > 0 {
@@ -221,7 +221,7 @@ pub fn menu_spawn_system(
             ));
             bottom_cmd.insert(Group::new(format!("menu_{}", entity)));
             // Add always (needed once the indicator becomes visible).
-            insert_menu_zindex(&mut bottom_cmd);
+            insert_menu_z_index(&mut bottom_cmd);
             let bottom_indicator = bottom_cmd.id();
             // Position only if needed (visible_end < items.len())
             if visible_end < menu.items.len() {
@@ -261,7 +261,7 @@ pub fn menu_spawn_system(
             };
             let mut cursor_cmd = commands.entity(cursor_entity);
             set_menu_position(&mut cursor_cmd, use_screen_space, cursor_position);
-            insert_menu_zindex(&mut cursor_cmd);
+            insert_menu_z_index(&mut cursor_cmd);
             debug!(
                 "menu_spawn_system: Positioned cursor entity {:?} at {:?}",
                 cursor_entity, cursor_position

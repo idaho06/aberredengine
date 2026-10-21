@@ -12,7 +12,7 @@ use bevy_ecs::hierarchy::ChildOf;
 use bevy_ecs::prelude::*;
 use bevy_ecs::system::SystemState;
 
-use aberred_core::components::globaltransform2d::GlobalTransform2D;
+use aberred_core::components::global_transform2d::GlobalTransform2D;
 use aberred_core::components::rotation::Rotation;
 use aberred_core::components::scale::Scale;
 use aberred_core::components::world_position::WorldPosition;
@@ -600,7 +600,7 @@ fn entity_context_nil_world_fields_without_hierarchy() {
 
 #[test]
 fn entity_cmd_set_screen_position_updates_screen_position() {
-    use aberred_core::components::screenposition::ScreenPosition;
+    use aberred_core::components::screen_position::ScreenPosition;
 
     let mut world = World::new();
     let entity = world.spawn(ScreenPosition::new(0.0, 0.0)).id();

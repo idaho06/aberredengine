@@ -2,7 +2,7 @@
 //!
 //! [`Position2D`] is the shared implementation behind
 //! [`WorldPosition`](super::world_position::WorldPosition) (world space) and
-//! [`ScreenPosition`](super::screenposition::ScreenPosition) (screen space).
+//! [`ScreenPosition`](super::screen_position::ScreenPosition) (screen space).
 //! The two are distinct ECS component types — `Position2D<WorldSpace>` and
 //! `Position2D<ScreenSpace>` are different monomorphizations with their own
 //! `TypeId` — but share one definition, one set of methods, and one test
@@ -26,7 +26,7 @@ pub trait PositionSpace: Send + Sync + 'static {}
 pub struct WorldSpace;
 impl PositionSpace for WorldSpace {}
 
-/// Screen-space (pixel) coordinates, used by [`ScreenPosition`](super::screenposition::ScreenPosition).
+/// Screen-space (pixel) coordinates, used by [`ScreenPosition`](super::screen_position::ScreenPosition).
 #[derive(Debug, Clone, Copy)]
 pub struct ScreenSpace;
 impl PositionSpace for ScreenSpace {}
@@ -39,7 +39,7 @@ impl PositionSpace for ScreenSpace {}
 /// `ComponentCloneBehavior::clone::<Self>()` type-check generically over
 /// `S: PositionSpace`, so entity cloning (`clone_and_spawn`) copies this
 /// component for both [`WorldPosition`](super::world_position::WorldPosition) and
-/// [`ScreenPosition`](super::screenposition::ScreenPosition).
+/// [`ScreenPosition`](super::screen_position::ScreenPosition).
 #[derive(Component, Debug)]
 #[component(clone_behavior = clone::<Self>())]
 pub struct Position2D<S: PositionSpace> {
@@ -148,7 +148,7 @@ pub(crate) mod test_helpers {
 
     /// Exercises the full `Position2D` API for the given coordinate space.
     /// Called once per space (`WorldSpace`, `ScreenSpace`) from
-    /// `world_position`/`screenposition`'s own test modules.
+    /// `world_position`/`screen_position`'s own test modules.
     pub(crate) fn run_shared_tests<S: PositionSpace>() {
         // new
         let pos = Position2D::<S>::new(10.0, 20.0);

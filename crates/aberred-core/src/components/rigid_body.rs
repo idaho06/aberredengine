@@ -51,7 +51,7 @@ impl AccelerationForce {
 ///
 /// # Example
 /// ```
-/// # use aberred_core::components::rigidbody::RigidBody;
+/// # use aberred_core::components::rigid_body::RigidBody;
 /// # use aberred_core::math::Vec2;
 /// let mut rb = RigidBody::with_physics(5.0, Some(300.0));
 /// rb.add_force("gravity", Vec2 { x: 0.0, y: 980.0 });

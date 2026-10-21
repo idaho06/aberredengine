@@ -9,13 +9,13 @@
 //! # Related
 //!
 //! - `aberred_lua::systems::lua_collision` – Lua-based collision observer
-//! - [`crate::components::boxcollider::BoxCollider`] – axis-aligned collider
+//! - [`crate::components::box_collider::BoxCollider`] – axis-aligned collider
 //! - [`crate::events::collision::BoxOverlap`] – emitted for each overlapping pair
 
 use bevy_ecs::prelude::*;
 
-use crate::components::boxcollider::BoxCollider;
-use crate::components::globaltransform2d::GlobalTransform2D;
+use crate::components::box_collider::BoxCollider;
+use crate::components::global_transform2d::GlobalTransform2D;
 use crate::components::world_position::WorldPosition;
 use crate::events::collision::BoxOverlap;
 

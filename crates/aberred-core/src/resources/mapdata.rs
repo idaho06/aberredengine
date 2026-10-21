@@ -114,7 +114,7 @@ pub struct EntityDef {
     pub collider: Option<BoxColliderEntry>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub group: Option<String>,
-    /// Render order (maps to [`crate::components::zindex::ZIndex`]).
+    /// Render order (maps to [`crate::components::z_index::ZIndex`]).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub z_index: Option<f32>,
     /// Rotation in degrees (maps to [`crate::components::rotation::Rotation`]).
@@ -145,7 +145,7 @@ pub struct EntityDef {
         skip_serializing_if = "Option::is_none"
     )]
     pub on_animation_finished: Option<String>,
-    /// Text rendering data (maps to [`crate::components::dynamictext::DynamicText`]).
+    /// Text rendering data (maps to [`crate::components::dynamic_text::DynamicText`]).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub dynamic_text: Option<DynamicTextEntry>,
     /// Animation key in [`crate::resources::animationstore::AnimationStore`].

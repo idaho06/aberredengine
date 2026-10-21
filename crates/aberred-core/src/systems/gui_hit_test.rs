@@ -18,9 +18,9 @@
 
 use bevy_ecs::prelude::*;
 
-use crate::components::guiinteractable::{GuiInteractable, GuiWidgetState};
-use crate::components::screenposition::ScreenPosition;
-use crate::components::zindex::ZIndex;
+use crate::components::gui_interactable::{GuiInteractable, GuiWidgetState};
+use crate::components::screen_position::ScreenPosition;
+use crate::components::z_index::ZIndex;
 use crate::events::gui_interactable::GuiClicked;
 use crate::math::{Rect, Vec2};
 use crate::resources::guiinputstate::GuiInputState;
@@ -115,7 +115,7 @@ pub fn gui_hit_test_system(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::components::guiimage::GuiImage;
+    use crate::components::gui_image::GuiImage;
 
     fn tick(world: &mut World) {
         let mut schedule = Schedule::default();
@@ -261,7 +261,7 @@ mod tests {
     }
 
     #[test]
-    fn two_overlapping_buttons_only_highest_zindex_becomes_hovered() {
+    fn two_overlapping_buttons_only_highest_z_index_becomes_hovered() {
         let mut world = new_world();
         let low = spawn_interactable(&mut world, 0.0, 0.0, 100.0, 100.0, 5.0);
         let high = spawn_interactable(&mut world, 0.0, 0.0, 100.0, 100.0, 10.0);
@@ -278,7 +278,7 @@ mod tests {
     }
 
     #[test]
-    fn equal_zindex_tie_broken_by_lower_entity_id_regardless_of_spawn_order() {
+    fn equal_z_index_tie_broken_by_lower_entity_id_regardless_of_spawn_order() {
         let mut world = new_world();
         let first_spawned = spawn_interactable(&mut world, 0.0, 0.0, 100.0, 100.0, 5.0);
         let second_spawned = spawn_interactable(&mut world, 0.0, 0.0, 100.0, 100.0, 5.0);

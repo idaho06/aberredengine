@@ -2,7 +2,7 @@
 //!
 //! A non-send resource that stores loaded fonts keyed by string IDs.
 //! Fonts are loaded during setup and referenced by key in
-//! [`DynamicText`](aberred_core::components::dynamictext::DynamicText) and
+//! [`DynamicText`](aberred_core::components::dynamic_text::DynamicText) and
 //! [`Menu`](aberred_core::components::menu::Menu) components.
 //!
 //! Note: This is a non-send resource because Raylib fonts must be accessed

@@ -20,7 +20,7 @@
 //!
 //! - [`crate::systems::collision_detector`] – collision detection system
 //! - `aberred_lua::systems::lua_collision` – Lua collision observer
-//! - [`crate::components::boxcollider::BoxCollider`] – the collider component
+//! - [`crate::components::box_collider::BoxCollider`] – the collider component
 
 use bevy_ecs::prelude::*;
 

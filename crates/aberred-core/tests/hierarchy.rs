@@ -10,8 +10,8 @@ use bevy_ecs::hierarchy::{ChildOf, Children};
 use bevy_ecs::prelude::*;
 use bevy_ecs::system::RunSystemOnce;
 
-use aberred_core::components::boxcollider::BoxCollider;
-use aberred_core::components::globaltransform2d::GlobalTransform2D;
+use aberred_core::components::box_collider::BoxCollider;
+use aberred_core::components::global_transform2d::GlobalTransform2D;
 use aberred_core::components::world_position::WorldPosition;
 use aberred_core::events::collision::BoxOverlap;
 use aberred_core::math::Vec2;

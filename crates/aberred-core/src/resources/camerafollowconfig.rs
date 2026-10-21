@@ -1,7 +1,7 @@
 //! Camera-follow configuration resource.
 //!
 //! [`CameraFollowConfig`] controls how the camera tracks entities marked with
-//! [`CameraTarget`](crate::components::cameratarget::CameraTarget). It is
+//! [`CameraTarget`](crate::components::camera_target::CameraTarget). It is
 //! inserted by the engine with `enabled: false` and can be activated and tuned
 //! at any time.
 
@@ -103,7 +103,7 @@ pub struct CameraFollowConfig {
     pub spring_stiffness: f32,
     /// Damping factor for [`FollowMode::SmoothDamp`]. Higher = less bounce.
     pub spring_damping: f32,
-    /// Speed of the smooth zoom interpolation toward the winning [`CameraTarget`](crate::components::cameratarget::CameraTarget)'s
+    /// Speed of the smooth zoom interpolation toward the winning [`CameraTarget`](crate::components::camera_target::CameraTarget)'s
     /// zoom. Uses `EaseOut` always, independent of the position [`FollowMode`].
     /// Higher values = faster zoom transition. Default is `5.0`.
     pub zoom_lerp_speed: f32,
