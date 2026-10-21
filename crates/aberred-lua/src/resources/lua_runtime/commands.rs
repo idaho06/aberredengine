@@ -588,6 +588,6 @@ pub enum InputCmd {
 /// Commands for loading a map file and spawning its contents from Lua.
 #[derive(Debug, Clone)]
 pub enum MapLuaCmd {
-    /// Read a `MapData` JSON file from `path` and trigger [`SpawnMapRequested`](aberred_core::events::spawnmap::SpawnMapRequested).
+    /// Read a `MapData` JSON file from `path` and trigger [`SpawnMapRequested`](aberred_core::events::map_spawn::SpawnMapRequested).
     LoadMap { path: String },
 }

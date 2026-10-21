@@ -24,8 +24,8 @@ use log::debug;
 use crate::math::Vec2;
 use glam::Mat3;
 
+use crate::events::debug_toggled::DebugToggled;
 use crate::events::input::InputActionChanged;
-use crate::events::switchdebug::DebugToggled;
 use crate::protocol::raw_input::RawDeviceSnapshot;
 use crate::resources::camera2d::{Camera2D, MainCamera};
 use crate::resources::game_config::GameConfig;

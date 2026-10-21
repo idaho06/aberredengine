@@ -8,13 +8,13 @@
 //! Submodules:
 //! - [`asset`] – asset load completion (`AssetLoaded`/`AssetLoadFailed`)
 //! - [`collision`] – collision notifications emitted by the physics/collision system
-//! - [`gamestate`] – state transition notifications for the high-level game flow
+//! - [`debug_toggled`] – toggle debug rendering and diagnostics on/off (F11, stays logic-side)
+//! - [`game_state`] – state transition notifications for the high-level game flow
 //! - [`gui_interactable`] – GUI interactable (button/image) click events
 //! - [`input`] – input action events (key press/release)
 //! - [`menu`] – menu selection events
 //! - [`phase`] – phase enter/exit events (`PhaseEntered`/`PhaseExited`)
 //! - [`scene`] – scene enter/exit events (`SceneEntered`/`SceneExited`)
-//! - [`switchdebug`] – toggle debug rendering and diagnostics on/off (F11, stays logic-side)
 //!
 //! Lua timer callbacks observe [`timer::TimerFired`] (`aberred_lua::systems::lua_timer_fired`);
 //! the render thread's F10 `SwitchFullScreenEvent` lives in `aberred-render`.
@@ -24,14 +24,14 @@
 pub mod animation;
 pub mod asset;
 pub mod collision;
-pub mod gamestate;
+pub mod debug_toggled;
+pub mod game_state;
 pub mod gui_interactable;
 pub mod input;
+pub mod map_spawn;
 pub mod menu;
 pub mod phase;
 pub mod scene;
-pub mod spawnmap;
-pub mod switchdebug;
 pub mod timer;
 pub mod tween;
 pub mod window;

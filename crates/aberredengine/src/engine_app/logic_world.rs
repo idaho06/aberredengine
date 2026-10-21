@@ -15,9 +15,9 @@ use aberred_core::components::screen_position::ScreenPosition;
 #[cfg(feature = "lua")]
 use aberred_core::components::world_position::WorldPosition;
 use aberred_core::error::EngineError;
-use aberred_core::events::gamestate::GameStateChanged;
-use aberred_core::events::gamestate::game_state_changed_observer;
-use aberred_core::events::switchdebug::debug_toggled_observer;
+use aberred_core::events::debug_toggled::debug_toggled_observer;
+use aberred_core::events::game_state::GameStateChanged;
+use aberred_core::events::game_state::game_state_changed_observer;
 use aberred_core::protocol::endpoints::RenderTx;
 #[cfg(any(test, feature = "test-support"))]
 use aberred_core::protocol::endpoints::setup_audio_stub;
@@ -75,7 +75,7 @@ use aberred_lua::systems::lua_collision::lua_collision_rule_added_observer;
 #[cfg(feature = "lua")]
 use aberred_lua::systems::lua_gui_clicked::lua_gui_clicked_observer;
 #[cfg(feature = "lua")]
-use aberred_lua::systems::lua_mapspawn::lua_map_spawned_observer;
+use aberred_lua::systems::lua_map_spawn::lua_map_spawned_observer;
 #[cfg(feature = "lua")]
 use aberred_lua::systems::lua_menu_selected::lua_menu_selected_observer;
 #[cfg(feature = "lua")]

@@ -58,7 +58,7 @@ use aberred_core::systems::window::detect_window_resize;
 use aberred_render::systems::render_system;
 
 #[cfg(feature = "lua")]
-use aberred_lua::systems::lua_mapspawn::process_lua_map_commands;
+use aberred_lua::systems::lua_map_spawn::process_lua_map_commands;
 #[cfg(feature = "lua")]
 use aberred_lua::systems::lua_phase::lua_phase_callbacks_system;
 #[cfg(feature = "lua")]

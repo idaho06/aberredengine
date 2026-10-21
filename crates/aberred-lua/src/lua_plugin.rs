@@ -456,7 +456,7 @@ pub fn update(
 ///
 /// `setup()` drains this same queue once for `on_setup`-time loads, using its own local buffer;
 /// this system is the reachable drain site for any `engine.load_*` call made after setup.
-/// Mirrors [`crate::systems::lua_mapspawn::process_lua_map_commands`]. The `RenderAssetCmd`s produced
+/// Mirrors [`crate::systems::lua_map_spawn::process_lua_map_commands`]. The `RenderAssetCmd`s produced
 /// here reach the render thread via `forward_render_asset_cmds` on the sim schedule.
 pub fn process_lua_asset_commands(
     lua_runtime: NonSend<LuaRuntime>,

@@ -10,4 +10,4 @@ pub mod lua_on_menu_selected;
 pub mod lua_on_phase;
 pub mod lua_on_timer_fired;
 pub mod lua_on_tween_finished;
-pub mod luasetup;
+pub mod lua_setup;

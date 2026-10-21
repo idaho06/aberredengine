@@ -2759,9 +2759,9 @@ fn lua_timer_callback_sees_this_ticks_animation_state() {
 #[cfg(feature = "lua")]
 #[test]
 fn rust_only_game_spawns_map_entities_without_lua_components() {
-    use aberredengine::core::events::spawnmap::SpawnMapRequested;
+    use aberredengine::core::events::map_spawn::SpawnMapRequested;
     use aberredengine::core::resources::map_data::{EntityDef, MapData};
-    use aberredengine::lua::components::luasetup::LuaSetup;
+    use aberredengine::lua::components::lua_setup::LuaSetup;
 
     let mut tw = TestWorld::new();
     tw.tick_to_play(DT, 8);

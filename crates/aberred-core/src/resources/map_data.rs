@@ -11,12 +11,12 @@
 //!
 //! # Runtime spawning
 //!
-//! After loading, trigger [`crate::events::spawnmap::SpawnMapRequested`] to
+//! After loading, trigger [`crate::events::map_spawn::SpawnMapRequested`] to
 //! have the engine load all referenced assets and spawn entities:
 //!
 //! ```rust,no_run
 //! # use aberred_core::resources::map_data::load_map;
-//! # use aberred_core::events::spawnmap::SpawnMapRequested;
+//! # use aberred_core::events::map_spawn::SpawnMapRequested;
 //! # use bevy_ecs::prelude::Commands;
 //! # fn example(mut commands: Commands) {
 //! let map = load_map("assets/levels/level01.json").unwrap();
@@ -33,7 +33,7 @@ use serde::{Deserialize, Serialize};
 ///
 /// Insert as a Bevy resource via `commands.insert_resource(map)` if you want
 /// to make the loaded data accessible to other systems, or trigger
-/// [`crate::events::spawnmap::SpawnMapRequested`] to spawn all assets and
+/// [`crate::events::map_spawn::SpawnMapRequested`] to spawn all assets and
 /// entities in one step.
 #[derive(Serialize, Deserialize, Default, Resource, Clone, Debug, PartialEq)]
 pub struct MapData {
@@ -133,7 +133,7 @@ pub struct EntityDef {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tint: Option<[u8; 4]>,
     /// In a game that runs Lua: Lua function to call once when this entity is first seen by the engine
-    /// (maps to `aberred_lua::components::luasetup::LuaSetup`).
+    /// (maps to `aberred_lua::components::lua_setup::LuaSetup`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub lua_setup: Option<String>,
     /// In a game that runs Lua: Lua function to call once when the entity's non-looped animation first finishes

@@ -359,7 +359,7 @@ mod tilemaps {
 // Map files
 mod map_files {
     use aberredengine::prelude::*;
-    use aberredengine::core::events::spawnmap::{MapSpawned, SpawnMapRequested};
+    use aberredengine::core::events::map_spawn::{MapSpawned, SpawnMapRequested};
     use aberredengine::core::resources::map_data::load_map;
 
     fn spawn_level(_: On<SceneEntered>, mut commands: Commands) {

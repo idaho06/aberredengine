@@ -6,11 +6,11 @@
 //! is ordered after it, so the entity commands a setup callback queues (e.g.
 //! `entity_set_animation`) apply before the entity's first animation tick.
 //!
-//! For timing and contract details see [`crate::components::luasetup`].
+//! For timing and contract details see [`crate::components::lua_setup`].
 
 use bevy_ecs::prelude::*;
 
-use crate::components::luasetup::LuaSetup;
+use crate::components::lua_setup::LuaSetup;
 use crate::systems::lua_commands::{
     CallShape, DrainScope, LuaDispatch, call_entity_callback, drain_dispatch_commands,
     refresh_signal_cache,

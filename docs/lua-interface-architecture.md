@@ -121,7 +121,7 @@ crates/aberred-lua/src/systems/lua_commands/
 └── parse.rs             # Animation condition parsing helpers
 ```
 
-`crates/aberred-lua/src/systems/` also holds the Bevy systems/observers that call into `lua_commands/` (`lua_phase.rs`, `lua_timer_fired.rs`, `lua_setup_entity.rs`, `lua_animation_finished.rs`, `lua_tween_finished.rs`, `lua_collision.rs`, `lua_menu_selected.rs`, `lua_mapspawn.rs`, `lua_gui_clicked.rs`, `lua_scene.rs`) and `lua_plugin.rs` (setup, first scene entry, `on_update_<scene>` dispatch) at the crate root.
+`crates/aberred-lua/src/systems/` also holds the Bevy systems/observers that call into `lua_commands/` (`lua_phase.rs`, `lua_timer_fired.rs`, `lua_setup_entity.rs`, `lua_animation_finished.rs`, `lua_tween_finished.rs`, `lua_collision.rs`, `lua_menu_selected.rs`, `lua_map_spawn.rs`, `lua_gui_clicked.rs`, `lua_scene.rs`) and `lua_plugin.rs` (setup, first scene entry, `on_update_<scene>` dispatch) at the crate root.
 
 ### Key Components
 

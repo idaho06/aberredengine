@@ -12,7 +12,7 @@
 //!
 //! ```rust,no_run
 //! # use aberred_core::resources::map_data::load_map;
-//! # use aberred_core::events::spawnmap::SpawnMapRequested;
+//! # use aberred_core::events::map_spawn::SpawnMapRequested;
 //! # use bevy_ecs::prelude::Commands;
 //! # fn example(mut commands: Commands) {
 //! let map = load_map("assets/levels/level01.json").unwrap();

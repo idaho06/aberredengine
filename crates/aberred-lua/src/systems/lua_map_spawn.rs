@@ -7,9 +7,9 @@
 //! `engine.load_map()` queue entries into `SpawnMapRequested` triggers.
 
 use crate::components::lua_on_animation_finished::LuaOnAnimationFinished;
-use crate::components::luasetup::LuaSetup;
+use crate::components::lua_setup::LuaSetup;
 use crate::resources::lua_runtime::{LuaRuntime, MapLuaCmd};
-use aberred_core::events::spawnmap::{MapSpawned, SpawnMapRequested};
+use aberred_core::events::map_spawn::{MapSpawned, SpawnMapRequested};
 use aberred_core::resources::map_data::load_map;
 use bevy_ecs::prelude::*;
 

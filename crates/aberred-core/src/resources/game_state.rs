@@ -2,7 +2,7 @@
 //!
 //! These resources track the authoritative current state of the game and any
 //! pending transition requested by systems. See
-//! `crate::events::gamestate::game_state_changed_observer` for how a
+//! `crate::events::game_state::game_state_changed_observer` for how a
 //! transition is applied and hooks are invoked.
 
 use bevy_ecs::prelude::Resource;

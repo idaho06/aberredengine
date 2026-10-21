@@ -2,7 +2,7 @@
 //!
 //! The entry point for runtime map loading is [`spawn_map_observer`], a
 //! persistent Bevy observer registered automatically by the engine. It fires
-//! whenever a [`crate::events::spawnmap::SpawnMapRequested`] event is
+//! whenever a [`crate::events::map_spawn::SpawnMapRequested`] event is
 //! triggered and delegates to [`spawn_map`].
 //!
 //! [`spawn_map`] is also available as a free function for use cases that need
@@ -26,7 +26,7 @@ use crate::components::tilemap::Tilemap;
 use crate::components::tint::Tint;
 use crate::components::world_position::WorldPosition;
 use crate::components::z_index::ZIndex;
-use crate::events::spawnmap::{MapSpawned, SpawnMapRequested};
+use crate::events::map_spawn::{MapSpawned, SpawnMapRequested};
 use crate::math::Color;
 use crate::protocol::render_assets::RenderAssetCmd;
 use crate::resources::animation_store::{AnimationClip, AnimationStore};

@@ -44,7 +44,7 @@ pub enum InputAction {
     /// Special function (default: F12).
     Special = 12,
     /// Toggle debug overlays (default: F11). Triggers
-    /// [`DebugToggled`](crate::events::switchdebug::DebugToggled)
+    /// [`DebugToggled`](crate::events::debug_toggled::DebugToggled)
     /// instead of an [`InputActionChanged`](crate::events::input::InputActionChanged).
     ToggleDebug = 13,
     /// Toggle fullscreen mode (default: F10). Emits no [`InputActionChanged`](crate::events::input::InputActionChanged): the

@@ -11,7 +11,7 @@
 //!   [`Persistent`](crate::components::persistent::Persistent), keeping their observers.
 
 use crate::components::persistent::SceneCleanup;
-use crate::events::gamestate::GameStateChanged;
+use crate::events::game_state::GameStateChanged;
 use crate::protocol::endpoints::RenderTx;
 use crate::protocol::render_logic::RenderMsg;
 use crate::resources::collision_contacts::CollisionContacts;

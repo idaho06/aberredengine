@@ -11,7 +11,7 @@ use crate::components::lua_on_gui_clicked::LuaOnGuiClicked;
 use crate::components::lua_on_menu_selected::LuaOnMenuSelected;
 use crate::components::lua_on_phase::{LuaOnPhaseEntered, LuaOnPhaseExited, LuaOnPhaseUpdate};
 use crate::components::lua_on_timer_fired::LuaOnTimerFired;
-use crate::components::luasetup::LuaSetup;
+use crate::components::lua_setup::LuaSetup;
 use aberred_core::components::animation::{Animation, AnimationController};
 use aberred_core::components::box_collider::BoxCollider;
 use aberred_core::components::camera_target::CameraTarget;
