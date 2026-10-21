@@ -400,7 +400,7 @@ pub fn update(
     time: Res<WorldTime>,
     input: Res<InputState>,
     camera: Res<MainCamera>,
-    screen: Res<RenderSize>,
+    render_size: Res<RenderSize>,
     mut ctx: DrainCtx,
     scene_manager: Res<SceneManager>,
     mut cached_callback: Local<String>,
@@ -414,7 +414,7 @@ pub fn update(
     // Update signal cache for Lua to read current values
     lua_runtime.sync_signals(&mut scene_state.world_signals);
     lua_runtime.update_gameconfig_cache(&scene_state.config);
-    lua_runtime.update_camera_cache(&camera, &screen, scene_state.config.pixel_snap_camera);
+    lua_runtime.update_camera_cache(&camera, &render_size, scene_state.config.pixel_snap_camera);
     if ctx.bindings.take_dirty() {
         lua_runtime.update_bindings_cache(&ctx.bindings);
     }
@@ -771,9 +771,9 @@ mod tests {
         let mut world = new_drain_test_world();
         world.insert_resource(WorldTime::default());
         world.insert_resource(InputState::default());
-        let screen = RenderSize { w: 800, h: 600 };
-        world.insert_resource(screen);
-        world.insert_resource(MainCamera(Camera2D::screen_centered(&screen)));
+        let render_size = RenderSize { w: 800, h: 600 };
+        world.insert_resource(render_size);
+        world.insert_resource(MainCamera(Camera2D::screen_centered(&render_size)));
         world
     }
 

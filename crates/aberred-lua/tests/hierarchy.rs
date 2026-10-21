@@ -149,7 +149,7 @@ fn entity_cmd_remove_parent_snaps_to_world_position() {
         "Child should not have GlobalTransform2D after RemoveParent"
     );
 
-    // WorldPosition should be snapped to the world position
+    // WorldPosition should be snapped to the former GlobalTransform2D position
     let pos = world.get::<WorldPosition>(child).unwrap();
     assert!(
         approx_eq(pos.pos.x, 100.0),
@@ -515,7 +515,7 @@ fn entity_context_includes_world_transform_fields() {
     let snapshot = EntitySnapshot {
         entity_id: 42_u64,
         group: None,
-        map_pos: Some((10.0, 20.0)),
+        pos: Some((10.0, 20.0)),
         screen_pos: None,
         rigid_body: None,
         rotation: Some(45.0),
@@ -561,7 +561,7 @@ fn entity_context_nil_world_fields_without_hierarchy() {
     let snapshot = EntitySnapshot {
         entity_id: 1_u64,
         group: None,
-        map_pos: None,
+        pos: None,
         screen_pos: None,
         rigid_body: None,
         rotation: None,

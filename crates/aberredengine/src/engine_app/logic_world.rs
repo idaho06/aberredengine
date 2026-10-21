@@ -126,11 +126,11 @@ impl EngineBuilder {
         world.insert_resource(tracked_groups);
         world.insert_resource(CollisionRuleIndex::default());
         world.insert_resource(CollisionContacts::default());
-        let screen = RenderSize {
+        let render_size = RenderSize {
             w: render_width as i32,
             h: render_height as i32,
         };
-        world.insert_resource(screen);
+        world.insert_resource(render_size);
         world.insert_resource(WindowSize {
             w: init.window_w,
             h: init.window_h,
@@ -185,7 +185,7 @@ impl EngineBuilder {
         world.insert_resource(PendingAssets::default());
         world.insert_resource(LoadedAssets::default());
         world.insert_resource(Messages::<RenderAssetCmd>::default());
-        world.insert_resource(MainCamera(Camera2D::screen_centered(&screen)));
+        world.insert_resource(MainCamera(Camera2D::screen_centered(&render_size)));
         world.insert_resource(AnimationStore::default());
         world.insert_resource(PostProcessShader::new());
         world.insert_resource(CameraFollowConfig::default());

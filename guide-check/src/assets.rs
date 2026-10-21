@@ -386,9 +386,9 @@ mod camera {
 
     use aberredengine::prelude::*;
 
-    fn setup_camera(mut camera: ResMut<MainCamera>, screen: Res<RenderSize>) {
+    fn setup_camera(mut camera: ResMut<MainCamera>, render_size: Res<RenderSize>) {
         // Look at (512, 256) from the screen center, zoomed in 2×
-        camera.0 = Camera2D::screen_centered(&screen).with_zoom(2.0);
+        camera.0 = Camera2D::screen_centered(&render_size).with_zoom(2.0);
         camera.0.target = Vec2::new(512.0, 256.0);
     }
 }

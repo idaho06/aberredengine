@@ -127,7 +127,7 @@ pub struct LuaTimerSnapshot<'a> {
 pub struct EntitySnapshot<'a> {
     pub entity_id: u64,
     pub group: Option<&'a str>,
-    pub map_pos: Option<(f32, f32)>,
+    pub pos: Option<(f32, f32)>,
     pub screen_pos: Option<(f32, f32)>,
     pub rigid_body: Option<RigidBodySnapshot>,
     pub rotation: Option<f32>,
@@ -275,19 +275,11 @@ pub fn build_entity_context_pooled<'a>(
     );
 
     // XY position subtables
-    set_opt!(
-        tables.ctx,
-        "pos",
-        snapshot.map_pos,
-        (x, y),
-        BIT_POS,
-        mask,
-        {
-            tables.pos.raw_set("x", x)?;
-            tables.pos.raw_set("y", y)?;
-            tables.ctx.raw_set("pos", tables.pos.clone())?;
-        }
-    );
+    set_opt!(tables.ctx, "pos", snapshot.pos, (x, y), BIT_POS, mask, {
+        tables.pos.raw_set("x", x)?;
+        tables.pos.raw_set("y", y)?;
+        tables.ctx.raw_set("pos", tables.pos.clone())?;
+    });
     set_opt!(
         tables.ctx,
         "screen_pos",
@@ -546,7 +538,7 @@ mod tests {
         EntitySnapshot {
             entity_id: 1,
             group: None,
-            map_pos: Some((1.0, 2.0)),
+            pos: Some((1.0, 2.0)),
             screen_pos: None,
             rigid_body: None,
             rotation: None,
@@ -569,7 +561,7 @@ mod tests {
         EntitySnapshot {
             entity_id: 1,
             group: Some("enemies"),
-            map_pos: Some((1.0, 2.0)),
+            pos: Some((1.0, 2.0)),
             screen_pos: Some((3.0, 4.0)),
             rigid_body: Some(RigidBodySnapshot {
                 velocity: (5.0, 6.0),
@@ -745,7 +737,7 @@ mod tests {
         let snapshot = EntitySnapshot {
             entity_id: 99_u64,
             group: None,
-            map_pos: None,
+            pos: None,
             screen_pos: None,
             rigid_body: None,
             rotation: None,

@@ -193,7 +193,7 @@ fn equal_priority_deterministic() {
 // ---------------------------------------------------------------------------
 
 #[test]
-fn prefers_global_transform_over_world_position() {
+fn prefers_global_transform_over_world_position_component() {
     let mut world = setup_world();
     world.resource_mut::<CameraFollowConfig>().mode = FollowMode::Instant;
 
@@ -216,7 +216,7 @@ fn prefers_global_transform_over_world_position() {
 }
 
 #[test]
-fn falls_back_to_world_position_without_global_transform() {
+fn falls_back_to_world_position_component_without_global_transform() {
     let mut world = setup_world();
     world.resource_mut::<CameraFollowConfig>().mode = FollowMode::Instant;
 

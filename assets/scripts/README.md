@@ -574,8 +574,8 @@ two independent key sets.
 | `scroll_y` | number | Mouse wheel scroll delta this frame. Positive = up, negative = down. Zero if no scroll. |
 | `mouse_x` | number | Cursor X in game/render-target space (letterbox-corrected, 0..render_width). Matches `ScreenPosition`. Use for HUD hit-testing. |
 | `mouse_y` | number | Cursor Y in game/render-target space (letterbox-corrected, 0..render_height). |
-| `mouse_world_x` | number | Cursor X in world-space (after camera transform). Matches `WorldPosition` entity coordinates. |
-| `mouse_world_y` | number | Cursor Y in world-space (after camera transform). Matches `WorldPosition` entity coordinates. |
+| `mouse_world_x` | number | Cursor X in world space (after camera transform). |
+| `mouse_world_y` | number | Cursor Y in world space (after camera transform). |
 | `gamepad_connected` | boolean | Whether pad 0 is connected this tick. |
 | `pad_left_x` / `pad_left_y` | number | Pad 0 left stick axes, `-1.0..1.0`, raw — never deadzoned (deadzone only affects `InputBinding::GamepadAxis` digital-threshold resolution, see [Input Rebinding](#input-rebinding)). |
 | `pad_right_x` / `pad_right_y` | number | Pad 0 right stick axes, `-1.0..1.0`, raw. |
@@ -1854,7 +1854,7 @@ ctx = {
 
     -- Optional fields (nil if component not present)
     group = "player",        -- Entity group name
-    pos = { x = 100, y = 200 },      -- World position (WorldPosition)
+    pos = { x = 100, y = 200 },      -- Position (WorldPosition; local to the parent when parented)
     screen_pos = { x = 50, y = 100 }, -- Screen position (ScreenPosition)
     vel = { x = 0, y = 0 },          -- Velocity (RigidBody)
     speed_sq = 0,                    -- Squared speed (RigidBody)

@@ -169,9 +169,9 @@ pub struct InputState {
     pub mouse_x: f32,
     /// Mouse Y in game/render-target space (letterbox-corrected). Range: 0.0..render_height.
     pub mouse_y: f32,
-    /// Mouse X in world-space (after camera transform). Matches WorldPosition coordinates.
+    /// Mouse X in world space (after camera transform).
     pub mouse_world_x: f32,
-    /// Mouse Y in world-space (after camera transform). Matches WorldPosition coordinates.
+    /// Mouse Y in world space (after camera transform).
     pub mouse_world_y: f32,
     /// Raw left mouse button state. Unlike the bound actions, this is
     /// NOT routed through InputBindings/InputAction rebinding — GUI hit

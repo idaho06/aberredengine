@@ -41,12 +41,12 @@ impl Camera2D {
         }
     }
 
-    /// A camera looking at the world origin from the center of `screen`, with zoom 1
+    /// A camera looking at the world origin from the center of `render_size`, with zoom 1
     /// and no rotation. This is the camera the engine starts with.
-    pub fn screen_centered(screen: &RenderSize) -> Self {
+    pub fn screen_centered(render_size: &RenderSize) -> Self {
         Self::new(
             Vec2::ZERO,
-            Vec2::new(screen.w as f32 * 0.5, screen.h as f32 * 0.5),
+            Vec2::new(render_size.w as f32 * 0.5, render_size.h as f32 * 0.5),
         )
     }
 
@@ -90,8 +90,8 @@ impl MainCamera {
     ///
     /// Use alongside [`pixel_snapped`](Self::pixel_snapped) when the render pass needs
     /// a culling rectangle that matches the snapped GPU transform.
-    pub fn world_visible_rect_snapped(&self, screen: &RenderSize) -> Rect {
-        MainCamera(self.pixel_snapped()).world_visible_rect(screen)
+    pub fn world_visible_rect_snapped(&self, render_size: &RenderSize) -> Rect {
+        MainCamera(self.pixel_snapped()).world_visible_rect(render_size)
     }
 
     /// Returns the visible world-space rectangle for the current camera state.
@@ -101,10 +101,10 @@ impl MainCamera {
     /// exact when `rotation == 0`.
     ///
     /// Guards against `zoom == 0` via `f32::EPSILON` to avoid division-by-zero.
-    pub fn world_visible_rect(&self, screen: &RenderSize) -> Rect {
+    pub fn world_visible_rect(&self, render_size: &RenderSize) -> Rect {
         let zoom = self.0.zoom.max(f32::EPSILON);
-        let w = screen.w as f32 / zoom;
-        let h = screen.h as f32 / zoom;
+        let w = render_size.w as f32 / zoom;
+        let h = render_size.h as f32 / zoom;
         let x = self.0.target.x - self.0.offset.x / zoom;
         let y = self.0.target.y - self.0.offset.y / zoom;
         Rect {
@@ -151,8 +151,8 @@ mod tests {
     #[test]
     fn view_rect_default_camera() {
         let cam = make_camera(Vec2 { x: 0.0, y: 0.0 }, Vec2 { x: 320.0, y: 180.0 }, 1.0);
-        let screen = RenderSize { w: 640, h: 360 };
-        let r = cam.world_visible_rect(&screen);
+        let render_size = RenderSize { w: 640, h: 360 };
+        let r = cam.world_visible_rect(&render_size);
         assert!(approx_eq(r.x, -320.0));
         assert!(approx_eq(r.y, -180.0));
         assert!(approx_eq(r.width, 640.0));
@@ -162,8 +162,8 @@ mod tests {
     #[test]
     fn view_rect_zoom_2x() {
         let cam = make_camera(Vec2 { x: 0.0, y: 0.0 }, Vec2 { x: 320.0, y: 180.0 }, 2.0);
-        let screen = RenderSize { w: 640, h: 360 };
-        let r = cam.world_visible_rect(&screen);
+        let render_size = RenderSize { w: 640, h: 360 };
+        let r = cam.world_visible_rect(&render_size);
         assert!(approx_eq(r.x, -160.0));
         assert!(approx_eq(r.y, -90.0));
         assert!(approx_eq(r.width, 320.0));
@@ -196,10 +196,10 @@ mod tests {
     #[test]
     fn world_visible_rect_snapped_matches_snapped_camera() {
         let cam = make_camera(Vec2 { x: 10.7, y: -3.2 }, Vec2 { x: 320.0, y: 180.0 }, 1.0);
-        let screen = RenderSize { w: 640, h: 360 };
-        let snapped_rect = cam.world_visible_rect_snapped(&screen);
+        let render_size = RenderSize { w: 640, h: 360 };
+        let snapped_rect = cam.world_visible_rect_snapped(&render_size);
         let snapped_cam = MainCamera(cam.pixel_snapped());
-        let expected = snapped_cam.world_visible_rect(&screen);
+        let expected = snapped_cam.world_visible_rect(&render_size);
         assert!(approx_eq(snapped_rect.x, expected.x));
         assert!(approx_eq(snapped_rect.y, expected.y));
         assert!(approx_eq(snapped_rect.width, expected.width));
@@ -209,8 +209,8 @@ mod tests {
     #[test]
     fn view_rect_zoom_zero_no_panic() {
         let cam = make_camera(Vec2 { x: 0.0, y: 0.0 }, Vec2 { x: 320.0, y: 180.0 }, 0.0);
-        let screen = RenderSize { w: 640, h: 360 };
-        let r = cam.world_visible_rect(&screen);
+        let render_size = RenderSize { w: 640, h: 360 };
+        let r = cam.world_visible_rect(&render_size);
         assert!(r.width.is_finite());
         assert!(r.height.is_finite());
     }

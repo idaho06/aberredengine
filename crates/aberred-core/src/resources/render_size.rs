@@ -6,8 +6,7 @@
 
 use bevy_ecs::prelude::Resource;
 
-/// The internal render resolution in pixels (`[render] width/height`);
-/// `WindowSize` is the OS window.
+/// The internal render resolution in pixels.
 ///
 /// Inserted independently in both `setup_logic_world` and
 /// `setup_render_world` -- two separate instances of this same type, not a

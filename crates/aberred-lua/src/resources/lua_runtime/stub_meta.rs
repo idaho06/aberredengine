@@ -374,17 +374,13 @@ impl LuaRuntime {
                         "mouse_world_x",
                         "number",
                         false,
-                        Some(
-                            "Cursor X in world-space (after camera transform, matches WorldPosition)",
-                        ),
+                        Some("Cursor X in world space (after camera transform)"),
                     ),
                     (
                         "mouse_world_y",
                         "number",
                         false,
-                        Some(
-                            "Cursor Y in world-space (after camera transform, matches WorldPosition)",
-                        ),
+                        Some("Cursor Y in world space (after camera transform)"),
                     ),
                     (
                         "gamepad_connected",

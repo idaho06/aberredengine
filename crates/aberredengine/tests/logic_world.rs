@@ -1579,11 +1579,11 @@ fn gui_click_observer_fires_once_without_lua() {
     tw.tick(1, DT);
 
     // A window the size of the game resolution maps cursor coordinates 1:1.
-    let screen = *tw.world.resource::<RenderSize>();
+    let render_size = *tw.world.resource::<RenderSize>();
     let sample = |down: bool| {
         let mut raw = RawDeviceSnapshot {
-            window_w: screen.w,
-            window_h: screen.h,
+            window_w: render_size.w,
+            window_h: render_size.h,
             mouse_x: 20.0,
             mouse_y: 15.0,
             ..Default::default()

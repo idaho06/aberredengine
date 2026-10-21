@@ -3,7 +3,7 @@
 //! When a root entity loses its last child, `propagate_transforms` stops
 //! updating its `GlobalTransform2D`; `cleanup_orphaned_global_transforms`
 //! removes the stale component so world-position lookups fall back to the
-//! live `WorldPosition`. Collision detection reads those world positions, so
+//! live `WorldPosition` component. Collision detection reads those positions, so
 //! a child collides where its parent places it, not at its local offset.
 
 use bevy_ecs::hierarchy::{ChildOf, Children};
@@ -266,7 +266,7 @@ fn collision_no_false_positive_from_local_position() {
 ///
 /// After a child is despawned, the parent's stale GT must be cleaned up
 /// before collision detection so that collider rects use the correct,
-/// live WorldPosition rather than the frozen world position from when the
+/// live WorldPosition rather than the frozen GlobalTransform2D from when the
 /// entity was last a hierarchy root.
 #[test]
 fn collision_uses_live_world_position_after_child_despawn() {

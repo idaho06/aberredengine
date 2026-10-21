@@ -166,8 +166,8 @@ engine = {}
 ---@field scroll_y number Mouse wheel delta (positive=up, negative=down)
 ---@field mouse_x number Cursor X in game-space (0..render_width, letterbox-corrected)
 ---@field mouse_y number Cursor Y in game-space (0..render_height, letterbox-corrected)
----@field mouse_world_x number Cursor X in world-space (after camera transform, matches WorldPosition)
----@field mouse_world_y number Cursor Y in world-space (after camera transform, matches WorldPosition)
+---@field mouse_world_x number Cursor X in world space (after camera transform)
+---@field mouse_world_y number Cursor Y in world space (after camera transform)
 ---@field gamepad_connected boolean Whether pad 0 is connected this tick
 ---@field pad_left_x number Pad 0 left stick X axis (-1.0..1.0)
 ---@field pad_left_y number Pad 0 left stick Y axis (-1.0..1.0)

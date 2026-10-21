@@ -270,8 +270,8 @@ fn run_tick_input_scenario(seed: u64) -> TickInputScenarioResult {
         .world
         .resource::<WorldSignals>()
         .has_flag("tick_input_round_trip");
-    let screen = tw.world.resource::<RenderSize>();
-    let render_size = (screen.w, screen.h);
+    let size = tw.world.resource::<RenderSize>();
+    let render_size = (size.w, size.h);
 
     TickInputScenarioResult {
         up_active,

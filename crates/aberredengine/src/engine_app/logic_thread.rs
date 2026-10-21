@@ -1058,8 +1058,8 @@ mod tests {
         );
 
         let check = |world: &World| {
-            let screen = world.resource::<RenderSize>();
-            assert_eq!((screen.w, screen.h), (640, 360));
+            let render_size = world.resource::<RenderSize>();
+            assert_eq!((render_size.w, render_size.h), (640, 360));
             assert_eq!(world.resource::<WindowSize>().w, 200, "newest sample wins");
             assert_eq!(world.resource::<ImguiCaptureMirror>().0, capture);
         };

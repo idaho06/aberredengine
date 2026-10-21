@@ -27,7 +27,7 @@ pub(crate) fn build_entity_context(
     // Query all optional components
     let group = ctx_queries.groups.get(entity).ok().map(|g| g.name());
 
-    let map_pos = ctx_queries
+    let pos = ctx_queries
         .positions
         .get(entity)
         .ok()
@@ -109,7 +109,7 @@ pub(crate) fn build_entity_context(
     let snapshot = EntitySnapshot {
         entity_id: entity.to_bits(),
         group,
-        map_pos,
+        pos,
         screen_pos,
         rigid_body,
         rotation,

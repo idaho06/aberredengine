@@ -1244,14 +1244,14 @@ A `.deterministic()` game loads a map's assets during `Setup` (see [Assets load 
 
 ### Camera
 
-`MainCamera` is pre-inserted by the engine with `Camera2D::screen_centered(&screen)`: `target` at the origin and `offset` at half the render resolution (center-screen). If you need a different initial position, request `ResMut<MainCamera>` and overwrite it — use `RenderSize` (a logic-side resource) rather than a live raylib handle for the resolution, since `RaylibAccess` isn't available here:
+`MainCamera` is pre-inserted by the engine with `Camera2D::screen_centered(&render_size)`: `target` at the origin and `offset` at half the render resolution (center-screen). If you need a different initial position, request `ResMut<MainCamera>` and overwrite it — use `RenderSize` (a logic-side resource) rather than a live raylib handle for the resolution, since `RaylibAccess` isn't available here:
 
 ```rust
 use aberredengine::prelude::*;
 
-fn setup_camera(mut camera: ResMut<MainCamera>, screen: Res<RenderSize>) {
+fn setup_camera(mut camera: ResMut<MainCamera>, render_size: Res<RenderSize>) {
     // Look at (512, 256) from the screen center, zoomed in 2×
-    camera.0 = Camera2D::screen_centered(&screen).with_zoom(2.0);
+    camera.0 = Camera2D::screen_centered(&render_size).with_zoom(2.0);
     camera.0.target = Vec2::new(512.0, 256.0);
 }
 ```
@@ -2555,8 +2555,8 @@ Each bound action is a `BoolState { active, just_pressed, just_released }`, read
 | `scroll_y` | Mouse wheel delta this sim tick. Positive = up, negative = down. |
 | `mouse_x` | Cursor X in game/render-target space (letterbox-corrected, 0..render_width). |
 | `mouse_y` | Cursor Y in game/render-target space (letterbox-corrected, 0..render_height). |
-| `mouse_world_x` | Cursor X in world-space (after camera transform, matches `WorldPosition`). |
-| `mouse_world_y` | Cursor Y in world-space (after camera transform, matches `WorldPosition`). |
+| `mouse_world_x` | Cursor X in world space (after camera transform). |
+| `mouse_world_y` | Cursor Y in world space (after camera transform). |
 
 **Gamepad fields (pad 0):**
 
