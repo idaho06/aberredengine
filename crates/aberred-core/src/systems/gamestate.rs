@@ -226,8 +226,8 @@ mod tests {
     }
 
     #[test]
-    fn check_pending_state_does_nothing_when_unchanged() {
-        // NextGameState defaults to Unchanged.
+    fn check_pending_state_does_nothing_without_a_request() {
+        // NextGameState defaults to no request (`None`).
         let mut world = world_with_next_state(NextGameState::default());
 
         tick_check_pending_state(&mut world);

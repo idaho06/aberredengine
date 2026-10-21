@@ -44,8 +44,6 @@ pub fn game_state_changed_observer(
     mut game_state: Option<ResMut<CurrentGameState>>,
     systems_store: Res<SystemsStore>,
 ) {
-    // This observer is triggered when a GameStateChanged event is fired.
-    // It checks the NextGameState resource and updates the CurrentGameState resource accordingly.
     debug!("GameStateChanged triggered");
 
     if let (Some(next_game_state), Some(game_state)) =

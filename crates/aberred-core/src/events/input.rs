@@ -6,7 +6,7 @@
 //! it indexes.
 //!
 //! Systems can subscribe to these events to react to input without directly
-//! reading the [`InputState`](crate::resources::input::InputState) resource.
+//! reading the `InputState` resource.
 
 use bevy_ecs::prelude::*;
 

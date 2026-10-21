@@ -102,7 +102,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn states_start_idle_and_pending_resets_to_unchanged() {
+    fn states_start_idle_and_reset_clears_the_request() {
         assert_eq!(CurrentGameState::default().get(), &GameState::None);
 
         let mut next = NextGameState::default();

@@ -1639,10 +1639,10 @@ pub fn animation_controller(
             animation.finished = false;
             controller.current_key = owned.clone();
             // Sync Sprite.tex_key to the new animation's texture (mirrors SetAnimation EntityCmd)
-            if let Some(anim_res) = animation_store.animations.get(owned.as_str())
+            if let Some(clip) = animation_store.animations.get(owned.as_str())
                 && let Ok(mut sprite) = sprite_query.get_mut(entity)
             {
-                sprite.tex_key = anim_res.tex_key.clone();
+                sprite.tex_key = clip.tex_key.clone();
             }
         }
     }

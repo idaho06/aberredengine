@@ -20,7 +20,7 @@
 //! - [`group`] – set of group names tracked for entity counting
 //! - [`guiinputstate`] – per-frame scratch state for GUI click consumption
 //! - [`guitheme`] – theme resource for GUI rendering (nine-patch window/button skins)
-//! - [`input`] – per-frame keyboard state of keys relevant to the game
+//! - [`input`] – per-tick resolved input ([`input::InputState`]) and the bindable [`input::InputAction`]s
 //! - [`next_scene`] – pending scene switch request
 //! - [`screensize`] – game's internal render resolution in pixels
 //! - [`scenemanager`] – scene registry and active-scene tracking

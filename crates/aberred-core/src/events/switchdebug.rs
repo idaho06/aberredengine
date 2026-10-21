@@ -24,8 +24,6 @@ pub fn debug_toggled_observer(
     mut commands: Commands,
     debug_mode: Option<Res<DebugMode>>,
 ) {
-    // This observer is triggered when a DebugToggled event is fired.
-    // It toggles the DebugMode resource.
     debug!("DebugToggled triggered");
 
     // Toggle the DebugMode resource

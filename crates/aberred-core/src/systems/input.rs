@@ -294,7 +294,7 @@ pub fn resolve_input_backlog(world: &mut World, samples: &[RawDeviceSnapshot]) {
             }
         }
 
-        // Emit InputEvents for every gameplay action's edges, in
+        // Emit InputActionChanged for every gameplay action's edges, in
         // `InputAction::ALL` order (engine toggles: see below).
         for action in InputAction::ALL {
             if action.is_engine_toggle() {
