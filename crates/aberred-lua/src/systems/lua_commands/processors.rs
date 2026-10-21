@@ -19,7 +19,7 @@ use aberred_core::components::shadow::Shadow;
 use aberred_core::math::{Color, Rect};
 use aberred_core::protocol::audio::AudioCmd;
 use aberred_core::protocol::render_assets::RenderAssetCmd;
-use aberred_core::resources::animationstore::{AnimationResource, AnimationStore};
+use aberred_core::resources::animationstore::{AnimationClip, AnimationStore};
 use aberred_core::resources::camera2d::Camera2DRes;
 use aberred_core::resources::camerafollowconfig::{CameraFollowConfig, EasingCurve, FollowMode};
 use aberred_core::resources::gameconfig::GameConfig;
@@ -628,7 +628,7 @@ pub fn process_animation_command(anim_store: &mut AnimationStore, cmd: Animation
         } => {
             anim_store.insert(
                 id.clone(),
-                AnimationResource::new(tex_key, horizontal_displacement, frame_count, fps)
+                AnimationClip::new(tex_key, horizontal_displacement, frame_count, fps)
                     .with_position(Vec2::new(pos_x, pos_y))
                     .with_vertical_displacement(vertical_displacement)
                     .with_looped(looped),

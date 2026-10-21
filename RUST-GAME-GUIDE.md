@@ -1121,21 +1121,21 @@ fn disable_post_processing(mut post: ResMut<PostProcessShader>) {
 
 ### Animations
 
-Animations are pure data — no raylib calls needed. `AnimationStore` is pre-inserted by the engine. Request it as `ResMut<AnimationStore>` and populate it with `AnimationResource` entries:
+Animations are pure data — no raylib calls needed. `AnimationStore` is pre-inserted by the engine. Request it as `ResMut<AnimationStore>` and populate it with `AnimationClip` entries:
 
 ```rust
 use aberredengine::prelude::*;
 
-anim_store.insert("player_idle", AnimationResource::new("player", 32.0, 4, 8.0));
+anim_store.insert("player_idle", AnimationClip::new("player", 32.0, 4, 8.0));
 
 anim_store.insert(
     "player_run",
-    AnimationResource::new("player", 32.0, 6, 12.0)
+    AnimationClip::new("player", 32.0, 6, 12.0)
         .with_position(Vec2::new(0.0, 64.0)), // second row of the spritesheet
 );
 ```
 
-`AnimationResource::new(tex_key, frame_width, frame_count, fps)` loops, starts at the texture's top-left and steps `frame_width` pixels per frame on one row; `tex_key` must match a loaded texture key. `.with_position(v)` moves frame 0, `.with_vertical_displacement(row_height)` wraps frames that run past the texture's right edge onto the next row, and `.with_looped(false)` plays once (see [Animation finished event](#animation-finished-event)).
+`AnimationClip::new(tex_key, frame_width, frame_count, fps)` loops, starts at the texture's top-left and steps `frame_width` pixels per frame on one row; `tex_key` must match a loaded texture key. `.with_position(v)` moves frame 0, `.with_vertical_displacement(row_height)` wraps frames that run past the texture's right edge onto the next row, and `.with_looped(false)` plays once (see [Animation finished event](#animation-finished-event)).
 
 ### Tilemaps
 
@@ -1302,7 +1302,7 @@ fn setup(mut assets: AssetLoader, mut anim_store: ResMut<AnimationStore>) -> Res
     assets.load_shader("glow", None, Some("assets/shaders/glow.fs"))?;
 
     // Animations (AnimationStore is pre-inserted, logic-owned — just populate it)
-    anim_store.insert("player_idle", AnimationResource::new("player", 32.0, 4, 8.0));
+    anim_store.insert("player_idle", AnimationClip::new("player", 32.0, 4, 8.0));
     Ok(())
 }
 ```
@@ -1369,7 +1369,7 @@ When `WorldSignals` has a value for key `"score"`, the text automatically update
 
 ### Component constructor quick reference
 
-`Sprite`, `Camera2D`, `AnimationResource` and the GUI theme types (`GuiTheme`, `GuiNinePatch`, `GuiButtonSkin`, `GuiProgressBarSkin`) are `#[non_exhaustive]`: build them with their constructors (or `Default` plus field assignment for `GuiTheme`), not struct literals, so the engine can add fields without breaking your game. Their fields stay public to read and write.
+`Sprite`, `Camera2D`, `AnimationClip` and the GUI theme types (`GuiTheme`, `GuiNinePatch`, `GuiButtonSkin`, `GuiProgressBarSkin`) are `#[non_exhaustive]`: build them with their constructors (or `Default` plus field assignment for `GuiTheme`), not struct literals, so the engine can add fields without breaking your game. Their fields stay public to read and write.
 
 | Component | Constructor |
 |-----------|-------------|

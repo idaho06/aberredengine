@@ -1590,11 +1590,11 @@ mod tests {
 
     #[test]
     fn set_animation_resets_frame_and_syncs_sprite_texture_from_store() {
-        use aberred_core::resources::animationstore::AnimationResource;
+        use aberred_core::resources::animationstore::AnimationClip;
         let mut store = AnimationStore::default();
         store.animations.insert(
             "run".to_string(),
-            AnimationResource::new("run_sheet", 16.0, 4, 10.0),
+            AnimationClip::new("run_sheet", 16.0, 4, 10.0),
         );
         let mut world = World::new();
         // The texture lookup reads the world's store when the command applies.

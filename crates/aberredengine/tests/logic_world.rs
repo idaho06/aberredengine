@@ -2726,7 +2726,7 @@ fn lua_and_rust_rules_on_one_pair_fire_once_per_tick() {
 fn lua_timer_callback_sees_this_ticks_animation_state() {
     use aberredengine::core::components::animation::{Animation, AnimationController, Condition};
     use aberredengine::core::components::timer::TimerMode;
-    use aberredengine::core::resources::animationstore::{AnimationResource, AnimationStore};
+    use aberredengine::core::resources::animationstore::{AnimationClip, AnimationStore};
     use aberredengine::lua::components::lua_on_timer_fired::LuaOnTimerFired;
 
     let mut tw = lua_script_world(
@@ -2739,7 +2739,7 @@ fn lua_timer_callback_sees_this_ticks_animation_state() {
     tw.world
         .resource_mut::<AnimationStore>()
         .animations
-        .insert("run".into(), AnimationResource::new("tex", 16.0, 4, 1.0));
+        .insert("run".into(), AnimationClip::new("tex", 16.0, 4, 1.0));
     tw.world.spawn((
         MapPosition::new(0.0, 0.0),
         Sprite::new("tex", 16.0, 16.0),

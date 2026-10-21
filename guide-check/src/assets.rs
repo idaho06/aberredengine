@@ -299,11 +299,11 @@ mod animations {
     fn register_animations(mut anim_store: ResMut<AnimationStore>) { // GLUE
     use aberredengine::prelude::*;
 
-    anim_store.insert("player_idle", AnimationResource::new("player", 32.0, 4, 8.0));
+    anim_store.insert("player_idle", AnimationClip::new("player", 32.0, 4, 8.0));
 
     anim_store.insert(
         "player_run",
-        AnimationResource::new("player", 32.0, 6, 12.0)
+        AnimationClip::new("player", 32.0, 6, 12.0)
             .with_position(Vec2::new(0.0, 64.0)), // second row of the spritesheet
     );
     } // GLUE
@@ -430,7 +430,7 @@ mod complete_setup_example {
         assets.load_shader("glow", None, Some("assets/shaders/glow.fs"))?;
 
         // Animations (AnimationStore is pre-inserted, logic-owned — just populate it)
-        anim_store.insert("player_idle", AnimationResource::new("player", 32.0, 4, 8.0));
+        anim_store.insert("player_idle", AnimationClip::new("player", 32.0, 4, 8.0));
         Ok(())
     }
 }

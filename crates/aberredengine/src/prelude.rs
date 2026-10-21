@@ -64,7 +64,7 @@ pub use aberred_core::protocol::asset_kind::AssetKind;
 pub use aberred_core::protocol::audio::AudioCmd;
 pub use aberred_core::protocol::render_assets::RenderAssetCmd;
 
-pub use aberred_core::resources::animationstore::{AnimationResource, AnimationStore};
+pub use aberred_core::resources::animationstore::{AnimationClip, AnimationStore};
 pub use aberred_core::resources::appstate::AppState;
 pub use aberred_core::resources::camera2d::{Camera2D, Camera2DRes};
 pub use aberred_core::resources::camerafollowconfig::{CameraFollowConfig, FollowMode};

@@ -847,7 +847,7 @@ mod tests {
     #[test]
     fn animation_finished_fires_exactly_once() {
         use crate::events::animation::AnimationFinished;
-        use crate::resources::animationstore::AnimationResource;
+        use crate::resources::animationstore::AnimationClip;
         use std::sync::Arc;
 
         #[derive(Resource, Default)]
@@ -867,7 +867,7 @@ mod tests {
         // branch fires immediately and the event is triggered.
         anim_store.animations.insert(
             "die".to_string(),
-            AnimationResource {
+            AnimationClip {
                 tex_key: Arc::from("t"),
                 position: Vec2 { x: 0.0, y: 0.0 },
                 horizontal_displacement: 32.0,
@@ -948,7 +948,7 @@ mod tests {
 
     #[test]
     fn animation_break_starves_entities_after_finished_nonlooped() {
-        use crate::resources::animationstore::AnimationResource;
+        use crate::resources::animationstore::AnimationClip;
         use std::sync::Arc;
 
         // delta > frame_duration (0.1s at 10 fps) so every entity advances this tick.
@@ -962,7 +962,7 @@ mod tests {
         let mut anim_store = AnimationStore::default();
         anim_store.animations.insert(
             "death".to_string(),
-            AnimationResource {
+            AnimationClip {
                 tex_key: Arc::from("t"),
                 position: Vec2 { x: 0.0, y: 0.0 },
                 horizontal_displacement: 32.0,
@@ -974,7 +974,7 @@ mod tests {
         );
         anim_store.animations.insert(
             "idle".to_string(),
-            AnimationResource {
+            AnimationClip {
                 tex_key: Arc::from("t"),
                 position: Vec2 { x: 0.0, y: 0.0 },
                 horizontal_displacement: 32.0,
@@ -1050,7 +1050,7 @@ mod tests {
     #[test]
     fn animation_stale_signal_cleared_after_restart() {
         use crate::components::signals::Signals;
-        use crate::resources::animationstore::AnimationResource;
+        use crate::resources::animationstore::AnimationClip;
         use std::sync::Arc;
 
         let mut world = World::new();
@@ -1067,7 +1067,7 @@ mod tests {
         // branch, then advances normally without re-entering the overflow branch.
         anim_store.animations.insert(
             "die".to_string(),
-            AnimationResource {
+            AnimationClip {
                 tex_key: Arc::from("t"),
                 position: Vec2 { x: 0.0, y: 0.0 },
                 horizontal_displacement: 32.0,
@@ -1153,15 +1153,15 @@ mod tests {
 
     // --- animation_controller system ---
 
-    fn make_animation_resource(
+    fn make_animation_clip(
         tex_key: &str,
         position: (f32, f32),
         displacement: (f32, f32),
         frame_count: usize,
         fps: f32,
         looped: bool,
-    ) -> crate::resources::animationstore::AnimationResource {
-        crate::resources::animationstore::AnimationResource {
+    ) -> crate::resources::animationstore::AnimationClip {
+        crate::resources::animationstore::AnimationClip {
             tex_key: std::sync::Arc::from(tex_key),
             position: Vec2 {
                 x: position.0,
@@ -1324,11 +1324,11 @@ mod tests {
         };
         anim_store.animations.insert(
             "idle".to_string(),
-            make_animation_resource("sheet_idle", (0.0, 0.0), (64.0, 0.0), 4, 10.0, true),
+            make_animation_clip("sheet_idle", (0.0, 0.0), (64.0, 0.0), 4, 10.0, true),
         );
         anim_store.animations.insert(
             "walk".to_string(),
-            make_animation_resource("sheet_walk", (0.0, 0.0), (64.0, 0.0), 8, 12.0, true),
+            make_animation_clip("sheet_walk", (0.0, 0.0), (64.0, 0.0), 8, 12.0, true),
         );
         world.insert_resource(anim_store);
 
@@ -1372,7 +1372,7 @@ mod tests {
         };
         anim_store.animations.insert(
             "idle".to_string(),
-            make_animation_resource("sheet_idle", (0.0, 0.0), (64.0, 0.0), 4, 10.0, true),
+            make_animation_clip("sheet_idle", (0.0, 0.0), (64.0, 0.0), 4, 10.0, true),
         );
         world.insert_resource(anim_store);
 
@@ -1480,7 +1480,7 @@ mod tests {
         };
         anim_store.animations.insert(
             "big".to_string(),
-            make_animation_resource("sheet", (0.0, 0.0), (64.0, 64.0), 12, fps, true),
+            make_animation_clip("sheet", (0.0, 0.0), (64.0, 64.0), 12, fps, true),
         );
         world.insert_resource(anim_store);
 
@@ -1581,7 +1581,7 @@ mod tests {
         };
         anim_store.animations.insert(
             "missing_tex".to_string(),
-            make_animation_resource("nonexistent", (0.0, 0.0), (64.0, 64.0), 8, fps, true),
+            make_animation_clip("nonexistent", (0.0, 0.0), (64.0, 64.0), 8, fps, true),
         );
         world.insert_resource(anim_store);
 

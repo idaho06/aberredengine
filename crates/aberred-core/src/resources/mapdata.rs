@@ -78,7 +78,7 @@ pub struct FontEntry {
 
 /// An animation clip defined as a strip of frames in a sprite sheet.
 ///
-/// Fields map 1:1 to [`crate::resources::animationstore::AnimationResource`].
+/// Fields map 1:1 to [`crate::resources::animationstore::AnimationClip`].
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct AnimationEntry {
     /// Key used to look up the animation in `AnimationStore`.

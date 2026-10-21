@@ -525,7 +525,7 @@ pub enum CameraFollowCmd {
 /// Commands for registering animations from Lua.
 #[derive(Debug, Clone)]
 pub enum AnimationCmd {
-    /// Register an animation resource in the AnimationStore
+    /// Register an animation clip in the AnimationStore
     RegisterAnimation {
         id: String,
         tex_key: String,

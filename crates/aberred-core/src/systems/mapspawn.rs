@@ -29,7 +29,7 @@ use crate::components::zindex::ZIndex;
 use crate::events::spawnmap::{MapSpawned, SpawnMapRequested};
 use crate::math::Color;
 use crate::protocol::render_assets::RenderAssetCmd;
-use crate::resources::animationstore::{AnimationResource, AnimationStore};
+use crate::resources::animationstore::{AnimationClip, AnimationStore};
 use crate::resources::mapdata::{
     EntityDef, MapData, ParticleEmitterShapeEntry, ParticleEmitterTtlEntry,
 };
@@ -83,7 +83,7 @@ pub fn spawn_map(
     }
 
     for entry in &map.animations {
-        let anim = AnimationResource {
+        let anim = AnimationClip {
             tex_key: Arc::from(entry.texture_key.as_str()),
             position: Vec2 {
                 x: entry.position[0],
