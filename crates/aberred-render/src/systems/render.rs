@@ -377,7 +377,7 @@ pub fn render_system(
             aberred_core::tracy::tracy_span!("render/world_space");
             let render_cam = if res.game_config.0.pixel_snap_camera {
                 camera2d_to_raylib(
-                    aberred_core::resources::camera2d::Camera2DRes(camera2d_from_raylib(
+                    aberred_core::resources::camera2d::MainCamera(camera2d_from_raylib(
                         res.camera.0,
                     ))
                     .pixel_snapped(),

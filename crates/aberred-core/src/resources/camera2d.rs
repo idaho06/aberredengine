@@ -63,19 +63,19 @@ impl Camera2D {
     }
 }
 
-/// ECS resource that holds the active 2D camera parameters.
+/// The camera the world is drawn with: the active [`Camera2D`].
 ///
 /// Typically inserted during setup or scene loading, read by render systems, and optionally
 /// mutated by camera-controller systems.
 #[derive(Resource)]
-pub struct Camera2DRes(pub Camera2D);
+pub struct MainCamera(pub Camera2D);
 
-impl Camera2DRes {
+impl MainCamera {
     /// Returns a copy of the camera with `target` rounded to the nearest integer pixel.
     ///
     /// Pass this to `begin_mode2D` instead of `self.0` to prevent sub-pixel GPU sampling
     /// from bleeding sprite atlas tiles into their neighbors during camera movement.
-    /// The stored `Camera2DRes` is unchanged so game-logic systems keep full float precision.
+    /// The stored `MainCamera` is unchanged so game-logic systems keep full float precision.
     pub fn pixel_snapped(&self) -> Camera2D {
         Camera2D {
             target: Vec2 {
@@ -91,7 +91,7 @@ impl Camera2DRes {
     /// Use alongside [`pixel_snapped`](Self::pixel_snapped) when the render pass needs
     /// a culling rectangle that matches the snapped GPU transform.
     pub fn world_visible_rect_snapped(&self, screen: &ScreenSize) -> Rect {
-        Camera2DRes(self.pixel_snapped()).world_visible_rect(screen)
+        MainCamera(self.pixel_snapped()).world_visible_rect(screen)
     }
 
     /// Returns the visible world-space rectangle for the current camera state.
@@ -139,8 +139,8 @@ mod tests {
         assert_eq!(Camera2D::default(), Camera2D::new(Vec2::ZERO, Vec2::ZERO));
     }
 
-    fn make_camera(target: Vec2, offset: Vec2, zoom: f32) -> Camera2DRes {
-        Camera2DRes(Camera2D {
+    fn make_camera(target: Vec2, offset: Vec2, zoom: f32) -> MainCamera {
+        MainCamera(Camera2D {
             target,
             offset,
             rotation: 0.0,
@@ -180,7 +180,7 @@ mod tests {
 
     #[test]
     fn pixel_snapped_preserves_other_fields() {
-        let cam = Camera2DRes(Camera2D {
+        let cam = MainCamera(Camera2D {
             target: Vec2 { x: 1.5, y: 2.5 },
             offset: Vec2 { x: 100.0, y: 200.0 },
             rotation: 45.0,
@@ -198,7 +198,7 @@ mod tests {
         let cam = make_camera(Vec2 { x: 10.7, y: -3.2 }, Vec2 { x: 320.0, y: 180.0 }, 1.0);
         let screen = ScreenSize { w: 640, h: 360 };
         let snapped_rect = cam.world_visible_rect_snapped(&screen);
-        let snapped_cam = Camera2DRes(cam.pixel_snapped());
+        let snapped_cam = MainCamera(cam.pixel_snapped());
         let expected = snapped_cam.world_visible_rect(&screen);
         assert!(approx_eq(snapped_rect.x, expected.x));
         assert!(approx_eq(snapped_rect.y, expected.y));

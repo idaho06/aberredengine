@@ -27,7 +27,7 @@ use glam::Mat3;
 use crate::events::input::{InputAction, InputActionChanged};
 use crate::events::switchdebug::DebugToggled;
 use crate::protocol::raw_input::RawDeviceSnapshot;
-use crate::resources::camera2d::{Camera2D, Camera2DRes};
+use crate::resources::camera2d::{Camera2D, MainCamera};
 use crate::resources::gameconfig::GameConfig;
 use crate::resources::input::{BoolState, InputState};
 use crate::resources::input_bindings::{AxisDirection, InputBinding, InputBindings, MouseButton};
@@ -190,7 +190,7 @@ pub fn resolve_input_backlog(world: &mut World, samples: &[RawDeviceSnapshot]) {
     }
 
     let capture = world.resource::<ImguiCaptureMirror>().0;
-    let camera = world.resource::<Camera2DRes>().0;
+    let camera = world.resource::<MainCamera>().0;
     // Set by the caller from this backlog's newest sample just before
     // calling (`apply_tick_input`), so it's already the right value to
     // letterbox-correct the mouse position against — no need to rebuild a
@@ -447,7 +447,7 @@ mod tests {
         world.insert_resource(GameConfig::default());
         world.insert_resource(PrevRawSnapshot::default());
         world.insert_resource(ImguiCaptureMirror::default());
-        world.insert_resource(Camera2DRes(camera));
+        world.insert_resource(MainCamera(camera));
         world.insert_resource(ScreenSize { w: 640, h: 360 });
         world.insert_resource(WindowSize { w: 640, h: 360 });
         world.insert_resource(EventLog::default());

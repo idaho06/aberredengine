@@ -21,7 +21,7 @@ use crate::resources::lua_runtime::{
 use aberred_core::protocol::audio::AudioCmd;
 use aberred_core::protocol::render_assets::RenderAssetCmd;
 use aberred_core::resources::animationstore::AnimationStore;
-use aberred_core::resources::camera2d::Camera2DRes;
+use aberred_core::resources::camera2d::MainCamera;
 use aberred_core::resources::camerafollowconfig::CameraFollowConfig;
 use aberred_core::resources::gameconfig::GameConfig;
 use aberred_core::resources::gamestate::NextGameState;
@@ -103,7 +103,7 @@ pub fn setup(
 ) {
     // Default camera. Needed to start the engine before entering play state
     // The camera will be overridden later in the scene setup.
-    commands.insert_resource(Camera2DRes(Camera2D::screen_centered(&screen_size)));
+    commands.insert_resource(MainCamera(Camera2D::screen_centered(&screen_size)));
 
     let lua_runtime = &scripting.lua_runtime;
 
@@ -367,7 +367,7 @@ fn resolve_input_table(
 ///
 /// Runs in `SimSet::LateUpdate`, between `SimSet::Lifecycle` and
 /// `SimSet::Bookkeeping`, i.e. *after* `Movement`/`Transforms` (so
-/// `camera_follow_system` has already updated `Camera2DRes` for this tick)
+/// `camera_follow_system` has already updated `MainCamera` for this tick)
 /// and after `Collision`/`PostCollision` (so `collision_detector`/
 /// `lua_phase_callbacks_system` have already run). This restores the ordering guarantee the pre-thread-split engine
 /// had via an explicit `.after(camera_follow_system)` constraint on its
@@ -399,7 +399,7 @@ fn resolve_input_table(
 pub fn update(
     time: Res<WorldTime>,
     input: Res<InputState>,
-    camera: Res<Camera2DRes>,
+    camera: Res<MainCamera>,
     screen: Res<ScreenSize>,
     mut ctx: DrainCtx,
     scene_manager: Res<SceneManager>,
@@ -764,14 +764,14 @@ mod tests {
 
     /// Builds a [`World`] with all resources [`update`] depends on
     /// (superset of [`new_drain_test_world`]'s: also needs `WorldTime`/`InputState`/
-    /// `Camera2DRes`/`ScreenSize`).
+    /// `MainCamera`/`ScreenSize`).
     fn new_update_test_world() -> World {
         let mut world = new_drain_test_world();
         world.insert_resource(WorldTime::default());
         world.insert_resource(InputState::default());
         let screen = ScreenSize { w: 800, h: 600 };
         world.insert_resource(screen);
-        world.insert_resource(Camera2DRes(Camera2D::screen_centered(&screen)));
+        world.insert_resource(MainCamera(Camera2D::screen_centered(&screen)));
         world
     }
 

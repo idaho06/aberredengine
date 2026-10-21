@@ -20,7 +20,7 @@ use aberred_core::math::{Color, Rect};
 use aberred_core::protocol::audio::AudioCmd;
 use aberred_core::protocol::render_assets::RenderAssetCmd;
 use aberred_core::resources::animationstore::{AnimationClip, AnimationStore};
-use aberred_core::resources::camera2d::Camera2DRes;
+use aberred_core::resources::camera2d::MainCamera;
 use aberred_core::resources::camerafollowconfig::{CameraFollowConfig, EasingCurve, FollowMode};
 use aberred_core::resources::gameconfig::GameConfig;
 use aberred_core::resources::gamestate::{GameState, NextGameState};
@@ -163,7 +163,7 @@ pub fn process_camera_command(commands: &mut Commands, cmd: CameraCmd) {
             rotation,
             zoom,
         } => {
-            commands.insert_resource(Camera2DRes(
+            commands.insert_resource(MainCamera(
                 Camera2D::new(Vec2::new(target_x, target_y), Vec2::new(offset_x, offset_y))
                     .with_rotation(rotation)
                     .with_zoom(zoom),

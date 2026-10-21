@@ -268,7 +268,7 @@ mod tests {
     use crate::resources::lua_runtime::LuaRuntime;
     use crate::systems::lua_commands::{process_camera_command, process_camera_follow_command};
     use aberred_core::math::{Rect, Vec2};
-    use aberred_core::resources::camera2d::{Camera2D, Camera2DRes};
+    use aberred_core::resources::camera2d::{Camera2D, MainCamera};
     use aberred_core::resources::camerafollowconfig::{
         CameraFollowConfig, EasingCurve, FollowMode,
     };
@@ -307,7 +307,7 @@ mod tests {
             }
         }
         state.apply(&mut world);
-        let cam = world.resource::<Camera2DRes>().0;
+        let cam = world.resource::<MainCamera>().0;
         assert_eq!(
             (cam.target, cam.offset),
             (Vec2::new(10.0, 20.0), Vec2::new(320.0, 180.0))
@@ -317,7 +317,7 @@ mod tests {
 
     #[test]
     fn camera_getters_read_the_cache_with_and_without_pixel_snap() {
-        let camera = Camera2DRes(
+        let camera = MainCamera(
             Camera2D::new(Vec2::new(10.4, 20.6), Vec2::new(320.0, 180.0)).with_zoom(2.0),
         );
         let screen = ScreenSize { w: 640, h: 360 };

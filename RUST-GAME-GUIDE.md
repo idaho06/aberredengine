@@ -854,7 +854,7 @@ The subsections below show the underlying `RenderAssetCmd`/`AudioCmd` variants; 
 | `FontStore` / `ShaderStore` / `TextureStore` / `RenderTarget` | Render world only | **No** — queue loads with `AssetLoader` instead |
 | `FontMetricsStore` / `TextureDimsStore` | Logic world, pre-inserted | Yes — `Res<FontMetricsStore>` / `Res<TextureDimsStore>`; populated asynchronously after a load completes (see below) |
 | `AnimationStore` | Logic world, pre-inserted | Yes — `ResMut<AnimationStore>` |
-| `Camera2DRes` | Logic world, pre-inserted (pre-set to center offset) | Yes — `ResMut<Camera2DRes>` |
+| `MainCamera` | Logic world, pre-inserted (pre-set to center offset) | Yes — `ResMut<MainCamera>` |
 
 ### Textures
 
@@ -1244,12 +1244,12 @@ A `.deterministic()` game loads a map's assets during `Setup` (see [Assets load 
 
 ### Camera
 
-`Camera2DRes` is pre-inserted by the engine with `Camera2D::screen_centered(&screen)`: `target` at the origin and `offset` at half the render resolution (center-screen). If you need a different initial position, request `ResMut<Camera2DRes>` and overwrite it — use `ScreenSize` (a logic-side resource) rather than a live raylib handle for the resolution, since `RaylibAccess` isn't available here:
+`MainCamera` is pre-inserted by the engine with `Camera2D::screen_centered(&screen)`: `target` at the origin and `offset` at half the render resolution (center-screen). If you need a different initial position, request `ResMut<MainCamera>` and overwrite it — use `ScreenSize` (a logic-side resource) rather than a live raylib handle for the resolution, since `RaylibAccess` isn't available here:
 
 ```rust
 use aberredengine::prelude::*;
 
-fn setup_camera(mut camera: ResMut<Camera2DRes>, screen: Res<ScreenSize>) {
+fn setup_camera(mut camera: ResMut<MainCamera>, screen: Res<ScreenSize>) {
     // Look at (512, 256) from the screen center, zoomed in 2×
     camera.0 = Camera2D::screen_centered(&screen).with_zoom(2.0);
     camera.0.target = Vec2::new(512.0, 256.0);
@@ -1279,9 +1279,9 @@ fn follow_player(mut commands: Commands, mut follow: ResMut<CameraFollowConfig>)
 }
 ```
 
-- Every sim tick, `camera_follow_system` picks the `CameraTarget` with the highest `priority` (ties go to the lower `Entity`), and moves `Camera2DRes.target` toward its world position plus `follow.offset`. With no `CameraTarget` entity, the camera stays where it is.
+- Every sim tick, `camera_follow_system` picks the `CameraTarget` with the highest `priority` (ties go to the lower `Entity`), and moves `MainCamera.target` toward its world position plus `follow.offset`. With no `CameraTarget` entity, the camera stays where it is.
 - `mode`: `Instant` snaps; `Lerp` eases by `easing` (`EasingCurve::EaseOut` by default) at `lerp_speed`; `SmoothDamp` is a spring tuned by `spring_stiffness`/`spring_damping` (call `reset_velocity()` when you switch targets or modes); `Deadzone { half_w, half_h }` holds still until the target leaves that box around the camera, then catches up at `lerp_speed`.
-- While following, the camera's zoom eases toward the winning target's `zoom` at `zoom_lerp_speed`, so setting `Camera2DRes.zoom` yourself has no lasting effect; change the target's `zoom` instead.
+- While following, the camera's zoom eases toward the winning target's `zoom` at `zoom_lerp_speed`, so setting `MainCamera.zoom` yourself has no lasting effect; change the target's `zoom` instead.
 - `bounds` (a world-space `Rect`, `x`/`y` top-left) clamps the camera so the view stays inside it. The clamp assumes the default centered `offset`.
 
 ### Complete setup example
@@ -2378,7 +2378,7 @@ All resources are accessed as Bevy ECS system parameters. Use `Res<T>` / `ResMut
 | `DebugOverlayConfig` | `ResMut` | F11 debug overlay toggles for colliders, signals, bounds, and crosshairs |
 | `SystemsStore` | `Res` | Named system registry for `commands.run_system()` |
 | `SceneManager` | `Res` | Scene registry: the `.add_scene()` scenes or the implicit `"main"` (a Lua game registers each scene on its first request) |
-| `Camera2DRes` | `ResMut` | 2D camera (target, offset, zoom, rotation) |
+| `MainCamera` | `ResMut` | 2D camera (target, offset, zoom, rotation) |
 | `AnimationStore` | `Res` / `ResMut` | Animation definitions |
 | `GuiThemeStore` | `ResMut` | Named GUI theme registry (`FxHashMap<Arc<str>, GuiTheme>`); each theme holds panel/button/label/progress_bar nine-patches, font settings, and optional shadows; see [GUI widgets](#gui-widgets) |
 | `GuiInputState` | `Res` | `click_consumed_this_frame: bool` — set by `gui_hit_test_system` when any `GuiInteractable` absorbs a click; reset each frame |

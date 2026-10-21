@@ -1,6 +1,6 @@
 //! Camera-follow system.
 //!
-//! Moves [`Camera2DRes`] to track
+//! Moves [`MainCamera`] to track
 //! the highest-priority entity carrying
 //! [`CameraTarget`].
 //!
@@ -15,7 +15,7 @@ use bevy_ecs::prelude::*;
 use crate::components::cameratarget::CameraTarget;
 use crate::components::globaltransform2d::GlobalTransform2D;
 use crate::components::mapposition::MapPosition;
-use crate::resources::camera2d::Camera2DRes;
+use crate::resources::camera2d::MainCamera;
 use crate::resources::camerafollowconfig::{CameraFollowConfig, EasingCurve, FollowMode};
 use crate::resources::screensize::ScreenSize;
 use crate::resources::worldtime::WorldTime;
@@ -36,7 +36,7 @@ pub fn camera_follow_system(
         &MapPosition,
         Option<&GlobalTransform2D>,
     )>,
-    mut camera: ResMut<Camera2DRes>,
+    mut camera: ResMut<MainCamera>,
     mut config: ResMut<CameraFollowConfig>,
     time: Res<WorldTime>,
     screensize: Res<ScreenSize>,

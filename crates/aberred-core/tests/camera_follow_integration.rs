@@ -11,7 +11,7 @@ use aberred_core::components::cameratarget::CameraTarget;
 use aberred_core::components::globaltransform2d::GlobalTransform2D;
 use aberred_core::components::mapposition::MapPosition;
 use aberred_core::math::Rect;
-use aberred_core::resources::camera2d::{Camera2D, Camera2DRes};
+use aberred_core::resources::camera2d::{Camera2D, MainCamera};
 use aberred_core::resources::camerafollowconfig::{CameraFollowConfig, EasingCurve, FollowMode};
 use aberred_core::resources::screensize::ScreenSize;
 use aberred_core::resources::worldtime::WorldTime;
@@ -22,8 +22,8 @@ use aberred_core::testing::approx_eq;
 // Helpers
 // ---------------------------------------------------------------------------
 
-fn make_camera(target_x: f32, target_y: f32) -> Camera2DRes {
-    Camera2DRes(Camera2D::new(
+fn make_camera(target_x: f32, target_y: f32) -> MainCamera {
+    MainCamera(Camera2D::new(
         Vec2::new(target_x, target_y),
         Vec2::new(160.0, 120.0),
     ))
@@ -53,7 +53,7 @@ fn tick(world: &mut World) {
 }
 
 fn camera_target(world: &World) -> Vec2 {
-    let t = world.resource::<Camera2DRes>().0.target;
+    let t = world.resource::<MainCamera>().0.target;
     Vec2::new(t.x, t.y)
 }
 
@@ -519,7 +519,7 @@ fn bounds_clamp_far_edge() {
 fn bounds_clamp_respects_zoom() {
     let mut world = setup_world();
     // Set zoom = 2.0 → half viewport in world units = 160/2=80, 120/2=60
-    world.insert_resource(Camera2DRes(
+    world.insert_resource(MainCamera(
         Camera2D::new(Vec2::ZERO, Vec2::new(160.0, 120.0)).with_zoom(2.0),
     ));
     {
@@ -624,7 +624,7 @@ fn zero_width_bounds_center_x() {
 #[test]
 fn extreme_zoom_out_centers_camera_when_viewport_exceeds_bounds() {
     let mut world = setup_world();
-    world.insert_resource(Camera2DRes(
+    world.insert_resource(MainCamera(
         Camera2D::new(Vec2::ZERO, Vec2::new(160.0, 120.0)).with_zoom(0.1),
     ));
     {
@@ -684,7 +684,7 @@ fn no_bounds_allows_any_position() {
 // ---------------------------------------------------------------------------
 
 fn camera_zoom(world: &World) -> f32 {
-    world.resource::<Camera2DRes>().0.zoom
+    world.resource::<MainCamera>().0.zoom
 }
 
 #[test]

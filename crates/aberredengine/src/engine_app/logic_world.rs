@@ -24,7 +24,7 @@ use aberred_core::protocol::endpoints::setup_audio_stub;
 use aberred_core::protocol::render_assets::RenderAssetCmd;
 use aberred_core::resources::animationstore::AnimationStore;
 use aberred_core::resources::appstate::AppState;
-use aberred_core::resources::camera2d::{Camera2D, Camera2DRes};
+use aberred_core::resources::camera2d::{Camera2D, MainCamera};
 use aberred_core::resources::camerafollowconfig::CameraFollowConfig;
 use aberred_core::resources::collision_contacts::CollisionContacts;
 use aberred_core::resources::collision_rule_index::CollisionRuleIndex;
@@ -185,7 +185,7 @@ impl EngineBuilder {
         world.insert_resource(PendingAssets::default());
         world.insert_resource(LoadedAssets::default());
         world.insert_resource(Messages::<RenderAssetCmd>::default());
-        world.insert_resource(Camera2DRes(Camera2D::screen_centered(&screen)));
+        world.insert_resource(MainCamera(Camera2D::screen_centered(&screen)));
         world.insert_resource(AnimationStore::default());
         world.insert_resource(PostProcessShader::new());
         world.insert_resource(CameraFollowConfig::default());

@@ -38,7 +38,7 @@ use crate::components::tint::Tint;
 use crate::components::zindex::ZIndex;
 use crate::protocol::stats::ThreadStats;
 use crate::resources::appstate::AppState;
-use crate::resources::camera2d::{Camera2D, Camera2DRes};
+use crate::resources::camera2d::{Camera2D, MainCamera};
 use crate::resources::camerafollowconfig::CameraFollowConfig;
 use crate::resources::debugmode::DebugMode;
 use crate::resources::debugoverlayconfig::DebugOverlayConfig;
@@ -464,7 +464,7 @@ fn refill<D: bevy_ecs::query::ReadOnlyQueryData, T>(
 #[allow(clippy::too_many_arguments)]
 pub fn build_drawable_snapshot(
     queries: DrawableSnapshotQueries,
-    camera: Res<Camera2DRes>,
+    camera: Res<MainCamera>,
     config: Res<GameConfig>,
     mut world_signals: ResMut<WorldSignals>,
     app_state: Res<AppState>,
@@ -686,7 +686,7 @@ mod tests {
 
     fn new_test_world() -> World {
         let mut world = World::new();
-        world.insert_resource(Camera2DRes(Camera2D {
+        world.insert_resource(MainCamera(Camera2D {
             offset: Vec2::new(0.0, 0.0),
             target: Vec2::new(1.0, 2.0),
             rotation: 0.0,

@@ -66,7 +66,7 @@ pub use aberred_core::protocol::render_assets::RenderAssetCmd;
 
 pub use aberred_core::resources::animationstore::{AnimationClip, AnimationStore};
 pub use aberred_core::resources::appstate::AppState;
-pub use aberred_core::resources::camera2d::{Camera2D, Camera2DRes};
+pub use aberred_core::resources::camera2d::{Camera2D, MainCamera};
 pub use aberred_core::resources::camerafollowconfig::{CameraFollowConfig, FollowMode};
 pub use aberred_core::resources::gameconfig::GameConfig;
 pub use aberred_core::resources::gamestate::{GameState, NextGameState};

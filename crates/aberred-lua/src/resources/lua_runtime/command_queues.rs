@@ -118,7 +118,7 @@ impl LuaRuntime {
     /// are queued and applied in `process_lua_map_commands`, which runs after `lua_plugin::update`.
     pub fn update_camera_cache(
         &self,
-        camera: &aberred_core::resources::camera2d::Camera2DRes,
+        camera: &aberred_core::resources::camera2d::MainCamera,
         screen: &aberred_core::resources::screensize::ScreenSize,
         pixel_snap: bool,
     ) {
