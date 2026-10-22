@@ -1818,6 +1818,63 @@ function on_scene_enter(scene) table.insert(LOG, "switch:" .. scene) end
     );
 }
 
+/// A hybrid game's `.add_scene()` scene runs its Rust scene systems and
+/// `on_scene_enter` observers while Lua drives the switches, and Lua can still
+/// switch to a scene the builder never registered.
+#[cfg(feature = "lua")]
+#[test]
+fn hybrid_game_runs_rust_scene_systems_in_lua_scenes() {
+    let mut tw = lua_script_world_unplayed_with(
+        "hybrid_rust_scene_systems",
+        r#"
+LEVEL_TICKS = 0
+function on_enter_play()
+    table.insert(LOG, "enter_play")
+    engine.request_scene("level")
+    return ""
+end
+function on_scene_enter(scene) table.insert(LOG, "switch:" .. scene) end
+function on_update_level(input, dt)
+    LEVEL_TICKS = LEVEL_TICKS + 1
+    if LEVEL_TICKS == 3 then engine.request_scene("menu") end
+end
+"#,
+        |builder| {
+            builder
+                .add_scene("level")
+                .add_scene_system("level", count_scene_ticks)
+                .on_scene_enter(
+                    "level",
+                    |ev: On<SceneEntered>, mut log: ResMut<SceneLog>| {
+                        log.0.push(format!("enter {}", ev.name));
+                    },
+                )
+        },
+    );
+    tw.world.init_resource::<SceneLog>();
+    tw.world.init_resource::<SceneTicks>();
+    tw.tick_to_play(DT, 8);
+    tw.tick(6, DT);
+    let ticks_in_level = tw.world.resource::<SceneTicks>().0;
+    tw.tick(3, DT);
+
+    assert_eq!(
+        take_lua_log(&mut tw),
+        ["enter_play", "switch:level", "switch:menu"]
+    );
+    assert_eq!(tw.world.resource::<SceneLog>().0, ["enter level"]);
+    assert!(ticks_in_level > 0, "level scene systems ran");
+    assert_eq!(
+        tw.world.resource::<SceneTicks>().0,
+        ticks_in_level,
+        "level scene systems stop outside level"
+    );
+    assert_eq!(
+        tw.world.resource::<SceneManager>().active_scene.as_deref(),
+        Some("menu")
+    );
+}
+
 /// A GUI `request_scene` intent switches a Lua game's scene in its delivery
 /// tick's `Lifecycle`.
 #[cfg(feature = "lua")]

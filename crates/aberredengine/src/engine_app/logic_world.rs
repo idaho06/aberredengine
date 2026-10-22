@@ -222,27 +222,22 @@ impl EngineBuilder {
     }
 
     /// Register the hook/scene one-shot systems into the LOGIC world (runs on
-    /// the logic thread; consumes the setup hook and scenes out of `init`). A
-    /// Lua game gets `lua_plugin`'s setup/enter_play, core's
-    /// `scene_switch_system` and an on-demand `SceneManager` (each scene
-    /// registers on its first request); every other game has at least
-    /// `"main"`.
+    /// the logic thread; consumes the setup hook and scenes out of `init`).
+    /// Every game gets one `SceneManager` seeded with its `.add_scene()` names
+    /// and core's `scene_switch_system`. A Lua game's manager is on-demand
+    /// (any other scene registers on its first request), and it gets
+    /// `lua_plugin`'s setup/enter_play; every other game has at least
+    /// `"main"` and enters it through `scene_enter_play`.
     pub(crate) fn register_logic_systems(
         init: &mut LogicInit,
         world: &mut World,
+        has_lua: bool,
     ) -> Result<(), EngineError> {
         let mut systems_store = SystemsStore::new();
 
         #[cfg(feature = "lua")]
-        if init.lua_script.is_some() {
+        if has_lua {
             use aberred_lua::lua_plugin;
-            insert_scene_manager(
-                world,
-                SceneManagerInit {
-                    on_demand: true,
-                    ..SceneManagerInit::default()
-                },
-            );
             register_persistent_system(
                 world,
                 &mut systems_store,
@@ -255,44 +250,37 @@ impl EngineBuilder {
                 hook_keys::ENTER_PLAY,
                 lua_plugin::enter_play,
             );
-            register_persistent_system(
-                world,
-                &mut systems_store,
-                hook_keys::SWITCH_SCENE,
-                scene_switch_system,
-            );
         }
         if let Some(hook) = init.setup_hook.take() {
             hook(world, &mut systems_store);
         }
 
-        if !init.scenes.is_empty() {
-            let loading_scene = init.loading_scene.take();
-            let has_loading_scene = loading_scene.is_some();
-            insert_scene_manager(
-                world,
-                SceneManagerInit {
-                    scenes: std::mem::take(&mut init.scenes),
-                    initial_scene: init.initial_scene.take(),
-                    loading_scene,
-                    on_demand: false,
-                },
-            );
-            if has_loading_scene {
-                register_persistent_system(
-                    world,
-                    &mut systems_store,
-                    hook_keys::ENTER_SETUP,
-                    scene_enter_loading,
-                );
-            }
-
+        let loading_scene = init.loading_scene.take();
+        let has_loading_scene = loading_scene.is_some();
+        insert_scene_manager(
+            world,
+            SceneManagerInit {
+                scenes: std::mem::take(&mut init.scenes),
+                initial_scene: init.initial_scene.take(),
+                loading_scene,
+                on_demand: has_lua,
+            },
+        );
+        if has_loading_scene {
             register_persistent_system(
                 world,
                 &mut systems_store,
-                hook_keys::SWITCH_SCENE,
-                scene_switch_system,
+                hook_keys::ENTER_SETUP,
+                scene_enter_loading,
             );
+        }
+        register_persistent_system(
+            world,
+            &mut systems_store,
+            hook_keys::SWITCH_SCENE,
+            scene_switch_system,
+        );
+        if !has_lua {
             register_persistent_system(
                 world,
                 &mut systems_store,
@@ -334,7 +322,7 @@ impl EngineBuilder {
         let has_lua = init.lua_script.is_some();
         #[cfg(not(feature = "lua"))]
         let has_lua = false;
-        Self::register_logic_systems(init, world)?;
+        Self::register_logic_systems(init, world, has_lua)?;
         Self::spawn_observers(world, has_lua, std::mem::take(&mut init.extra_observers));
         world.resource_mut::<NextGameState>().set(GameState::Setup);
         world.trigger(GameStateChanged {});
