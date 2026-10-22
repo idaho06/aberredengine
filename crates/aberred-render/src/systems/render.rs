@@ -287,7 +287,7 @@ pub struct DebugResources<'w> {
     pub signal_intents: ResMut<'w, SignalIntents>,
     /// Render-side scene-callback table, resolved against
     /// `RenderActiveScene` instead of the logic-world-only `SceneManager`.
-    pub scene_table: Option<Res<'w, RenderSceneTable>>,
+    pub scene_table: Res<'w, RenderSceneTable>,
     pub overlay_config: ResMut<'w, DebugOverlayConfig>,
     // active_scene kept alongside scene_table since both are
     // always read together (world_draw_callback/gui_callback dispatch);
@@ -841,10 +841,10 @@ pub fn render_system(
             }
 
             if let Some(cb) = debug_res
-                .scene_table
+                .active_scene
+                .0
                 .as_deref()
-                .zip(debug_res.active_scene.0.as_deref())
-                .and_then(|(table, name)| table.get(name))
+                .and_then(|name| debug_res.scene_table.get(name))
                 .and_then(|desc| desc.world_draw_callback)
             {
                 let core_camera: aberred_core::resources::camera2d::Camera2D =
@@ -925,10 +925,10 @@ pub fn render_system(
     // Extract gui_callback from the active scene (fn pointer is Copy — no borrow held).
     // Must be done before taking mutable borrows of other debug_res fields below.
     let gui_callback: Option<GuiCallback> = debug_res
-        .scene_table
+        .active_scene
+        .0
         .as_deref()
-        .zip(debug_res.active_scene.0.as_deref())
-        .and_then(|(table, name)| table.get(name))
+        .and_then(|name| debug_res.scene_table.get(name))
         .and_then(|desc| desc.gui_callback);
 
     let needs_imgui = needs_imgui(debug_active, gui_callback.is_some());

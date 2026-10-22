@@ -133,7 +133,7 @@ impl EngineBuilder {
 
         // Render-side table of per-scene gui/world-draw callbacks (fn pointers,
         // cheap) for resolution against RenderActiveScene.
-        let render_scene_table = (!self.has_lua_script()).then(|| self.render_scene_table());
+        let render_scene_table = self.render_scene_table();
 
         let init = LogicInit {
             config: config.clone(),

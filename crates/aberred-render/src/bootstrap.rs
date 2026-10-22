@@ -56,7 +56,7 @@ pub fn setup_render_world(
     rl: raylib::RaylibHandle,
     thread: raylib::RaylibThread,
     render_target: RenderTarget,
-    render_scene_table: Option<RenderSceneTable>,
+    render_scene_table: RenderSceneTable,
     snapshot_consumer: SnapshotConsumer,
     bridge: LogicBridge,
 ) -> Result<World, EngineError> {
@@ -98,9 +98,7 @@ pub fn setup_render_world(
     // resource_scope panics if this resource is absent.
     world.insert_resource(SimIdMap::default());
     world.insert_resource(RenderStats::default());
-    if let Some(table) = render_scene_table {
-        world.insert_resource(table);
-    }
+    world.insert_resource(render_scene_table);
     world.insert_non_send(render_target);
     world.insert_non_send(FontStore::new());
     // Created before `bridge` is handed to the world: on failure here the

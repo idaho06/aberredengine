@@ -762,6 +762,21 @@ fn scene_render_callbacks_land_on_their_scene() {
     assert!(table.get("menu").is_none());
 }
 
+/// A `.with_lua()` game's scene render callbacks land in the render table too.
+#[cfg(feature = "lua")]
+#[test]
+fn hybrid_scene_render_callbacks_land_on_their_scene() {
+    let mut builder = EngineBuilder::new()
+        .with_lua("assets/scripts/main.lua")
+        .add_scene("level")
+        .initial_scene("level")
+        .add_scene_gui("level", level_gui);
+    validate(&mut builder).unwrap();
+
+    let table = builder.render_scene_table();
+    assert!(table.get("level").is_some_and(|s| s.gui_callback.is_some()));
+}
+
 #[test]
 fn scene_scoped_methods_reject_an_unregistered_scene() {
     let base = || EngineBuilder::new().add_scene("menu").initial_scene("menu");
