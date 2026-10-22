@@ -5,7 +5,7 @@
 //! [`MAIN_SCENE`](crate::resources::signal_keys::MAIN_SCENE)).
 //!
 //! - [`scene_switch_system`] — engine-owned scene transition: [`SceneExited`] → teardown →
-//!   [`SceneEntered`]
+//!   [`SceneEntered`] → [`SceneReady`]
 //! - [`insert_scene_manager`] — inserts [`SceneManager`] and spawns the persistent [`SceneName`] entity the scene events target
 //! - [`in_scene`] — run condition: true while the named scene is active
 //! - [`scene_switch_poll`] — runs the scene transition when a [`NextScene`] request is pending
@@ -29,7 +29,7 @@ use log::{debug, error, info, warn};
 
 use crate::components::persistent::{Persistent, SceneCleanup};
 use crate::components::scene::SceneName;
-use crate::events::scene::{SceneEntered, SceneExited};
+use crate::events::scene::{SceneEntered, SceneExited, SceneReady};
 use crate::math::{Color, Vec2};
 use crate::resources::app_state::AppState;
 use crate::resources::camera2d::Camera2D;
@@ -170,7 +170,8 @@ type SceneTeardown = (
 /// name under [`sk::PREVIOUS_SCENE`]. Entering the first
 /// scene tears nothing down, so what was spawned before it (during `Setup`)
 /// survives. Then it makes the new scene active and triggers [`SceneEntered`], so
-/// entities its observers spawn belong to the new scene.
+/// entities its observers spawn belong to the new scene, applies their commands,
+/// and triggers [`SceneReady`].
 pub fn scene_switch_system(world: &mut World, state: &mut SystemState<SceneTeardown>) {
     debug!("scene_switch_system: System called!");
 
@@ -250,8 +251,13 @@ pub fn scene_switch_system(world: &mut World, state: &mut SystemState<SceneTeard
 
     world.trigger(SceneEntered {
         scene: entered,
-        name: scene_name,
+        name: scene_name.clone(),
         previous,
+    });
+    world.flush();
+    world.trigger(SceneReady {
+        scene: entered,
+        name: scene_name,
     });
 }
 
@@ -571,6 +577,43 @@ mod tests {
 
         let spawned = world.query::<&SpawnedOnEnter>().iter(&world).count();
         assert_eq!(spawned, 1);
+    }
+
+    /// [`SceneReady`] follows [`SceneEntered`] and sees what the scene's own
+    /// enter observer spawned through `Commands`.
+    #[test]
+    fn scene_ready_follows_entered_and_sees_its_spawns() {
+        let (mut world, _) = world_in_menu_switching_to("level");
+        let level = world
+            .resource::<SceneManager>()
+            .scene_entity("level")
+            .unwrap();
+        world
+            .entity_mut(level)
+            .observe(|_: On<SceneEntered>, mut commands: Commands| {
+                commands.spawn(SpawnedOnEnter);
+            });
+        record_scene_events(&mut world);
+        add_global_observer(
+            &mut world,
+            |ev: On<SceneReady>,
+             spawned: Query<(), With<SpawnedOnEnter>>,
+             mut seen: ResMut<SeenEvents>| {
+                seen.0
+                    .push(format!("ready {} sees {}", ev.name, spawned.count()));
+            },
+        );
+
+        world.run_system_once(scene_switch_system).unwrap();
+
+        assert_eq!(
+            world.resource::<SeenEvents>().0,
+            [
+                "exit menu -> level",
+                "enter level from Some(\"menu\")",
+                "ready level sees 1"
+            ]
+        );
     }
 
     #[test]

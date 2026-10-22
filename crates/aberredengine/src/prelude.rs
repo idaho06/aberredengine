@@ -55,7 +55,7 @@ pub use aberred_core::events::collision::{CollisionEnded, CollisionOngoing, Coll
 pub use aberred_core::events::gui_interactable::GuiClicked;
 pub use aberred_core::events::menu::MenuSelected;
 pub use aberred_core::events::phase::{PhaseEntered, PhaseExited};
-pub use aberred_core::events::scene::{SceneEntered, SceneExited};
+pub use aberred_core::events::scene::{SceneEntered, SceneExited, SceneReady};
 pub use aberred_core::events::timer::TimerFired;
 pub use aberred_core::events::tween::TweenFinished;
 pub use aberred_core::resources::input::InputAction;
