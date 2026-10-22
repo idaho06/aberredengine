@@ -478,6 +478,7 @@ pub fn process_lua_asset_commands(
 /// Builds a [`World`] with all resources [`DrainCtx`] depends on.
 #[cfg(test)]
 pub(crate) fn new_drain_test_world() -> World {
+    use aberred_core::systems::scene_dispatch::{SceneManagerInit, insert_scene_manager};
     let mut world = World::new();
     world.insert_resource(WorldSignals::default());
     world.insert_resource(NextScene::default());
@@ -492,7 +493,13 @@ pub(crate) fn new_drain_test_world() -> World {
     world.insert_resource(bevy_ecs::message::Messages::<AudioCmd>::default());
     world.insert_resource(GuiThemeStore::default());
     world.insert_resource(GuiThemeWarnCache::default());
-    aberred_core::systems::scene_dispatch::insert_on_demand_scene_manager(&mut world);
+    insert_scene_manager(
+        &mut world,
+        SceneManagerInit {
+            on_demand: true,
+            ..Default::default()
+        },
+    );
     world.insert_non_send(LuaRuntime::new().expect("LuaRuntime::new"));
     world
 }

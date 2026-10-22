@@ -57,7 +57,9 @@ pub fn insert_scene_switch_resources(world: &mut World) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::systems::scene_dispatch::{insert_scene_manager, scene_switch_system};
+    use crate::systems::scene_dispatch::{
+        SceneManagerInit, insert_scene_manager, scene_switch_system,
+    };
     use bevy_ecs::system::RunSystemOnce;
 
     #[test]
@@ -93,7 +95,13 @@ mod tests {
     fn insert_scene_switch_resources_satisfies_scene_switch_system() {
         let mut world = World::new();
         insert_scene_switch_resources(&mut world);
-        insert_scene_manager(&mut world, ["main".to_owned()], None, None);
+        insert_scene_manager(
+            &mut world,
+            SceneManagerInit {
+                scenes: vec!["main".to_owned()],
+                ..SceneManagerInit::default()
+            },
+        );
         world
             .run_system_once(scene_switch_system)
             .expect("scene_switch_system should find every resource it needs");

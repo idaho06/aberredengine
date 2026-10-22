@@ -255,19 +255,33 @@ pub fn scene_switch_system(world: &mut World, state: &mut SystemState<SceneTeard
     });
 }
 
-/// Inserts the [`SceneManager`] resource with `scenes` registered, spawning one
-/// [`Persistent`] scene entity carrying [`SceneName`] per scene, which
+/// What [`insert_scene_manager`] seeds the [`SceneManager`] with.
+#[derive(Debug, Default, Clone)]
+pub struct SceneManagerInit {
+    /// Scenes registered up front, each with its persistent scene entity.
+    pub scenes: Vec<String>,
+    /// See [`SceneManager::initial_scene`].
+    pub initial_scene: Option<String>,
+    /// See [`SceneManager::loading_scene`].
+    pub loading_scene: Option<String>,
+    /// Whether a switch to an unregistered name registers it instead of
+    /// refusing it ([`SceneManager::registers_on_demand`]).
+    pub on_demand: bool,
+}
+
+/// Inserts the [`SceneManager`] resource seeded from `init`, spawning one
+/// [`Persistent`] scene entity carrying [`SceneName`] per seeded scene, which
 /// [`SceneEntered`]/[`SceneExited`] target ([`SceneManager::scene_entity`]).
-pub fn insert_scene_manager(
-    world: &mut World,
-    scenes: impl IntoIterator<Item = String>,
-    initial_scene: Option<String>,
-    loading_scene: Option<String>,
-) {
+///
+/// A Rust game's scenes are closed: [`scene_switch_system`] refuses any other
+/// name. A Lua game's manager is `on_demand`: its seeded scenes exist from the
+/// start, and any other name registers on its first request.
+pub fn insert_scene_manager(world: &mut World, init: SceneManagerInit) {
     let mut scene_manager = SceneManager::new();
-    scene_manager.initial_scene = initial_scene;
-    scene_manager.loading_scene = loading_scene;
-    for name in scenes {
+    scene_manager.initial_scene = init.initial_scene;
+    scene_manager.loading_scene = init.loading_scene;
+    scene_manager.on_demand = init.on_demand;
+    for name in init.scenes {
         let entity = spawn_scene_entity(world, &name);
         scene_manager.insert(name, entity);
     }
@@ -277,14 +291,6 @@ pub fn insert_scene_manager(
 /// Spawns the [`Persistent`] entity standing for the scene `name`.
 fn spawn_scene_entity(world: &mut World, name: &str) -> Entity {
     world.spawn((SceneName(Arc::from(name)), Persistent)).id()
-}
-
-/// Inserts a [`SceneManager`] with no scenes that registers each scene on its
-/// first request: [`scene_switch_system`] spawns the [`Persistent`]
-/// [`SceneName`] entity for an unknown name instead of refusing it. Lua games,
-/// which declare no scenes, use it.
-pub fn insert_on_demand_scene_manager(world: &mut World) {
-    world.insert_resource(SceneManager::on_demand());
 }
 
 /// Run condition: true while `name` is the active [`SceneManager`] scene.
@@ -441,7 +447,13 @@ mod tests {
     fn world_in_menu_switching_to(target: &str) -> (World, Entity) {
         let mut world = World::new();
         insert_scene_switch_resources(&mut world);
-        insert_scene_manager(&mut world, ["menu".into(), "level".into()], None, None);
+        insert_scene_manager(
+            &mut world,
+            SceneManagerInit {
+                scenes: vec!["menu".into(), "level".into()],
+                ..SceneManagerInit::default()
+            },
+        );
         world.resource_mut::<SceneManager>().active_scene = Some("menu".to_owned());
         world.resource_mut::<TrackedGroups>().add_group("enemies");
         world.resource_mut::<NextScene>().set(target);
@@ -707,12 +719,18 @@ mod tests {
         );
     }
 
-    /// World with an on-demand [`SceneManager`] (no scenes registered) and a
+    /// World with an on-demand [`SceneManager`] (no scenes seeded) and a
     /// [`NextScene`] request for `target`.
     fn on_demand_world_switching_to(target: &str) -> World {
         let mut world = World::new();
         insert_scene_switch_resources(&mut world);
-        insert_on_demand_scene_manager(&mut world);
+        insert_scene_manager(
+            &mut world,
+            SceneManagerInit {
+                on_demand: true,
+                ..SceneManagerInit::default()
+            },
+        );
         world.resource_mut::<NextScene>().set(target);
         world
     }
@@ -757,6 +775,42 @@ mod tests {
 
         let scenes = world.resource::<SceneManager>();
         assert_eq!(scenes.scene_entity("level"), level);
+        assert_eq!(scenes.scene_names(), ["level", "menu"]);
+        assert_eq!(scenes.active_scene.as_deref(), Some("level"));
+    }
+
+    /// A seeded on-demand manager spawns its seeded scenes up front, still
+    /// registers an unknown name on request, and reuses a seeded entity.
+    #[test]
+    fn on_demand_manager_seeded_with_scenes_keeps_registering() {
+        let mut world = World::new();
+        insert_scene_switch_resources(&mut world);
+        insert_scene_manager(
+            &mut world,
+            SceneManagerInit {
+                scenes: vec!["level".to_owned()],
+                on_demand: true,
+                ..SceneManagerInit::default()
+            },
+        );
+        let level = world
+            .resource::<SceneManager>()
+            .scene_entity("level")
+            .expect("seeded before any switch");
+        assert_eq!(world.get::<SceneName>(level).map(|n| &*n.0), Some("level"));
+        assert!(world.get::<Persistent>(level).is_some());
+
+        world.resource_mut::<NextScene>().set("menu");
+        world.run_system_once(scene_switch_system).unwrap();
+        assert_eq!(
+            world.resource::<SceneManager>().active_scene.as_deref(),
+            Some("menu")
+        );
+
+        world.resource_mut::<NextScene>().set("level");
+        world.run_system_once(scene_switch_system).unwrap();
+        let scenes = world.resource::<SceneManager>();
+        assert_eq!(scenes.scene_entity("level"), Some(level));
         assert_eq!(scenes.scene_names(), ["level", "menu"]);
         assert_eq!(scenes.active_scene.as_deref(), Some("level"));
     }

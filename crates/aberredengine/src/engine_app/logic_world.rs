@@ -61,7 +61,8 @@ use aberred_core::systems::menu::{
     menu_controller_observer, menu_despawn, menu_selection_observer,
 };
 use aberred_core::systems::scene_dispatch::{
-    insert_scene_manager, scene_enter_loading, scene_enter_play, scene_switch_system,
+    SceneManagerInit, insert_scene_manager, scene_enter_loading, scene_enter_play,
+    scene_switch_system,
 };
 
 #[cfg(feature = "lua")]
@@ -234,9 +235,14 @@ impl EngineBuilder {
 
         #[cfg(feature = "lua")]
         if init.lua_script.is_some() {
-            use aberred_core::systems::scene_dispatch::insert_on_demand_scene_manager;
             use aberred_lua::lua_plugin;
-            insert_on_demand_scene_manager(world);
+            insert_scene_manager(
+                world,
+                SceneManagerInit {
+                    on_demand: true,
+                    ..SceneManagerInit::default()
+                },
+            );
             register_persistent_system(
                 world,
                 &mut systems_store,
@@ -265,9 +271,12 @@ impl EngineBuilder {
             let has_loading_scene = loading_scene.is_some();
             insert_scene_manager(
                 world,
-                std::mem::take(&mut init.scenes),
-                init.initial_scene.take(),
-                loading_scene,
+                SceneManagerInit {
+                    scenes: std::mem::take(&mut init.scenes),
+                    initial_scene: init.initial_scene.take(),
+                    loading_scene,
+                    on_demand: false,
+                },
             );
             if has_loading_scene {
                 register_persistent_system(

@@ -11,7 +11,8 @@ use aberredengine::core::resources::scene_manager::SceneManager;
 use aberredengine::core::resources::systems_store::{self as hook_keys, SystemsStore};
 use aberredengine::core::resources::world_signals::WorldSignals;
 use aberredengine::core::systems::scene_dispatch::{
-    insert_scene_manager, scene_enter_play, scene_switch_poll, scene_switch_system,
+    SceneManagerInit, insert_scene_manager, scene_enter_play, scene_switch_poll,
+    scene_switch_system,
 };
 use bevy_ecs::message::MessageReader;
 use bevy_ecs::prelude::*;
@@ -47,9 +48,11 @@ fn scene_world(scenes: &[&str]) -> World {
     world.init_resource::<SceneLog>();
     insert_scene_manager(
         &mut world,
-        scenes.iter().map(|name| name.to_string()),
-        scenes.first().map(|name| name.to_string()),
-        None,
+        SceneManagerInit {
+            scenes: scenes.iter().map(|name| name.to_string()).collect(),
+            initial_scene: scenes.first().map(|name| name.to_string()),
+            ..SceneManagerInit::default()
+        },
     );
 
     let switch = world.register_system(scene_switch_system);
