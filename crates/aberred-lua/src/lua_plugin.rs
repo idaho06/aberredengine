@@ -191,7 +191,7 @@ pub fn enter_play(
 
 /// The resources Lua's common command queues apply to, plus reusable drain
 /// buffers: the drain [`update`] and the scene-entered observer
-/// ([`lua_scene_entered_observer`](crate::systems::lua_scene::lua_scene_entered_observer))
+/// ([`lua_scene_ready_observer`](crate::systems::lua_scene::lua_scene_ready_observer))
 /// run after their Lua callbacks return.
 #[derive(SystemParam)]
 pub struct DrainCtx<'w, 's> {
