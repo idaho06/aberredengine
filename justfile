@@ -33,6 +33,7 @@ check-guide:
     cargo check --manifest-path guide-check/Cargo.toml --target-dir target --all-targets
     cargo check --manifest-path guide-check/Cargo.toml --target-dir target --all-targets --features lua
     cargo test --manifest-path guide-check/Cargo.toml --target-dir target
+    cargo test --manifest-path guide-check/Cargo.toml --target-dir target --features lua
     cargo clippy --manifest-path guide-check/Cargo.toml --target-dir target --all-targets
     cargo clippy --manifest-path guide-check/Cargo.toml --target-dir target --all-targets --features lua
 

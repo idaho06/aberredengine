@@ -9,6 +9,8 @@
 mod assets;
 mod gameplay;
 mod gui;
+#[cfg(feature = "lua")]
+mod hybrid;
 mod logic;
 mod resources;
 mod scene_manager;
