@@ -595,8 +595,8 @@ impl EngineBuilder {
     }
 
     /// Registers the SceneManager's own `sim`-schedule systems. Every game
-    /// has scenes: a Lua game's register on demand, every other game has its
-    /// own or the implicit `"main"`.
+    /// has scenes: its own or the implicit `"main"`, and a Lua game's manager
+    /// also registers any other scene on its first request.
     /// Accepted consequence: a scene switch resolved mid-tick runs the rest
     /// of that tick's pipeline against the newly-spawned scene, so the
     /// snapshot published at the end of that tick may show it partially

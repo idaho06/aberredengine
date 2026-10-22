@@ -210,7 +210,7 @@ impl EngineBuilder {
                 log::error!("Failed to load Lua script '{path_display}': {e}");
                 eprintln!(
                     "Failed to load Lua script '{path_display}': {e}\n\
-                     The engine will continue running with no scenes loaded; fix the script and restart."
+                     The engine will continue running with no Lua callbacks loaded; fix the script and restart."
                 );
             }
             world.insert_non_send(lua_runtime);
@@ -224,10 +224,10 @@ impl EngineBuilder {
     /// Register the hook/scene one-shot systems into the LOGIC world (runs on
     /// the logic thread; consumes the setup hook and scenes out of `init`).
     /// Every game gets one `SceneManager` seeded with its `.add_scene()` names
-    /// and core's `scene_switch_system`. A Lua game's manager is on-demand
-    /// (any other scene registers on its first request), and it gets
-    /// `lua_plugin`'s setup/enter_play; every other game has at least
-    /// `"main"` and enters it through `scene_enter_play`.
+    /// (or the implicit `"main"`) and core's `scene_switch_system`. A Lua
+    /// game's manager is on-demand (any other scene registers on its first
+    /// request), and it gets `lua_plugin`'s setup/enter_play; every other
+    /// game enters its first scene through `scene_enter_play`.
     pub(crate) fn register_logic_systems(
         init: &mut LogicInit,
         world: &mut World,
