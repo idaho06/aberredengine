@@ -370,7 +370,7 @@ pub fn scene_enter_play(
 }
 
 /// One-shot system registered as `"enter_setup"` when the game has a loading
-/// scene: enters it on entering `Setup`, right after the setup hook.
+/// scene: enters it on entering `Setup`, right after the setup hooks.
 pub fn scene_enter_loading(
     commands: Commands,
     next_scene: ResMut<NextScene>,

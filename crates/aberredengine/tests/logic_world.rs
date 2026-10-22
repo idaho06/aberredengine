@@ -1126,7 +1126,15 @@ struct LoadingText;
 
 /// A two-scene game with a `"loading"` scene shown while one texture loads.
 fn loading_scene_world(extra: impl FnOnce(TestWorldBuilder) -> TestWorldBuilder) -> TestWorld {
-    let builder = TestWorld::builder()
+    extra(with_loading_scene(TestWorld::builder()))
+        .build()
+        .expect("build should succeed")
+}
+
+/// Adds [`loading_scene_world`]'s scenes, setup hook and scene systems to
+/// `builder`.
+fn with_loading_scene(builder: TestWorldBuilder) -> TestWorldBuilder {
+    builder
         .add_scene("loading")
         .add_scene("game")
         .initial_scene("game")
@@ -1135,6 +1143,8 @@ fn loading_scene_world(extra: impl FnOnce(TestWorldBuilder) -> TestWorldBuilder)
             |mut assets: AssetLoader, mut commands: Commands| -> Result {
                 // The loading scene is entered right after this hook, during build().
                 commands.init_resource::<SceneLog>();
+                commands.init_resource::<SceneTicks>();
+                commands.init_resource::<Counter>();
                 assets.load_texture("player", "player.png")?;
                 Ok(())
             },
@@ -1145,11 +1155,7 @@ fn loading_scene_world(extra: impl FnOnce(TestWorldBuilder) -> TestWorldBuilder)
             commands.spawn(LoadingText);
         })
         .add_scene_system("loading", count_scene_ticks)
-        .add_scene_system("game", increment_counter);
-    let mut tw = extra(builder).build().expect("build should succeed");
-    tw.world.init_resource::<SceneTicks>();
-    tw.world.init_resource::<Counter>();
-    tw
+        .add_scene_system("game", increment_counter)
 }
 
 fn loading_texts(tw: &mut TestWorld) -> usize {
@@ -2004,6 +2010,62 @@ end
         tw.world.resource::<MainCamera>().0.target,
         Vec2::new(1.0, 2.0),
         "the Rust camera wins"
+    );
+}
+
+/// A hybrid game's loading scene ticks its Rust scene systems during Setup,
+/// and Lua's `on_scene_enter` runs once for it, after the Rust
+/// `on_scene_enter`, while `on_update_<loading>` never runs. On Play, Lua's
+/// first scene tears the loading scene down.
+#[cfg(feature = "lua")]
+#[test]
+fn hybrid_loading_scene_ticks_rust_and_enters_lua_once() {
+    let mut tw = lua_script_world_unplayed_with(
+        "hybrid_loading_scene",
+        r#"
+function on_enter_play()
+    engine.request_scene("game")
+    return ""
+end
+function on_scene_enter(scene)
+    table.insert(LOG, "enter:" .. scene)
+    if scene == "loading" then
+        table.insert(LOG, "spinner:" .. tostring(engine.get_entity("spinner") ~= nil))
+    end
+end
+function on_update_loading(input, dt) table.insert(LOG, "update:loading") end
+"#,
+        |builder| {
+            with_loading_scene(builder).on_scene_enter(
+                "loading",
+                |_: On<SceneEntered>, mut commands: Commands, mut signals: ResMut<WorldSignals>| {
+                    let spinner = commands.spawn_empty().id();
+                    signals.register_entity("spinner", spinner);
+                },
+            )
+        },
+    );
+
+    tw.tick(3, DT);
+    assert_eq!(
+        *tw.world.resource::<CurrentGameState>().get(),
+        GameState::Setup
+    );
+    assert!(
+        tw.world.resource::<SceneTicks>().0 >= 3,
+        "loading scene systems run during Setup"
+    );
+    assert_eq!(take_lua_log(&mut tw), ["enter:loading", "spinner:true"]);
+
+    tw.deliver_texture_dims("player", 8, 8);
+    tw.tick_to_play(DT, 8);
+    tw.tick(1, DT);
+
+    assert_eq!(take_lua_log(&mut tw), ["enter:game"]);
+    assert_eq!(
+        loading_texts(&mut tw),
+        0,
+        "torn down with the loading scene"
     );
 }
 

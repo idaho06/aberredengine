@@ -474,12 +474,15 @@ impl EngineBuilder {
 
     /// Show the scene `scene` while `Setup` waits for assets.
     ///
-    /// The engine enters it on entering `Setup`, right after the setup hook, so
-    /// its [`SceneEntered`] observers see what the hook inserted and can queue
+    /// The engine enters it on entering `Setup`, right after the setup hooks
+    /// (`main.lua`'s `on_setup()`, then [`on_setup`](Self::on_setup)), so its
+    /// [`SceneEntered`] observers see what the hooks inserted and can queue
     /// the few assets the loading scene needs (a font); `Setup` waits for those
     /// too. Its
     /// [`add_scene_system`](Self::add_scene_system)s run every sim tick while
     /// loading, e.g. to show [`PendingAssets::len`](aberred_core::resources::pending_assets::PendingAssets::len).
+    /// With `with_lua`, Lua's `on_scene_enter` runs for it,
+    /// and its `on_update_<scene>` does not run during `Setup`.
     /// On `Playing` the engine leaves it for the initial scene, which tears it
     /// down along with everything spawned during `Setup`.
     ///
