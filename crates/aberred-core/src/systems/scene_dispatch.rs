@@ -763,18 +763,25 @@ mod tests {
         );
     }
 
-    /// World with an on-demand [`SceneManager`] (no scenes seeded) and a
-    /// [`NextScene`] request for `target`.
-    fn on_demand_world_switching_to(target: &str) -> World {
+    /// World with an on-demand [`SceneManager`] seeded with `scenes`.
+    fn on_demand_world(scenes: &[&str]) -> World {
         let mut world = World::new();
         insert_scene_switch_resources(&mut world);
         insert_scene_manager(
             &mut world,
             SceneManagerInit {
+                scenes: scenes.iter().map(|&s| s.to_owned()).collect(),
                 on_demand: true,
                 ..SceneManagerInit::default()
             },
         );
+        world
+    }
+
+    /// [`on_demand_world`] with no scenes seeded and a [`NextScene`] request
+    /// for `target`.
+    fn on_demand_world_switching_to(target: &str) -> World {
+        let mut world = on_demand_world(&[]);
         world.resource_mut::<NextScene>().set(target);
         world
     }
@@ -827,16 +834,7 @@ mod tests {
     /// registers an unknown name on request, and reuses a seeded entity.
     #[test]
     fn on_demand_manager_seeded_with_scenes_keeps_registering() {
-        let mut world = World::new();
-        insert_scene_switch_resources(&mut world);
-        insert_scene_manager(
-            &mut world,
-            SceneManagerInit {
-                scenes: vec!["level".to_owned()],
-                on_demand: true,
-                ..SceneManagerInit::default()
-            },
-        );
+        let mut world = on_demand_world(&["level"]);
         let level = world
             .resource::<SceneManager>()
             .scene_entity("level")
