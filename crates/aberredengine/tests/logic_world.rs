@@ -1915,6 +1915,46 @@ end
     );
 }
 
+/// Lua's `on_scene_enter` runs after the Rust scene-enter work of a hybrid
+/// game: it sees an entity a per-scene `on_scene_enter` registered and a
+/// flag a global `SceneEntered` observer set.
+#[cfg(feature = "lua")]
+#[test]
+fn lua_scene_enter_sees_rust_scene_enter_work() {
+    let mut tw = lua_script_world_with(
+        "lua_sees_rust_scene_enter",
+        r#"
+function on_enter_play()
+    engine.request_scene("level")
+    return ""
+end
+function on_scene_enter(scene)
+    table.insert(LOG, tostring(engine.get_entity("player") ~= nil))
+    table.insert(LOG, tostring(engine.has_flag("rust_entered")))
+end
+"#,
+        |builder| {
+            builder
+                .add_scene("level")
+                .on_scene_enter(
+                    "level",
+                    |_: On<SceneEntered>,
+                     mut commands: Commands,
+                     mut signals: ResMut<WorldSignals>| {
+                        let player = commands.spawn_empty().id();
+                        signals.register_entity("player", player);
+                    },
+                )
+                .add_observer(|_: On<SceneEntered>, mut signals: ResMut<WorldSignals>| {
+                    signals.set_flag("rust_entered");
+                })
+        },
+    );
+    tw.tick(1, DT);
+
+    assert_eq!(take_lua_log(&mut tw), ["true", "true"]);
+}
+
 /// A hybrid game runs `main.lua`'s `on_setup()` first, then the Rust setup
 /// hook, which sees Lua's `AnimationStore` and may override Lua's camera.
 #[cfg(feature = "lua")]

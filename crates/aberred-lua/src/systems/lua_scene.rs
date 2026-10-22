@@ -3,13 +3,13 @@
 //! Core `scene_switch_system` switches scenes; these observers add the Lua
 //! side. [`lua_scene_exited_observer`] drops the commands queued for the scene
 //! being left, before its entities are despawned. [`lua_scene_entered_observer`]
-//! calls `on_scene_enter` once the old scene is gone. The engine registers
-//! them only when a Lua script is set. Their order relative to other global
-//! observers of the same event is undefined.
+//! calls `on_scene_enter` on [`SceneReady`], so every Rust `SceneEntered`
+//! observer has run and its commands have applied. The engine registers them
+//! only when a Lua script is set.
 
 use crate::lua_plugin::DrainCtx;
 use crate::resources::lua_runtime::LuaRuntime;
-use aberred_core::events::scene::{SceneEntered, SceneExited};
+use aberred_core::events::scene::{SceneExited, SceneReady};
 use bevy_ecs::prelude::*;
 use log::error;
 
@@ -25,7 +25,7 @@ pub fn lua_scene_exited_observer(_: On<SceneExited>, lua_runtime: NonSend<LuaRun
 /// callbacks are re-injected), refreshes the tracked-group and signal caches so
 /// the callback sees the post-teardown state, drains the commands it queued,
 /// and refreshes the config cache.
-pub fn lua_scene_entered_observer(trigger: On<SceneEntered>, mut ctx: DrainCtx) {
+pub fn lua_scene_entered_observer(trigger: On<SceneReady>, mut ctx: DrainCtx) {
     let lua_runtime = &ctx.scripting.lua_runtime;
     lua_runtime.clear_function_cache();
     lua_runtime.update_tracked_groups_cache(&ctx.tracked_groups.groups);
@@ -59,14 +59,13 @@ mod tests {
         world
     }
 
-    /// Triggers [`SceneEntered`] for `name`, then applies the observer's
+    /// Triggers [`SceneReady`] for `name`, then applies the observer's
     /// commands, as the next sync point does in the engine.
     fn enter(world: &mut World, name: &str) {
         let scene = world.spawn_empty().id();
-        world.trigger(SceneEntered {
+        world.trigger(SceneReady {
             scene,
             name: Arc::from(name),
-            previous: None,
         });
         world.flush();
     }
