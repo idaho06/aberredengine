@@ -4,6 +4,10 @@
 //! entity state information. Used by Lua phase, timer and other entity callbacks to pass
 //! rich entity context to Lua callbacks.
 //!
+//! Numeric fields (here and in the collision ctx) go in as `f32`, which widens to a
+//! Lua number (`f64`) exactly, so this direction never rounds; only Lua-to-Rust
+//! values truncate, once, at the boundary.
+//!
 //! # Context Structure
 //!
 //! The context table contains:

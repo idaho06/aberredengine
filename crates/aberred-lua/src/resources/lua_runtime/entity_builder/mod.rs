@@ -402,6 +402,16 @@ mod tests {
         assert!(same, "chained with_* calls must return the same userdata");
     }
 
+    /// A Lua number reaches an `f32` field truncated once, after Lua's own `f64`
+    /// arithmetic: `16777216 + 1 + 1` is `16777218` in `f64`, while an `f32`
+    /// chain rounds each `+ 1` away (to `16777216`).
+    #[test]
+    fn lua_numbers_truncate_to_f32_once_at_the_boundary() {
+        let cmd = built_spawn_cmd("engine.spawn():with_position(16777216 + 1 + 1, 0):build()");
+        let (x, _) = cmd.position.unwrap();
+        assert_eq!(x.to_bits(), 16777218.0_f32.to_bits());
+    }
+
     #[test]
     fn long_chain_builds_expected_spawn_cmd() {
         let cmd = built_spawn_cmd(

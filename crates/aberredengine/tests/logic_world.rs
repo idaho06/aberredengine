@@ -1657,6 +1657,46 @@ end
     );
 }
 
+/// Two deterministic worlds running the same Lua physics script hash
+/// identically every tick (the hash covers `WorldPosition`/`RigidBody` bits).
+/// Evidence that this script shows no divergence, not proof that none is
+/// possible.
+#[cfg(feature = "lua")]
+#[test]
+fn deterministic_lua_worlds_hash_identically() {
+    const SCRIPT: &str = r#"
+function on_update(ctx, input, dt)
+    local v = ctx.vel
+    engine.entity_set_velocity(ctx.id, v.x * 0.97 + dt / 3, v.y - ctx.pos.x * 0.001)
+end
+"#;
+    let run = || {
+        let mut tw = lua_script_world_with("float_two_worlds", SCRIPT, |b| b.deterministic(7));
+        exec_lua(
+            &mut tw,
+            "engine.spawn():register_as('probe'):with_position(0.1, 1 / 3)\
+             :with_velocity(10.7, -3.3):with_friction(0.25)\
+             :with_phase('run'):with_lua_phase_update('on_update'):build()",
+        );
+        let trail: Vec<u64> = (0..120)
+            .map(|_| {
+                tw.tick(1, DT);
+                aberredengine::test_support::hash_world_state(&tw.world)
+            })
+            .collect();
+        let probe = tw
+            .world
+            .resource::<WorldSignals>()
+            .get_entity("probe")
+            .unwrap();
+        (trail, tw.world.get::<WorldPosition>(probe).unwrap().pos)
+    };
+
+    let ((first, end_pos), (second, _)) = (run(), run());
+    assert_ne!(end_pos, Vec2::new(0.1, 1.0 / 3.0), "the probe moves");
+    assert_eq!(first, second);
+}
+
 /// `engine.collision_phase_transition` from a collision callback sets
 /// `Phase.next`; core `phase_system` applies it at the start of the next tick.
 /// The Lua enter callback runs after collision, so after the hit.
