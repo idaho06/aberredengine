@@ -117,6 +117,10 @@ impl EngineBuilder {
     /// engine moves to `Playing` on its own unless the hook requested another
     /// state through `NextGameState` (e.g. `Quitting`), which then wins.
     ///
+    /// In a Lua game it runs after `main.lua`'s `on_setup()`, whose commands are
+    /// already applied: it sees Lua's `AnimationStore` and `MainCamera` and may
+    /// add to or replace them.
+    ///
     /// The system is registered into [`SystemsStore`](aberred_core::resources::systems_store::SystemsStore)
     /// under the key `"setup"`.
     pub fn on_setup<M>(mut self, system: impl IntoSystem<(), (), M> + Send + 'static) -> Self {
@@ -509,8 +513,10 @@ impl EngineBuilder {
 
     /// Configure the builder for a Lua game.
     ///
-    /// Sets up all four hooks to use `lua_plugin` functions and initialises the
-    /// Lua runtime with the given script path.
+    /// Initialises the Lua runtime with the given script path; `main.lua`'s
+    /// `on_setup()`, `on_enter_play()`, `on_scene_enter()` and `on_update_<scene>()`
+    /// drive the game. Combines with `.on_setup()` (run after `main.lua`'s
+    /// `on_setup()`), `.add_scene()` and `.add_system()`.
     #[cfg(feature = "lua")]
     pub fn with_lua(mut self, script_path: impl Into<PathBuf>) -> Self {
         self.lua_script = Some(script_path.into());

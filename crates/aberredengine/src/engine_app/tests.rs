@@ -575,29 +575,6 @@ fn a_lua_game_validates_its_scenes_like_a_rust_game() {
     .unwrap();
 }
 
-#[cfg(feature = "lua")]
-#[test]
-fn test_with_lua_conflicts_with_user_hook_either_order() {
-    let lua_first = EngineBuilder::new()
-        .with_lua("assets/scripts/main.lua")
-        .on_setup(dummy_setup)
-        .try_run()
-        .expect_err("with_lua + on_setup should fail preflight regardless of order");
-    let hook_first = EngineBuilder::new()
-        .on_setup(dummy_setup)
-        .with_lua("assets/scripts/main.lua")
-        .try_run()
-        .expect_err("on_setup + with_lua should fail preflight regardless of order");
-
-    for err in [lua_first, hook_first] {
-        assert!(
-            err.to_string()
-                .contains("EngineBuilder conflict: .with_lua()")
-        );
-        assert!(err.to_string().contains("on_setup"));
-    }
-}
-
 #[test]
 fn test_initial_scene_not_registered() {
     let err = EngineBuilder::new()
@@ -863,17 +840,6 @@ fn replay_record_or_play_conflicts_with_lua() {
 #[cfg(feature = "lua")]
 #[test]
 fn validation_reports_the_earliest_conflict_first() {
-    // lua + setup + seed: the Lua/setup conflict wins over the
-    // Lua/deterministic one.
-    let err = validate(
-        &mut EngineBuilder::new()
-            .with_lua("main.lua")
-            .deterministic(1)
-            .on_setup(dummy_setup),
-    )
-    .unwrap_err();
-    assert!(matches!(err, EngineError::LuaConflictsWithSetup), "{err}");
-
     // record + play + lua: the record/play conflict wins over the Lua one.
     let err = validate(
         &mut EngineBuilder::new()
@@ -890,7 +856,7 @@ fn validation_reports_the_earliest_conflict_first() {
 
 #[cfg(feature = "lua")]
 #[test]
-fn lua_conflicts_with_an_explicit_setup_hook_in_either_order() {
+fn lua_combines_with_an_explicit_setup_hook_in_either_order() {
     for builder in [
         EngineBuilder::new()
             .on_setup(dummy_setup)
@@ -899,8 +865,7 @@ fn lua_conflicts_with_an_explicit_setup_hook_in_either_order() {
             .with_lua("main.lua")
             .on_setup(dummy_setup),
     ] {
-        let err = validate(&mut { builder }).unwrap_err();
-        assert!(matches!(err, EngineError::LuaConflictsWithSetup), "{err}");
+        validate(&mut { builder }).unwrap();
     }
 }
 

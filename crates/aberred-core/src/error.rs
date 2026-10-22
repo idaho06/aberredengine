@@ -13,12 +13,6 @@ pub enum EngineError {
     AddSceneRequiresInitialScene,
 
     #[error(
-        "EngineBuilder conflict: .with_lua() runs main.lua's on_setup(); also calling \
-         .on_setup() is ambiguous. Remove the .on_setup() call."
-    )]
-    LuaConflictsWithSetup,
-
-    #[error(
         "EngineBuilder conflict: .deterministic(seed) and .with_lua() cannot be used \
          together. Lua is outside the deterministic envelope, so deterministic games are \
          Rust-only."

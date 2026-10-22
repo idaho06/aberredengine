@@ -136,8 +136,9 @@ impl TestWorldBuilder {
         self
     }
 
-    /// Register the `setup` hook. As with [`EngineBuilder::on_setup`], the
-    /// engine moves to `Playing` after it runs unless it requested another state.
+    /// Register the `setup` hook. As with [`EngineBuilder::on_setup`], it runs
+    /// after a Lua script's `on_setup()`, and the engine moves to `Playing`
+    /// after it runs unless it requested another state.
     pub fn on_setup<M>(mut self, system: impl IntoSystem<(), (), M> + Send + 'static) -> Self {
         self.setup_hook = Some(hook_registrar(hook_keys::SETUP, system));
         self

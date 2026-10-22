@@ -21,7 +21,6 @@ impl EngineBuilder {
     }
 
     pub(super) fn validate_builder(&self) -> Result<(), EngineError> {
-        self.validate_lua_conflicts()?;
         self.validate_scene_manager()?;
         self.validate_scene_refs()?;
         self.validate_deterministic()?;
@@ -57,18 +56,6 @@ impl EngineBuilder {
         {
             false
         }
-    }
-
-    /// Checks `.with_lua()` against `.on_setup()`: a Lua game's setup is
-    /// `main.lua`'s `on_setup()`.
-    fn validate_lua_conflicts(&self) -> Result<(), EngineError> {
-        if !self.has_lua_script() {
-            return Ok(());
-        }
-        if self.setup_hook.is_some() {
-            return Err(EngineError::LuaConflictsWithSetup);
-        }
-        Ok(())
     }
 
     /// Checks `.add_scene()`/`.initial_scene()` consistency: `initial_scene` is
