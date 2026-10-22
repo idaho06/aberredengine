@@ -1,6 +1,6 @@
 # Aberred Engine — Rust Game Developer Guide
 
-This guide explains how to build a 2D game in pure Rust using the Aberred Engine as a library dependency, without Lua scripting.
+This guide explains how to build a 2D game in pure Rust using the Aberred Engine as a library dependency, without Lua scripting (to combine Rust with `main.lua` scripts, see [Hybrid games](#hybrid-games-rust--lua)).
 
 **Contents**
 
@@ -32,7 +32,7 @@ Built-in systems:
 - **Menus** — scrollable interactive menus with built-in `MenuActions` and a `MenuSelected` event
 - **Animation** — frame-based sprite animation with controller rules
 - **Particles** — emitter system with templates, shapes, arcs, speed ranges
-- **Scene management** — named scenes with `SceneEntered`/`SceneExited` events, scene-scoped systems, optional GUI and world-draw callbacks, and auto-despawn
+- **Scene management** — named scenes with `SceneEntered`/`SceneReady`/`SceneExited` events, scene-scoped systems, optional GUI and world-draw callbacks, and auto-despawn
 - **Tweens** — position, rotation, and scale interpolation with easing and loop modes
 - **Timers** — repeating or one-shot countdown timers that trigger a `TimerFired` event
 - **Phase state machines** — per-entity state machines over named phases, with `PhaseEntered`/`PhaseExited` events
@@ -88,7 +88,7 @@ Start every game module with the prelude:
 use aberredengine::prelude::*;
 ```
 
-It brings in the `bevy_ecs` prelude (`Commands`, `Query`, `Res`, `On`, …) and the `bevy_ecs` crate itself, so `#[derive(Component)]`, `#[derive(Resource)]` and `#[derive(Event)]` work; the math types (`Vec2`, `Color`, `Rect`); the common components, resources, events and commands; the scene events (`SceneEntered`, `SceneExited`) and the `in_scene` run condition; and `EngineBuilder`, `SimSet` and `EngineError`. Less common items keep their full path under `aberredengine::core::...`, and the examples below import those explicitly. The render-thread types a GUI callback receives (`TextureStore`, `FontStore`, `GuiCtx`, `GuiCallback`) are in the prelude and in `aberredengine::render`; the rest of the render thread is out of reach of game code.
+It brings in the `bevy_ecs` prelude (`Commands`, `Query`, `Res`, `On`, …) and the `bevy_ecs` crate itself, so `#[derive(Component)]`, `#[derive(Resource)]` and `#[derive(Event)]` work; the math types (`Vec2`, `Color`, `Rect`); the common components, resources, events and commands; the scene events (`SceneEntered`, `SceneReady`, `SceneExited`) and the `in_scene` run condition; and `EngineBuilder`, `SimSet` and `EngineError`. Less common items keep their full path under `aberredengine::core::...`, and the examples below import those explicitly. The render-thread types a GUI callback receives (`TextureStore`, `FontStore`, `GuiCtx`, `GuiCallback`) are in the prelude and in `aberredengine::render`; the rest of the render thread is out of reach of game code.
 
 The `bevy_ecs` prelude has its own `Result` (`Result<T = (), E = BevyError>`) and a lifecycle event named `Add`, so in a module that glob-imports the prelude they shadow `std::result::Result` and `std::ops::Add`. `Result<T, E>` with an explicit error type is the standard `Result`; write `std::ops::Add` in full when implementing it.
 
@@ -185,7 +185,7 @@ Setup ──→ Playing ──→ Quitting
 ```
 
 1. **Setup** — The engine calls the `setup` hook once, on the logic thread. Load assets here (textures, fonts, sounds, shaders, animations; see [Section 6](#6-loading-assets)). Omit `.on_setup()` if you have nothing to load. With `.loading_scene(name)`, that scene is entered right after the hook and stays active until Setup ends. Once the hook has run, the engine moves to `Playing` on its own, as soon as every load queued so far has been answered (see [Waiting for loads](#waiting-for-loads)); a failed load counts as answered. A hook that requests `Playing` itself waits the same way. A hook that requests another state through `ResMut<NextGameState>` (e.g. `GameState::Quitting`) gets it at once.
-2. **Playing** — The engine enters the initial scene (triggering `SceneEntered`) and runs your systems every sim tick.
+2. **Playing** — The engine enters the initial scene (triggering `SceneEntered`; for a `.with_lua()` game, see [Hybrid games](#hybrid-games-rust--lua)) and runs your systems every sim tick.
 3. **Scene switches** — A request through `NextScene::set(name)`, a `MenuAction::RequestScene` menu item or a GUI callback's `intents.request_scene(name)` runs the exit→enter sequence late in the tick (`SimSet::Lifecycle`); see [Triggering scene transitions](#triggering-scene-transitions).
 4. **Quitting** — When the game state becomes `GameState::Quitting` (via `NextGameState::set(GameState::Quitting)`, a `MenuAction::RequestQuit` menu item or a GUI callback's `intents.request_quit()`) or the window is closed, the engine shuts down. Request it from any system or observer through `ResMut<NextGameState>`.
 
@@ -217,14 +217,14 @@ The engine owns the main loop. You configure it through `EngineBuilder`: registe
 | `.add_late_scene_system(scene, system)` | Like `.add_scene_system()`, but late in the tick. Both start the tick after `scene` is entered. |
 | `.add_observer(observer_fn)` | Register a persistent observer for a custom or engine event. See [Custom systems and observers](#custom-systems-and-observers). |
 | `.on_scene_enter(scene, observer_fn)` / `.on_scene_exit(scene, observer_fn)` | Observe `SceneEntered`/`SceneExited` for one scene only. See [Scene-scoped systems and observers](#scene-scoped-systems-and-observers). |
-| `.with_lua(path)` | **Lua builds only** (`lua` feature). Run a Lua game from the `main.lua` at `path`; a pure-Rust game never calls it. |
+| `.with_lua(path)` | **Lua builds only** (`lua` feature). Run the `main.lua` at `path`; combines with the other builder methods. See [Hybrid games](#hybrid-games-rust--lua). |
 | `.deterministic(seed)` | Seed `SimRng` from `seed` instead of entropy, pinning simulation randomness to a known value. Mutually exclusive with `.with_lua()`. See [Determinism and replay](#10-determinism-and-replay) below. |
 | `.record_replay(path, game_version)` | Record this session's input stream to `path`. Requires `.deterministic(seed)` first; mutually exclusive with `.play_replay()`. |
 | `.play_replay(path)` | Replay a previously recorded file from `path` instead of live input. The seed comes from the file's header — do not also call `.deterministic()`. Mutually exclusive with `.record_replay()`. |
 | `.try_run()` | Start the engine; a startup failure is returned as `Err(EngineError)`. See [Startup error handling](#startup-error-handling). |
 | `.run()` | Like `.try_run()`, but exits the process with status 1 on startup failure. |
 
-**Conflict rules:** `.add_scene()` cannot be combined with `.with_lua()` — a Lua game's scenes come from `main.lua`, each registered on its first request. `.add_scene()` requires `.initial_scene(...)`, and that name must match a registered scene — a missing or misspelled `.initial_scene(...)` is a startup error, and so is calling `.initial_scene(...)` with no `.add_scene()` calls at all. `.with_lua()` also conflicts with an explicit `.on_setup()` call, in either order — it installs its own setup hook, and mixing in yours is ambiguous. `.add_system()` combines with `.with_lua()` freely. Every rule here is checked at startup; see [Startup error handling](#startup-error-handling).
+**Conflict rules:** `.add_scene()` requires `.initial_scene(...)`, and that name must match a registered scene — a missing or misspelled `.initial_scene(...)` is a startup error, and so is calling `.initial_scene(...)` with no `.add_scene()` calls at all. These rules also apply with `.with_lua()`, which conflicts only with `.deterministic()` and the replay methods. Every rule here is checked at startup; see [Startup error handling](#startup-error-handling).
 
 ### Multi-scene games
 
@@ -295,7 +295,9 @@ Every scene has a persistent scene entity. These methods also accept the implici
 - `SceneExited { scene, name, next }` fires before the old scene is torn down: its entities are still alive.
 - `SceneEntered { scene, name, previous }` fires after the teardown, so entities its observers spawn belong to the new scene. It also fires for the initial scene, with `previous: None`.
 
-Global observers of the same scene event (`.add_observer()`) run in no guaranteed order relative to each other. **Lua builds only:** both events fire in a `.with_lua()` game too, so its `.add_observer()` observers run alongside the engine's own Lua scene observers, also in no guaranteed order. No scene is registered at startup in such a game, so `.add_observer()` is the way to react to its scenes.
+- `SceneReady { scene, name }` fires right after `SceneEntered`, once its observers' commands have applied: what they spawned and registered is in the world.
+
+Global observers of the same scene event (`.add_observer()`) run in no guaranteed order relative to each other.
 
 `.on_scene_enter(scene, ..)`/`.on_scene_exit(scene, ..)` attach an observer to one scene's entity; `.add_observer()` sees every scene and reads `name` from the event. `.add_scene_system(scene, ..)` and `.add_system_if(.., in_scene(..))` run a system only while a scene is active. Every scene these methods name, and every scene given to `.add_scene_gui()`/`.add_scene_world_draw()`, must be registered with `.add_scene()` (the implicit `"main"` counts), or startup fails with `EngineError::SceneNotRegistered`.
 
@@ -358,6 +360,58 @@ fn register_late(builder: EngineBuilder) -> EngineBuilder {
 
 For finer placement, use [`.configure_schedule()`](#configure_scheduleclosure--full-ordering-control).
 
+### Hybrid games (Rust + Lua)
+
+**Lua builds only.** A `.with_lua()` game accepts the other builder methods: Rust systems do the heavy, typed or scene-scoped work, and `main.lua` scripts the scenes. Lua attaches only core data (groups, components, signals); Rust adopts the entities it cares about by observing `On<Add, Group>` and reads tuning values from `WorldSignals`:
+
+```rust
+use aberredengine::prelude::*;
+
+// Rust-side marker for the swarm members a Lua script spawns.
+#[derive(Component)]
+struct Boid;
+
+// Lua spawns with `:with_group("swarm")`; Rust adopts every such entity.
+fn adopt_swarm(ev: On<Add, Group>, groups: Query<&Group>, mut commands: Commands) {
+    let entity = ev.event_target();
+    if groups.get(entity).is_ok_and(|group| group.name() == "swarm") {
+        commands.entity(entity).insert(Boid);
+    }
+}
+
+// Runs before Lua's on_scene_enter, which sees this value and may override it.
+fn seed_tuning(_: On<SceneEntered>, mut signals: ResMut<WorldSignals>) {
+    signals.set_scalar("swarm_aggression", 1.0);
+}
+
+// Lua tunes the swarm with `engine.set_scalar("swarm_aggression", 2.0)`.
+fn swarm_steering(signals: Res<WorldSignals>, mut boids: Query<&mut RigidBody, With<Boid>>) {
+    let max_speed = Some(120.0 * signals.get_scalar("swarm_aggression").unwrap_or(1.0));
+    for mut body in &mut boids {
+        if body.max_speed != max_speed {
+            body.max_speed = max_speed;
+        }
+    }
+}
+
+fn hybrid_game() -> EngineBuilder {
+    EngineBuilder::new()
+        .with_lua("assets/scripts/main.lua")
+        .add_scene("asteroids_level01")
+        .initial_scene("asteroids_level01")
+        .add_observer(adopt_swarm)
+        .on_scene_enter("asteroids_level01", seed_tuning)
+        .add_scene_system("asteroids_level01", swarm_steering)
+}
+```
+
+- **Scenes:** register with `.add_scene()` every scene Rust code names (`.on_scene_enter()`, `.add_scene_system()`, `.add_scene_gui()`, …), and give `.initial_scene()`. `main.lua` may enter other scenes too; each is registered on its first request (see the note in [Triggering scene transitions](#triggering-scene-transitions)).
+- **First scene:** `main.lua`'s `on_enter_play` runs first; the scene it requests with `engine.request_scene` wins, else `.initial_scene()`, else the implicit `"main"`.
+- **Setup:** `main.lua`'s `on_setup()` runs, then `.on_setup()`. The Rust hook sees the `AnimationStore` and `MainCamera` Lua inserted, and may add to or replace them.
+- **Scene entry:** `main.lua`'s `on_scene_enter` runs on `SceneReady`, after the Rust `SceneEntered` observers: an entity one of them spawned and registered resolves through `engine.get_entity`.
+- **Loading scene:** `on_scene_enter` runs once for the `.loading_scene()`; its `on_update_<scene>` doesn't run during Setup.
+- **Each tick:** your `.add_system()`/`.add_scene_system()` systems, then collision, Lua phase callbacks, the scene switch, Lua's `on_update_<scene>`, and your `.add_late_system()` systems (see [the `SimSet` order](#configure_scheduleclosure--full-ordering-control)).
+
 ### Observers that live for one scene
 
 Observers registered with `.add_observer()` are always active. For observers that should only fire within a specific scene, spawn them from the scene's `SceneEntered` observer **without** the `Persistent` component:
@@ -398,13 +452,13 @@ fn update(mut next_scene: ResMut<NextScene>) {
 
 The new scene's `.add_scene_system()` systems start on the next sim tick.
 
-> **Note:** a mistyped scene name only logs an error ("No scene registered for '…'", followed by the list of registered scenes), so it is easy to miss. Prefer constants over repeated string literals. **Lua builds only:** in a `.with_lua()` game a mistyped name is registered as a new, empty scene and entered, with no error.
+> **Note:** a mistyped scene name only logs an error ("No scene registered for '…'", followed by the list of registered scenes), so it is easy to miss. Prefer constants over repeated string literals. **Lua builds only:** in a `.with_lua()` game an unknown name is registered as a new, empty scene and entered, with no error.
 
 ### What happens during a scene switch
 
 When the `scene_switch_system` runs, it performs these steps in order:
 
-1. **Take and check the target scene** — takes the requested name from `NextScene`. If no scene is registered under that name, the system logs "No scene registered" and returns: nothing below runs, and the current scene keeps running untouched. The request is consumed either way; it is not retried. In a `.with_lua()` game an unknown name is registered instead, and the switch goes ahead
+1. **Take and check the target scene** — takes the requested name from `NextScene`. If no scene is registered under that name, the system logs "No scene registered" and returns: nothing below runs, and the current scene keeps running untouched. The request is consumed either way; it is not retried. **Lua builds only:** in a `.with_lua()` game an unknown name is registered instead, and the switch goes ahead
 2. **Forget collision contacts, then trigger `SceneExited`** — if a scene was active, the touching pairs are forgotten without a `CollisionEnded` (see [Contact events](#contact-events)), then its exit observers run while its entities, `WorldSignals` entity registrations and group counts are all still in place
 3. **Despawn non-persistent entities** — every entity *without* the `Persistent` component is despawned
 4. **Clear entity registrations** — non-persistent entity refs stored in `WorldSignals` are removed
@@ -412,6 +466,7 @@ When the `scene_switch_system` runs, it performs these steps in order:
 6. **Write `previous_scene`** — the old active scene name is stored in `WorldSignals["previous_scene"]`
 7. **Set active scene** — updates `SceneManager.active_scene` and `WorldSignals["scene"]` to the new scene name
 8. **Trigger `SceneEntered`** — the new scene's enter observers run, typically spawning entities and setting up initial state; what they spawn belongs to the new scene
+9. **Trigger `SceneReady`** — once the `SceneEntered` observers' commands have applied
 
 Steps 2–6 tear down the scene being left, so they run only when a scene is active. Entering the first scene skips them: entities spawned before it (during Setup) survive into it.
 
@@ -521,7 +576,7 @@ These builder methods register independent ECS systems and event observers. **Al
 
 #### `.add_system(system)` — multiple per-sim-tick systems
 
-Registers a Bevy ECS system that runs once per sim tick while `Playing` (`run_if(state_is_playing)`), ordered alongside the engine's own script-update systems. Can be called multiple times.
+Registers a Bevy ECS system that runs once per sim tick while `Playing` (`run_if(state_is_playing)`), in `SimSet::Update`. Can be called multiple times.
 
 ```rust
 EngineBuilder::new()
@@ -583,7 +638,7 @@ EngineBuilder::new()
 
 Engine system functions are `pub` and importable from `aberredengine::core::systems::*`. Use them directly as `.after()` / `.before()` arguments. Only systems on this logic-thread schedule work there: render-thread systems such as `render_system` can't be ordered against. No automatic `run_if` or `after` constraints are applied — you control everything.
 
-The sim schedule runs its `SimSet` groups in this order: `ApplyIntents`, `Phases`, `Spawn`, `AudioPump`, `Update`, `Controllers`, `Movement`, `Transforms`, `Collision`, `Gui`, `PostCollision`, `Lifecycle`, `LateUpdate`, `Bookkeeping`. Place a system relative to a whole group with `.in_set(SimSet::X)`, `.before(SimSet::X)` or `.after(SimSet::X)`.
+The sim schedule runs its `SimSet` groups in this order: `ApplyIntents`, `Phases`, `Spawn`, `AudioPump`, `Update`, `Controllers`, `Movement`, `Transforms`, `Collision`, `Gui`, `PostCollision`, `Lifecycle`, `LateUpdate`, `Bookkeeping`. Place a system relative to a whole group with `.in_set(SimSet::X)`, `.before(SimSet::X)` or `.after(SimSet::X)`. **Lua builds only:** Lua phase callbacks run in `PostCollision`, and `on_update_<scene>` in `LateUpdate`, before the `.add_late_system()` systems.
 
 #### `.add_observer(observer_fn)` — persistent event observers
 
@@ -841,7 +896,7 @@ fn main() -> Result<(), EngineError> {
 - `WorldTime` doesn't advance during Setup, so a loading scene shows progress, not time-based animation (tweens, sprite animations).
 - Its text appears once its font has loaded; until then it simply doesn't draw.
 - Leaving it tears it down along with everything spawned during Setup, the setup hook's spawns included. Mark what must survive `Persistent`, or spawn it in the initial scene.
-- During Setup the loading scene is the only scene: any other scene request (`NextScene::set`, a menu's `RequestScene`) is ignored with a warning, with or without a loading scene, and the engine always moves on to the initial scene. A quit requested during Setup takes effect without waiting for loads.
+- During Setup the loading scene is the only scene: any other scene request (`NextScene::set`, a menu's `RequestScene`) is ignored with a warning, with or without a loading scene, and the engine always moves on to the first scene (see [Game lifecycle](#game-lifecycle)). A quit requested during Setup takes effect without waiting for loads.
 - In a deterministic game, spawn only from the loading scene's `SceneEntered` observer, never from its per-tick systems: the number of Setup ticks depends on load times, and entity ids must not.
 - The loading scene must differ from the initial scene.
 
@@ -2377,7 +2432,7 @@ All resources are accessed as Bevy ECS system parameters. Use `Res<T>` / `ResMut
 | `CameraFollowConfig` | `ResMut` | Camera-follow behavior (mode, easing, zoom speed, bounds, offsets); see [Following an entity](#following-an-entity) |
 | `DebugOverlayConfig` | `ResMut` | F11 debug overlay toggles for colliders, signals, bounds, and crosshairs |
 | `SystemsStore` | `Res` | Named system registry for `commands.run_system()` |
-| `SceneManager` | `Res` | Scene registry: the `.add_scene()` scenes or the implicit `"main"` (a Lua game registers each scene on its first request) |
+| `SceneManager` | `Res` | Scene registry: the `.add_scene()` scenes or the implicit `"main"` (a `.with_lua()` game also registers any other scene on its first request) |
 | `MainCamera` | `ResMut` | 2D camera (target, offset, zoom, rotation) |
 | `AnimationStore` | `Res` / `ResMut` | Animation definitions |
 | `GuiThemeStore` | `ResMut` | Named GUI theme registry (`FxHashMap<Arc<str>, GuiTheme>`); each theme holds panel/button/label/progress_bar nine-patches, font settings, and optional shadows; see [GUI widgets](#gui-widgets) |
