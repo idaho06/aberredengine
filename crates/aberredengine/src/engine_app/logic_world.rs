@@ -241,7 +241,7 @@ impl EngineBuilder {
             register_persistent_system(
                 world,
                 &mut systems_store,
-                hook_keys::SETUP,
+                hook_keys::SCRIPT_SETUP,
                 lua_plugin::setup,
             );
             register_persistent_system(

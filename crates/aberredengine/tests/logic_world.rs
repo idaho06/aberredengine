@@ -1875,6 +1875,58 @@ end
     );
 }
 
+/// A hybrid game runs `main.lua`'s `on_setup()` first, then the Rust setup
+/// hook, which sees Lua's `AnimationStore` and may override Lua's camera.
+#[cfg(feature = "lua")]
+#[test]
+fn hybrid_setup_runs_lua_then_rust() {
+    use aberredengine::core::resources::animation_store::AnimationStore;
+    use aberredengine::core::resources::camera2d::{Camera2D, MainCamera};
+
+    /// Whether the Rust setup saw Lua's `"lua_walk"` animation.
+    #[derive(Resource)]
+    struct SawLuaAnimation(bool);
+
+    let mut tw = lua_script_world_unplayed_with(
+        "hybrid_setup",
+        r#"
+function on_setup()
+    table.insert(LOG, "lua setup")
+    engine.register_animation("lua_walk", "tex", 0, 0, 16, 0, 4, 8, true)
+end
+"#,
+        |builder| {
+            builder.on_setup(|mut commands: Commands, animations: Res<AnimationStore>| {
+                commands.insert_resource(SawLuaAnimation(
+                    animations.animations.contains_key("lua_walk"),
+                ));
+                commands.insert_resource(MainCamera(
+                    Camera2D::new(Vec2::new(1.0, 2.0), Vec2::ZERO).with_zoom(3.0),
+                ));
+            })
+        },
+    );
+    tw.tick_to_play(DT, 8);
+
+    assert_eq!(take_lua_log(&mut tw), ["lua setup"]);
+    assert!(
+        tw.world.resource::<SawLuaAnimation>().0,
+        "the Rust setup sees Lua's animations"
+    );
+    assert!(
+        tw.world
+            .resource::<AnimationStore>()
+            .animations
+            .contains_key("lua_walk"),
+        "Lua's animations survive the Rust setup"
+    );
+    assert_eq!(
+        tw.world.resource::<MainCamera>().0.target,
+        Vec2::new(1.0, 2.0),
+        "the Rust camera wins"
+    );
+}
+
 /// Logs each scene a Lua game enters; `on_enter_play` requests `request`
 /// (Lua literal, `nil` for none).
 #[cfg(feature = "lua")]

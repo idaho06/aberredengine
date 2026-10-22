@@ -84,14 +84,18 @@ fn on_state_enter(state: &GameState, commands: &mut Commands, systems_store: &Sy
     match state {
         GameState::None => debug!("Entered None state"),
         GameState::Setup => {
-            if let Some(setup) = systems_store.get(hook_keys::SETUP) {
-                commands.run_system(*setup);
+            // In order, each seeing what the previous one inserted: the
+            // script setup, the setup hook, then the loading scene.
+            for key in [
+                hook_keys::SCRIPT_SETUP,
+                hook_keys::SETUP,
+                hook_keys::ENTER_SETUP,
+            ] {
+                if let Some(id) = systems_store.get(key) {
+                    commands.run_system(*id);
+                }
             }
-            // After the hook, so the loading scene sees the resources it inserted.
-            if let Some(enter_setup) = systems_store.get(hook_keys::ENTER_SETUP) {
-                commands.run_system(*enter_setup);
-            }
-            // Queued after the hook, so a state the hook requested wins.
+            // Queued after the hooks, so a state a hook requested wins.
             commands.queue(request_playing_if_unchanged);
         }
         GameState::Playing => {
@@ -189,6 +193,45 @@ mod tests {
         let mut world = world_with_setup(Some(|mut next| next.set(GameState::Playing)));
         enter(&mut world, GameState::Setup);
         assert_eq!(next(&world), Some(GameState::Playing));
+    }
+
+    #[test]
+    fn script_setup_runs_first_and_its_commands_reach_setup() {
+        #[derive(Resource, Default)]
+        struct SetupLog(Vec<&'static str>);
+        #[derive(Resource)]
+        struct FromScript;
+
+        let mut world = world_with_setup(None);
+        world.init_resource::<SetupLog>();
+        let script_setup =
+            world.register_system(|mut commands: Commands, mut log: ResMut<SetupLog>| {
+                log.0.push("script_setup");
+                commands.insert_resource(FromScript);
+            });
+        let setup = world.register_system(
+            |mut log: ResMut<SetupLog>, from_script: Option<Res<FromScript>>| {
+                log.0.push(if from_script.is_some() {
+                    "setup (saw script)"
+                } else {
+                    "setup"
+                });
+            },
+        );
+        let enter_setup = world.register_system(|mut log: ResMut<SetupLog>| {
+            log.0.push("enter_setup");
+        });
+        let mut store = world.resource_mut::<SystemsStore>();
+        store.insert(hook_keys::SCRIPT_SETUP, script_setup);
+        store.insert(hook_keys::SETUP, setup);
+        store.insert(hook_keys::ENTER_SETUP, enter_setup);
+
+        enter(&mut world, GameState::Setup);
+
+        assert_eq!(
+            world.resource::<SetupLog>().0,
+            ["script_setup", "setup (saw script)", "enter_setup"]
+        );
     }
 
     #[test]

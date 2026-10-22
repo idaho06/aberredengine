@@ -59,7 +59,12 @@ impl SystemsStore {
 // get compile-time-checked references and a single rename point (mirrors
 // src/resources/signal_keys.rs's convention for WorldSignals keys).
 
-/// One-shot asset-loading hook, called during the `Setup` game state.
+/// The scripting layer's one-shot setup (`main.lua`'s `on_setup()`), run on
+/// entering `Setup` before [`SETUP`].
+pub const SCRIPT_SETUP: &str = "script_setup";
+
+/// One-shot asset-loading hook, called during the `Setup` game state, after
+/// [`SCRIPT_SETUP`] (so it sees the resources the script setup inserted).
 pub const SETUP: &str = "setup";
 
 /// Engine-installed system run once on entering `Setup`, right after the setup
