@@ -3,16 +3,11 @@ use aberred_core::error::EngineError;
 use aberred_core::resources::signal_keys as sk;
 use aberred_core::resources::world_signals::MAX_GROUP_NAME_LEN;
 
-/// Registers and enters [`sk::MAIN_SCENE`] when the game registers no scene of
-/// its own: no `.add_scene()`, no `.initial_scene()` and no Lua (which drives
-/// scenes from `main.lua`). Shared by `EngineBuilder::try_run` and
-/// `TestWorldBuilder::build`.
-pub(crate) fn ensure_main_scene(
-    scenes: &mut Vec<String>,
-    initial_scene: &mut Option<String>,
-    has_lua: bool,
-) {
-    if scenes.is_empty() && initial_scene.is_none() && !has_lua {
+/// Registers [`sk::MAIN_SCENE`] as the initial scene when the game registers
+/// no scene of its own (no `.add_scene()`, no `.initial_scene()`), Lua games
+/// included. Shared by `EngineBuilder::try_run` and `TestWorldBuilder::build`.
+pub(crate) fn ensure_main_scene(scenes: &mut Vec<String>, initial_scene: &mut Option<String>) {
+    if scenes.is_empty() && initial_scene.is_none() {
         scenes.push(sk::MAIN_SCENE.to_owned());
         *initial_scene = Some(sk::MAIN_SCENE.to_owned());
     }
@@ -22,8 +17,7 @@ impl EngineBuilder {
     /// See [`ensure_main_scene`]. Runs before validation, so
     /// `.add_scene_system("main", ..)` and friends validate against it.
     pub(super) fn ensure_main_scene(&mut self) {
-        let has_lua = self.has_lua_script();
-        ensure_main_scene(&mut self.scenes, &mut self.initial_scene, has_lua);
+        ensure_main_scene(&mut self.scenes, &mut self.initial_scene);
     }
 
     pub(super) fn validate_builder(&self) -> Result<(), EngineError> {
@@ -65,14 +59,11 @@ impl EngineBuilder {
         }
     }
 
-    /// Checks `.with_lua()` against `.add_scene()` and `.on_setup()`: a Lua
-    /// game's setup is `main.lua`'s `on_setup()`.
+    /// Checks `.with_lua()` against `.on_setup()`: a Lua game's setup is
+    /// `main.lua`'s `on_setup()`.
     fn validate_lua_conflicts(&self) -> Result<(), EngineError> {
         if !self.has_lua_script() {
             return Ok(());
-        }
-        if !self.scenes.is_empty() {
-            return Err(EngineError::LuaConflictsWithSceneManager);
         }
         if self.setup_hook.is_some() {
             return Err(EngineError::LuaConflictsWithSetup);

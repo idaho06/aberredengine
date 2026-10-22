@@ -294,7 +294,7 @@ The previous section covers how Lua calls *into* Rust. This section covers the o
 A Lua game has a `SceneManager` that registers each scene on its first request, and switches scenes through the same core `scene_switch_system` as a Rust game. Four lifecycle points:
 
 1. **`setup()`** — runs once at startup. Calls `on_setup()` if defined, drains `asset_commands` (translating each into an `AudioCmd` or a `RenderAssetCmd`), drains `animation_commands` into a fresh `AnimationStore` resource, then transitions `CurrentGameState` to `Playing`.
-2. **`enter_play()`** — runs once, immediately after `setup()`. Calls `on_enter_play()` if defined, drains `signal_commands`/`group_commands` (world signals aren't touched by `setup()` — Lua is expected to seed them here), updates the tracked-groups cache, then enters the first scene through core `switch_to` (`scene_dispatch.rs`): the scene `on_setup`/`on_enter_play` requested with `engine.request_scene`, else `sk::DEFAULT_SCENE`. The first entry despawns nothing, so what `on_setup`/`on_enter_play` queued applies in the first scene (drained by `lua_scene_entered_observer`, step 3).
+2. **`enter_play()`** — runs once, immediately after `setup()`. Calls `on_enter_play()` if defined, drains `signal_commands`/`group_commands` (world signals aren't touched by `setup()` — Lua is expected to seed them here), updates the tracked-groups cache, then enters the first scene through core `switch_to` (`scene_dispatch.rs`): the scene `on_setup`/`on_enter_play` requested with `engine.request_scene`, else `SceneManager.initial_scene` (the builder's `.initial_scene()`, or the implicit `sk::MAIN_SCENE`). The first entry despawns nothing, so what `on_setup`/`on_enter_play` queued applies in the first scene (drained by `lua_scene_entered_observer`, step 3).
 3. **Scene switch** — core `scene_switch_poll` (`SimSet::Lifecycle`) runs `scene_switch_system` when a scene request is pending in `NextScene` (`engine.request_scene()`, a menu's `RequestScene`, a GUI intent, a Rust system) and no quit is. Two observers in `systems/lua_scene.rs`, registered only when a Lua script is set, add the Lua side:
    - `lua_scene_exited_observer` (`On<SceneExited>`, before the old scene's entities are despawned) calls `clear_all_commands()`: `clear`-policy queues may reference entities about to be despawned.
    - `lua_scene_entered_observer` (`On<SceneEntered>`, after the teardown) calls `clear_function_cache()` (callbacks are re-injected per scene, so stale closures must not survive the switch), refreshes the tracked-groups and signal caches so `on_scene_enter` observes the post-teardown state, calls `on_scene_enter(name)`, drains the common queues (`DrainCtx::drain`, below), and refreshes the gameconfig cache. `scene_switch_system` itself stamps the tick's `frame_count` in `SceneManager.entered_at`.
@@ -808,8 +808,7 @@ pub const PREVIOUS_SCENE: &str = "previous_scene"; // string output: the scene a
 pub const ANIMATION_ENDED: &str = "animation_ended"; // entity Signals flag: non-looped animation reached last frame
 pub const MOVING:       &str = "moving";         // entity Signals flag: set by `movement` while velocity is non-zero
 pub const SPEED_SQ:     &str = "speed_sq";       // entity Signals scalar: squared speed, published each frame by `movement`
-pub const MAIN_SCENE:    &str = "main";          // the implicit scene of a Rust game with no .add_scene()
-pub const DEFAULT_SCENE:   &str = "menu";        // the scene a Lua game enters when nothing was requested
+pub const MAIN_SCENE:    &str = "main";          // the implicit scene of a game with no .add_scene(), Lua included
 pub const GROUP_COUNT_PREFIX: &str = "group_count:"; // integer key prefix
 ```
 

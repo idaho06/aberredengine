@@ -359,10 +359,7 @@ pub fn scene_enter_play(
     systems_store: Res<SystemsStore>,
     scene_manager: Res<SceneManager>,
 ) {
-    let initial = scene_manager
-        .initial_scene
-        .clone()
-        .expect("SceneManager.initial_scene not set; validate_builder should have caught this");
+    let initial = scene_manager.expect_initial_scene();
     switch_to(commands, next_scene, &systems_store, initial);
 }
 

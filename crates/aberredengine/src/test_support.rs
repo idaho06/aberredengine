@@ -286,11 +286,7 @@ impl TestWorldBuilder {
     /// functions `logic_thread_main` calls (`setup_logic_world`, then
     /// `init_logic_world`).
     pub fn build(mut self) -> Result<TestWorld, aberred_core::error::EngineError> {
-        #[cfg(feature = "lua")]
-        let has_lua = self.lua_script.is_some();
-        #[cfg(not(feature = "lua"))]
-        let has_lua = false;
-        ensure_main_scene(&mut self.scenes, &mut self.initial_scene, has_lua);
+        ensure_main_scene(&mut self.scenes, &mut self.initial_scene);
 
         let (_tx_logic, rx_logic) = unbounded::<LogicMsg>();
         let (tx_render, rx_render) = unbounded::<RenderMsg>();

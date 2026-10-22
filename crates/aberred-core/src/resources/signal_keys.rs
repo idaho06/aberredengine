@@ -24,14 +24,10 @@ pub const MOVING: &str = "moving";
 /// `movement` each frame. Read by animation rules and exposed to Lua callbacks.
 pub const SPEED_SQ: &str = "speed_sq";
 
-/// The scene a Rust game without `EngineBuilder::add_scene` runs in: the engine
-/// registers and enters it, so scene events, `in_scene` and scene systems work.
-/// Unrelated to [`DEFAULT_SCENE`], the scene a Lua game enters when nothing was requested.
+/// The scene a game without `EngineBuilder::add_scene` runs in, Lua games
+/// included: the engine registers it as the initial scene, so scene events,
+/// `in_scene` and scene systems work.
 pub const MAIN_SCENE: &str = "main";
-
-/// The first scene a Lua game enters when none was requested (an
-/// `on_enter_play` that never calls `engine.request_scene`).
-pub const DEFAULT_SCENE: &str = "menu";
 
 /// Prefix for integer signals that track live entity counts per group.
 /// Full key: `format!("{GROUP_COUNT_PREFIX}{group_name}")`.

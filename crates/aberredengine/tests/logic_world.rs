@@ -1875,6 +1875,71 @@ end
     );
 }
 
+/// Logs each scene a Lua game enters; `on_enter_play` requests `request`
+/// (Lua literal, `nil` for none).
+#[cfg(feature = "lua")]
+fn lua_first_scene_script(request: &str) -> String {
+    format!(
+        r#"
+function on_enter_play()
+    local request = {request}
+    if request then engine.request_scene(request) end
+    return ""
+end
+function on_scene_enter(scene) table.insert(LOG, "switch:" .. scene) end
+"#
+    )
+}
+
+/// With no `on_enter_play` request, a Lua game enters its `.initial_scene()`.
+#[cfg(feature = "lua")]
+#[test]
+fn lua_game_without_a_request_enters_its_initial_scene() {
+    let mut tw = lua_script_world_with(
+        "first_scene_initial",
+        &lua_first_scene_script("nil"),
+        |builder| builder.add_scene("level").initial_scene("level"),
+    );
+
+    assert_eq!(take_lua_log(&mut tw), ["switch:level"]);
+}
+
+/// An `on_enter_play` request beats `.initial_scene()`.
+#[cfg(feature = "lua")]
+#[test]
+fn lua_on_enter_play_request_beats_the_initial_scene() {
+    let mut tw = lua_script_world_with(
+        "first_scene_request",
+        &lua_first_scene_script(r#""intro""#),
+        |builder| builder.add_scene("level").initial_scene("level"),
+    );
+
+    assert_eq!(take_lua_log(&mut tw), ["switch:intro"]);
+}
+
+/// A Lua game with no `.add_scene()` and no request enters the implicit
+/// `"main"`, and `"main"` scene systems run in it.
+#[cfg(feature = "lua")]
+#[test]
+fn lua_game_without_scenes_enters_the_main_scene() {
+    let mut tw = lua_script_world_unplayed_with(
+        "first_scene_main",
+        &lua_first_scene_script("nil"),
+        |builder| builder.add_scene_system(sk::MAIN_SCENE, count_scene_ticks),
+    );
+    tw.world.init_resource::<SceneTicks>();
+    tw.tick_to_play(DT, 8);
+    let before = tw.world.resource::<SceneTicks>().0;
+    tw.tick(3, DT);
+
+    assert_eq!(take_lua_log(&mut tw), ["switch:main"]);
+    assert_eq!(
+        tw.world.resource::<WorldSignals>().get_string(sk::SCENE),
+        Some(sk::MAIN_SCENE)
+    );
+    assert_eq!(tw.world.resource::<SceneTicks>().0 - before, 3);
+}
+
 /// A GUI `request_scene` intent switches a Lua game's scene in its delivery
 /// tick's `Lifecycle`.
 #[cfg(feature = "lua")]
@@ -1915,7 +1980,7 @@ fn lua_engine_request_quit_quits_exactly_once() {
     let mut tw = lua_script_world(
         "engine_request_quit",
         r#"
-function on_enter_play() return "" end
+function on_enter_play() engine.request_scene("menu") return "" end
 function on_update_menu(input, dt) engine.request_quit() end
 "#,
     );
@@ -1933,7 +1998,7 @@ function on_update_menu(input, dt) engine.request_quit() end
 /// whose confirm switches to `b` (`:with_menu_action_request_scene`).
 #[cfg(feature = "lua")]
 const LUA_MENU_GO_TO_B: &str = r#"
-function on_enter_play() return "" end
+function on_enter_play() engine.request_scene("menu") return "" end
 function on_scene_enter(scene)
     table.insert(LOG, "switch:" .. scene)
     if scene == "menu" then
@@ -1963,26 +2028,6 @@ fn lua_menu_action_request_scene_switches_the_scene() {
     );
 }
 
-/// With no request in `on_enter_play`, a Lua game enters `"menu"` first.
-#[cfg(feature = "lua")]
-#[test]
-fn lua_game_without_a_request_enters_the_menu_scene() {
-    let mut tw = lua_script_world(
-        "default_scene",
-        r#"
-function on_enter_play() return "" end
-function on_scene_enter(scene) table.insert(LOG, "switch:" .. scene) end
-"#,
-    );
-    tw.tick(1, DT);
-
-    assert_eq!(take_lua_log(&mut tw), ["switch:menu"]);
-    assert_eq!(
-        tw.world.resource::<WorldSignals>().get_string(sk::SCENE),
-        Some("menu")
-    );
-}
-
 /// Writing the `scene` string and the `switch_scene` flag from `on_update`
 /// switches nothing: the same `on_update_<scene>` keeps running.
 #[cfg(feature = "lua")]
@@ -1991,7 +2036,7 @@ fn lua_raw_scene_signals_switch_nothing() {
     let mut tw = lua_script_world(
         "raw_scene_signals",
         r#"
-function on_enter_play() return "" end
+function on_enter_play() engine.request_scene("menu") return "" end
 function on_scene_enter(scene) table.insert(LOG, "switch:" .. scene) end
 function on_update_menu(input, dt)
     table.insert(LOG, "update:menu")
@@ -2079,7 +2124,7 @@ fn lua_scene_switch_keeps_only_persistent_tracked_groups() {
     let mut tw = lua_script_world_with(
         "switch_tracked_groups",
         r#"
-function on_enter_play() return "" end
+function on_enter_play() engine.request_scene("menu") return "" end
 function on_scene_enter(scene)
     if scene == "menu" then engine.track_group("bullets") end
 end
@@ -2142,7 +2187,7 @@ fn lua_quit_wins_over_a_scene_request_in_the_same_update() {
     let mut tw = lua_script_world(
         "quit_over_scene",
         r#"
-function on_enter_play() return "" end
+function on_enter_play() engine.request_scene("menu") return "" end
 function on_scene_enter(scene) table.insert(LOG, "switch:" .. scene) end
 function on_update_menu(input, dt)
     engine.request_scene("b")
@@ -2167,7 +2212,7 @@ end
 fn lua_game_triggers_rust_scene_events() {
     let mut tw = lua_script_world_unplayed_with(
         "rust_scene_events",
-        "function on_enter_play() return '' end\n",
+        "function on_enter_play() engine.request_scene('menu') return '' end\n",
         |builder| {
             builder
                 .add_observer(log_scene_entered)
@@ -2197,7 +2242,7 @@ fn lua_game_triggers_rust_scene_events() {
 fn in_scene_gates_a_system_in_a_lua_game() {
     let mut tw = lua_script_world_unplayed_with(
         "in_scene",
-        "function on_enter_play() return '' end\n",
+        "function on_enter_play() engine.request_scene('menu') return '' end\n",
         |builder| builder.add_system_if(count_scene_ticks, in_scene("menu")),
     );
     tw.world.init_resource::<SceneTicks>();
@@ -2217,6 +2262,7 @@ fn lua_on_enter_play_spawn_survives_the_first_scene_entry() {
         "enter_play_spawn",
         r#"
 function on_enter_play()
+    engine.request_scene("menu")
     engine.spawn():register_as("keeper"):build()
     return ""
 end

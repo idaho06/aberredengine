@@ -536,18 +536,12 @@ fn test_add_scene_requires_initial_scene() {
 
 #[cfg(feature = "lua")]
 #[test]
-fn test_with_lua_conflicts_with_add_scene() {
-    let err = EngineBuilder::new()
+fn with_lua_combines_with_add_scene() {
+    let mut builder = EngineBuilder::new()
         .with_lua("assets/scripts/main.lua")
         .add_scene("menu")
-        .initial_scene("menu")
-        .try_run()
-        .expect_err("with_lua + add_scene should fail preflight");
-
-    assert!(
-        err.to_string()
-            .contains("EngineBuilder conflict: .with_lua() and .add_scene()")
-    );
+        .initial_scene("menu");
+    validate(&mut builder).unwrap();
 }
 
 #[cfg(feature = "lua")]
@@ -706,10 +700,11 @@ fn a_builder_without_scenes_enters_an_implicit_main_scene() {
 
 #[cfg(feature = "lua")]
 #[test]
-fn a_lua_builder_gets_no_implicit_main_scene() {
+fn a_lua_builder_gets_the_implicit_main_scene() {
     let mut builder = EngineBuilder::new().with_lua("assets/scripts/main.lua");
     validate(&mut builder).unwrap();
-    assert!(builder.scenes.is_empty());
+    assert_eq!(builder.scenes, [sk::MAIN_SCENE]);
+    assert_eq!(builder.initial_scene.as_deref(), Some(sk::MAIN_SCENE));
 }
 fn on_level_entered(_: On<SceneEntered>) {}
 fn on_level_exited(_: On<SceneExited>) {}
@@ -837,20 +832,16 @@ fn replay_record_or_play_conflicts_with_lua() {
 #[cfg(feature = "lua")]
 #[test]
 fn validation_reports_the_earliest_conflict_first() {
-    // lua + scenes + seed: the Lua/SceneManager conflict wins over the
+    // lua + setup + seed: the Lua/setup conflict wins over the
     // Lua/deterministic one.
     let err = validate(
         &mut EngineBuilder::new()
             .with_lua("main.lua")
             .deterministic(1)
-            .add_scene("menu")
-            .initial_scene("menu"),
+            .on_setup(dummy_setup),
     )
     .unwrap_err();
-    assert!(
-        matches!(err, EngineError::LuaConflictsWithSceneManager),
-        "{err}"
-    );
+    assert!(matches!(err, EngineError::LuaConflictsWithSetup), "{err}");
 
     // record + play + lua: the record/play conflict wins over the Lua one.
     let err = validate(

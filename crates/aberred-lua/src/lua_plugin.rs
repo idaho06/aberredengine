@@ -42,7 +42,6 @@ use crate::systems::lua_commands::{
     process_input_command, process_render_command, process_signal_command, translate_asset_command,
 };
 use aberred_core::resources::camera2d::Camera2D;
-use aberred_core::resources::signal_keys as sk;
 use aberred_core::resources::world_signals::WorldSignals;
 use aberred_core::resources::world_time::WorldTime;
 use aberred_core::systems::scene_dispatch::switch_to;
@@ -147,9 +146,13 @@ pub use aberred_core::systems::game_state::quit_game;
 
 /// The `enter_play` hook of a Lua game: calls `on_enter_play`, applies the
 /// signal and group commands it queued, then enters the first scene through
-/// the `switch_scene` hook -- the scene `on_enter_play` requested with
-/// `engine.request_scene`, else [`sk::DEFAULT_SCENE`]. The first entry tears
-/// nothing down, so entities spawned in `on_setup`/`on_enter_play` survive it.
+/// the `switch_scene` hook -- the scene `on_setup`/`on_enter_play` requested
+/// with `engine.request_scene`, else [`SceneManager::initial_scene`] (the
+/// builder's `.initial_scene()`, or the implicit
+/// [`MAIN_SCENE`](aberred_core::resources::signal_keys::MAIN_SCENE)). The
+/// first entry tears nothing down, so entities spawned in
+/// `on_setup`/`on_enter_play` survive it.
+#[allow(clippy::too_many_arguments)]
 pub fn enter_play(
     commands: Commands,
     mut world_signals: ResMut<WorldSignals>,
@@ -157,6 +160,7 @@ pub fn enter_play(
     mut next_game_state: ResMut<NextGameState>,
     mut tracked_groups: ResMut<TrackedGroups>,
     systems_store: Res<SystemsStore>,
+    scene_manager: Res<SceneManager>,
     lua_runtime: NonSend<LuaRuntime>,
 ) {
     // Call Lua on_enter_play function if it exists
@@ -194,7 +198,7 @@ pub fn enter_play(
 
     let scene = next_scene
         .take()
-        .unwrap_or_else(|| sk::DEFAULT_SCENE.to_owned());
+        .unwrap_or_else(|| scene_manager.expect_initial_scene());
     switch_to(commands, next_scene, &systems_store, scene);
 }
 

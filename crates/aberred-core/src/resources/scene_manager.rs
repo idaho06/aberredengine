@@ -33,7 +33,10 @@ pub struct SceneManager {
     /// `None` before the first scene. A scene's per-tick updates skip this
     /// tick (see [`past_scene_entry`](crate::systems::scene_dispatch::past_scene_entry)).
     pub entered_at: Option<u64>,
-    /// Initial scene name (set by `EngineBuilder`).
+    /// The first scene on entering `Playing` (set by `EngineBuilder`: its
+    /// `.initial_scene()`, or the implicit
+    /// [`MAIN_SCENE`](crate::resources::signal_keys::MAIN_SCENE)). A Lua
+    /// game's `on_enter_play` request takes precedence over it.
     pub initial_scene: Option<String>,
     /// Scene active during `Setup` while assets load (`EngineBuilder::loading_scene`).
     /// During `Setup` it is the only switch target.
@@ -53,6 +56,17 @@ impl SceneManager {
     /// ([`WorldTime::frame_count`](crate::resources::world_time::WorldTime::frame_count)).
     pub fn entered_on(&self, frame: u64) -> bool {
         self.entered_at == Some(frame)
+    }
+
+    /// The [initial scene](Self::initial_scene)'s name.
+    ///
+    /// # Panics
+    ///
+    /// When it is unset: `EngineBuilder` sets it for every game.
+    pub fn expect_initial_scene(&self) -> String {
+        self.initial_scene
+            .clone()
+            .expect("SceneManager.initial_scene not set; EngineBuilder sets it for every game")
     }
 
     /// Register a scene under the given name, standing for `entity`.
