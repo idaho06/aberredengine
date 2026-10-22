@@ -119,7 +119,7 @@ end
 
 -- Called when entering Playing game state
 function on_enter_play()
-    engine.request_scene("menu")        -- the first scene (default: "menu")
+    engine.request_scene("menu")        -- the first scene (else .initial_scene(), else "main")
     return "Hello from Lua!"
 end
 
@@ -278,8 +278,11 @@ immediately: every scene request is applied by the next scene switch poll.
 
 Entering the first scene despawns nothing: spawns and other commands queued in `on_setup`/`on_enter_play` apply
 when the first scene is entered. Each later switch despawns the scene it leaves (every entity not built with
-`:with_persistent()`). The engine's Rust scene events (`SceneEntered`/`SceneExited`) fire in Lua games too, so Rust
-observers of them run alongside the script.
+`:with_persistent()`). The engine's Rust scene events (`SceneEntered`/`SceneExited`) fire in Lua games too. A game
+can combine `main.lua` with Rust scenes, setup and systems (see
+[Hybrid games](../../RUST-GAME-GUIDE.md#hybrid-games-rust--lua)): the Rust `SceneEntered` observers run, and their
+commands apply, before `on_scene_enter(name)`, so an entity a Rust observer registered resolves through
+`engine.get_entity`.
 
 ### 3. Callback Command Processing
 
