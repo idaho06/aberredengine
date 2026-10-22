@@ -1,6 +1,6 @@
 # Aberred Engine — Rust Game Developer Guide
 
-This guide explains how to build a 2D game in pure Rust using the Aberred Engine as a library dependency, without Lua scripting (to combine Rust with `main.lua` scripts, see [Hybrid games](#hybrid-games-rust--lua)).
+This guide explains how to build a 2D game in pure Rust using the Aberred Engine as a library dependency, without Lua scripting. To combine Rust with `main.lua` scripts, see [Hybrid games](#hybrid-games-rust--lua).
 
 **Contents**
 
@@ -224,7 +224,7 @@ The engine owns the main loop. You configure it through `EngineBuilder`: registe
 | `.try_run()` | Start the engine; a startup failure is returned as `Err(EngineError)`. See [Startup error handling](#startup-error-handling). |
 | `.run()` | Like `.try_run()`, but exits the process with status 1 on startup failure. |
 
-**Conflict rules:** `.add_scene()` requires `.initial_scene(...)`, and that name must match a registered scene — a missing or misspelled `.initial_scene(...)` is a startup error, and so is calling `.initial_scene(...)` with no `.add_scene()` calls at all. These rules also apply with `.with_lua()`, which conflicts only with `.deterministic()` and the replay methods. Every rule here is checked at startup; see [Startup error handling](#startup-error-handling).
+**Conflict rules:** `.add_scene()` requires `.initial_scene(...)`, and that name must match a registered scene — a missing or misspelled `.initial_scene(...)` is a startup error, and so is calling `.initial_scene(...)` with no `.add_scene()` calls at all. **Lua builds only:** these rules also apply with `.with_lua()`, which conflicts only with `.deterministic()` and the replay methods. Every rule here is checked at startup; see [Startup error handling](#startup-error-handling).
 
 ### Multi-scene games
 
@@ -362,7 +362,7 @@ For finer placement, use [`.configure_schedule()`](#configure_scheduleclosure--f
 
 ### Hybrid games (Rust + Lua)
 
-**Lua builds only.** A `.with_lua()` game accepts the other builder methods: Rust systems do the heavy, typed or scene-scoped work, and `main.lua` scripts the scenes. Lua attaches only core data (groups, components, signals); Rust adopts the entities it cares about by observing `On<Add, Group>` and reads tuning values from `WorldSignals`:
+**Lua builds only.** A `.with_lua()` game accepts the other builder methods: Rust does the heavy or typed work, and `main.lua` scripts the scenes. Lua attaches core data (groups, components, signals); Rust adopts entities by observing `On<Add, Group>` and reads tuning values from `WorldSignals`:
 
 ```rust
 use aberredengine::prelude::*;
@@ -408,9 +408,9 @@ fn hybrid_game() -> EngineBuilder {
 - **Scenes:** register with `.add_scene()` every scene Rust code names (`.on_scene_enter()`, `.add_scene_system()`, `.add_scene_gui()`, …), and give `.initial_scene()`. `main.lua` may enter other scenes too; each is registered on its first request (see the note in [Triggering scene transitions](#triggering-scene-transitions)).
 - **First scene:** `main.lua`'s `on_enter_play` runs first; the scene it requests with `engine.request_scene` wins, else `.initial_scene()`, else the implicit `"main"`.
 - **Setup:** `main.lua`'s `on_setup()` runs, then `.on_setup()`. The Rust hook sees the `AnimationStore` and `MainCamera` Lua inserted, and may add to or replace them.
-- **Scene entry:** `main.lua`'s `on_scene_enter` runs on `SceneReady`, after the Rust `SceneEntered` observers: an entity one of them spawned and registered resolves through `engine.get_entity`.
+- **Scene entry:** `main.lua`'s `on_scene_enter` runs on `SceneReady`, so `engine.get_entity` finds what the Rust `SceneEntered` observers spawned and registered.
 - **Loading scene:** `on_scene_enter` runs once for the `.loading_scene()`; its `on_update_<scene>` doesn't run during Setup.
-- **Each tick:** your `.add_system()`/`.add_scene_system()` systems, then collision, Lua phase callbacks, the scene switch, Lua's `on_update_<scene>`, and your `.add_late_system()` systems (see [the `SimSet` order](#configure_scheduleclosure--full-ordering-control)).
+- **Each tick:** your `.add_system()` systems, then Lua's callbacks, then your `.add_late_system()` systems; see [the `SimSet` order](#configure_scheduleclosure--full-ordering-control).
 
 ### Observers that live for one scene
 

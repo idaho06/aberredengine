@@ -291,7 +291,7 @@ The previous section covers how Lua calls *into* Rust. This section covers the o
 
 ### Scene Lifecycle
 
-A Lua game has a `SceneManager` seeded with the builder's `.add_scene()` names (or the implicit `"main"`) that also registers any other scene on its first request, and switches scenes through the same core `scene_switch_system` as a Rust game. Four lifecycle points:
+A Lua game's `SceneManager` holds the builder's `.add_scene()` names (or the implicit `"main"`) and registers any other scene on its first request. It switches scenes through the same core `scene_switch_system` as a Rust game. Four lifecycle points:
 
 1. **`setup()`** — runs once at startup. Calls `on_setup()` if defined, drains `asset_commands` (translating each into an `AudioCmd` or a `RenderAssetCmd`), drains `animation_commands` into a fresh `AnimationStore` resource. It is the `script_setup` hook: the Rust `.on_setup()` hook runs right after it, then the loading scene (if any) is entered, and core moves to `Playing` once Setup's loads are answered.
 2. **`enter_play()`** — runs once, immediately after `setup()`. Calls `on_enter_play()` if defined, drains `signal_commands`/`group_commands` (world signals aren't touched by `setup()` — Lua is expected to seed them here), updates the tracked-groups cache. It is the `script_enter_play` hook; core's `scene_enter_play` (`enter_play` hook, `scene_dispatch.rs`) runs right after it and enters the first scene: the scene `on_setup`/`on_enter_play` requested with `engine.request_scene`, else `SceneManager.initial_scene` (the builder's `.initial_scene()`, or the implicit `sk::MAIN_SCENE`). The first entry despawns nothing, so what `on_setup`/`on_enter_play` queued applies in the first scene (drained by `lua_scene_ready_observer`, step 3).
