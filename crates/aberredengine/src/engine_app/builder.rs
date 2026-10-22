@@ -398,9 +398,11 @@ impl EngineBuilder {
     /// switch despawns every non-[`Persistent`](aberred_core::components::persistent::Persistent) entity. Use with
     /// [`.initial_scene()`](Self::initial_scene) to specify which scene starts first.
     ///
+    /// In a `.with_lua()` game the registered scenes exist from startup, and Lua
+    /// can still request any other name, which registers on its first request.
+    ///
     /// # Errors (at `.run()`/`.try_run()`)
     ///
-    /// - If `.add_scene()` is combined with `.with_lua()`
     /// - If `.add_scene()` is used without `.initial_scene()`, or `.initial_scene()`
     ///   names a scene that was never registered
     ///
@@ -457,7 +459,10 @@ impl EngineBuilder {
     /// Set the initial scene for [`SceneManager`](aberred_core::resources::scene_manager::SceneManager)-based games.
     ///
     /// This scene is entered (triggering [`SceneEntered`]) when the game
-    /// transitions to the `Playing` state.
+    /// transitions to the `Playing` state. In a `.with_lua()` game, a scene
+    /// requested from `on_setup`/`on_enter_play` with `engine.request_scene` is
+    /// entered instead. A game without `.add_scene()` enters the implicit
+    /// `"main"` scene.
     pub fn initial_scene(mut self, name: impl Into<String>) -> Self {
         self.initial_scene = Some(name.into());
         self

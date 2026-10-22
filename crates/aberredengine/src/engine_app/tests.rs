@@ -534,14 +534,45 @@ fn test_add_scene_requires_initial_scene() {
     );
 }
 
+/// A Lua game's `.add_scene()`/`.initial_scene()`/scene-ref rules are a Rust
+/// game's rules.
 #[cfg(feature = "lua")]
 #[test]
-fn with_lua_combines_with_add_scene() {
-    let mut builder = EngineBuilder::new()
-        .with_lua("assets/scripts/main.lua")
-        .add_scene("menu")
-        .initial_scene("menu");
-    validate(&mut builder).unwrap();
+fn a_lua_game_validates_its_scenes_like_a_rust_game() {
+    let lua = || EngineBuilder::new().with_lua("assets/scripts/main.lua");
+
+    let err = validate(&mut lua().add_scene("level")).unwrap_err();
+    assert!(
+        matches!(err, EngineError::AddSceneRequiresInitialScene),
+        "{err}"
+    );
+
+    let err = validate(&mut lua().add_scene("a").initial_scene("b")).unwrap_err();
+    assert!(
+        matches!(err, EngineError::InitialSceneNotRegistered { .. }),
+        "{err}"
+    );
+
+    let err = validate(&mut lua().initial_scene("a")).unwrap_err();
+    assert!(
+        matches!(err, EngineError::InitialSceneWithoutScenes),
+        "{err}"
+    );
+
+    let err = validate(&mut lua().add_scene_system("typo", scene_tick)).unwrap_err();
+    assert!(
+        matches!(err, EngineError::SceneNotRegistered { .. }),
+        "{err}"
+    );
+
+    validate(&mut lua().add_scene_system(sk::MAIN_SCENE, scene_tick)).unwrap();
+    validate(
+        &mut lua()
+            .add_scene("level")
+            .initial_scene("level")
+            .add_scene_system("level", scene_tick),
+    )
+    .unwrap();
 }
 
 #[cfg(feature = "lua")]

@@ -72,14 +72,12 @@ impl EngineBuilder {
     }
 
     /// Checks `.add_scene()`/`.initial_scene()` consistency: `initial_scene` is
-    /// set and matches a registered scene name, or, with no scenes (Lua),
-    /// `initial_scene` is unset.
+    /// set and matches a registered scene name. Runs after
+    /// [`ensure_main_scene`], so no scenes means `.initial_scene()` was set
+    /// without `.add_scene()`.
     fn validate_scene_manager(&self) -> Result<(), EngineError> {
         if self.scenes.is_empty() {
-            if self.initial_scene.is_some() {
-                return Err(EngineError::InitialSceneWithoutScenes);
-            }
-            return Ok(());
+            return Err(EngineError::InitialSceneWithoutScenes);
         }
 
         let Some(initial_scene) = &self.initial_scene else {

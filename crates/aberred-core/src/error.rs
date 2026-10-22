@@ -13,13 +13,6 @@ pub enum EngineError {
     AddSceneRequiresInitialScene,
 
     #[error(
-        "EngineBuilder conflict: .with_lua() and .add_scene() are mutually exclusive. \
-         A Lua game's scenes come from main.lua (each registers on its first request); \
-         a Rust game declares them with .add_scene() -- not both."
-    )]
-    LuaConflictsWithSceneManager,
-
-    #[error(
         "EngineBuilder conflict: .with_lua() runs main.lua's on_setup(); also calling \
          .on_setup() is ambiguous. Remove the .on_setup() call."
     )]
