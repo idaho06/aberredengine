@@ -9,7 +9,7 @@
 //! - [`insert_scene_manager`] — inserts [`SceneManager`] and spawns the persistent [`SceneName`] entity the scene events target
 //! - [`in_scene`] — run condition: true while the named scene is active
 //! - [`scene_switch_poll`] — runs the scene transition when a [`NextScene`] request is pending
-//! - [`scene_enter_play`] — one-shot system that seeds the initial scene and triggers the first switch
+//! - [`scene_enter_play`] — one-shot system that enters the first scene (a pending request, else the initial scene)
 //! - [`scene_enter_loading`] — the same for the loading scene, on entering `Setup`
 //!
 //! Scene behavior is ECS: observers of [`SceneEntered`]/[`SceneExited`] and systems
@@ -357,16 +357,20 @@ pub fn scene_switch_poll(
 // scene_enter_play — one-shot bootstrap
 // ---------------------------------------------------------------------------
 
-/// One-shot system registered as `"enter_play"` for SceneManager-based games:
-/// enters the initial scene (stored in [`SceneManager`]).
+/// One-shot system registered as `"enter_play"`: enters the first scene, the
+/// one requested through [`NextScene`] before `Playing` (e.g. by `main.lua`'s
+/// `on_enter_play`), else [`SceneManager::initial_scene`]. The first entry
+/// tears nothing down, so entities spawned during `Setup` survive it.
 pub fn scene_enter_play(
     commands: Commands,
-    next_scene: ResMut<NextScene>,
+    mut next_scene: ResMut<NextScene>,
     systems_store: Res<SystemsStore>,
     scene_manager: Res<SceneManager>,
 ) {
-    let initial = scene_manager.expect_initial_scene();
-    switch_to(commands, next_scene, &systems_store, initial);
+    let scene = next_scene
+        .take()
+        .unwrap_or_else(|| scene_manager.expect_initial_scene());
+    switch_to(commands, next_scene, &systems_store, scene);
 }
 
 /// One-shot system registered as `"enter_setup"` when the game has a loading
@@ -853,6 +857,40 @@ mod tests {
         assert_eq!(scenes.scene_entity("level"), Some(level));
         assert_eq!(scenes.scene_names(), ["level", "menu"]);
         assert_eq!(scenes.active_scene.as_deref(), Some("level"));
+    }
+
+    /// `scene_enter_play` enters a scene requested before `Playing` (e.g. by
+    /// a script's `on_enter_play`), else the initial scene.
+    #[test]
+    fn scene_enter_play_prefers_a_pending_request_over_the_initial_scene() {
+        for (request, entered) in [(None, "a"), (Some("b"), "b")] {
+            let mut world = World::new();
+            insert_scene_switch_resources(&mut world);
+            insert_scene_manager(
+                &mut world,
+                SceneManagerInit {
+                    scenes: vec!["a".into(), "b".into()],
+                    initial_scene: Some("a".into()),
+                    ..SceneManagerInit::default()
+                },
+            );
+            let switch = world.register_system(scene_switch_system);
+            let mut store = SystemsStore::new();
+            store.insert(hook_keys::SWITCH_SCENE, switch);
+            world.insert_resource(store);
+            if let Some(request) = request {
+                world.resource_mut::<NextScene>().set(request);
+            }
+
+            world.run_system_once(scene_enter_play).unwrap();
+            world.flush();
+
+            assert_eq!(
+                world.resource::<SceneManager>().active_scene.as_deref(),
+                Some(entered),
+                "request {request:?}"
+            );
+        }
     }
 
     /// The `Setup` refusal comes first: a refused on-demand request registers

@@ -99,8 +99,12 @@ fn on_state_enter(state: &GameState, commands: &mut Commands, systems_store: &Sy
             commands.queue(request_playing_if_unchanged);
         }
         GameState::Playing => {
-            if let Some(enter_play) = systems_store.get(hook_keys::ENTER_PLAY) {
-                commands.run_system(*enter_play);
+            // The script's entry first, so a scene it requests is the one
+            // the engine's entry enters.
+            for key in [hook_keys::SCRIPT_ENTER_PLAY, hook_keys::ENTER_PLAY] {
+                if let Some(id) = systems_store.get(key) {
+                    commands.run_system(*id);
+                }
             }
         }
         // GameState::Paused => eprintln!("Entered Paused state"),
@@ -231,6 +235,41 @@ mod tests {
         assert_eq!(
             world.resource::<SetupLog>().0,
             ["script_setup", "setup (saw script)", "enter_setup"]
+        );
+    }
+
+    #[test]
+    fn script_enter_play_runs_first_and_its_commands_reach_enter_play() {
+        #[derive(Resource, Default)]
+        struct PlayLog(Vec<&'static str>);
+        #[derive(Resource)]
+        struct FromScript;
+
+        let mut world = world_with_setup(None);
+        world.init_resource::<PlayLog>();
+        let script_enter_play =
+            world.register_system(|mut commands: Commands, mut log: ResMut<PlayLog>| {
+                log.0.push("script_enter_play");
+                commands.insert_resource(FromScript);
+            });
+        let enter_play = world.register_system(
+            |mut log: ResMut<PlayLog>, from_script: Option<Res<FromScript>>| {
+                log.0.push(if from_script.is_some() {
+                    "enter_play (saw script)"
+                } else {
+                    "enter_play"
+                });
+            },
+        );
+        let mut store = world.resource_mut::<SystemsStore>();
+        store.insert(hook_keys::SCRIPT_ENTER_PLAY, script_enter_play);
+        store.insert(hook_keys::ENTER_PLAY, enter_play);
+
+        enter(&mut world, GameState::Playing);
+
+        assert_eq!(
+            world.resource::<PlayLog>().0,
+            ["script_enter_play", "enter_play (saw script)"]
         );
     }
 

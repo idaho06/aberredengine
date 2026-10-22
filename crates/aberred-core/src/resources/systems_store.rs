@@ -71,8 +71,13 @@ pub const SETUP: &str = "setup";
 /// hook: enters the loading scene. Registered only when the game has one.
 pub const ENTER_SETUP: &str = "enter_setup";
 
-/// Engine-installed system run once when transitioning to `Playing`: enters
-/// the initial scene (scene manager) or calls `main.lua`'s `on_enter_play` (Lua).
+/// The scripting layer's one-shot `Playing` entry (`main.lua`'s
+/// `on_enter_play()`), run before [`ENTER_PLAY`].
+pub const SCRIPT_ENTER_PLAY: &str = "script_enter_play";
+
+/// Engine-installed system run once on entering `Playing`, after
+/// [`SCRIPT_ENTER_PLAY`]: enters the first scene, the one requested so far
+/// (e.g. by the script) or else the initial scene.
 pub const ENTER_PLAY: &str = "enter_play";
 
 /// Engine-installed system run when a scene transition is requested: the scene

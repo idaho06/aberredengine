@@ -3,7 +3,7 @@
 //! # Key Functions
 //!
 //! - [`setup`] – calls `on_setup` in Lua to queue asset loads, then drains them into stores
-//! - [`enter_play`] – calls `on_enter_play`, processes initial signals/groups, enters the first scene
+//! - [`enter_play`] – calls `on_enter_play`, processes initial signals/groups (the engine then enters the first scene)
 //! - [`update`] – refreshes Lua caches, calls `on_update_<scene>`, drains command queues
 //!
 //! Scene switches run core's `scene_switch_system`; the Lua side of a switch
@@ -44,7 +44,6 @@ use crate::systems::lua_commands::{
 use aberred_core::resources::camera2d::Camera2D;
 use aberred_core::resources::world_signals::WorldSignals;
 use aberred_core::resources::world_time::WorldTime;
-use aberred_core::systems::scene_dispatch::switch_to;
 use bevy_ecs::prelude::*;
 use bevy_ecs::system::SystemParam;
 use log::{debug, error, info};
@@ -144,23 +143,16 @@ pub fn setup(
 
 pub use aberred_core::systems::game_state::quit_game;
 
-/// The `enter_play` hook of a Lua game: calls `on_enter_play`, applies the
-/// signal and group commands it queued, then enters the first scene through
-/// the `switch_scene` hook -- the scene `on_setup`/`on_enter_play` requested
-/// with `engine.request_scene`, else [`SceneManager::initial_scene`] (the
-/// builder's `.initial_scene()`, or the implicit
-/// [`MAIN_SCENE`](aberred_core::resources::signal_keys::MAIN_SCENE)). The
-/// first entry tears nothing down, so entities spawned in
-/// `on_setup`/`on_enter_play` survive it.
-#[allow(clippy::too_many_arguments)]
+/// The script `enter_play` hook of a Lua game: calls `on_enter_play` and
+/// applies the signal and group commands it (and `on_setup`) queued. The
+/// engine's `enter_play` hook runs next and enters the first scene: the one
+/// requested with `engine.request_scene`, else
+/// [`SceneManager::initial_scene`].
 pub fn enter_play(
-    commands: Commands,
     mut world_signals: ResMut<WorldSignals>,
     mut next_scene: ResMut<NextScene>,
     mut next_game_state: ResMut<NextGameState>,
     mut tracked_groups: ResMut<TrackedGroups>,
-    systems_store: Res<SystemsStore>,
-    scene_manager: Res<SceneManager>,
     lua_runtime: NonSend<LuaRuntime>,
 ) {
     // Call Lua on_enter_play function if it exists
@@ -195,11 +187,6 @@ pub fn enter_play(
 
     // Update the tracked groups cache for Lua
     lua_runtime.update_tracked_groups_cache(&tracked_groups.groups);
-
-    let scene = next_scene
-        .take()
-        .unwrap_or_else(|| scene_manager.expect_initial_scene());
-    switch_to(commands, next_scene, &systems_store, scene);
 }
 
 /// The resources Lua's common command queues apply to, plus reusable drain

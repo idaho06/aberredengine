@@ -224,10 +224,10 @@ impl EngineBuilder {
     /// Register the hook/scene one-shot systems into the LOGIC world (runs on
     /// the logic thread; consumes the setup hook and scenes out of `init`).
     /// Every game gets one `SceneManager` seeded with its `.add_scene()` names
-    /// (or the implicit `"main"`) and core's `scene_switch_system`. A Lua
-    /// game's manager is on-demand (any other scene registers on its first
-    /// request), and it gets `lua_plugin`'s setup/enter_play; every other
-    /// game enters its first scene through `scene_enter_play`.
+    /// (or the implicit `"main"`), core's `scene_switch_system`, and core's
+    /// `scene_enter_play`. A Lua game's manager is on-demand (any other scene
+    /// registers on its first request), and `lua_plugin`'s setup/enter_play
+    /// run as the script hooks, before the Rust ones.
     pub(crate) fn register_logic_systems(
         init: &mut LogicInit,
         world: &mut World,
@@ -247,7 +247,7 @@ impl EngineBuilder {
             register_persistent_system(
                 world,
                 &mut systems_store,
-                hook_keys::ENTER_PLAY,
+                hook_keys::SCRIPT_ENTER_PLAY,
                 lua_plugin::enter_play,
             );
         }
@@ -280,14 +280,12 @@ impl EngineBuilder {
             hook_keys::SWITCH_SCENE,
             scene_switch_system,
         );
-        if !has_lua {
-            register_persistent_system(
-                world,
-                &mut systems_store,
-                hook_keys::ENTER_PLAY,
-                scene_enter_play,
-            );
-        }
+        register_persistent_system(
+            world,
+            &mut systems_store,
+            hook_keys::ENTER_PLAY,
+            scene_enter_play,
+        );
 
         register_persistent_system(world, &mut systems_store, hook_keys::QUIT_GAME, quit_game);
         register_persistent_system(
