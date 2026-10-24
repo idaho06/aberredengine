@@ -18,6 +18,7 @@ use bevy_ecs::message::Message;
 
 use crate::math::Color;
 use crate::protocol::asset_kind::AssetKind;
+use crate::resources::font_key::is_reserved_font_key;
 use crate::resources::texture_filter::TextureFilter;
 
 /// GL asset-load/upload commands. Consumed once per frame by
@@ -134,6 +135,23 @@ impl RenderAssetCmd {
             | Self::RenameFont { .. } => None,
         }
     }
+
+    /// The reserved font key (`"default"` or `""`) this command would load,
+    /// remove or rename onto, if any. A game cannot touch the embedded
+    /// default font, so the render thread rejects such a command and
+    /// `AssetLoader` refuses to queue it.
+    pub fn reserved_font_key(&self) -> Option<&str> {
+        match self {
+            Self::Font { key, .. } | Self::RemoveFont { key } => {
+                Some(key.as_str()).filter(|k| is_reserved_font_key(k))
+            }
+            Self::RenameFont { old_key, new_key } => [old_key, new_key]
+                .into_iter()
+                .map(String::as_str)
+                .find(|k| is_reserved_font_key(k)),
+            _ => None,
+        }
+    }
 }
 
 #[cfg(test)]
@@ -240,6 +258,61 @@ mod tests {
         ];
         for cmd in &cases {
             assert_eq!(cmd.load_target(), None, "{cmd:?}");
+        }
+    }
+
+    fn font(key: &str) -> RenderAssetCmd {
+        RenderAssetCmd::Font {
+            key: s(key),
+            path: s("f.ttf"),
+            size: 16,
+            skip_if_loaded: false,
+        }
+    }
+
+    #[test]
+    fn loading_removing_or_renaming_a_reserved_font_key_is_flagged() {
+        for key in ["default", ""] {
+            assert_eq!(font(key).reserved_font_key(), Some(key));
+            assert_eq!(
+                RenderAssetCmd::RemoveFont { key: s(key) }.reserved_font_key(),
+                Some(key)
+            );
+            assert_eq!(
+                RenderAssetCmd::RenameFont {
+                    old_key: s(key),
+                    new_key: s("x"),
+                }
+                .reserved_font_key(),
+                Some(key)
+            );
+        }
+    }
+
+    #[test]
+    fn renaming_into_a_reserved_font_key_is_flagged() {
+        for key in ["default", ""] {
+            let cmd = RenderAssetCmd::RenameFont {
+                old_key: s("ui"),
+                new_key: s(key),
+            };
+            assert_eq!(cmd.reserved_font_key(), Some(key));
+        }
+    }
+
+    #[test]
+    fn ordinary_font_keys_and_other_assets_are_not_flagged() {
+        let cases = [
+            font("ui"),
+            RenderAssetCmd::RemoveFont { key: s("ui") },
+            RenderAssetCmd::RenameFont {
+                old_key: s("a"),
+                new_key: s("b"),
+            },
+            RenderAssetCmd::RemoveTexture { key: s("default") },
+        ];
+        for cmd in &cases {
+            assert_eq!(cmd.reserved_font_key(), None, "{cmd:?}");
         }
     }
 }

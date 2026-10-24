@@ -23,6 +23,12 @@ pub enum AssetError {
         /// The key requested.
         key: String,
     },
+    /// A font load, remove or rename touched the reserved default font key
+    /// (`"default"` or `""`), which the engine owns.
+    ReservedFontKey {
+        /// The reserved key.
+        key: String,
+    },
 }
 
 impl std::fmt::Display for AssetError {
@@ -32,6 +38,11 @@ impl std::fmt::Display for AssetError {
                 f,
                 "{kind:?} '{key}' isn't loaded, and a deterministic game can't load \
                  assets while Playing; load it during Setup"
+            ),
+            Self::ReservedFontKey { key } => write!(
+                f,
+                "font key '{key}' is reserved for the embedded default font; \
+                 pick another key"
             ),
         }
     }
@@ -163,6 +174,11 @@ impl<'w> AssetLoader<'w> {
     }
 
     fn queue_render(&mut self, cmd: RenderAssetCmd) -> Result<(), AssetError> {
+        if let Some(key) = cmd.reserved_font_key() {
+            return Err(AssetError::ReservedFontKey {
+                key: key.to_owned(),
+            });
+        }
         if queues(self.gate.render(&cmd), cmd.load_target())? {
             self.render.write(cmd);
         }
@@ -249,6 +265,23 @@ mod tests {
 
     fn audio_cmds(world: &mut World) -> Vec<AudioCmd> {
         world.resource_mut::<Messages<AudioCmd>>().drain().collect()
+    }
+
+    #[test]
+    fn loading_a_reserved_font_key_is_refused_and_queues_nothing() {
+        let mut world = loader_world();
+        world
+            .run_system_once(|mut assets: AssetLoader| {
+                for key in ["default", ""] {
+                    assert_eq!(
+                        assets.load_font(key, "f.ttf", 16),
+                        Err(AssetError::ReservedFontKey { key: key.into() })
+                    );
+                }
+                assert!(assets.load_font("ui", "f.ttf", 16).is_ok());
+            })
+            .unwrap();
+        assert_eq!(render_cmds(&mut world).len(), 1);
     }
 
     #[test]

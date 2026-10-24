@@ -737,6 +737,19 @@ mod tests {
     }
 
     #[test]
+    fn translate_font_keeps_a_reserved_key_so_the_render_thread_rejects_it() {
+        for id in ["default", ""] {
+            let cmd = super::asset_cmd_to_render_asset_cmd(AssetCmd::Font {
+                id: id.into(),
+                path: "assets/font1.ttf".into(),
+                size: 24,
+            })
+            .expect("a font command maps to a render asset command");
+            assert_eq!(cmd.reserved_font_key(), Some(id));
+        }
+    }
+
+    #[test]
     fn translate_font_sets_skip_if_loaded_false() {
         let mut h = AssetCmdTestHarness::new();
         h.translate(AssetCmd::Font {

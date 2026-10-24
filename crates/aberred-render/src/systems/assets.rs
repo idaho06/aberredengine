@@ -103,6 +103,22 @@ pub fn process_render_asset_cmds(
     }
 }
 
+/// Rejects a command that loads, removes or renames onto a reserved font key
+/// (the embedded default font), returning whether it did. A rejected load is
+/// answered with [`LogicMsg::AssetLoadFailed`]; a rejected remove or rename
+/// has no pending load behind it, so it is only logged. Touches no store.
+fn reject_reserved_font_key(cmd: &RenderAssetCmd, notifications: &mut Vec<LogicMsg>) -> bool {
+    let Some(reserved) = cmd.reserved_font_key() else {
+        return false;
+    };
+    let error = format!("font key '{reserved}' is reserved for the embedded default font");
+    match cmd.load_target() {
+        Some((kind, key)) => notifications.push(load_reply(kind, key.to_owned(), Err(error))),
+        None => error!("Rejected {cmd:?}: {error}"),
+    }
+    true
+}
+
 /// Performs the GL load/upload for a single [`RenderAssetCmd`].
 ///
 /// Every load command ([`RenderAssetCmd::load_target`] is `Some`) pushes
@@ -122,6 +138,9 @@ pub(crate) fn apply_render_asset_cmd(
     shaders: &mut ShaderStore,
     notifications: &mut Vec<LogicMsg>,
 ) {
+    if reject_reserved_font_key(&cmd, notifications) {
+        return;
+    }
     let target = cmd.load_target().map(|(kind, key)| (kind, key.to_owned()));
     let outcome = match cmd {
         RenderAssetCmd::Texture { key, path, filter } => match rl.load_texture(th, &path) {
@@ -356,6 +375,56 @@ mod tests {
             }),
         );
         assert!(matches!(reply, LogicMsg::ShaderLoaded { key } if key == "glow"));
+    }
+
+    fn font_cmd(key: &str) -> RenderAssetCmd {
+        RenderAssetCmd::Font {
+            key: key.to_owned(),
+            path: "f.ttf".to_owned(),
+            size: 16,
+            skip_if_loaded: false,
+        }
+    }
+
+    #[test]
+    fn a_reserved_font_load_is_answered_with_asset_load_failed() {
+        for key in ["default", ""] {
+            let mut out = Vec::new();
+            assert!(reject_reserved_font_key(&font_cmd(key), &mut out));
+            assert!(matches!(
+                out.as_slice(),
+                [LogicMsg::AssetLoadFailed { kind: AssetKind::Font, key: k, .. }] if k == key
+            ));
+        }
+    }
+
+    #[test]
+    fn a_reserved_font_remove_or_rename_is_dropped_without_a_reply() {
+        let cmds = [
+            RenderAssetCmd::RemoveFont {
+                key: "default".to_owned(),
+            },
+            RenderAssetCmd::RenameFont {
+                old_key: "default".to_owned(),
+                new_key: "x".to_owned(),
+            },
+            RenderAssetCmd::RenameFont {
+                old_key: "ui".to_owned(),
+                new_key: "".to_owned(),
+            },
+        ];
+        for cmd in &cmds {
+            let mut out = Vec::new();
+            assert!(reject_reserved_font_key(cmd, &mut out), "{cmd:?}");
+            assert!(out.is_empty(), "{cmd:?}");
+        }
+    }
+
+    #[test]
+    fn an_ordinary_font_command_is_not_rejected() {
+        let mut out = Vec::new();
+        assert!(!reject_reserved_font_key(&font_cmd("ui"), &mut out));
+        assert!(out.is_empty());
     }
 
     #[test]
