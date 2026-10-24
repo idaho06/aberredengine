@@ -23,11 +23,21 @@ impl LuaRuntime {
             meta_fns,
             "load_font",
             asset_commands,
-            |(id, path, size)| (String, String, i32),
-            AssetCmd::Font { id, path, size },
-            desc = "Load a font from file. The keys 'default' and '' are reserved for the embedded default font and are rejected",
+            |(id, path, size, spacing)| (String, String, i32, Option<f32>),
+            AssetCmd::Font {
+                id,
+                path,
+                size,
+                spacing
+            },
+            desc = "Load a font from file. `spacing` is the extra pixels between glyphs when the font is drawn and measured (default 1). The keys 'default' and '' are reserved for the embedded default font and are rejected",
             cat = "asset",
-            params = [("id", "string"), ("path", "string"), ("size", "integer")]
+            params = [
+                ("id", "string"),
+                ("path", "string"),
+                ("size", "integer"),
+                ("spacing", "number?")
+            ]
         );
         register_cmd!(
             engine,

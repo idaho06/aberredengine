@@ -21,7 +21,13 @@ pub enum AssetCmd {
         filter: Option<String>,
     },
     /// Load a font from a file path with a specific size
-    Font { id: String, path: String, size: i32 },
+    Font {
+        id: String,
+        path: String,
+        size: i32,
+        /// Extra pixels between glyphs; `None` is the standard spacing.
+        spacing: Option<f32>,
+    },
     /// Load a music track from a file path
     Music { id: String, path: String },
     /// Load a sound effect from a file path

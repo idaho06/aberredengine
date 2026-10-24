@@ -219,6 +219,7 @@ mod tests {
             key: s("player"),
             path: s("f.ttf"),
             size: 8,
+            spacing: 1.0,
             skip_if_loaded: true,
         };
         assert_eq!(

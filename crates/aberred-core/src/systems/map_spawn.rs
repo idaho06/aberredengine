@@ -12,6 +12,7 @@
 use std::sync::Arc;
 
 use crate::math::Vec2;
+use crate::resources::font_metrics::TEXT_SPACING;
 use bevy_ecs::prelude::*;
 
 use crate::components::animation::Animation;
@@ -78,6 +79,7 @@ pub fn spawn_map(
             key: entry.key.clone(),
             path: entry.path.clone(),
             size: entry.font_size as i32,
+            spacing: TEXT_SPACING,
             skip_if_loaded: true,
         });
     }
@@ -405,11 +407,16 @@ mod tests {
                 key,
                 path,
                 size,
+                spacing,
                 skip_if_loaded,
             } => {
                 assert_eq!(key, "font1");
                 assert_eq!(path, "assets/font1.ttf");
                 assert_eq!(*size, 24);
+                assert_eq!(
+                    *spacing, TEXT_SPACING,
+                    "map fonts load with the standard spacing"
+                );
                 assert!(
                     skip_if_loaded,
                     "spawn_map fonts should skip if already loaded"

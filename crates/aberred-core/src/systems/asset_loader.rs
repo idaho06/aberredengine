@@ -6,7 +6,7 @@ use bevy_ecs::system::SystemParam;
 use crate::protocol::asset_kind::AssetKind;
 use crate::protocol::audio::AudioCmd;
 use crate::protocol::render_assets::RenderAssetCmd;
-use crate::resources::font_metrics::FontMetricsStore;
+use crate::resources::font_metrics::{FontMetricsStore, TEXT_SPACING};
 use crate::resources::texture_dims::TextureDimsStore;
 use crate::resources::texture_filter::TextureFilter;
 use crate::systems::asset_gate::{AssetGate, Verdict};
@@ -109,18 +109,32 @@ impl<'w> AssetLoader<'w> {
         })
     }
 
-    /// Queues a font load from `path` at `size` pixels under `key`. An already
-    /// loaded `key` is reloaded.
+    /// Queues a font load from `path` at `size` pixels under `key`, with the
+    /// standard glyph spacing ([`TEXT_SPACING`]). An already loaded `key` is
+    /// reloaded.
     pub fn load_font(
         &mut self,
         key: impl Into<String>,
         path: impl Into<String>,
         size: i32,
     ) -> Result<(), AssetError> {
+        self.load_font_with_spacing(key, path, size, TEXT_SPACING)
+    }
+
+    /// Queues a font load like [`load_font`](Self::load_font), with `spacing`
+    /// extra pixels between glyphs when the font is drawn and measured.
+    pub fn load_font_with_spacing(
+        &mut self,
+        key: impl Into<String>,
+        path: impl Into<String>,
+        size: i32,
+        spacing: f32,
+    ) -> Result<(), AssetError> {
         self.queue_render(RenderAssetCmd::Font {
             key: key.into(),
             path: path.into(),
             size,
+            spacing,
             skip_if_loaded: false,
         })
     }
@@ -268,6 +282,46 @@ mod tests {
     }
 
     #[test]
+    fn fonts_load_with_the_standard_spacing_unless_the_load_names_one() {
+        let mut world = loader_world();
+        world
+            .run_system_once(|mut assets: AssetLoader| {
+                assets.load_font("ui", "ui.ttf", 16).unwrap();
+                assets
+                    .load_font_with_spacing("tight", "tight.ttf", 16, 0.0)
+                    .unwrap();
+            })
+            .unwrap();
+        let spacings: Vec<(String, f32)> = render_cmds(&mut world)
+            .into_iter()
+            .filter_map(|cmd| match cmd {
+                RenderAssetCmd::Font { key, spacing, .. } => Some((key, spacing)),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            spacings,
+            [("ui".to_owned(), TEXT_SPACING), ("tight".to_owned(), 0.0)]
+        );
+    }
+
+    #[test]
+    fn loading_a_reserved_font_key_with_a_spacing_is_refused_too() {
+        let mut world = loader_world();
+        world
+            .run_system_once(|mut assets: AssetLoader| {
+                assert_eq!(
+                    assets.load_font_with_spacing("default", "f.ttf", 16, 2.0),
+                    Err(AssetError::ReservedFontKey {
+                        key: "default".into()
+                    })
+                );
+            })
+            .unwrap();
+        assert!(render_cmds(&mut world).is_empty());
+    }
+
+    #[test]
     fn loading_a_reserved_font_key_is_refused_and_queues_nothing() {
         let mut world = loader_world();
         world
@@ -312,7 +366,7 @@ mod tests {
         ));
         assert!(matches!(
             &cmds[2],
-            RenderAssetCmd::Font { key, path, size: 32, skip_if_loaded: false }
+            RenderAssetCmd::Font { key, path, size: 32, skip_if_loaded: false, .. }
                 if key == "arcade" && path == "arcade.ttf"
         ));
         assert!(matches!(

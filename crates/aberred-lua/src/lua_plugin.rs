@@ -902,6 +902,45 @@ mod tests {
     }
 
     #[test]
+    fn lua_load_font_takes_an_optional_spacing() {
+        use aberred_core::protocol::render_assets::RenderAssetCmd;
+        let mut world = new_drain_test_world();
+        world.insert_resource(Messages::<RenderAssetCmd>::default());
+
+        {
+            let lua_runtime = world.get_non_send::<LuaRuntime>().unwrap();
+            lua_runtime
+                .lua()
+                .load(
+                    "engine.load_font('ui', 'ui.ttf', 16)\n\
+                     engine.load_font('tight', 'tight.ttf', 16, 0)",
+                )
+                .exec()
+                .expect("queue load_font");
+        }
+        world.run_system_once(process_lua_asset_commands).unwrap();
+
+        let spacings: Vec<(String, f32)> = world
+            .resource_mut::<Messages<RenderAssetCmd>>()
+            .drain()
+            .filter_map(|cmd| match cmd {
+                RenderAssetCmd::Font { key, spacing, .. } => Some((key, spacing)),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            spacings,
+            [
+                (
+                    "ui".to_owned(),
+                    aberred_core::resources::font_metrics::TEXT_SPACING
+                ),
+                ("tight".to_owned(), 0.0)
+            ]
+        );
+    }
+
+    #[test]
     fn process_lua_asset_commands_translates_load_texture_same_call() {
         // process_lua_asset_commands is schedule-agnostic (NonSend<LuaRuntime>
         // + MessageWriters + Local<Vec<_>>) -- this confirms an

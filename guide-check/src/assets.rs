@@ -170,6 +170,7 @@ mod fonts {
         key: "arcade".to_string(),
         path: "assets/fonts/arcade.ttf".to_string(),
         size: 32,
+        spacing: 1.0, // extra pixels between glyphs, used to draw and to measure this font
         skip_if_loaded: false, // true = don't reload if "arcade" is already loaded
     });
     } // GLUE

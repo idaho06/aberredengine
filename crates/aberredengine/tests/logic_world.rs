@@ -535,6 +535,7 @@ fn font_load_forwards_and_metrics_reply_sizes_text_next_tick() {
             key: "test_font".to_string(),
             path: "assets/fonts/does_not_matter.ttf".to_string(),
             size: 20,
+            spacing: 1.0,
             skip_if_loaded: false,
         });
 

@@ -101,6 +101,7 @@ mod tests {
                     key: k(),
                     path: k(),
                     size: 8,
+                    spacing: 1.0,
                     skip_if_loaded: false,
                 },
                 LogicMsg::FontLoaded {

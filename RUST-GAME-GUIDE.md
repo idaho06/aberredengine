@@ -1011,9 +1011,12 @@ asset_cmds.write(RenderAssetCmd::Font {
     key: "arcade".to_string(),
     path: "assets/fonts/arcade.ttf".to_string(),
     size: 32,
+    spacing: 1.0, // extra pixels between glyphs, used to draw and to measure this font
     skip_if_loaded: false, // true = don't reload if "arcade" is already loaded
 });
 ```
+
+`spacing` is set when the font loads and travels with it: drawing and `FontMetrics::measure_text` both use it. `AssetLoader::load_font` loads with `1.0` (`TEXT_SPACING`); `AssetLoader::load_font_with_spacing(key, path, size, spacing)` and Lua's `engine.load_font(id, path, size, spacing)` pick another. A pixel font whose advance is its cell width usually wants `0.0`, as the [default font](#default-font) does.
 
 To measure text (e.g. to size UI elements) without touching the render-world `FontStore`, read `FontMetricsStore` — populated asynchronously the same way `TextureDimsStore` is, so tolerate a missing key the first tick or two after queuing the load:
 

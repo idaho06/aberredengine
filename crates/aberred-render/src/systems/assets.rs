@@ -20,7 +20,7 @@ use aberred_core::protocol::asset_kind::AssetKind;
 use aberred_core::protocol::endpoints::LogicTx;
 use aberred_core::protocol::render_assets::RenderAssetCmd;
 use aberred_core::protocol::render_logic::LogicMsg;
-use aberred_core::resources::font_metrics::{FontMetrics, GlyphMetrics, TEXT_SPACING};
+use aberred_core::resources::font_metrics::{FontMetrics, GlyphMetrics};
 use aberred_core::resources::texture_filter::TextureFilter;
 use raylib::ffi;
 use raylib::prelude::Image;
@@ -175,6 +175,7 @@ pub(crate) fn apply_render_asset_cmd(
             key,
             path,
             size,
+            spacing,
             skip_if_loaded,
         } => {
             if skip_if_loaded && let Some((font, spacing)) = fonts.get_with_spacing(&key) {
@@ -189,8 +190,8 @@ pub(crate) fn apply_render_asset_cmd(
             } else {
                 load_font_with_mipmaps(rl, th, &path, size).map(|font| {
                     debug!("Loaded font '{}' from '{}'", key, path);
-                    let metrics = extract_font_metrics(&font, TEXT_SPACING);
-                    fonts.add(&key, font, TEXT_SPACING);
+                    let metrics = extract_font_metrics(&font, spacing);
+                    fonts.add(&key, font, spacing);
                     LogicMsg::FontLoaded { key, metrics }
                 })
             }
@@ -365,6 +366,7 @@ fn load_font_with_mipmaps(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use aberred_core::resources::font_metrics::TEXT_SPACING;
 
     #[test]
     fn a_successful_load_replies_with_its_own_message() {
@@ -383,6 +385,7 @@ mod tests {
             key: key.to_owned(),
             path: "f.ttf".to_owned(),
             size: 16,
+            spacing: 1.0,
             skip_if_loaded: false,
         }
     }

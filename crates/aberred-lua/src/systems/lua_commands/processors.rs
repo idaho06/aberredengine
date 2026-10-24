@@ -7,6 +7,7 @@ use std::sync::Arc;
 
 use aberred_core::math::Vec2;
 use aberred_core::resources::camera2d::Camera2D;
+use aberred_core::resources::font_metrics::TEXT_SPACING;
 use bevy_ecs::prelude::*;
 use log::{debug, warn};
 
@@ -253,10 +254,16 @@ pub fn asset_cmd_to_render_asset_cmd(cmd: AssetCmd) -> Option<RenderAssetCmd> {
                 filter,
             })
         }
-        AssetCmd::Font { id, path, size } => Some(RenderAssetCmd::Font {
+        AssetCmd::Font {
+            id,
+            path,
+            size,
+            spacing,
+        } => Some(RenderAssetCmd::Font {
             key: id,
             path,
             size,
+            spacing: spacing.unwrap_or(TEXT_SPACING),
             skip_if_loaded: false,
         }),
         AssetCmd::Shader {
@@ -659,6 +666,7 @@ mod tests {
     use aberred_core::protocol::audio::AudioCmd;
     use aberred_core::protocol::render_assets::RenderAssetCmd;
     use aberred_core::resources::animation_store::AnimationStore;
+    use aberred_core::resources::font_metrics::TEXT_SPACING;
     use aberred_core::resources::game_state::NextGameState;
     use aberred_core::resources::gui_theme::GuiThemeStore;
     use aberred_core::resources::post_process_shader::PostProcessShader;
@@ -743,9 +751,27 @@ mod tests {
                 id: id.into(),
                 path: "assets/font1.ttf".into(),
                 size: 24,
+                spacing: None,
             })
             .expect("a font command maps to a render asset command");
             assert_eq!(cmd.reserved_font_key(), Some(id));
+        }
+    }
+
+    #[test]
+    fn translate_font_spacing_defaults_to_the_standard_one_and_honors_an_explicit_one() {
+        for (spacing, expected) in [(None, TEXT_SPACING), (Some(0.0), 0.0), (Some(2.5), 2.5)] {
+            let cmd = super::asset_cmd_to_render_asset_cmd(AssetCmd::Font {
+                id: "f".into(),
+                path: "f.ttf".into(),
+                size: 16,
+                spacing,
+            })
+            .expect("a font command maps to a render asset command");
+            assert!(
+                matches!(cmd, RenderAssetCmd::Font { spacing, .. } if spacing == expected),
+                "{spacing:?} -> {cmd:?}"
+            );
         }
     }
 
@@ -756,6 +782,7 @@ mod tests {
             id: "font1".into(),
             path: "assets/font1.ttf".into(),
             size: 24,
+            spacing: None,
         });
 
         let render_cmds = h.render_asset_cmds();
@@ -765,11 +792,13 @@ mod tests {
                 key,
                 path,
                 size,
+                spacing,
                 skip_if_loaded,
             } => {
                 assert_eq!(key, "font1");
                 assert_eq!(path, "assets/font1.ttf");
                 assert_eq!(*size, 24);
+                assert_eq!(*spacing, TEXT_SPACING);
                 assert!(!skip_if_loaded, "Lua font loads always reload");
             }
             other => panic!("expected RenderAssetCmd::Font, got {other:?}"),

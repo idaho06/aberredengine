@@ -307,11 +307,12 @@ function engine.request_scene(name) end
 
 -- ==================== Asset Loading ====================
 
----Load a font from file. The keys 'default' and '' are reserved for the embedded default font and are rejected
+---Load a font from file. `spacing` is the extra pixels between glyphs when the font is drawn and measured (default 1). The keys 'default' and '' are reserved for the embedded default font and are rejected
 ---@param id string
 ---@param path string
 ---@param size integer
-function engine.load_font(id, path, size) end
+---@param spacing number|nil
+function engine.load_font(id, path, size, spacing) end
 
 ---Load a map JSON file and spawn all its assets and entities
 ---@param path string

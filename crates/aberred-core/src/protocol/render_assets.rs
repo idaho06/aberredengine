@@ -42,10 +42,15 @@ pub enum RenderAssetCmd {
     /// point of this seam), and the producer runs on the logic thread while
     /// `FontStore` lives on the render thread, so synchronously checking
     /// "already loaded" from the producer side isn't possible.
+    ///
+    /// `spacing` is the glyph spacing (extra pixels between glyphs) the font
+    /// loads with, used to draw it and to measure its text;
+    /// `TEXT_SPACING` unless the load asks for another.
     Font {
         key: String,
         path: String,
         size: i32,
+        spacing: f32,
         skip_if_loaded: bool,
     },
     /// Load a shader from optional vertex/fragment paths, store under `key`.
@@ -209,6 +214,7 @@ mod tests {
                     key: s("f"),
                     path: s("f.ttf"),
                     size: 8,
+                    spacing: 1.0,
                     skip_if_loaded: true,
                 },
                 AssetKind::Font,
@@ -266,6 +272,7 @@ mod tests {
             key: s(key),
             path: s("f.ttf"),
             size: 16,
+            spacing: 1.0,
             skip_if_loaded: false,
         }
     }
