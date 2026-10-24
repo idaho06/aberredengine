@@ -62,6 +62,7 @@ use aberred_core::resources::game_config::GameConfig;
 use aberred_core::resources::game_state::{CurrentGameState, GameState};
 use aberred_core::resources::systems_store as hook_keys;
 use aberred_core::systems::time::update_world_time;
+use aberred_render::resources::default_font::DEFAULT_FONT_SPACING;
 
 /// A headless logic-thread `World` plus its `sim`/`present` schedules.
 ///
@@ -325,10 +326,10 @@ impl TestWorldBuilder {
         // The engine queues the default font's metrics before the logic
         // thread starts, so they are in the store before any system runs; a
         // headless world gets the same, from a synthetic monospace font.
-        world
-            .resource_mut::<FontMetricsStore>()
-            .0
-            .insert(DEFAULT_FONT_KEY.to_owned(), lowercase_alphabet_metrics());
+        world.resource_mut::<FontMetricsStore>().0.insert(
+            DEFAULT_FONT_KEY.to_owned(),
+            lowercase_alphabet_metrics().with_spacing(DEFAULT_FONT_SPACING),
+        );
         let (audio_cmds, audio_msgs_tx) = init
             .audio_stub_ends
             .take()

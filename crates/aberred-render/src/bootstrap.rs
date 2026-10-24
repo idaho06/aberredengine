@@ -3,6 +3,7 @@ use bevy_ecs::prelude::*;
 
 use crate::events::switchfullscreen::switch_fullscreen_observer;
 use crate::logging::raylib_log_level_from_env;
+use crate::resources::default_font::DEFAULT_FONT_SPACING;
 pub use crate::resources::default_font::load_default_font;
 use crate::resources::fontstore::FontStore;
 use crate::resources::imgui_bridge::ImguiBridge;
@@ -103,7 +104,7 @@ pub fn setup_render_world(
     world.insert_resource(RenderStats::default());
     world.insert_resource(render_scene_table);
     world.insert_non_send(render_target);
-    world.insert_non_send(FontStore::with_default(default_font));
+    world.insert_non_send(FontStore::with_default(default_font, DEFAULT_FONT_SPACING));
     // Created before `bridge` is handed to the world: on failure here the
     // logic thread (already spawned by the caller) is still reachable
     // through the locally-owned `bridge` and can be shut down explicitly,

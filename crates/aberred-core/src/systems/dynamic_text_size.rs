@@ -10,7 +10,6 @@ use bevy_ecs::prelude::*;
 use log::debug;
 
 use crate::components::dynamic_text::DynamicText;
-use crate::resources::font_key::font_spacing;
 use crate::resources::font_metrics::{FontMetricsStore, FontMetricsWarnCache};
 use crate::resources::pending_assets::PendingAssets;
 
@@ -20,7 +19,7 @@ use crate::resources::pending_assets::PendingAssets;
 /// whose font was replaced, takes its real size when the metrics land).
 ///
 /// An empty, reserved or unknown font key measures with the default font's
-/// metrics and its glyph spacing ([`FontMetricsStore::resolve_key`]); an unknown key that is not
+/// metrics ([`FontMetricsStore::resolve_key`]; its glyph spacing is set when the font loads); an unknown key that is not
 /// pending warns once. The size stays zero until the resolved font's metrics
 /// exist.
 ///
@@ -46,7 +45,7 @@ pub fn dynamic_text_size_system(
         let Some(font_metrics) = metrics.0.get(font) else {
             continue;
         };
-        let size = font_metrics.measure_text(&text.text, text.font_size, font_spacing(font));
+        let size = font_metrics.measure_text(&text.text, text.font_size);
         text.bypass_change_detection().set_size(size);
     }
 }
@@ -92,6 +91,12 @@ mod tests {
         metrics
     }
 
+    /// The embedded default font's metrics: the fixture glyphs, loaded with no
+    /// glyph spacing.
+    fn default_font_metrics() -> FontMetrics {
+        lowercase_alphabet_metrics().with_spacing(0.0)
+    }
+
     fn only_text_size(world: &mut World) -> Vec2 {
         world.query::<&DynamicText>().single(world).unwrap().size()
     }
@@ -106,7 +111,7 @@ mod tests {
     fn empty_and_default_keys_measure_with_the_default_font() {
         for key in ["", "default"] {
             let mut world = new_test_world();
-            insert_metrics(&mut world, "default", lowercase_alphabet_metrics());
+            insert_metrics(&mut world, "default", default_font_metrics());
             world.spawn(DynamicText::new("abc", key, 20.0, Color::WHITE));
 
             run_once(&mut world);
@@ -122,7 +127,7 @@ mod tests {
     #[test]
     fn unknown_key_falls_back_to_the_default_font_and_warns_once() {
         let mut world = new_test_world();
-        insert_metrics(&mut world, "default", lowercase_alphabet_metrics());
+        insert_metrics(&mut world, "default", default_font_metrics());
         world.spawn(DynamicText::new("abc", "typo", 20.0, Color::WHITE));
 
         run_once(&mut world);
@@ -139,7 +144,7 @@ mod tests {
     #[test]
     fn a_pending_font_falls_back_without_warning() {
         let mut world = new_test_world();
-        insert_metrics(&mut world, "default", lowercase_alphabet_metrics());
+        insert_metrics(&mut world, "default", default_font_metrics());
         world
             .resource_mut::<PendingAssets>()
             .queue(AssetKind::Font, "later");
@@ -159,7 +164,7 @@ mod tests {
     #[test]
     fn text_is_remeasured_when_its_pending_font_arrives() {
         let mut world = new_test_world();
-        insert_metrics(&mut world, "default", lowercase_alphabet_metrics());
+        insert_metrics(&mut world, "default", default_font_metrics());
         world
             .resource_mut::<PendingAssets>()
             .queue(AssetKind::Font, "wide");
@@ -183,7 +188,11 @@ mod tests {
     #[test]
     fn a_loaded_font_is_measured_with_its_own_metrics() {
         let mut world = new_test_world();
-        insert_metrics(&mut world, "default", wide_alphabet_metrics());
+        insert_metrics(
+            &mut world,
+            "default",
+            wide_alphabet_metrics().with_spacing(0.0),
+        );
         world.spawn(DynamicText::new("abc", "test_font", 20.0, Color::WHITE));
 
         run_once(&mut world);

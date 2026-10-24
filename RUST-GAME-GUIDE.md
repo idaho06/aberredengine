@@ -999,7 +999,7 @@ fn show_banner(_: On<SceneEntered>, mut commands: Commands) {
 - The key is reserved: `AssetLoader::load_font("default", ..)` returns `AssetError::ReservedFontKey`, and the render thread rejects a raw `RenderAssetCmd` that loads, removes or renames it (a rejected load is answered with `AssetLoadFailed`).
 - An unknown key draws and measures with the default font and logs one warning per key, unless a load of that key is still pending. An empty `GuiTheme.font` is the default font.
 - The charset covers Latin, Latin-1 and Latin Extended-A, punctuation, super- and subscripts, fractions, currency, math, arrows, box drawing, block elements and geometric shapes, stars, card suits (`♥`) and music notes, so a progress bar can be drawn with text only (`█▏▎▍▌▋▊▉░▒▓`).
-- It is rasterized at 14 px with point sampling and no mipmaps, and drawn with no extra glyph spacing (other fonts get 1 px between glyphs), so box-drawing and block glyphs join up. At a multiple of 14 (14, 28, 42, …) every glyph pixel lands on a screen pixel.
+- It is rasterized at 14 px with point sampling and no mipmaps, and loaded with no extra glyph spacing (a font loads with 1 px between glyphs unless its load says otherwise), so box-drawing and block glyphs join up. At a multiple of 14 (14, 28, 42, …) every glyph pixel lands on a screen pixel.
 - Departure Mono is licensed under the SIL Open Font License 1.1. A game that ships the engine's binary carries the notice: the license text is `crates/aberred-render/fonts/DepartureMono-LICENSE.txt`.
 
 ### Fonts
@@ -1022,11 +1022,13 @@ use aberredengine::core::resources::font_metrics::FontMetricsStore;
 
 fn measure_label(fonts: Res<FontMetricsStore>) {
     if let Some(metrics) = fonts.0.get("arcade") {
-        let size = metrics.measure_text("Hello!", 32.0, 1.0);
+        let size = metrics.measure_text("Hello!", 32.0);
         // ... use size.x / size.y ...
     }
 }
 ```
+
+`measure_text` uses the glyph spacing the font was loaded with (`metrics.spacing`), the same one drawing uses.
 
 To remove a previously-loaded font (dropping its GPU handle and `FontStore` metadata), use `RenderAssetCmd::RemoveFont { key }`. The render thread also reports `LogicMsg::FontRemoved { key }`, which prunes the logic-side `FontMetricsStore` entry automatically.
 

@@ -8,24 +8,6 @@
 /// Key of the embedded default font.
 pub const DEFAULT_FONT_KEY: &str = "default";
 
-/// Pixels added between glyphs when drawing and measuring text.
-pub const TEXT_SPACING: f32 = 1.0;
-
-/// Glyph spacing of the default font. It is a pixel font whose advance is
-/// exactly its cell width, so any extra spacing opens gaps in box-drawing and
-/// block glyphs.
-pub const DEFAULT_FONT_SPACING: f32 = 0.0;
-
-/// The glyph spacing for text drawn with the font that `resolved_key` names
-/// (a key already resolved by [`resolve_font_key`]).
-pub fn font_spacing(resolved_key: &str) -> f32 {
-    if resolved_key == DEFAULT_FONT_KEY {
-        DEFAULT_FONT_SPACING
-    } else {
-        TEXT_SPACING
-    }
-}
-
 /// Whether `key` names the default font (`"default"` or its `""` alias). A
 /// game cannot load, remove or rename a reserved key.
 pub fn is_reserved_font_key(key: &str) -> bool {
@@ -55,13 +37,6 @@ mod tests {
 
     fn known(k: &str) -> bool {
         k == "ui"
-    }
-
-    #[test]
-    fn the_default_font_has_no_glyph_spacing_and_other_fonts_keep_the_standard_one() {
-        assert_eq!(font_spacing(DEFAULT_FONT_KEY), DEFAULT_FONT_SPACING);
-        assert_eq!(DEFAULT_FONT_SPACING, 0.0);
-        assert_eq!(font_spacing("ui"), TEXT_SPACING);
     }
 
     #[test]

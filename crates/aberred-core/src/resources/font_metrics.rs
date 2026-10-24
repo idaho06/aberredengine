@@ -26,6 +26,11 @@ use rustc_hash::FxHashMap;
 /// calls that function, so it is safe to hardcode here.
 const TEXT_LINE_SPACING: f32 = 2.0;
 
+/// Glyph spacing, in pixels, a font loads with unless its load asks for
+/// another (the extra pixels `MeasureTextEx`/`DrawTextEx` insert between
+/// glyphs).
+pub const TEXT_SPACING: f32 = 1.0;
+
 /// Fallback codepoint raylib's `GetGlyphIndex` looks for when the requested
 /// codepoint isn't in the font (`'?'`).
 const FALLBACK_CODEPOINT: i32 = 63;
@@ -41,7 +46,7 @@ pub struct GlyphMetrics {
 /// CPU-side measurement data for one font, keyed by codepoint. `Send + Sync`
 /// so it can live on a logic thread separate from the GL context that
 /// loaded the font.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct FontMetrics {
     pub base_size: i32,
     /// Keyed by Unicode codepoint (`GlyphInfo.value`), mirroring raylib's
@@ -58,6 +63,16 @@ pub struct FontMetrics {
     /// a real GL-loaded font's glyph array is available. `FontMetrics`
     /// itself has no raylib dependency; only extraction does.
     pub first_glyph: Option<GlyphMetrics>,
+    /// Extra pixels between glyphs, set when the font is loaded and used by
+    /// both drawing (`aberred-render`) and [`measure_text`](Self::measure_text),
+    /// so the two never disagree.
+    pub spacing: f32,
+}
+
+impl Default for FontMetrics {
+    fn default() -> Self {
+        Self::new(0, FxHashMap::default())
+    }
 }
 
 impl FontMetrics {
@@ -72,7 +87,14 @@ impl FontMetrics {
             base_size,
             glyphs,
             first_glyph: None,
+            spacing: TEXT_SPACING,
         }
+    }
+
+    /// These metrics with glyph spacing `spacing`.
+    pub fn with_spacing(mut self, spacing: f32) -> Self {
+        self.spacing = spacing;
+        self
     }
 
     /// Resolve a codepoint to its glyph metrics, replicating raylib's
@@ -86,10 +108,9 @@ impl FontMetrics {
             .or(self.first_glyph)
     }
 
-    /// Faithful port of raylib's `MeasureTextEx` (`rtext.c`). `spacing` is
-    /// the extra pixels inserted between glyphs (same argument raylib
-    /// takes).
-    pub fn measure_text(&self, text: &str, font_size: f32, spacing: f32) -> Vec2 {
+    /// Faithful port of raylib's `MeasureTextEx` (`rtext.c`), with this
+    /// font's [`spacing`](Self::spacing) as raylib's `spacing` argument.
+    pub fn measure_text(&self, text: &str, font_size: f32) -> Vec2 {
         if text.is_empty() || self.base_size == 0 {
             return Vec2::new(0.0, 0.0);
         }
@@ -130,7 +151,8 @@ impl FontMetrics {
             temp_text_width = text_width;
         }
 
-        let width = temp_text_width * scale_factor + (max_char_count - 1).max(0) as f32 * spacing;
+        let width =
+            temp_text_width * scale_factor + (max_char_count - 1).max(0) as f32 * self.spacing;
         Vec2::new(width, text_height)
     }
 }
@@ -223,6 +245,7 @@ pub mod test_support {
             base_size: 20,
             glyphs,
             first_glyph: Some(a_glyph),
+            spacing: super::TEXT_SPACING,
         }
     }
 }
@@ -256,7 +279,30 @@ mod tests {
             base_size: 20,
             glyphs,
             first_glyph: Some(first_glyph),
+            spacing: TEXT_SPACING,
         }
+    }
+
+    #[test]
+    fn new_and_default_metrics_use_the_standard_spacing() {
+        assert_eq!(
+            FontMetrics::new(20, FxHashMap::default()).spacing,
+            TEXT_SPACING
+        );
+        assert_eq!(FontMetrics::default().spacing, TEXT_SPACING);
+        assert_eq!(fixture().with_spacing(0.0).spacing, 0.0);
+    }
+
+    #[test]
+    fn measure_text_uses_the_fonts_own_spacing() {
+        let m = fixture();
+        // "abc": 3 glyphs of 10 plus 2 gaps of `spacing`.
+        assert_eq!(m.measure_text("abc", 20.0).x, 32.0);
+        assert_eq!(
+            m.clone().with_spacing(0.0).measure_text("abc", 20.0).x,
+            30.0
+        );
+        assert_eq!(m.with_spacing(2.5).measure_text("abc", 20.0).x, 35.0);
     }
 
     #[test]
@@ -264,34 +310,34 @@ mod tests {
         let m = fixture();
         // "abc" @ font_size == base_size (scale 1.0), spacing 1.0:
         // width = 3*10 * 1.0 + (3-1)*1.0 = 32.0
-        let size = m.measure_text("abc", 20.0, 1.0);
+        let size = m.measure_text("abc", 20.0);
         assert_eq!(size.x, 32.0);
         assert_eq!(size.y, 20.0);
     }
 
     #[test]
     fn zero_advance_glyph_falls_back_to_rec_width_plus_offset() {
-        let m = fixture();
+        let m = fixture().with_spacing(0.0);
         // "Z" -> advance_x == 0, so width = rec_width(7) + offset_x(2) = 9.0
         // scale 1.0, spacing 0 -> (1-1)*spacing = 0
-        let size = m.measure_text("Z", 20.0, 0.0);
+        let size = m.measure_text("Z", 20.0);
         assert_eq!(size.x, 9.0);
     }
 
     #[test]
     fn missing_codepoint_falls_back_to_question_mark_glyph() {
-        let m = fixture();
+        let m = fixture().with_spacing(0.0);
         // '9' isn't in the fixture -> falls back to '?' (advance_x=6)
-        let size = m.measure_text("9", 20.0, 0.0);
+        let size = m.measure_text("9", 20.0);
         assert_eq!(size.x, 6.0);
     }
 
     #[test]
     fn missing_codepoint_falls_back_to_first_glyph_when_no_question_mark() {
-        let mut m = fixture();
+        let mut m = fixture().with_spacing(0.0);
         m.glyphs.remove(&('?' as i32));
         // '9' missing, no '?' glyph -> falls back to first_glyph ('a', advance_x=10)
-        let size = m.measure_text("9", 20.0, 0.0);
+        let size = m.measure_text("9", 20.0);
         assert_eq!(size.x, 10.0);
     }
 
@@ -302,7 +348,7 @@ mod tests {
         // longest line char count = 2 -> spacing term = (2-1)*1.0 = 1.0
         // temp_text_width tracks the widest line's raw width = 20.0
         // height = font_size + 1*(font_size + TEXT_LINE_SPACING) = 20 + 22 = 42
-        let size = m.measure_text("aa\na", 20.0, 1.0);
+        let size = m.measure_text("aa\na", 20.0);
         assert_eq!(size.x, 20.0 + 1.0);
         assert_eq!(size.y, 42.0);
     }
@@ -312,7 +358,7 @@ mod tests {
         let m = fixture();
         // "a" @ font_size 40 (base_size 20) -> scale 2.0
         // width = 10 * 2.0 + (1-1)*spacing = 20.0
-        let size = m.measure_text("a", 40.0, 1.0);
+        let size = m.measure_text("a", 40.0);
         assert_eq!(size.x, 20.0);
         // height is NOT scaled - it's font_size directly for a single line
         assert_eq!(size.y, 40.0);
@@ -321,7 +367,7 @@ mod tests {
     #[test]
     fn empty_text_measures_zero() {
         let m = fixture();
-        let size = m.measure_text("", 20.0, 1.0);
+        let size = m.measure_text("", 20.0);
         assert_eq!(size.x, 0.0);
         assert_eq!(size.y, 0.0);
     }

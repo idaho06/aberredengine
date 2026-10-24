@@ -24,7 +24,6 @@ use crate::events::menu::MenuSelected;
 use crate::math::Vec2;
 use crate::protocol::audio::AudioCmd;
 use crate::protocol::render_assets::RenderAssetCmd;
-use crate::resources::font_key::font_spacing;
 use crate::resources::font_metrics::{FontMetricsStore, FontMetricsWarnCache};
 use crate::resources::game_state::GameState::Quitting;
 use crate::resources::game_state::NextGameState;
@@ -145,15 +144,14 @@ pub fn menu_spawn_system(
                     }
                     continue;
                 };
-                let spacing = font_spacing(label_font);
-                let size = metrics.measure_text(&menu_item.label, font_size, spacing);
+                let size = metrics.measure_text(&menu_item.label, font_size);
                 let key = format!("menu_{}", menu_item.id);
                 render_asset_cmd_writer.write(RenderAssetCmd::RasterizeText {
                     key: key.clone(),
                     font_key: label_font.to_owned(),
                     text: menu_item.label.clone(),
                     font_size,
-                    spacing,
+                    spacing: metrics.spacing,
                     color: normal_color,
                 });
                 ecmd.insert(Sprite {
@@ -609,43 +607,57 @@ mod tests {
     /// A world whose `"default"` font has metrics, like the engine's.
     fn world_with_default_font() -> World {
         let mut world = new_test_world();
-        world
-            .resource_mut::<FontMetricsStore>()
-            .0
-            .insert("default".to_string(), lowercase_alphabet_metrics());
+        world.resource_mut::<FontMetricsStore>().0.insert(
+            "default".to_string(),
+            lowercase_alphabet_metrics().with_spacing(0.0),
+        );
         world
     }
 
     /// Runs `menu_spawn_system` for one static-label menu using `font`;
-    /// returns the queued `RasterizeText` font keys and the label sprite width.
-    fn spawn_static_label(world: &mut World, font: &str) -> (Vec<String>, f32) {
+    /// returns the queued `RasterizeText` font keys and spacings, and the label
+    /// sprite width.
+    fn spawn_static_label(world: &mut World, font: &str) -> (Vec<String>, Vec<f32>, f32) {
         world.spawn(
             Menu::new(&[("ok", "ok")], Vec2::ZERO, font, 20.0, 4.0, false).with_dynamic_text(false),
         );
         world
             .run_system_once(menu_spawn_system)
             .expect("system should run");
-        let font_keys = world
+        let (font_keys, spacings) = world
             .resource_mut::<Messages<RenderAssetCmd>>()
             .drain()
             .filter_map(|cmd| match cmd {
-                RenderAssetCmd::RasterizeText { font_key, .. } => Some(font_key),
+                RenderAssetCmd::RasterizeText {
+                    font_key, spacing, ..
+                } => Some((font_key, spacing)),
                 _ => None,
             })
-            .collect();
+            .unzip();
         let width = world
             .query::<&Sprite>()
             .iter(world)
             .next()
             .map_or(0.0, |sprite| sprite.width);
-        (font_keys, width)
+        (font_keys, spacings, width)
+    }
+
+    #[test]
+    fn static_label_rasterizes_with_the_spacing_it_was_measured_with() {
+        let mut world = world_with_default_font();
+        let (_, spacings, width) = spawn_static_label(&mut world, "test_font");
+        assert_eq!((spacings.as_slice(), width), (&[1.0][..], 21.0));
+
+        let mut world = world_with_default_font();
+        let (_, spacings, width) = spawn_static_label(&mut world, "default");
+        assert_eq!((spacings.as_slice(), width), (&[0.0][..], 20.0));
     }
 
     #[test]
     fn static_label_with_an_empty_or_default_font_uses_the_default_font() {
         for font in ["", "default"] {
             let mut world = world_with_default_font();
-            let (font_keys, width) = spawn_static_label(&mut world, font);
+            let (font_keys, _, width) = spawn_static_label(&mut world, font);
             assert_eq!(font_keys, ["default"], "{font:?}");
             assert_eq!(width, 20.0, "{font:?}");
         }
@@ -654,7 +666,7 @@ mod tests {
     #[test]
     fn static_label_with_an_unknown_font_falls_back_and_warns_once() {
         let mut world = world_with_default_font();
-        let (font_keys, width) = spawn_static_label(&mut world, "typo");
+        let (font_keys, _, width) = spawn_static_label(&mut world, "typo");
         assert_eq!(font_keys, ["default"], "measure and rasterize agree");
         assert_eq!(width, 20.0);
         assert!(
@@ -671,7 +683,7 @@ mod tests {
         world
             .resource_mut::<PendingAssets>()
             .queue(AssetKind::Font, "later");
-        let (font_keys, width) = spawn_static_label(&mut world, "later");
+        let (font_keys, _, width) = spawn_static_label(&mut world, "later");
         assert_eq!(font_keys, ["default"]);
         assert_eq!(width, 20.0);
         assert!(

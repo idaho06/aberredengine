@@ -178,7 +178,7 @@ mod fonts {
 
     fn measure_label(fonts: Res<FontMetricsStore>) {
         if let Some(metrics) = fonts.0.get("arcade") {
-            let size = metrics.measure_text("Hello!", 32.0, 1.0);
+            let size = metrics.measure_text("Hello!", 32.0);
             // ... use size.x / size.y ...
         }
     }

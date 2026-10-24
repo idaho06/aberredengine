@@ -20,7 +20,7 @@ use aberred_core::protocol::asset_kind::AssetKind;
 use aberred_core::protocol::endpoints::LogicTx;
 use aberred_core::protocol::render_assets::RenderAssetCmd;
 use aberred_core::protocol::render_logic::LogicMsg;
-use aberred_core::resources::font_metrics::{FontMetrics, GlyphMetrics};
+use aberred_core::resources::font_metrics::{FontMetrics, GlyphMetrics, TEXT_SPACING};
 use aberred_core::resources::texture_filter::TextureFilter;
 use raylib::ffi;
 use raylib::prelude::Image;
@@ -35,7 +35,7 @@ use rustc_hash::FxHashMap;
 /// `ffi::Font` is a raylib type — `aberred-core` cannot depend on raylib.
 /// `FontMetrics` the struct and `measure_text` stay core-side as a
 /// pure-Rust port of raylib's `MeasureTextEx`/`GetGlyphIndex`.
-pub(crate) fn extract_font_metrics(font: &ffi::Font) -> FontMetrics {
+pub(crate) fn extract_font_metrics(font: &ffi::Font, spacing: f32) -> FontMetrics {
     let glyph_count = font.glyphCount.max(0) as usize;
     // SAFETY: `font.glyphs`/`font.recs` are raylib-owned arrays of
     // `glyphCount` entries, valid as long as the font hasn't been
@@ -67,6 +67,7 @@ pub(crate) fn extract_font_metrics(font: &ffi::Font) -> FontMetrics {
         base_size: font.baseSize,
         glyphs,
         first_glyph,
+        spacing,
     }
 }
 
@@ -176,20 +177,20 @@ pub(crate) fn apply_render_asset_cmd(
             size,
             skip_if_loaded,
         } => {
-            if skip_if_loaded && let Some(font) = fonts.get(&key) {
+            if skip_if_loaded && let Some((font, spacing)) = fonts.get_with_spacing(&key) {
                 debug!(
                     "process_render_asset_cmds: font '{}' already loaded, skipping",
                     key
                 );
                 Ok(LogicMsg::FontLoaded {
                     key,
-                    metrics: extract_font_metrics(font),
+                    metrics: extract_font_metrics(font, spacing),
                 })
             } else {
                 load_font_with_mipmaps(rl, th, &path, size).map(|font| {
                     debug!("Loaded font '{}' from '{}'", key, path);
-                    let metrics = extract_font_metrics(&font);
-                    fonts.add(&key, font);
+                    let metrics = extract_font_metrics(&font, TEXT_SPACING);
+                    fonts.add(&key, font, TEXT_SPACING);
                     LogicMsg::FontLoaded { key, metrics }
                 })
             }
@@ -233,7 +234,7 @@ pub(crate) fn apply_render_asset_cmd(
             color,
         } => match fonts.get_or_default(&font_key) {
             None => Err(format!("font '{font_key}' is not loaded")),
-            Some(font) => load_texture_from_text(
+            Some((font, _)) => load_texture_from_text(
                 rl,
                 th,
                 font,
@@ -472,7 +473,7 @@ mod tests {
             )
             .expect("failed to load test font");
 
-        let metrics = extract_font_metrics(&font);
+        let metrics = extract_font_metrics(&font, TEXT_SPACING);
 
         let corpus = [
             "Hello, world!",
@@ -490,7 +491,10 @@ mod tests {
                     let expected = unsafe {
                         raylib::ffi::MeasureTextEx(*font, text_c.as_ptr(), font_size, spacing)
                     };
-                    let actual = metrics.measure_text(text, font_size, spacing);
+                    let actual = metrics
+                        .clone()
+                        .with_spacing(spacing)
+                        .measure_text(text, font_size);
                     assert!(
                         (actual.x - expected.x).abs() < 0.01
                             && (actual.y - expected.y).abs() < 0.01,

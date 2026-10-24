@@ -9,7 +9,8 @@
 //! from the main thread only.
 
 // use bevy_ecs::prelude::Resource; // NonSend resource: use NonSend<FontStore> in system parameters
-use aberred_core::resources::font_key::{font_spacing, resolve_font_key};
+use aberred_core::resources::font_key::resolve_font_key;
+use aberred_core::resources::font_metrics::TEXT_SPACING;
 use raylib::prelude::Font;
 use rustc_hash::FxHashMap;
 
@@ -18,6 +19,12 @@ use rustc_hash::FxHashMap;
 pub struct FontMeta {
     pub path: String,
     pub font_size: f32,
+}
+
+/// A loaded font and the glyph spacing it was loaded with.
+struct LoadedFont {
+    font: Font,
+    spacing: f32,
 }
 
 /// Map of font keys to loaded fonts, plus the embedded default font.
@@ -30,8 +37,8 @@ pub struct FontMeta {
 /// This is a non-send resource; use `NonSend<FontStore>` in system parameters.
 // NonSend resource: insert with insert_non_send and access via NonSend/NonSendMut
 pub struct FontStore {
-    fonts: FxHashMap<String, Font>,
-    default: Option<Font>,
+    fonts: FxHashMap<String, LoadedFont>,
+    default: Option<LoadedFont>,
     pub meta: FxHashMap<String, FontMeta>,
 }
 
@@ -51,20 +58,23 @@ impl FontStore {
         }
     }
 
-    /// Create a store whose default font is `font`.
-    pub fn with_default(font: Font) -> Self {
+    /// Create a store whose default font is `font`, drawn with glyph spacing
+    /// `spacing`.
+    pub fn with_default(font: Font, spacing: f32) -> Self {
         Self {
-            default: Some(font),
+            default: Some(LoadedFont { font, spacing }),
             ..Self::new()
         }
     }
 
-    /// Add a font with the given key (no metadata — for engine-internal fonts).
-    pub fn add(&mut self, id: impl Into<String>, font: Font) {
-        self.fonts.insert(id.into(), font);
+    /// Add a font with the given key and glyph spacing (no metadata — for
+    /// engine-internal fonts).
+    pub fn add(&mut self, id: impl Into<String>, font: Font, spacing: f32) {
+        self.fonts.insert(id.into(), LoadedFont { font, spacing });
     }
 
-    /// Add a font with editor metadata (path and font size).
+    /// Add a font with editor metadata (path and font size), with the
+    /// standard glyph spacing.
     pub fn add_with_meta(
         &mut self,
         id: impl Into<String>,
@@ -73,33 +83,34 @@ impl FontStore {
         font_size: f32,
     ) {
         let key = id.into();
-        self.fonts.insert(key.clone(), font);
+        self.add(key.clone(), font, TEXT_SPACING);
         self.meta.insert(key, FontMeta { path, font_size });
     }
 
     /// Get a font by its key.
     pub fn get(&self, id: impl AsRef<str>) -> Option<&Font> {
-        self.fonts.get(id.as_ref())
+        self.get_with_spacing(id).map(|(font, _)| font)
     }
 
-    /// Get the font a draw call should use for `id`: the loaded font under
-    /// that key, else the default font (an empty or unknown key). `None` only
-    /// when the key is unloaded and the store has no default font.
-    pub fn get_or_default(&self, id: impl AsRef<str>) -> Option<&Font> {
+    /// Get a font and the glyph spacing it was loaded with by its key.
+    pub fn get_with_spacing(&self, id: impl AsRef<str>) -> Option<(&Font, f32)> {
+        self.fonts.get(id.as_ref()).map(|f| (&f.font, f.spacing))
+    }
+
+    /// Get the font a draw call should use for `id`, with its glyph spacing:
+    /// the loaded font under that key, else the default font (an empty or
+    /// unknown key). `None` only when the key is unloaded and the store has no
+    /// default font.
+    pub fn get_or_default(&self, id: impl AsRef<str>) -> Option<(&Font, f32)> {
         self.fonts
             .get(self.resolve(id.as_ref()))
             .or(self.default.as_ref())
+            .map(|f| (&f.font, f.spacing))
     }
 
     /// The loaded key `id` resolves to, or the default font's key.
     fn resolve<'a>(&self, id: &'a str) -> &'a str {
         resolve_font_key(id, |k| self.fonts.contains_key(k))
-    }
-
-    /// The glyph spacing for drawing `id`: that of the font
-    /// [`get_or_default`](Self::get_or_default) picks for it.
-    pub fn spacing_for(&self, id: impl AsRef<str>) -> f32 {
-        font_spacing(self.resolve(id.as_ref()))
     }
 
     /// Rename a font key, moving both the font and its metadata.
@@ -143,18 +154,5 @@ impl FontStore {
     /// Returns `true` if no fonts are loaded.
     pub fn is_empty(&self) -> bool {
         self.fonts.is_empty()
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn empty_default_and_unknown_keys_draw_with_the_default_fonts_spacing() {
-        let store = FontStore::new();
-        for key in ["", "default", "typo"] {
-            assert_eq!(store.spacing_for(key), 0.0, "{key:?}");
-        }
     }
 }

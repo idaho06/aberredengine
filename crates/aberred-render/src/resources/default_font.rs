@@ -17,6 +17,11 @@ use crate::systems::extract_font_metrics;
 pub(crate) const DEFAULT_FONT_BYTES: &[u8] =
     include_bytes!("../../fonts/DepartureMono-Regular.otf");
 
+/// Glyph spacing the default font loads with. It is a pixel font whose advance
+/// is exactly its cell width, so any extra spacing opens gaps in box-drawing
+/// and block glyphs.
+pub const DEFAULT_FONT_SPACING: f32 = 0.0;
+
 /// Pixel height the default font is rasterized at, one design pixel per
 /// screen pixel. raylib scales by `size / (ascender - descender)`, so this is
 /// the font's cell height in design pixels; drawing at a multiple of it keeps
@@ -140,13 +145,14 @@ pub fn load_default_font(
             raylib::ffi::TextureFilter::TEXTURE_FILTER_POINT as i32,
         );
     }
-    let metrics = extract_font_metrics(&font);
+    let metrics = extract_font_metrics(&font, DEFAULT_FONT_SPACING);
     Ok((font, metrics))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::resources::fontstore::FontStore;
     use ttf_parser::Face;
 
     fn face() -> Face<'static> {
@@ -263,10 +269,16 @@ mod tests {
         assert!(missing.is_empty(), "listed but not loaded: {missing:?}");
 
         let sample = "Loading... 42% \u{2588}\u{2588}\u{258c}";
-        let ours = metrics.measure_text(sample, DEFAULT_FONT_SIZE as f32, 1.0);
+        assert_eq!(metrics.spacing, DEFAULT_FONT_SPACING);
+        let ours = metrics.measure_text(sample, DEFAULT_FONT_SIZE as f32);
         let theirs = unsafe {
             let c = std::ffi::CString::new(sample).unwrap();
-            raylib::ffi::MeasureTextEx(*font.as_ref(), c.as_ptr(), DEFAULT_FONT_SIZE as f32, 1.0)
+            raylib::ffi::MeasureTextEx(
+                *font.as_ref(),
+                c.as_ptr(),
+                DEFAULT_FONT_SIZE as f32,
+                DEFAULT_FONT_SPACING,
+            )
         };
         assert_eq!((ours.x, ours.y), (theirs.x, theirs.y));
 
@@ -278,5 +290,13 @@ mod tests {
             metrics.glyphs.len(),
             advances
         );
+
+        // The store hands the default font and its spacing to every lookup
+        // that names it, is empty or is unknown.
+        let store = FontStore::with_default(font, DEFAULT_FONT_SPACING);
+        for key in ["default", "", "typo"] {
+            let (_, spacing) = store.get_or_default(key).expect("the default font");
+            assert_eq!(spacing, DEFAULT_FONT_SPACING, "{key:?}");
+        }
     }
 }
