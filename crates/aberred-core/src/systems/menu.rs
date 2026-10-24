@@ -24,6 +24,7 @@ use crate::events::menu::MenuSelected;
 use crate::math::Vec2;
 use crate::protocol::audio::AudioCmd;
 use crate::protocol::render_assets::RenderAssetCmd;
+use crate::resources::font_key::font_spacing;
 use crate::resources::font_metrics::{FontMetricsStore, FontMetricsWarnCache};
 use crate::resources::game_state::GameState::Quitting;
 use crate::resources::game_state::NextGameState;
@@ -144,14 +145,15 @@ pub fn menu_spawn_system(
                     }
                     continue;
                 };
-                let size = metrics.measure_text(&menu_item.label, font_size, 1.0);
+                let spacing = font_spacing(label_font);
+                let size = metrics.measure_text(&menu_item.label, font_size, spacing);
                 let key = format!("menu_{}", menu_item.id);
                 render_asset_cmd_writer.write(RenderAssetCmd::RasterizeText {
                     key: key.clone(),
                     font_key: label_font.to_owned(),
                     text: menu_item.label.clone(),
                     font_size,
-                    spacing: 1.0,
+                    spacing,
                     color: normal_color,
                 });
                 ecmd.insert(Sprite {
@@ -645,7 +647,7 @@ mod tests {
             let mut world = world_with_default_font();
             let (font_keys, width) = spawn_static_label(&mut world, font);
             assert_eq!(font_keys, ["default"], "{font:?}");
-            assert_eq!(width, 21.0, "{font:?}");
+            assert_eq!(width, 20.0, "{font:?}");
         }
     }
 
@@ -654,7 +656,7 @@ mod tests {
         let mut world = world_with_default_font();
         let (font_keys, width) = spawn_static_label(&mut world, "typo");
         assert_eq!(font_keys, ["default"], "measure and rasterize agree");
-        assert_eq!(width, 21.0);
+        assert_eq!(width, 20.0);
         assert!(
             !world
                 .resource_mut::<FontMetricsWarnCache>()
@@ -671,7 +673,7 @@ mod tests {
             .queue(AssetKind::Font, "later");
         let (font_keys, width) = spawn_static_label(&mut world, "later");
         assert_eq!(font_keys, ["default"]);
-        assert_eq!(width, 21.0);
+        assert_eq!(width, 20.0);
         assert!(
             world
                 .resource_mut::<FontMetricsWarnCache>()

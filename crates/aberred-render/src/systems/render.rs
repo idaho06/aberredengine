@@ -654,6 +654,7 @@ pub fn render_system(
                 aberred_core::tracy::tracy_span!("render/draw_world_texts");
                 for item in text_buffer.iter() {
                     if let Some(font) = fonts.get_or_default(&item.text.font) {
+                        let spacing = fonts.spacing_for(&item.text.font);
                         let final_color = resolve_text_tint(item.maybe_tint, item.text.color);
                         let draw_pos = vec2_to_raylib(item.resolved_pos.pos);
 
@@ -667,7 +668,7 @@ pub fn render_system(
                                 &item.text.text,
                                 shadow_pos,
                                 item.text.font_size,
-                                1.0,
+                                spacing,
                                 shadow_color(shadow),
                             );
                         }
@@ -713,7 +714,7 @@ pub fn render_system(
                                         &item.text.text,
                                         draw_pos,
                                         item.text.font_size,
-                                        1.0,
+                                        spacing,
                                         final_color,
                                     );
                                 } else {
@@ -726,7 +727,7 @@ pub fn render_system(
                                         &item.text.text,
                                         draw_pos,
                                         item.text.font_size,
-                                        1.0,
+                                        spacing,
                                         final_color,
                                     );
                                 }
@@ -740,7 +741,7 @@ pub fn render_system(
                                     &item.text.text,
                                     draw_pos,
                                     item.text.font_size,
-                                    1.0,
+                                    spacing,
                                     final_color,
                                 );
                             }
@@ -750,7 +751,7 @@ pub fn render_system(
                                 &item.text.text,
                                 draw_pos,
                                 item.text.font_size,
-                                1.0,
+                                spacing,
                                 final_color,
                             );
                         }

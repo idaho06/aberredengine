@@ -10,6 +10,7 @@ use bevy_ecs::prelude::*;
 use log::debug;
 
 use crate::components::dynamic_text::DynamicText;
+use crate::resources::font_key::font_spacing;
 use crate::resources::font_metrics::{FontMetricsStore, FontMetricsWarnCache};
 use crate::resources::pending_assets::PendingAssets;
 
@@ -19,7 +20,7 @@ use crate::resources::pending_assets::PendingAssets;
 /// whose font was replaced, takes its real size when the metrics land).
 ///
 /// An empty, reserved or unknown font key measures with the default font's
-/// metrics ([`FontMetricsStore::resolve`]); an unknown key that is not
+/// metrics and its glyph spacing ([`FontMetricsStore::resolve_key`]); an unknown key that is not
 /// pending warns once. The size stays zero until the resolved font's metrics
 /// exist.
 ///
@@ -41,10 +42,11 @@ pub fn dynamic_text_size_system(
             continue;
         }
         debug!("Calculating size for DynamicText: '{}'", text.text);
-        let Some(font_metrics) = metrics.resolve(&text.font, &pending, &mut warn_cache) else {
+        let font = metrics.resolve_key(&text.font, &pending, &mut warn_cache);
+        let Some(font_metrics) = metrics.0.get(font) else {
             continue;
         };
-        let size = font_metrics.measure_text(&text.text, text.font_size, 1.0);
+        let size = font_metrics.measure_text(&text.text, text.font_size, font_spacing(font));
         text.bypass_change_detection().set_size(size);
     }
 }
@@ -109,7 +111,7 @@ mod tests {
 
             run_once(&mut world);
 
-            assert_eq!(only_text_size(&mut world), Vec2::new(32.0, 20.0), "{key:?}");
+            assert_eq!(only_text_size(&mut world), Vec2::new(30.0, 20.0), "{key:?}");
             assert!(
                 world.resource_mut::<FontMetricsWarnCache>().warn_once(key),
                 "{key:?} is reserved and never warns"
@@ -125,7 +127,7 @@ mod tests {
 
         run_once(&mut world);
 
-        assert_eq!(only_text_size(&mut world), Vec2::new(32.0, 20.0));
+        assert_eq!(only_text_size(&mut world), Vec2::new(30.0, 20.0));
         assert!(
             !world
                 .resource_mut::<FontMetricsWarnCache>()
@@ -145,7 +147,7 @@ mod tests {
 
         run_once(&mut world);
 
-        assert_eq!(only_text_size(&mut world), Vec2::new(32.0, 20.0));
+        assert_eq!(only_text_size(&mut world), Vec2::new(30.0, 20.0));
         assert!(
             world
                 .resource_mut::<FontMetricsWarnCache>()
@@ -166,7 +168,7 @@ mod tests {
         schedule.add_systems(dynamic_text_size_system);
 
         schedule.run(&mut world);
-        assert_eq!(only_text_size(&mut world).x, 32.0, "default font stand-in");
+        assert_eq!(only_text_size(&mut world).x, 30.0, "default font stand-in");
 
         insert_metrics(&mut world, "wide", wide_alphabet_metrics());
         world

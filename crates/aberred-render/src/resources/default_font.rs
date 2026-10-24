@@ -43,6 +43,7 @@ pub(crate) const DEFAULT_FONT_RANGES: &[RangeInclusive<u32>] = &[
     0x2580..=0x259F,   // Block Elements
     0x25A0..=0x25FF,   // Geometric Shapes
     0x2605..=0x2606,   // Stars
+    0x2660..=0x266F,   // Card suits and music notes
     0x2726..=0x2727,   // Stars
     0x276C..=0x2771,   // Ornamental brackets
     0x1FB82..=0x1FB8B, // Legacy Computing eighths
@@ -108,7 +109,7 @@ pub(crate) const DEFAULT_FONT_CHARS: &str = "\
     \u{2588}\u{2589}\u{258A}\u{258B}\u{258C}\u{258D}\u{258E}\u{258F}\u{2590}\u{2591}\
     \u{2592}\u{2593}\u{2594}\u{2595}\u{2596}\u{2597}\u{2598}\u{2599}\u{259A}\u{259B}\
     \u{259C}\u{259D}\u{259E}\u{259F}\u{25A0}\u{25A1}\u{25AA}\u{25AB}\u{25B2}\u{25B3}\
-    \u{25B7}\u{25BA}\u{25BC}\u{25BD}\u{25C1}\u{25C4}\u{25CA}\u{25CC}\u{2605}\u{2606}\
+    \u{25B7}\u{25BA}\u{25BC}\u{25BD}\u{25C1}\u{25C4}\u{25CA}\u{25CC}\u{2605}\u{2606}\u{2660}\u{2663}\u{2665}\u{2666}\u{2669}\u{266A}\u{266B}\u{266C}\
     \u{2726}\u{2727}\u{276C}\u{276D}\u{276E}\u{276F}\u{2770}\u{2771}\u{1FB82}\u{1FB83}\
     \u{1FB84}\u{1FB85}\u{1FB86}\u{1FB87}\u{1FB88}\u{1FB89}\u{1FB8A}\u{1FB8B}\
     ";
@@ -210,7 +211,7 @@ mod tests {
 
     #[test]
     fn the_list_contains_the_characters_games_rely_on() {
-        for c in "█▏▎▍▌▋▊▉░▒▓━┃ñ¿€≤→★".chars() {
+        for c in "█▏▎▍▌▋▊▉░▒▓━┃ñ¿€≤→★♥".chars() {
             assert!(DEFAULT_FONT_CHARS.contains(c), "missing {c:?}");
         }
     }

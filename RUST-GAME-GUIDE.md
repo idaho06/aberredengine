@@ -998,8 +998,8 @@ fn show_banner(_: On<SceneEntered>, mut commands: Commands) {
 
 - The key is reserved: `AssetLoader::load_font("default", ..)` returns `AssetError::ReservedFontKey`, and the render thread rejects a raw `RenderAssetCmd` that loads, removes or renames it (a rejected load is answered with `AssetLoadFailed`).
 - An unknown key draws and measures with the default font and logs one warning per key, unless a load of that key is still pending. An empty `GuiTheme.font` is the default font.
-- The charset covers Latin, Latin-1 and Latin Extended-A, punctuation, super- and subscripts, fractions, currency, math, arrows, box drawing, block elements and geometric shapes, so a progress bar can be drawn with text only (`█▏▎▍▌▋▊▉░▒▓`).
-- It is rasterized at 14 px with point sampling and no mipmaps. At a multiple of 14 (14, 28, 42, …) every glyph pixel lands on a screen pixel.
+- The charset covers Latin, Latin-1 and Latin Extended-A, punctuation, super- and subscripts, fractions, currency, math, arrows, box drawing, block elements and geometric shapes, stars, card suits (`♥`) and music notes, so a progress bar can be drawn with text only (`█▏▎▍▌▋▊▉░▒▓`).
+- It is rasterized at 14 px with point sampling and no mipmaps, and drawn with no extra glyph spacing (other fonts get 1 px between glyphs), so box-drawing and block glyphs join up. At a multiple of 14 (14, 28, 42, …) every glyph pixel lands on a screen pixel.
 - Departure Mono is licensed under the SIL Open Font License 1.1. A game that ships the engine's binary carries the notice: the license text is `crates/aberred-render/fonts/DepartureMono-LICENSE.txt`.
 
 ### Fonts

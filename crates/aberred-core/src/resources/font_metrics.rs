@@ -166,19 +166,6 @@ impl FontMetricsStore {
         }
     }
 
-    /// The metrics a measurement of font `key` should use ([`resolve_key`]
-    /// then a lookup). `None` only when the resolved font has no metrics yet.
-    ///
-    /// [`resolve_key`]: Self::resolve_key
-    pub fn resolve(
-        &self,
-        key: &str,
-        pending: &PendingAssets,
-        warn_cache: &mut FontMetricsWarnCache,
-    ) -> Option<&FontMetrics> {
-        self.0.get(self.resolve_key(key, pending, warn_cache))
-    }
-
     /// Move the metrics entry for `old_key` to `new_key` in place (mirrors
     /// [`TextureDimsStore::rename`](crate::resources::texture_dims::TextureDimsStore::rename)).
     /// No-op if `old_key` isn't tracked.

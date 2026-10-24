@@ -607,9 +607,9 @@ fn default_font_text_has_a_size_on_the_first_tick() {
     tw.tick(1, DT);
 
     for text in texts {
-        // 3 glyphs of 10 + 2 spacings of 1.
+        // 3 glyphs of 10, no spacing.
         let size = tw.world.get::<DynamicText>(text).unwrap().size();
-        assert_eq!(size, Vec2::new(32.0, 20.0));
+        assert_eq!(size, Vec2::new(30.0, 20.0));
     }
 }
 
@@ -627,7 +627,7 @@ fn unknown_font_key_falls_back_and_warns_once() {
 
     assert_eq!(
         tw.world.get::<DynamicText>(text).unwrap().size(),
-        Vec2::new(32.0, 20.0)
+        Vec2::new(30.0, 20.0)
     );
     assert!(
         !tw.world

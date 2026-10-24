@@ -13,6 +13,7 @@ pub(super) fn draw_screen_text_item(
 ) {
     let pos = item.pos;
     if let Some(font) = fonts.get_or_default(&item.font) {
+        let spacing = fonts.spacing_for(&item.font);
         let final_color = resolve_text_tint(item.maybe_tint, item.color);
         if let Some(shadow) = item.maybe_shadow {
             let shadow_pos = Vector2 {
@@ -24,7 +25,7 @@ pub(super) fn draw_screen_text_item(
                 &item.text,
                 shadow_pos,
                 item.font_size,
-                1.0,
+                spacing,
                 shadow_color(shadow),
             );
         }
@@ -33,7 +34,7 @@ pub(super) fn draw_screen_text_item(
             &item.text,
             vec2_to_raylib(pos.pos),
             item.font_size,
-            1.0,
+            spacing,
             final_color,
         );
         if debug {
