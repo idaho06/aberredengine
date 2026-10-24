@@ -8,6 +8,7 @@
 #![cfg(feature = "test-support")]
 
 use aberredengine::bevy_ecs::prelude::*;
+use aberredengine::bevy_ecs::system::RunSystemOnce;
 use aberredengine::core::components::box_collider::BoxCollider;
 use aberredengine::core::components::collision::{BoxSides, CollisionRule};
 use aberredengine::core::components::dynamic_text::DynamicText;
@@ -38,7 +39,9 @@ use aberredengine::core::protocol::raw_input::RawDeviceSnapshot;
 use aberredengine::core::protocol::render_assets::RenderAssetCmd;
 use aberredengine::core::protocol::render_logic::{LogicMsg, RenderMsg};
 use aberredengine::core::protocol::tick_input::TickInput;
-use aberredengine::core::resources::font_metrics::{FontMetrics, GlyphMetrics};
+use aberredengine::core::resources::font_metrics::{
+    FontMetrics, FontMetricsWarnCache, GlyphMetrics,
+};
 use aberredengine::core::resources::game_state::{CurrentGameState, GameState, NextGameState};
 use aberredengine::core::resources::input::InputAction;
 use aberredengine::core::resources::input::InputState;
@@ -51,7 +54,7 @@ use aberredengine::core::resources::scene_manager::SceneManager;
 use aberredengine::core::resources::signal_intents::SignalIntent;
 use aberredengine::core::resources::signal_keys as sk;
 use aberredengine::core::resources::world_signals::WorldSignals;
-use aberredengine::core::systems::asset_loader::AssetLoader;
+use aberredengine::core::systems::asset_loader::{AssetError, AssetLoader};
 use aberredengine::core::systems::scene_dispatch::in_scene;
 use aberredengine::engine_app::SimSet;
 use aberredengine::raylib::ffi::KeyboardKey;
@@ -550,10 +553,16 @@ fn font_load_forwards_and_metrics_reply_sizes_text_next_tick() {
         other => panic!("expected RenderMsg::Asset(Font), got {other:?}"),
     }
 
-    // Metrics haven't arrived yet: size stays at its zero default.
+    // Metrics haven't arrived yet: the pending font's text is measured with
+    // the default font (10 per glyph at size 20), without a warning.
     let size_before = tw.world.get::<DynamicText>(text).unwrap().size();
-    assert_eq!(size_before.x, 0.0);
-    assert_eq!(size_before.y, 0.0);
+    assert_eq!(size_before, Vec2::new(10.0, 20.0));
+    assert!(
+        tw.world
+            .resource_mut::<FontMetricsWarnCache>()
+            .warn_once("test_font"),
+        "a pending font is not a typo"
+    );
 
     let mut glyphs = FxHashMap::default();
     glyphs.insert(
@@ -566,12 +575,7 @@ fn font_load_forwards_and_metrics_reply_sizes_text_next_tick() {
     );
     tw.deliver_font_metrics("test_font", FontMetrics::new(10, glyphs));
 
-    // `dynamic_text_size_system` only re-measures on `Changed<DynamicText>` --
-    // metrics arriving alone doesn't retroactively resize an entity that
-    // hasn't been touched since. A legitimate re-touch (here, `set_text`)
-    // is what triggers the retry once metrics are available.
-    tw.world.get_mut::<DynamicText>(text).unwrap().set_text("a");
-
+    // The metrics landing re-measures every text; no re-touch needed.
     tw.tick(1, DT);
 
     let size_after = tw.world.get::<DynamicText>(text).unwrap().size();
@@ -582,6 +586,74 @@ fn font_load_forwards_and_metrics_reply_sizes_text_next_tick() {
     assert_eq!(
         size_after.y, 20.0,
         "text_height == font_size for single-line text"
+    );
+}
+
+/// The default font is available from the first tick: reserved keys (and the
+/// `""` alias) are measured with its metrics although no font was ever
+/// loaded, so a loading scene can lay out text.
+#[test]
+fn default_font_text_has_a_size_on_the_first_tick() {
+    let mut tw = TestWorld::new();
+    let texts: Vec<Entity> = ["default", ""]
+        .into_iter()
+        .map(|key| {
+            tw.world
+                .spawn(DynamicText::new("abc", key, 20.0, Color::WHITE))
+                .id()
+        })
+        .collect();
+
+    tw.tick(1, DT);
+
+    for text in texts {
+        // 3 glyphs of 10 + 2 spacings of 1.
+        let size = tw.world.get::<DynamicText>(text).unwrap().size();
+        assert_eq!(size, Vec2::new(32.0, 20.0));
+    }
+}
+
+/// An unknown key falls back to the default font instead of measuring zero,
+/// and warns once however many ticks pass.
+#[test]
+fn unknown_font_key_falls_back_and_warns_once() {
+    let mut tw = TestWorld::new();
+    let text = tw
+        .world
+        .spawn(DynamicText::new("abc", "typo", 20.0, Color::WHITE))
+        .id();
+
+    tw.tick(30, DT);
+
+    assert_eq!(
+        tw.world.get::<DynamicText>(text).unwrap().size(),
+        Vec2::new(32.0, 20.0)
+    );
+    assert!(
+        !tw.world
+            .resource_mut::<FontMetricsWarnCache>()
+            .warn_once("typo"),
+        "the fallback warned for 'typo' (once, per the cache)"
+    );
+}
+
+/// The reserved default font cannot be loaded from game code.
+#[test]
+fn loading_the_reserved_default_font_is_refused() {
+    let mut tw = TestWorld::new();
+    let results = tw
+        .world
+        .run_system_once(|mut assets: AssetLoader| {
+            ["default", ""].map(|key| assets.load_font(key, "f.ttf", 16))
+        })
+        .expect("system runs");
+    for (result, key) in results.into_iter().zip(["default", ""]) {
+        assert_eq!(result, Err(AssetError::ReservedFontKey { key: key.into() }));
+    }
+    tw.tick(1, DT);
+    assert!(
+        tw.sent_to_render.try_recv().is_err(),
+        "a refused load reaches no thread"
     );
 }
 
