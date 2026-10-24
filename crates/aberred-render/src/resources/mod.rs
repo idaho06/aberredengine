@@ -4,6 +4,7 @@
 //! -- nothing here is ever inserted into or read from the logic/sim world.
 //!
 //! Submodules
+//! - [`default_font`] – embedded default font bytes and charset
 //! - [`fontstore`] – loaded fonts keyed by string IDs (NonSend)
 //! - [`fullscreen`] – presence toggles fullscreen mode
 //! - [`imgui_bridge`] – internal Dear ImGui backend (NonSend)
@@ -16,6 +17,7 @@
 //! - [`sim_id_map`] – sim-entity-id -> mirror-entity lookup backing mirror-entity reconciliation
 //! - [`texturestore`] – loaded textures keyed by string IDs
 
+pub mod default_font;
 pub mod fontstore;
 pub mod fullscreen;
 pub mod imgui_bridge;

@@ -19,6 +19,7 @@ raylib = { workspace = true, features = ["noscreenshot"] }
 
 [dev-dependencies]
 aberred-core = { path = "../aberred-core", features = ["test-support"] }
+ttf-parser = "0.25"
 
 [features]
 tracy = ["dep:tracy-client"]
