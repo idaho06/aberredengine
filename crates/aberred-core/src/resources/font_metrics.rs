@@ -14,7 +14,11 @@
 //! functions when the vendored raylib code changes.
 
 use crate::math::Vec2;
+use crate::protocol::asset_kind::AssetKind;
+use crate::resources::font_key::{font_key_needs_warning, resolve_font_key};
+use crate::resources::pending_assets::PendingAssets;
 use bevy_ecs::prelude::Resource;
+use log::warn;
 use rustc_hash::FxHashMap;
 
 /// raylib's default `textLineSpacing` (`rtext.c`'s static global, default
@@ -137,6 +141,26 @@ impl FontMetrics {
 pub struct FontMetricsStore(pub FxHashMap<String, FontMetrics>);
 
 impl FontMetricsStore {
+    /// The metrics a measurement of font `key` should use: the font's own, or
+    /// the default font's for an empty, reserved or unknown key (the same
+    /// resolution drawing uses, `resolve_font_key`). An unknown key that is
+    /// not pending warns once per key through `warn_cache`. `None` only when
+    /// the resolved font has no metrics yet.
+    pub fn resolve<'a>(
+        &'a self,
+        key: &str,
+        pending: &PendingAssets,
+        warn_cache: &mut FontMetricsWarnCache,
+    ) -> Option<&'a FontMetrics> {
+        let known = |k: &str| self.0.contains_key(k);
+        if font_key_needs_warning(key, known(key), pending.contains(AssetKind::Font, key))
+            && warn_cache.warn_once(key)
+        {
+            warn!("Font '{key}' is not loaded, using the default font");
+        }
+        self.0.get(resolve_font_key(key, known))
+    }
+
     /// Move the metrics entry for `old_key` to `new_key` in place (mirrors
     /// [`TextureDimsStore::rename`](crate::resources::texture_dims::TextureDimsStore::rename)).
     /// No-op if `old_key` isn't tracked.

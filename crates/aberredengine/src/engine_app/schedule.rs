@@ -519,9 +519,13 @@ impl EngineBuilder {
         );
         sim.add_systems(update_world_signals_binding_system.in_set(SimSet::Bookkeeping));
         sim.add_systems(detect_window_resize.in_set(SimSet::Bookkeeping));
+        // After both forwarders: `PendingAssets` already counts this tick's
+        // font loads, so a font requested this tick is "pending", not a typo.
         sim.add_systems(
             dynamic_text_size_system
                 .after(update_world_signals_binding_system)
+                .after(forward_render_asset_cmds)
+                .after(forward_audio_cmds)
                 .in_set(SimSet::Bookkeeping),
         );
 
