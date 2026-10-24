@@ -10,7 +10,6 @@
 
 // use bevy_ecs::prelude::Resource; // NonSend resource: use NonSend<FontStore> in system parameters
 use aberred_core::resources::font_key::resolve_font_key;
-use aberred_core::resources::font_metrics::TEXT_SPACING;
 use raylib::prelude::Font;
 use rustc_hash::FxHashMap;
 
@@ -19,6 +18,8 @@ use rustc_hash::FxHashMap;
 pub struct FontMeta {
     pub path: String,
     pub font_size: f32,
+    /// Extra pixels between glyphs the font was loaded with.
+    pub spacing: f32,
 }
 
 /// A loaded font and the glyph spacing it was loaded with.
@@ -73,18 +74,26 @@ impl FontStore {
         self.fonts.insert(id.into(), LoadedFont { font, spacing });
     }
 
-    /// Add a font with editor metadata (path and font size), with the
-    /// standard glyph spacing.
+    /// Add a font with the given glyph spacing and editor metadata (path and
+    /// font size).
     pub fn add_with_meta(
         &mut self,
         id: impl Into<String>,
         font: Font,
+        spacing: f32,
         path: String,
         font_size: f32,
     ) {
         let key = id.into();
-        self.add(key.clone(), font, TEXT_SPACING);
-        self.meta.insert(key, FontMeta { path, font_size });
+        self.add(key.clone(), font, spacing);
+        self.meta.insert(
+            key,
+            FontMeta {
+                path,
+                font_size,
+                spacing,
+            },
+        );
     }
 
     /// Get a font by its key.

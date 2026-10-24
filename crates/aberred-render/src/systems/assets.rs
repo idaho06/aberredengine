@@ -191,7 +191,7 @@ pub(crate) fn apply_render_asset_cmd(
                 load_font_with_mipmaps(rl, th, &path, size).map(|font| {
                     debug!("Loaded font '{}' from '{}'", key, path);
                     let metrics = extract_font_metrics(&font, spacing);
-                    fonts.add(&key, font, spacing);
+                    fonts.add_with_meta(&key, font, spacing, path, size as f32);
                     LogicMsg::FontLoaded { key, metrics }
                 })
             }
@@ -508,5 +508,62 @@ mod tests {
                 }
             }
         }
+    }
+
+    /// Windowed check of the editor-facing font bookkeeping: loading a font
+    /// through `apply_render_asset_cmd` records its path, size and spacing in
+    /// `FontStore::meta` and the store entry, replies `FontLoaded` with the same
+    /// spacing, and a rename or remove carries the metadata along. Opens a
+    /// window, so it never runs in `just check`:
+    ///
+    /// `cargo test -p aberred-render --lib -- --ignored --nocapture a_loaded_font_records`
+    #[test]
+    #[ignore = "opens a window; run by hand, see doc comment"]
+    fn a_loaded_font_records_its_metadata_and_spacing() {
+        let (mut rl, thread) = raylib::init().size(64, 64).title("font meta test").build();
+        let path = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../assets/fonts/Arcade_Cabinet.ttf"
+        )
+        .to_owned();
+        let mut textures = TextureStore::new();
+        let mut fonts = FontStore::new();
+        let mut shaders = ShaderStore::new();
+        let mut replies = Vec::new();
+
+        apply_render_asset_cmd(
+            &mut rl,
+            &thread,
+            RenderAssetCmd::Font {
+                key: "arcade".to_owned(),
+                path: path.clone(),
+                size: 24,
+                spacing: 0.5,
+                skip_if_loaded: false,
+            },
+            &mut textures,
+            &mut fonts,
+            &mut shaders,
+            &mut replies,
+        );
+
+        let meta = fonts.meta.get("arcade").expect("the load records metadata");
+        assert_eq!(
+            (meta.path.as_str(), meta.font_size, meta.spacing),
+            (path.as_str(), 24.0, 0.5)
+        );
+        assert_eq!(fonts.get_with_spacing("arcade").map(|(_, s)| s), Some(0.5));
+        assert!(
+            matches!(
+                replies.as_slice(),
+                [LogicMsg::FontLoaded { key, metrics }] if key == "arcade" && metrics.spacing == 0.5
+            ),
+            "{replies:?}"
+        );
+
+        assert!(fonts.rename("arcade", "renamed"));
+        assert!(fonts.meta.contains_key("renamed") && !fonts.meta.contains_key("arcade"));
+        fonts.remove("renamed");
+        assert!(fonts.meta.is_empty());
     }
 }
