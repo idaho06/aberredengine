@@ -1293,7 +1293,7 @@ EngineBuilder::new()
 
 ### Map files
 
-A map file (JSON deserialized into `MapData`, any extension) lists textures, fonts, animations and entity definitions. Load it with `load_map(path)` and trigger `SpawnMapRequested { map }`: the engine queues the map's textures and fonts, fills `AnimationStore` with its animations, and spawns its entities. Don't also queue the map's assets yourself: a texture would load twice, and so would a font you queue after the map (see [Waiting for loads](#waiting-for-loads)). Then the engine triggers `MapSpawned { map, spawned }`:
+A map file (JSON deserialized into `MapData`, any extension) lists textures, fonts, animations and entity definitions (a font entry is `key`, `path`, `font_size` and an optional `spacing`, the extra pixels between glyphs: `1.0` when absent, `0.0` for a pixel font; a key that is already loaded keeps the spacing it loaded with). Load it with `load_map(path)` and trigger `SpawnMapRequested { map }`: the engine queues the map's textures and fonts, fills `AnimationStore` with its animations, and spawns its entities. Don't also queue the map's assets yourself: a texture would load twice, and so would a font you queue after the map (see [Waiting for loads](#waiting-for-loads)). Then the engine triggers `MapSpawned { map, spawned }`:
 
 ```rust
 use aberredengine::prelude::*;

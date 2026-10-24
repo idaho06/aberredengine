@@ -74,12 +74,12 @@ pub fn spawn_map(
     for entry in &map.fonts {
         // "Already loaded" dedup happens in `apply_render_asset_cmd`, gated by
         // `skip_if_loaded: true` -- `spawn_map` does not read `FontStore`
-        // directly.
+        // directly. A key that is already loaded keeps the spacing it loaded with.
         render_asset_cmds.push(RenderAssetCmd::Font {
             key: entry.key.clone(),
             path: entry.path.clone(),
             size: entry.font_size as i32,
-            spacing: TEXT_SPACING,
+            spacing: entry.spacing.unwrap_or(TEXT_SPACING),
             skip_if_loaded: true,
         });
     }
@@ -367,11 +367,20 @@ mod tests {
                 path: "assets/tex1.png".into(),
                 filter: None,
             }],
-            fonts: vec![FontEntry {
-                key: "font1".into(),
-                path: "assets/font1.ttf".into(),
-                font_size: 24.0,
-            }],
+            fonts: vec![
+                FontEntry {
+                    key: "font1".into(),
+                    path: "assets/font1.ttf".into(),
+                    font_size: 24.0,
+                    spacing: None,
+                },
+                FontEntry {
+                    key: "pixel".into(),
+                    path: "assets/pixel.otf".into(),
+                    font_size: 14.0,
+                    spacing: Some(0.0),
+                },
+            ],
             entities: vec![EntityDef {
                 position: Some([1.0, 2.0]),
                 ..Default::default()
@@ -394,7 +403,7 @@ mod tests {
         // One entity per `map.entities` entry -- `MapSpawned` observers zip
         // `spawned` against `map.entities` by index, so this length must hold.
         assert_eq!(entities.len(), map.entities.len());
-        assert_eq!(render_asset_cmds.len(), 2);
+        assert_eq!(render_asset_cmds.len(), 3);
         match &render_asset_cmds[0] {
             RenderAssetCmd::Texture { key, path, .. } => {
                 assert_eq!(key, "tex1");
@@ -424,6 +433,14 @@ mod tests {
             }
             other => panic!("expected RenderAssetCmd::Font, got {other:?}"),
         }
+        assert!(
+            matches!(
+                &render_asset_cmds[2],
+                RenderAssetCmd::Font { key, spacing, .. } if key == "pixel" && *spacing == 0.0
+            ),
+            "a map font's own spacing reaches the load command: {:?}",
+            render_asset_cmds[2]
+        );
 
         let mut position_query = world.query::<&WorldPosition>();
         assert_eq!(position_query.iter(&world).count(), 1);

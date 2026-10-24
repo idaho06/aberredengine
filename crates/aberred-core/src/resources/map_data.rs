@@ -74,6 +74,11 @@ pub struct FontEntry {
     pub key: String,
     pub path: String,
     pub font_size: f32,
+    /// Extra pixels between glyphs when the font is drawn and measured. Absent
+    /// is the standard spacing (`1.0`); a pixel font whose advance is its cell
+    /// width wants `0.0`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub spacing: Option<f32>,
 }
 
 /// An animation clip defined as a strip of frames in a sprite sheet.
@@ -282,6 +287,7 @@ mod tests {
                 key: "arcade".into(),
                 path: "assets/fonts/Arcade.ttf".into(),
                 font_size: 32.0,
+                spacing: Some(0.5),
             }],
             animations: vec![AnimationEntry {
                 key: "walk".into(),
@@ -342,6 +348,30 @@ mod tests {
         save_map(&path, &original).expect("save_map failed");
         let loaded = load_map(&path).expect("load_map failed");
         assert_eq!(original, loaded);
+    }
+
+    #[test]
+    fn font_spacing_is_optional_in_json_and_omitted_when_unset() {
+        // A map written before fonts had a spacing parses, and saving it again
+        // does not add the key.
+        let json = r#"{ "key": "arcade", "path": "a.ttf", "font_size": 32.0 }"#;
+        let entry: FontEntry = serde_json::from_str(json).unwrap();
+        assert_eq!(entry.spacing, None);
+        let saved = serde_json::to_string(&entry).unwrap();
+        assert!(!saved.contains("spacing"), "{saved}");
+    }
+
+    #[test]
+    fn font_spacing_round_trips() {
+        let entry = FontEntry {
+            key: "pixel".into(),
+            path: "p.otf".into(),
+            font_size: 14.0,
+            spacing: Some(0.0),
+        };
+        let saved = serde_json::to_string(&entry).unwrap();
+        assert!(saved.contains("\"spacing\":0.0"), "{saved}");
+        assert_eq!(serde_json::from_str::<FontEntry>(&saved).unwrap(), entry);
     }
 
     #[test]
