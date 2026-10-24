@@ -20,7 +20,7 @@ use std::sync::Arc;
 
 use crate::math::Vec2;
 use bevy_ecs::prelude::*;
-use log::{error, warn};
+use log::warn;
 
 use crate::components::dynamic_text::DynamicText;
 use crate::components::gui_button::GuiButton;
@@ -44,8 +44,7 @@ use crate::resources::gui_theme::{GuiTheme, GuiThemeStore, GuiThemeWarnCache};
 /// caption with fixed padding instead of centering from measured text size.
 /// `font`/`font_size`/`text_color` are resolved from the named theme (`theme_key`) in `GuiThemeStore` (or
 /// built-in defaults if the key isn't registered, with a one-time warn via
-/// `gui_theme_warn_cache`), logging the existing "forgot to call
-/// engine.set_gui_theme_font" error when `font` is unset. `z_index`
+/// `gui_theme_warn_cache`). An empty theme `font` is the default font. `z_index`
 /// defaults to `0.0` when the parent has no `ZIndex` yet. `signal_binding`
 /// (currently only ever passed by `gui_label_spawn_system`, never by
 /// `gui_button_spawn_system`), if `Some`, attaches a `SignalBinding` to the
@@ -85,13 +84,6 @@ fn spawn_themed_caption(
             &default_theme
         }
     };
-    if theme.font.is_empty() {
-        error!(
-            "GuiTheme '{}'.font is unset — call engine.set_gui_theme_font(\"{}\", ...) before spawning \
-             GuiButton/GuiLabel captions; the caption entity is still spawned but renders with no visible text",
-            theme_key, theme_key
-        );
-    }
     let mut caption = commands.spawn((
         DynamicText::new(text, &*theme.font, theme.font_size, theme.text_color),
         ChildOf(parent),

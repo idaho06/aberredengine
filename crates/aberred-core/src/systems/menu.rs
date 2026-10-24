@@ -29,6 +29,7 @@ use crate::resources::game_state::GameState::Quitting;
 use crate::resources::game_state::NextGameState;
 use crate::resources::input::InputAction;
 use crate::resources::next_scene::NextScene;
+use crate::resources::pending_assets::PendingAssets;
 use crate::resources::texture_dims::TextureDimsStore;
 use bevy_ecs::prelude::*;
 use log::{debug, warn};
@@ -76,6 +77,7 @@ pub fn menu_spawn_system(
     mut commands: Commands,
     mut query: Query<(Entity, &mut Menu), Added<Menu>>,
     font_metrics: Res<FontMetricsStore>,
+    pending: Res<PendingAssets>,
     mut warn_cache: ResMut<FontMetricsWarnCache>,
     mut render_asset_cmd_writer: MessageWriter<RenderAssetCmd>,
 ) {
@@ -130,11 +132,14 @@ pub fn menu_spawn_system(
                 // Static text sprite: measure via FontMetricsStore (CPU-side),
                 // queue rasterization for process_render_asset_cmds
                 // (render-destined).
-                let Some(metrics) = font_metrics.0.get(&font_string) else {
-                    if warn_cache.warn_once(&font_string) {
+                // Resolve once so the label is measured and rasterized with
+                // the same font.
+                let label_font = font_metrics.resolve_key(&font_string, &pending, &mut warn_cache);
+                let Some(metrics) = font_metrics.0.get(label_font) else {
+                    if warn_cache.warn_once(label_font) {
                         warn!(
                             "menu_spawn_system: skipping menu item '{}' because font '{}' has no cached metrics",
-                            menu_item.id, font_string
+                            menu_item.id, label_font
                         );
                     }
                     continue;
@@ -143,7 +148,7 @@ pub fn menu_spawn_system(
                 let key = format!("menu_{}", menu_item.id);
                 render_asset_cmd_writer.write(RenderAssetCmd::RasterizeText {
                     key: key.clone(),
-                    font_key: font_string.clone(),
+                    font_key: label_font.to_owned(),
                     text: menu_item.label.clone(),
                     font_size,
                     spacing: 1.0,
@@ -581,7 +586,9 @@ mod tests {
     use bevy_ecs::message::Messages;
     use bevy_ecs::system::RunSystemOnce;
 
+    use crate::protocol::asset_kind::AssetKind;
     use crate::resources::font_metrics::test_support::lowercase_alphabet_metrics;
+    use crate::resources::pending_assets::PendingAssets;
 
     fn new_test_world() -> World {
         let mut world = World::new();
@@ -592,8 +599,85 @@ mod tests {
             .insert("test_font".to_string(), lowercase_alphabet_metrics());
         world.insert_resource(store);
         world.insert_resource(FontMetricsWarnCache::default());
+        world.insert_resource(PendingAssets::default());
         world.insert_resource(Messages::<RenderAssetCmd>::default());
         world
+    }
+
+    /// A world whose `"default"` font has metrics, like the engine's.
+    fn world_with_default_font() -> World {
+        let mut world = new_test_world();
+        world
+            .resource_mut::<FontMetricsStore>()
+            .0
+            .insert("default".to_string(), lowercase_alphabet_metrics());
+        world
+    }
+
+    /// Runs `menu_spawn_system` for one static-label menu using `font`;
+    /// returns the queued `RasterizeText` font keys and the label sprite width.
+    fn spawn_static_label(world: &mut World, font: &str) -> (Vec<String>, f32) {
+        world.spawn(
+            Menu::new(&[("ok", "ok")], Vec2::ZERO, font, 20.0, 4.0, false).with_dynamic_text(false),
+        );
+        world
+            .run_system_once(menu_spawn_system)
+            .expect("system should run");
+        let font_keys = world
+            .resource_mut::<Messages<RenderAssetCmd>>()
+            .drain()
+            .filter_map(|cmd| match cmd {
+                RenderAssetCmd::RasterizeText { font_key, .. } => Some(font_key),
+                _ => None,
+            })
+            .collect();
+        let width = world
+            .query::<&Sprite>()
+            .iter(world)
+            .next()
+            .map_or(0.0, |sprite| sprite.width);
+        (font_keys, width)
+    }
+
+    #[test]
+    fn static_label_with_an_empty_or_default_font_uses_the_default_font() {
+        for font in ["", "default"] {
+            let mut world = world_with_default_font();
+            let (font_keys, width) = spawn_static_label(&mut world, font);
+            assert_eq!(font_keys, ["default"], "{font:?}");
+            assert_eq!(width, 21.0, "{font:?}");
+        }
+    }
+
+    #[test]
+    fn static_label_with_an_unknown_font_falls_back_and_warns_once() {
+        let mut world = world_with_default_font();
+        let (font_keys, width) = spawn_static_label(&mut world, "typo");
+        assert_eq!(font_keys, ["default"], "measure and rasterize agree");
+        assert_eq!(width, 21.0);
+        assert!(
+            !world
+                .resource_mut::<FontMetricsWarnCache>()
+                .warn_once("typo"),
+            "the fallback already warned for 'typo'"
+        );
+    }
+
+    #[test]
+    fn static_label_with_a_pending_font_falls_back_without_warning() {
+        let mut world = world_with_default_font();
+        world
+            .resource_mut::<PendingAssets>()
+            .queue(AssetKind::Font, "later");
+        let (font_keys, width) = spawn_static_label(&mut world, "later");
+        assert_eq!(font_keys, ["default"]);
+        assert_eq!(width, 21.0);
+        assert!(
+            world
+                .resource_mut::<FontMetricsWarnCache>()
+                .warn_once("later"),
+            "a pending font is not a typo"
+        );
     }
 
     #[derive(Resource, Default)]

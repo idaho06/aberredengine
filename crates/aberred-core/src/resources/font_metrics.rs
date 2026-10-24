@@ -141,24 +141,37 @@ impl FontMetrics {
 pub struct FontMetricsStore(pub FxHashMap<String, FontMetrics>);
 
 impl FontMetricsStore {
-    /// The metrics a measurement of font `key` should use: the font's own, or
-    /// the default font's for an empty, reserved or unknown key (the same
-    /// resolution drawing uses, `resolve_font_key`). An unknown key that is
-    /// not pending warns once per key through `warn_cache`. `None` only when
-    /// the resolved font has no metrics yet.
-    pub fn resolve<'a>(
-        &'a self,
-        key: &str,
+    /// The font key a measurement or rasterization of `key` should use:
+    /// `key` itself when its metrics exist, else the default font's key (an
+    /// empty, reserved or unknown key; the same resolution drawing uses,
+    /// `resolve_font_key`). An unknown key that is not pending warns once per
+    /// key through `warn_cache`.
+    pub fn resolve_key<'a>(
+        &self,
+        key: &'a str,
         pending: &PendingAssets,
         warn_cache: &mut FontMetricsWarnCache,
-    ) -> Option<&'a FontMetrics> {
+    ) -> &'a str {
         let known = |k: &str| self.0.contains_key(k);
         if font_key_needs_warning(key, known(key), pending.contains(AssetKind::Font, key))
             && warn_cache.warn_once(key)
         {
             warn!("Font '{key}' is not loaded, using the default font");
         }
-        self.0.get(resolve_font_key(key, known))
+        resolve_font_key(key, known)
+    }
+
+    /// The metrics a measurement of font `key` should use ([`resolve_key`]
+    /// then a lookup). `None` only when the resolved font has no metrics yet.
+    ///
+    /// [`resolve_key`]: Self::resolve_key
+    pub fn resolve(
+        &self,
+        key: &str,
+        pending: &PendingAssets,
+        warn_cache: &mut FontMetricsWarnCache,
+    ) -> Option<&FontMetrics> {
+        self.0.get(self.resolve_key(key, pending, warn_cache))
     }
 
     /// Move the metrics entry for `old_key` to `new_key` in place (mirrors
