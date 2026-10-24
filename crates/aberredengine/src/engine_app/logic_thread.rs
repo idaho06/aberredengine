@@ -768,6 +768,33 @@ mod tests {
         );
     }
 
+    /// `try_run` sends the default font's metrics before the logic thread is
+    /// spawned, so they are the first message in the channel. The first drain
+    /// stores them, under the reserved key, before any system runs.
+    #[test]
+    fn the_default_font_metrics_sent_before_the_thread_exists_land_in_the_first_drain() {
+        let (tx_logic, rx_logic) = crossbeam_channel::unbounded::<LogicMsg>();
+        tx_logic
+            .send(LogicMsg::FontLoaded {
+                key: aberred_core::resources::font_key::DEFAULT_FONT_KEY.into(),
+                metrics: Default::default(),
+            })
+            .unwrap();
+        let mut world = World::new();
+        world.init_resource::<FontMetricsStore>();
+        world.init_resource::<PendingAssets>();
+        world.init_resource::<LoadedAssets>();
+
+        drain_logic_messages(None, &rx_logic, &mut world);
+
+        assert!(
+            world
+                .resource::<FontMetricsStore>()
+                .0
+                .contains_key("default")
+        );
+    }
+
     /// Render's shutdown sends `Shutdown` and then joins while still holding
     /// its sender, so a drain must never let a separate disconnect probe eat
     /// the last queued messages: they must be applied AND the disconnect

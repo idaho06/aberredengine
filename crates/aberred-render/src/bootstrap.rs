@@ -3,6 +3,7 @@ use bevy_ecs::prelude::*;
 
 use crate::events::switchfullscreen::switch_fullscreen_observer;
 use crate::logging::raylib_log_level_from_env;
+pub use crate::resources::default_font::load_default_font;
 use crate::resources::fontstore::FontStore;
 use crate::resources::imgui_bridge::ImguiBridge;
 use crate::resources::mirrors::{
@@ -51,11 +52,13 @@ use aberred_core::systems::render_assets::update_bevy_render_asset_cmds;
 /// `receive_snapshot` -- never stored as a resource, never gameplay
 /// entities. (The fullscreen-toggle `Observer` entity spawned below is
 /// infrastructure, not a drawable.)
+#[allow(clippy::too_many_arguments)] // one argument per startup-built value handed to the render world
 pub fn setup_render_world(
     config: GameConfig,
     rl: raylib::RaylibHandle,
     thread: raylib::RaylibThread,
     render_target: RenderTarget,
+    default_font: raylib::prelude::Font,
     render_scene_table: RenderSceneTable,
     snapshot_consumer: SnapshotConsumer,
     bridge: LogicBridge,
@@ -100,7 +103,7 @@ pub fn setup_render_world(
     world.insert_resource(RenderStats::default());
     world.insert_resource(render_scene_table);
     world.insert_non_send(render_target);
-    world.insert_non_send(FontStore::new());
+    world.insert_non_send(FontStore::with_default(default_font));
     // Created before `bridge` is handed to the world: on failure here the
     // logic thread (already spawned by the caller) is still reachable
     // through the locally-owned `bridge` and can be shut down explicitly,

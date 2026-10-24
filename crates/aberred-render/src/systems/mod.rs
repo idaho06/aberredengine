@@ -15,7 +15,7 @@
 //! - `assets` – the render-thread GL asset loader ([`process_render_asset_cmds`])
 //! - [`raylib_access`] – bundled [`RaylibHandle`](raylib::RaylibHandle)/[`RaylibThread`](raylib::RaylibThread) `SystemParam`
 
-mod assets;
+pub(crate) mod assets;
 mod debug_overlay;
 mod gameconfig;
 mod geometry;

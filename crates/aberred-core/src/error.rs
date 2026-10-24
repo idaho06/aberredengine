@@ -63,6 +63,9 @@ pub enum EngineError {
     #[error("Failed to create render target: {message}")]
     RenderTarget { message: String },
 
+    #[error("Failed to load the embedded default font: {message}")]
+    DefaultFont { message: String },
+
     #[error("Failed to initialize imgui bridge: {message}")]
     Imgui { message: String },
 

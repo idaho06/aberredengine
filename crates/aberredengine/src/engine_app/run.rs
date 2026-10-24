@@ -1,7 +1,9 @@
 use bevy_ecs::prelude::*;
 use crossbeam_channel::{bounded, unbounded};
 
-use aberred_render::bootstrap::{build_render_schedule, setup_render_world, setup_window};
+use aberred_render::bootstrap::{
+    build_render_schedule, load_default_font, setup_render_world, setup_window,
+};
 
 use super::builder::EngineBuilder;
 use super::logic_thread::{LogicInit, logic_thread};
@@ -16,6 +18,7 @@ use aberred_core::protocol::replay::{
 };
 use aberred_core::protocol::snapshot::{SnapshotConsumer, SnapshotPublisher};
 use aberred_core::resources::drawable_snapshot::DrawableSnapshot;
+use aberred_core::resources::font_key::DEFAULT_FONT_KEY;
 use aberred_core::resources::game_config::default_render_fps;
 use aberred_render::resources::mirrors::RenderGameConfig;
 use aberred_render::resources::quit_requested::QuitRequested;
@@ -103,9 +106,20 @@ impl EngineBuilder {
             None => None,
         };
 
-        let (rl, thread, render_target) = setup_window(&config)?;
+        let (mut rl, thread, render_target) = setup_window(&config)?;
 
         let (tx_logic, rx_logic) = unbounded::<LogicMsg>();
+        // The default font is loaded and its metrics queued BEFORE the logic
+        // thread exists: the channel is FIFO, so the first drain stores them
+        // before any system runs, and a loading scene can measure text with
+        // the default font from its first tick.
+        let (default_font, default_metrics) = load_default_font(&mut rl, &thread)?;
+        tx_logic
+            .send(LogicMsg::FontLoaded {
+                key: DEFAULT_FONT_KEY.into(),
+                metrics: default_metrics,
+            })
+            .expect("rx_logic is alive until the logic thread takes it");
         let (tx_render, rx_render) = unbounded::<RenderMsg>();
         // Input gets its own dedicated bounded channel, separate
         // from the unbounded LogicMsg channel above — see LogicBridge::tx_input.
@@ -170,6 +184,7 @@ impl EngineBuilder {
             rl,
             thread,
             render_target,
+            default_font,
             render_scene_table,
             SnapshotConsumer(snap_out),
             LogicBridge {

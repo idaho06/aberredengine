@@ -5,24 +5,29 @@
 //! into its atlas: `DEFAULT_FONT_RANGES` intersected with the glyphs the
 //! font actually has, so raylib never rasterizes `.notdef` boxes.
 
+use aberred_core::error::EngineError;
+use aberred_core::resources::font_metrics::FontMetrics;
+use raylib::prelude::{Font, RaylibHandle, RaylibThread};
+#[cfg(test)]
 use std::ops::RangeInclusive;
 
+use crate::systems::assets::extract_font_metrics;
+
 /// The embedded font file.
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "consumed by the startup font load")
-)]
 pub(crate) const DEFAULT_FONT_BYTES: &[u8] =
     include_bytes!("../../fonts/DepartureMono-Regular.otf");
+
+/// Pixel height the default font is rasterized at, one design pixel per
+/// screen pixel. raylib scales by `size / (ascender - descender)`, so this is
+/// the font's cell height in design pixels; drawing at a multiple of it keeps
+/// every glyph pixel on the screen pixel grid.
+pub(crate) const DEFAULT_FONT_SIZE: i32 = 14;
 
 /// Unicode ranges the default font is expected to cover: Latin, punctuation,
 /// numerals, currency, math, arrows, and the graphical sets (box drawing,
 /// block elements, geometric shapes) that let a progress bar be drawn with
 /// text only.
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "consumed by the startup font load")
-)]
+#[cfg(test)]
 pub(crate) const DEFAULT_FONT_RANGES: &[RangeInclusive<u32>] = &[
     0x0020..=0x007E,   // Basic Latin
     0x00A0..=0x00FF,   // Latin-1 Supplement
@@ -44,10 +49,6 @@ pub(crate) const DEFAULT_FONT_RANGES: &[RangeInclusive<u32>] = &[
 ];
 
 /// Characters rasterized into the default font's atlas, in ascending order.
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "consumed by the startup font load")
-)]
 pub(crate) const DEFAULT_FONT_CHARS: &str = "\
     \u{20}\u{21}\u{22}\u{23}\u{24}\u{25}\u{26}\u{27}\u{28}\u{29}\
     \u{2A}\u{2B}\u{2C}\u{2D}\u{2E}\u{2F}\u{30}\u{31}\u{32}\u{33}\
@@ -112,6 +113,36 @@ pub(crate) const DEFAULT_FONT_CHARS: &str = "\
     \u{1FB84}\u{1FB85}\u{1FB86}\u{1FB87}\u{1FB88}\u{1FB89}\u{1FB8A}\u{1FB8B}\
     ";
 
+/// Rasterizes the embedded default font into a GL texture with point
+/// sampling (no mipmaps: they blur a pixel font) and extracts its CPU-side
+/// metrics. Needs a window and GL context.
+pub fn load_default_font(
+    rl: &mut RaylibHandle,
+    th: &RaylibThread,
+) -> Result<(Font, FontMetrics), EngineError> {
+    let font = rl
+        .load_font_from_memory(
+            th,
+            ".otf",
+            DEFAULT_FONT_BYTES,
+            DEFAULT_FONT_SIZE,
+            Some(DEFAULT_FONT_CHARS),
+        )
+        .map_err(|e| EngineError::DefaultFont {
+            message: e.to_string(),
+        })?;
+    // SAFETY: `font.texture` is the live texture raylib just created for
+    // this font, and a GL context exists (the caller holds `rl`).
+    unsafe {
+        raylib::ffi::SetTextureFilter(
+            font.texture,
+            raylib::ffi::TextureFilter::TEXTURE_FILTER_POINT as i32,
+        );
+    }
+    let metrics = extract_font_metrics(&font);
+    Ok((font, metrics))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -128,6 +159,29 @@ mod tests {
             .filter_map(char::from_u32)
             .filter(|&c| face.glyph_index(c).is_some())
             .collect()
+    }
+
+    #[test]
+    fn the_native_size_puts_glyph_edges_on_whole_pixels() {
+        let face = face();
+        let a = face.glyph_index('A').unwrap();
+        let bbox = face.glyph_bounding_box(a).unwrap();
+        let cell = i32::from(face.ascender()) - i32::from(face.descender());
+        let edges = [
+            i32::from(face.glyph_hor_advance(a).unwrap()),
+            i32::from(bbox.x_min),
+            i32::from(bbox.x_max),
+            i32::from(bbox.y_min),
+            i32::from(bbox.y_max),
+        ];
+        const { assert!(DEFAULT_FONT_SIZE > 0) };
+        for edge in edges {
+            assert_eq!(
+                edge * DEFAULT_FONT_SIZE % cell,
+                0,
+                "{edge} font units are not whole pixels at size {DEFAULT_FONT_SIZE}"
+            );
+        }
     }
 
     #[test]
@@ -169,5 +223,59 @@ mod tests {
             "expected OpenType/CFF outlines"
         );
         assert!(face.is_monospaced());
+    }
+
+    /// Windowed check of the embedded font: it rasterizes (the OTF/CFF
+    /// outlines go through raylib's stb_truetype), the glyphs the games rely on
+    /// exist, the font is monospaced, and `extract_font_metrics` agrees with
+    /// raylib's `MeasureTextEx`. Opens a window, so it never runs in
+    /// `just check`; run it on a machine with a display:
+    ///
+    /// `cargo test -p aberred-render --lib -- --ignored --nocapture default_font_loads`
+    #[test]
+    #[ignore = "opens a window; run by hand, see doc comment"]
+    fn default_font_loads_and_measures_like_raylib() {
+        let (mut rl, thread) = raylib::init()
+            .size(64, 64)
+            .title("default font test")
+            .build();
+
+        let (font, metrics) = load_default_font(&mut rl, &thread).expect("the default font loads");
+
+        let advances: std::collections::BTreeSet<i32> = "A\u{f1}\u{2588}\u{258f}\u{2192}\u{20ac}"
+            .chars()
+            .map(|c| {
+                metrics
+                    .glyphs
+                    .get(&(c as i32))
+                    .unwrap_or_else(|| panic!("no glyph for {c:?}"))
+                    .advance_x
+            })
+            .collect();
+        assert_eq!(advances.len(), 1, "monospaced advances: {advances:?}");
+
+        let missing: Vec<String> = DEFAULT_FONT_CHARS
+            .chars()
+            .filter(|&c| !metrics.glyphs.contains_key(&(c as i32)))
+            .map(|c| format!("U+{:04X}", c as u32))
+            .collect();
+        assert!(missing.is_empty(), "listed but not loaded: {missing:?}");
+
+        let sample = "Loading... 42% \u{2588}\u{2588}\u{258c}";
+        let ours = metrics.measure_text(sample, DEFAULT_FONT_SIZE as f32, 1.0);
+        let theirs = unsafe {
+            let c = std::ffi::CString::new(sample).unwrap();
+            raylib::ffi::MeasureTextEx(*font.as_ref(), c.as_ptr(), DEFAULT_FONT_SIZE as f32, 1.0)
+        };
+        assert_eq!((ours.x, ours.y), (theirs.x, theirs.y));
+
+        eprintln!(
+            "default font: atlas {}x{}, base size {}, {} glyphs, advance {:?}",
+            font.texture.width,
+            font.texture.height,
+            font.baseSize,
+            metrics.glyphs.len(),
+            advances
+        );
     }
 }
