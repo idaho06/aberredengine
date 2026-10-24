@@ -587,7 +587,9 @@ mod tests {
     use bevy_ecs::system::RunSystemOnce;
 
     use crate::protocol::asset_kind::AssetKind;
-    use crate::resources::font_metrics::test_support::lowercase_alphabet_metrics;
+    use crate::resources::font_metrics::test_support::{
+        default_font_metrics, lowercase_alphabet_metrics,
+    };
     use crate::resources::pending_assets::PendingAssets;
 
     fn new_test_world() -> World {
@@ -607,10 +609,10 @@ mod tests {
     /// A world whose `"default"` font has metrics, like the engine's.
     fn world_with_default_font() -> World {
         let mut world = new_test_world();
-        world.resource_mut::<FontMetricsStore>().0.insert(
-            "default".to_string(),
-            lowercase_alphabet_metrics().with_spacing(0.0),
-        );
+        world
+            .resource_mut::<FontMetricsStore>()
+            .0
+            .insert("default".to_string(), default_font_metrics());
         world
     }
 

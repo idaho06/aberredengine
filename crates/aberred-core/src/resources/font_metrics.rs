@@ -31,6 +31,11 @@ const TEXT_LINE_SPACING: f32 = 2.0;
 /// glyphs).
 pub const TEXT_SPACING: f32 = 1.0;
 
+/// Glyph spacing the embedded default font loads with. It is a pixel font whose
+/// advance is exactly its cell width, so any extra spacing opens gaps in
+/// box-drawing and block glyphs.
+pub const DEFAULT_FONT_SPACING: f32 = 0.0;
+
 /// Fallback codepoint raylib's `GetGlyphIndex` looks for when the requested
 /// codepoint isn't in the font (`'?'`).
 const FALLBACK_CODEPOINT: i32 = 63;
@@ -221,8 +226,14 @@ impl FontMetricsWarnCache {
 /// doesn't get re-derived per module.
 #[cfg(any(test, feature = "test-support"))]
 pub mod test_support {
-    use super::{FontMetrics, GlyphMetrics};
+    use super::{DEFAULT_FONT_SPACING, FontMetrics, GlyphMetrics};
     use rustc_hash::FxHashMap;
+
+    /// [`lowercase_alphabet_metrics`] as the embedded default font loads: with
+    /// [`DEFAULT_FONT_SPACING`].
+    pub fn default_font_metrics() -> FontMetrics {
+        lowercase_alphabet_metrics().with_spacing(DEFAULT_FONT_SPACING)
+    }
 
     /// A synthetic `FontMetrics` covering `'a'..='z'` with uniform
     /// `advance_x: 10, offset_x: 0, rec_width: 8.0` glyphs and

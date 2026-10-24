@@ -6,7 +6,7 @@
 //! font actually has, so raylib never rasterizes `.notdef` boxes.
 
 use aberred_core::error::EngineError;
-use aberred_core::resources::font_metrics::FontMetrics;
+use aberred_core::resources::font_metrics::{DEFAULT_FONT_SPACING, FontMetrics};
 use raylib::prelude::{Font, RaylibHandle, RaylibThread};
 #[cfg(test)]
 use std::ops::RangeInclusive;
@@ -16,11 +16,6 @@ use crate::systems::extract_font_metrics;
 /// The embedded font file.
 pub(crate) const DEFAULT_FONT_BYTES: &[u8] =
     include_bytes!("../../fonts/DepartureMono-Regular.otf");
-
-/// Glyph spacing the default font loads with. It is a pixel font whose advance
-/// is exactly its cell width, so any extra spacing opens gaps in box-drawing
-/// and block glyphs.
-pub const DEFAULT_FONT_SPACING: f32 = 0.0;
 
 /// Pixel height the default font is rasterized at, one design pixel per
 /// screen pixel. raylib scales by `size / (ascender - descender)`, so this is

@@ -19,9 +19,9 @@ use crate::resources::pending_assets::PendingAssets;
 /// whose font was replaced, takes its real size when the metrics land).
 ///
 /// An empty, reserved or unknown font key measures with the default font's
-/// metrics ([`FontMetricsStore::resolve_key`]; its glyph spacing is set when the font loads); an unknown key that is not
-/// pending warns once. The size stays zero until the resolved font's metrics
-/// exist.
+/// metrics ([`FontMetricsStore::resolve_key`]), glyph spacing included (it is
+/// set when the font loads); an unknown key that is not pending warns once.
+/// The size stays zero until the resolved font's metrics exist.
 ///
 /// Uses `bypass_change_detection` when updating the size field to avoid
 /// re-triggering this system on the next frame.
@@ -58,8 +58,11 @@ mod tests {
     use crate::components::dynamic_text::DynamicText;
     use crate::math::{Color, Vec2};
     use crate::protocol::asset_kind::AssetKind;
+    use crate::resources::font_metrics::DEFAULT_FONT_SPACING;
     use crate::resources::font_metrics::FontMetrics;
-    use crate::resources::font_metrics::test_support::lowercase_alphabet_metrics;
+    use crate::resources::font_metrics::test_support::{
+        default_font_metrics, lowercase_alphabet_metrics,
+    };
     use crate::resources::pending_assets::PendingAssets;
 
     fn new_test_world() -> World {
@@ -89,12 +92,6 @@ mod tests {
             glyph.advance_x *= 2;
         }
         metrics
-    }
-
-    /// The embedded default font's metrics: the fixture glyphs, loaded with no
-    /// glyph spacing.
-    fn default_font_metrics() -> FontMetrics {
-        lowercase_alphabet_metrics().with_spacing(0.0)
     }
 
     fn only_text_size(world: &mut World) -> Vec2 {
@@ -191,7 +188,7 @@ mod tests {
         insert_metrics(
             &mut world,
             "default",
-            wide_alphabet_metrics().with_spacing(0.0),
+            wide_alphabet_metrics().with_spacing(DEFAULT_FONT_SPACING),
         );
         world.spawn(DynamicText::new("abc", "test_font", 20.0, Color::WHITE));
 

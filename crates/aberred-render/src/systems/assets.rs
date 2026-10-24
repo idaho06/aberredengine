@@ -487,17 +487,18 @@ mod tests {
             "1234567890",
         ];
 
+        // One metrics copy per spacing, not one per measurement.
+        let by_spacing = [0.0_f32, 1.0, 2.5].map(|s| (s, metrics.clone().with_spacing(s)));
+
         for text in corpus {
             let text_c = std::ffi::CString::new(text).unwrap();
             for font_size in [16.0_f32, 32.0, 48.0] {
-                for spacing in [0.0_f32, 1.0, 2.5] {
+                for (spacing, metrics) in &by_spacing {
+                    let spacing = *spacing;
                     let expected = unsafe {
                         raylib::ffi::MeasureTextEx(*font, text_c.as_ptr(), font_size, spacing)
                     };
-                    let actual = metrics
-                        .clone()
-                        .with_spacing(spacing)
-                        .measure_text(text, font_size);
+                    let actual = metrics.measure_text(text, font_size);
                     assert!(
                         (actual.x - expected.x).abs() < 0.01
                             && (actual.y - expected.y).abs() < 0.01,

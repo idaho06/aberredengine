@@ -3,7 +3,6 @@ use bevy_ecs::prelude::*;
 
 use crate::events::switchfullscreen::switch_fullscreen_observer;
 use crate::logging::raylib_log_level_from_env;
-use crate::resources::default_font::DEFAULT_FONT_SPACING;
 pub use crate::resources::default_font::load_default_font;
 use crate::resources::fontstore::FontStore;
 use crate::resources::imgui_bridge::ImguiBridge;
@@ -33,6 +32,7 @@ use aberred_core::protocol::endpoints::{LogicBridge, LogicTx, shutdown_logic_bri
 use aberred_core::protocol::render_assets::RenderAssetCmd;
 use aberred_core::protocol::snapshot::SnapshotConsumer;
 use aberred_core::resources::debug_overlay_config::DebugOverlayConfig;
+use aberred_core::resources::font_metrics::DEFAULT_FONT_SPACING;
 use aberred_core::resources::game_config::GameConfig;
 use aberred_core::resources::gui_theme::GuiThemeWarnCache;
 use aberred_core::resources::render_size::RenderSize;

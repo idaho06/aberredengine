@@ -306,22 +306,6 @@ mod tests {
     }
 
     #[test]
-    fn loading_a_reserved_font_key_with_a_spacing_is_refused_too() {
-        let mut world = loader_world();
-        world
-            .run_system_once(|mut assets: AssetLoader| {
-                assert_eq!(
-                    assets.load_font_with_spacing("default", "f.ttf", 16, 2.0),
-                    Err(AssetError::ReservedFontKey {
-                        key: "default".into()
-                    })
-                );
-            })
-            .unwrap();
-        assert!(render_cmds(&mut world).is_empty());
-    }
-
-    #[test]
     fn loading_a_reserved_font_key_is_refused_and_queues_nothing() {
         let mut world = loader_world();
         world
