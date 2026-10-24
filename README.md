@@ -143,3 +143,13 @@ sudo apt install -y \
 - The generated Lua stubs should not be edited by hand.
 - `src/engine_app/` is the main source of truth for engine startup and schedule ordering.
 - Two additional opt-in feature flags exist beyond `lua`: `tracy` (profiling, build with `--profile release-tracy`) and `test-support` (headless logic-world test harness). See `RUST-GAME-GUIDE.md` for details.
+
+## Third-party notices
+
+### Departure Mono
+
+The engine embeds [Departure Mono](https://departuremono.com) as its default font.
+
+Copyright 2022–2024 Helena Zhang (helenazhang.com). Licensed under the SIL Open Font License, Version 1.1.
+The unmodified font is `crates/aberred-render/fonts/DepartureMono-Regular.otf`; the full license text is in
+`crates/aberred-render/fonts/DepartureMono-LICENSE.txt`.
