@@ -13,12 +13,6 @@ use crate::components::dynamic_text::DynamicText;
 use crate::resources::font_metrics::{FontMetricsStore, FontMetricsWarnCache};
 use crate::resources::pending_assets::PendingAssets;
 
-/// The [`DynamicText`]s added or changed since the system last ran.
-type ChangedTexts<'w, 's> = Query<'w, 's, &'static mut DynamicText, Changed<DynamicText>>;
-
-/// Every [`DynamicText`].
-type AllTexts<'w, 's> = Query<'w, 's, &'static mut DynamicText>;
-
 /// Recalculates the cached size for any [`DynamicText`] that was added or
 /// changed, and for every [`DynamicText`] when [`FontMetricsStore`] changed (a
 /// text measured with the default font while its own font was pending, or
@@ -36,23 +30,22 @@ type AllTexts<'w, 's> = Query<'w, 's, &'static mut DynamicText>;
 /// `FontStore`/`ffi::MeasureTextEx`, so this system has no GL-context
 /// dependency.
 pub fn dynamic_text_size_system(
-    mut texts: ParamSet<(ChangedTexts, AllTexts)>,
+    mut texts: Query<&mut DynamicText>,
     metrics: Res<FontMetricsStore>,
     pending: Res<PendingAssets>,
     mut warn_cache: ResMut<FontMetricsWarnCache>,
 ) {
-    let mut measure = |mut text: Mut<DynamicText>| {
+    let remeasure_all = metrics.is_changed();
+    for mut text in &mut texts {
+        if !remeasure_all && !text.is_changed() {
+            continue;
+        }
         debug!("Calculating size for DynamicText: '{}'", text.text);
         let Some(font_metrics) = metrics.resolve(&text.font, &pending, &mut warn_cache) else {
-            return;
+            continue;
         };
         let size = font_metrics.measure_text(&text.text, text.font_size, 1.0);
         text.bypass_change_detection().set_size(size);
-    };
-    if metrics.is_changed() {
-        texts.p1().iter_mut().for_each(&mut measure);
-    } else {
-        texts.p0().iter_mut().for_each(&mut measure);
     }
 }
 

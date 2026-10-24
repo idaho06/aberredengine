@@ -307,7 +307,7 @@ function engine.request_scene(name) end
 
 -- ==================== Asset Loading ====================
 
----Load a font from file
+---Load a font from file. The keys 'default' and '' are reserved for the embedded default font and are rejected
 ---@param id string
 ---@param path string
 ---@param size integer
@@ -1539,7 +1539,7 @@ function engine.set_gui_theme_button(theme_key, state, tex_key, source_x, source
 ---@param a integer
 function engine.set_gui_theme_button_shadow(theme_key, state, dx, dy, r, g, b, a) end
 
----Set the named theme's caption font/size/color in GuiThemeStore, used by every GuiButton/GuiLabel caption that references it
+---Set the named theme's caption font/size/color in GuiThemeStore, used by every GuiButton/GuiLabel caption that references it. An empty or 'default' font_key is the embedded default font
 ---@param theme_key string
 ---@param font_key string
 ---@param font_size number
@@ -2104,7 +2104,7 @@ function EntityBuilder:with_stuck_to_offset(offset_x, offset_y) end
 ---@return EntityBuilder
 function EntityBuilder:with_stuck_to_stored_velocity(vx, vy) end
 
----Set DynamicText component
+---Set DynamicText component. `font` is a loaded font key; 'default' (or '') is the embedded default font, available without loading anything, and an unknown key falls back to it with a warning
 ---@param content string
 ---@param font string
 ---@param font_size number
@@ -2699,7 +2699,7 @@ function CollisionEntityBuilder:with_stuck_to_offset(offset_x, offset_y) end
 ---@return CollisionEntityBuilder
 function CollisionEntityBuilder:with_stuck_to_stored_velocity(vx, vy) end
 
----Set DynamicText component
+---Set DynamicText component. `font` is a loaded font key; 'default' (or '') is the embedded default font, available without loading anything, and an unknown key falls back to it with a warning
 ---@param content string
 ---@param font string
 ---@param font_size number

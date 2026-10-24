@@ -153,12 +153,17 @@ impl FontMetricsStore {
         warn_cache: &mut FontMetricsWarnCache,
     ) -> &'a str {
         let known = |k: &str| self.0.contains_key(k);
-        if font_key_needs_warning(key, known(key), pending.contains(AssetKind::Font, key))
+        let is_known = known(key);
+        if font_key_needs_warning(key, is_known, pending.contains(AssetKind::Font, key))
             && warn_cache.warn_once(key)
         {
             warn!("Font '{key}' is not loaded, using the default font");
         }
-        resolve_font_key(key, known)
+        if is_known {
+            key
+        } else {
+            resolve_font_key(key, known)
+        }
     }
 
     /// The metrics a measurement of font `key` should use ([`resolve_key`]

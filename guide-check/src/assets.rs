@@ -66,7 +66,7 @@ mod loading_screen {
         commands.spawn((
             LoadingText,
             ScreenPosition::new(10.0, 10.0),
-            DynamicText::new("Loading…", "ui", 16.0, Color::WHITE),
+            DynamicText::new("Loading…", "default", 14.0, Color::WHITE),
         ));
     }
 
@@ -91,6 +91,18 @@ mod loading_screen {
             .on_scene_enter("loading", show_loading)
             .add_scene_system("loading", update_loading)
             .try_run()
+    }
+}
+
+// Default font
+mod default_font {
+    use aberredengine::prelude::*;
+
+    fn show_banner(_: On<SceneEntered>, mut commands: Commands) {
+        commands.spawn((
+            ScreenPosition::new(10.0, 10.0),
+            DynamicText::new("HP █████▌░░░", "default", 14.0, Color::WHITE),
+        ));
     }
 }
 

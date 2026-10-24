@@ -865,7 +865,7 @@ fn show_loading(_: On<SceneEntered>, mut commands: Commands) {
     commands.spawn((
         LoadingText,
         ScreenPosition::new(10.0, 10.0),
-        DynamicText::new("Loading…", "ui", 16.0, Color::WHITE),
+        DynamicText::new("Loading…", "default", 14.0, Color::WHITE),
     ));
 }
 
@@ -894,7 +894,7 @@ fn main() -> Result<(), EngineError> {
 ```
 
 - `WorldTime` doesn't advance during Setup, so a loading scene shows progress, not time-based animation (tweens, sprite animations).
-- Its text appears once its font has loaded; until then it simply doesn't draw.
+- Its text can use the [default font](#default-font), which is available before any load is answered; a font queued in the setup hook is not ready yet.
 - Leaving it tears it down along with everything spawned during Setup, the setup hook's spawns included. Mark what must survive `Persistent`, or spawn it in the initial scene.
 - During Setup the loading scene is the only scene: any other scene request (`NextScene::set`, a menu's `RequestScene`) is ignored with a warning, with or without a loading scene, and the engine always moves on to the first scene (see [Game lifecycle](#game-lifecycle)). A quit requested during Setup takes effect without waiting for loads.
 - In a deterministic game, spawn only from the loading scene's `SceneEntered` observer, never from its per-tick systems: the number of Setup ticks depends on load times, and entity ids must not.
@@ -982,6 +982,25 @@ Same `LogicMsg::TextureLoaded` reply and `TextureDimsStore` population as the pa
 To remove a previously-loaded texture (dropping its GPU handle), use `RenderAssetCmd::RemoveTexture { key }`. The render thread also reports `LogicMsg::TextureRemoved { key }`, which prunes the logic-side `TextureDimsStore` entry automatically — no manual cleanup needed on your side.
 
 To rename an already-loaded texture's key or change its sampling filter without reloading from disk, use `RenderAssetCmd::RenameTexture { old_key, new_key }` / `RenderAssetCmd::SetTextureFilter { key, filter }` — both are in-place `TextureStore` mutations (a key move / a single `SetTextureFilter` GL call), not a fresh load. `RenameTexture` reports `LogicMsg::TextureRenamed { old_key, new_key }`, which moves the `TextureDimsStore` entry to the new key automatically; `SetTextureFilter` has no logic-side effect to mirror. Both no-op with a warning if the key isn't loaded.
+
+### Default font
+
+The engine embeds [Departure Mono](https://departuremono.com) and loads it before the first tick, so text works without loading any font. Use the key `"default"` (or `""`) in `DynamicText`, menus and GUI themes, including in a loading scene before any `load_font` has been answered:
+
+```rust
+fn show_banner(_: On<SceneEntered>, mut commands: Commands) {
+    commands.spawn((
+        ScreenPosition::new(10.0, 10.0),
+        DynamicText::new("HP █████▌░░░", "default", 14.0, Color::WHITE),
+    ));
+}
+```
+
+- The key is reserved: `AssetLoader::load_font("default", ..)` returns `AssetError::ReservedFontKey`, and the render thread rejects a raw `RenderAssetCmd` that loads, removes or renames it (a rejected load is answered with `AssetLoadFailed`).
+- An unknown key draws and measures with the default font and logs one warning per key, unless a load of that key is still pending. An empty `GuiTheme.font` is the default font.
+- The charset covers Latin, Latin-1 and Latin Extended-A, punctuation, super- and subscripts, fractions, currency, math, arrows, box drawing, block elements and geometric shapes, so a progress bar can be drawn with text only (`█▏▎▍▌▋▊▉░▒▓`).
+- It is rasterized at 14 px with point sampling and no mipmaps. At a multiple of 14 (14, 28, 42, …) every glyph pixel lands on a screen pixel.
+- Departure Mono is licensed under the SIL Open Font License 1.1. A game that ships the engine's binary carries the notice: the license text is `crates/aberred-render/fonts/DepartureMono-LICENSE.txt`.
 
 ### Fonts
 
@@ -2068,9 +2087,7 @@ fn setup_gui_theme(mut theme_store: ResMut<GuiThemeStore>) {
 ```
 
 `GuiNinePatch::new(tex_key, source, border)` maps onto raylib's `NPatchInfo`: the `source` region of the texture, with a
-`border`-pixel border on every side (`.with_borders(left, top, right, bottom)` for per-side widths). `tex_key` must already be loaded into `TextureStore` (see [Section 6](#6-loading-assets)). `theme.font` defaults to an empty key — if it's
-still unset when a non-empty caption is about to spawn, the engine logs an `error!`; the caption entity still
-spawns, it just renders no visible glyphs.
+`border`-pixel border on every side (`.with_borders(left, top, right, bottom)` for per-side widths). `tex_key` must already be loaded into `TextureStore` (see [Section 6](#6-loading-assets)). `theme.font` defaults to an empty key, which is the [default font](#default-font).
 
 **`GuiTheme` fields of note:**
 - `panel: GuiNinePatch` — background patch for `GuiWindow`, `GuiLabel`, `GuiProgressBar`.
@@ -2839,7 +2856,7 @@ mod tests {
 }
 ```
 
-- No real assets load: `deliver_texture_dims(key, w, h)` and `deliver_font_metrics(key, metrics)` fake the render thread's load replies, and `sent_to_render` receives the `RenderMsg`s (asset commands, quit) the game would have sent.
+- No real assets load: the `"default"` font has synthetic metrics from the first tick, like the engine's embedded font, and `deliver_texture_dims(key, w, h)` and `deliver_font_metrics(key, metrics)` fake the render thread's load replies, and `sent_to_render` receives the `RenderMsg`s (asset commands, quit) the game would have sent.
 - `audio_cmds` receives the `AudioCmd`s your code writes; send fake replies through `audio_msgs_tx`.
 - `send_input(sample)` feeds one raw input sample: start from `RawDeviceSnapshot::default()` (`aberredengine::core::protocol::raw_input`) and press keys with `sample.set_key(Key::KEY_SPACE.as_u32())`. `present()` returns the `DrawableSnapshot` the render thread would draw.
 

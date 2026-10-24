@@ -11,7 +11,7 @@ use raylib::prelude::{Font, RaylibHandle, RaylibThread};
 #[cfg(test)]
 use std::ops::RangeInclusive;
 
-use crate::systems::assets::extract_font_metrics;
+use crate::systems::extract_font_metrics;
 
 /// The embedded font file.
 pub(crate) const DEFAULT_FONT_BYTES: &[u8] =

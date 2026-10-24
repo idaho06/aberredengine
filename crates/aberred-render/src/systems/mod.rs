@@ -15,7 +15,7 @@
 //! - `assets` – the render-thread GL asset loader ([`process_render_asset_cmds`])
 //! - [`raylib_access`] – bundled [`RaylibHandle`](raylib::RaylibHandle)/[`RaylibThread`](raylib::RaylibThread) `SystemParam`
 
-pub(crate) mod assets;
+mod assets;
 mod debug_overlay;
 mod gameconfig;
 mod geometry;
@@ -34,6 +34,7 @@ mod sprite;
 mod text;
 pub mod window;
 
+pub(crate) use assets::extract_font_metrics;
 pub use assets::process_render_asset_cmds;
 pub use gameconfig::apply_gameconfig_changes;
 pub use raylib_access::RaylibAccess;

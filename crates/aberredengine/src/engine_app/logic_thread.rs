@@ -773,19 +773,15 @@ mod tests {
     /// stores them, under the reserved key, before any system runs.
     #[test]
     fn the_default_font_metrics_sent_before_the_thread_exists_land_in_the_first_drain() {
-        let (tx_logic, rx_logic) = crossbeam_channel::unbounded::<LogicMsg>();
-        tx_logic
-            .send(LogicMsg::FontLoaded {
+        let mut world = drain_world();
+
+        drain_msgs(
+            &mut world,
+            vec![LogicMsg::FontLoaded {
                 key: aberred_core::resources::font_key::DEFAULT_FONT_KEY.into(),
                 metrics: Default::default(),
-            })
-            .unwrap();
-        let mut world = World::new();
-        world.init_resource::<FontMetricsStore>();
-        world.init_resource::<PendingAssets>();
-        world.init_resource::<LoadedAssets>();
-
-        drain_logic_messages(None, &rx_logic, &mut world);
+            }],
+        );
 
         assert!(
             world

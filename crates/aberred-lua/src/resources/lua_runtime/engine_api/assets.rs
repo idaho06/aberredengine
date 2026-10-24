@@ -25,7 +25,7 @@ impl LuaRuntime {
             asset_commands,
             |(id, path, size)| (String, String, i32),
             AssetCmd::Font { id, path, size },
-            desc = "Load a font from file",
+            desc = "Load a font from file. The keys 'default' and '' are reserved for the embedded default font and are rejected",
             cat = "asset",
             params = [("id", "string"), ("path", "string"), ("size", "integer")]
         );

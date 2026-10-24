@@ -74,7 +74,7 @@ pub(super) fn register<M: LuaUserDataMethods<LuaEntityBuilder>>(
         methods,
         meta,
         "with_text",
-        "Set DynamicText component",
+        "Set DynamicText component. `font` is a loaded font key; 'default' (or '') is the embedded default font, available without loading anything, and an unknown key falls back to it with a warning",
         [
             ("content", "string"),
             ("font", "string"),

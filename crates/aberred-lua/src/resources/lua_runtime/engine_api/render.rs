@@ -332,7 +332,7 @@ impl LuaRuntime {
                 b,
                 a
             },
-            desc = "Set the named theme's caption font/size/color in GuiThemeStore, used by every GuiButton/GuiLabel caption that references it",
+            desc = "Set the named theme's caption font/size/color in GuiThemeStore, used by every GuiButton/GuiLabel caption that references it. An empty or 'default' font_key is the embedded default font",
             cat = "render",
             params = [
                 ("theme_key", "string"),
