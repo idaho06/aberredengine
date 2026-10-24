@@ -86,6 +86,39 @@ local function build_gui_demo_window(ctx)
         :build()
 end
 
+--- Default-font specimen panel: the embedded "default" font (no engine.load_font
+-- needed) at 14/28/42 px, left column plain, right column with a shadow
+-- (shadow offset = size / 14 px). Each row mixes Latin accents with box-drawing
+-- and block/shape glyphs. The font is monospaced (advance = size / 2), so a
+-- row's width is char_count * size / 2; each column is ~100 px wide. Multiples
+-- of 14 keep every glyph pixel on a screen pixel.
+--- @param ctx EntityContext
+local function build_font_panel(ctx)
+    local rows = {
+        { size = 42, y = 6,  text = "Ñé┌░" },
+        { size = 28, y = 49, text = "¿Qué?■▲" },
+        { size = 14, y = 78, text = "Ñandú┌─┐│♥■▲" },
+    }
+    for _, row in ipairs(rows) do
+        -- Plain.
+        engine.spawn()
+            :with_text(row.text, "default", row.size, 255, 255, 255, 255)
+            :with_parent(ctx.id)
+            :with_gui_offset(6, row.y)
+            :with_z_index(2)
+            :build()
+        -- Shadowed.
+        local d = row.size / 14
+        engine.spawn()
+            :with_text(row.text, "default", row.size, 255, 255, 255, 255)
+            :with_shadow(d, d, 0, 0, 0, 200)
+            :with_parent(ctx.id)
+            :with_gui_offset(112, row.y)
+            :with_z_index(2)
+            :build()
+    end
+end
+
 --- Second window: spawned with no :with_screen_position() at all, so it has
 -- no ScreenPosition component and is invisible from frame 0 (visibility is
 -- presence/absence of ScreenPosition, per docs/gui-system-architecture.md).
@@ -589,6 +622,7 @@ M._callbacks = {
     on_hide_window2_clicked    = on_hide_window2_clicked,
     on_hide_window2_tween_done = on_hide_window2_tween_done,
     on_update_gui_demo         = on_update_gui_demo,
+    build_font_panel           = build_font_panel,
     -- Character window setup callbacks
     build_character_window     = build_character_window,
     on_char_enemy_timer_setup  = on_char_enemy_timer_setup,
@@ -631,16 +665,25 @@ function M.spawn()
         :with_z_index(1)
         :build()
 
-    -- Wave visualizer: stacked vertical bars at screen center (640×360).
-    -- Label at top; positive bar (Vertical, fills upward) directly above
-    -- negative bar (VerticalReversed, fills downward). Bars touch at y=192,
-    -- centering the group on y≈178. x=305 centers the 30px-wide bars on x=320.
+    -- Default-font specimen (build_font_panel): top-center, between window 1
+    -- (x<=210) and the character window (x>=440), below the title.
+    engine.spawn()
+        :with_gui_window(222, 100)
+        :with_screen_position(215, 36)
+        :with_z_index(0)
+        :with_lua_setup("build_font_panel")
+        :build()
+
+    -- Wave visualizer: stacked vertical bars at screen center (640×360),
+    -- below the font panel. Label at top; positive bar (Vertical, fills
+    -- upward) directly above negative bar (VerticalReversed, fills downward).
+    -- Bars touch at y=212. x=305 centers the 30px-wide bars on x=320.
     engine.spawn()
         :with_gui_label(110, 24, "0.0")
         :with_gui_label_signal_binding("wave")
         :with_gui_label_signal_binding_format("Wave: {}")
         :with_gui_theme_key("compact")
-        :with_screen_position(265, 114)
+        :with_screen_position(265, 138)
         :with_z_index(2)
         :build()
 
@@ -649,7 +692,7 @@ function M.spawn()
         :with_gui_progress_bar_vertical()
         :with_gui_progress_bar_signal_binding("wave_pos")
         :with_gui_theme_key("compact")
-        :with_screen_position(305, 142)
+        :with_screen_position(305, 162)
         :with_z_index(2)
         :build()
 
@@ -659,7 +702,7 @@ function M.spawn()
         :with_gui_progress_bar_reversed()
         :with_gui_progress_bar_signal_binding("wave_neg")
         :with_gui_theme_key("compact")
-        :with_screen_position(305, 192)
+        :with_screen_position(305, 212)
         :with_z_index(2)
         :build()
 
