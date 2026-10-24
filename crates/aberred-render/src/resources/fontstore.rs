@@ -9,6 +9,7 @@
 //! from the main thread only.
 
 // use bevy_ecs::prelude::Resource; // NonSend resource: use NonSend<FontStore> in system parameters
+use aberred_core::resources::font_key::resolve_font_key;
 use raylib::prelude::Font;
 use rustc_hash::FxHashMap;
 
@@ -19,12 +20,18 @@ pub struct FontMeta {
     pub font_size: f32,
 }
 
-/// Map of font keys to loaded fonts.
+/// Map of font keys to loaded fonts, plus the embedded default font.
+///
+/// The default font lives in its own slot rather than the map, so `remove`,
+/// `rename` and `clear` can never lose it. [`get`](Self::get) answers for
+/// loaded keys only; [`get_or_default`](Self::get_or_default) is the lookup
+/// for drawing, where an empty or unknown key means the default font.
 ///
 /// This is a non-send resource; use `NonSend<FontStore>` in system parameters.
 // NonSend resource: insert with insert_non_send and access via NonSend/NonSendMut
 pub struct FontStore {
     fonts: FxHashMap<String, Font>,
+    default: Option<Font>,
     pub meta: FxHashMap<String, FontMeta>,
 }
 
@@ -39,7 +46,16 @@ impl FontStore {
     pub fn new() -> Self {
         Self {
             fonts: FxHashMap::default(),
+            default: None,
             meta: FxHashMap::default(),
+        }
+    }
+
+    /// Create a store whose default font is `font`.
+    pub fn with_default(font: Font) -> Self {
+        Self {
+            default: Some(font),
+            ..Self::new()
         }
     }
 
@@ -64,6 +80,14 @@ impl FontStore {
     /// Get a font by its key.
     pub fn get(&self, id: impl AsRef<str>) -> Option<&Font> {
         self.fonts.get(id.as_ref())
+    }
+
+    /// Get the font a draw call should use for `id`: the loaded font under
+    /// that key, else the default font (an empty or unknown key). `None` only
+    /// when the key is unloaded and the store has no default font.
+    pub fn get_or_default(&self, id: impl AsRef<str>) -> Option<&Font> {
+        let key = resolve_font_key(id.as_ref(), |k| self.fonts.contains_key(k));
+        self.fonts.get(key).or(self.default.as_ref())
     }
 
     /// Rename a font key, moving both the font and its metadata.

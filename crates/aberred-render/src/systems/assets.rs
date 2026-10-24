@@ -231,7 +231,7 @@ pub(crate) fn apply_render_asset_cmd(
             font_size,
             spacing,
             color,
-        } => match fonts.get(&font_key) {
+        } => match fonts.get_or_default(&font_key) {
             None => Err(format!("font '{font_key}' is not loaded")),
             Some(font) => load_texture_from_text(
                 rl,

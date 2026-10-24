@@ -653,7 +653,7 @@ pub fn render_system(
             {
                 aberred_core::tracy::tracy_span!("render/draw_world_texts");
                 for item in text_buffer.iter() {
-                    if let Some(font) = fonts.get(&item.text.font) {
+                    if let Some(font) = fonts.get_or_default(&item.text.font) {
                         let final_color = resolve_text_tint(item.maybe_tint, item.text.color);
                         let draw_pos = vec2_to_raylib(item.resolved_pos.pos);
 

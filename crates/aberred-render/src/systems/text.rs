@@ -12,7 +12,7 @@ pub(super) fn draw_screen_text_item(
     debug: bool,
 ) {
     let pos = item.pos;
-    if let Some(font) = fonts.get(&item.font) {
+    if let Some(font) = fonts.get_or_default(&item.font) {
         let final_color = resolve_text_tint(item.maybe_tint, item.color);
         if let Some(shadow) = item.maybe_shadow {
             let shadow_pos = Vector2 {
