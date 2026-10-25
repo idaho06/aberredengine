@@ -58,6 +58,38 @@ impl LuaRuntime {
         }
     }
 
+    /// Moves the scene `on_setup` requested out of the signal queue.
+    ///
+    /// Removes every `SignalCmd::RequestScene` (other signal commands keep
+    /// their order) and remembers the last name, as `NextScene::set` would, for
+    /// [`take_setup_scene_request`](Self::take_setup_scene_request). Without
+    /// this, a loading scene's entry drains the queue during Setup, where the
+    /// scene switch refuses any target but the loading scene and consumes the
+    /// request.
+    pub fn stash_setup_scene_request(&self) {
+        let Some(data) = self.lua.app_data_ref::<LuaAppData>() else {
+            return;
+        };
+        let mut slot = data.setup_scene_request.borrow_mut();
+        data.signal_commands
+            .borrow_mut()
+            .retain(|queued| match &queued.cmd {
+                SignalCmd::RequestScene { name } => {
+                    *slot = Some(name.clone());
+                    false
+                }
+                _ => true,
+            });
+    }
+
+    /// The scene [`stash_setup_scene_request`](Self::stash_setup_scene_request)
+    /// set aside, once.
+    pub fn take_setup_scene_request(&self) -> Option<String> {
+        self.lua
+            .app_data_ref::<LuaAppData>()
+            .and_then(|data| data.setup_scene_request.borrow_mut().take())
+    }
+
     // -------------------------------------------------------------------------
     // Cache updates
     // -------------------------------------------------------------------------
@@ -228,5 +260,54 @@ mod tests {
         );
         assert_eq!(seqs(|o| runtime.drain_spawn_commands_into(o)), [3]);
         assert_eq!(seqs(|o| runtime.drain_clone_commands_into(o)), [4]);
+    }
+
+    #[test]
+    fn stash_setup_scene_request_removes_only_scene_requests_and_keeps_the_last() {
+        let runtime = LuaRuntime::new().expect("LuaRuntime::new");
+        runtime
+            .lua()
+            .load(
+                "engine.set_flag('f')\n\
+                 engine.request_scene('a')\n\
+                 engine.set_integer('n', 1)\n\
+                 engine.request_scene('b')",
+            )
+            .exec()
+            .expect("script runs");
+
+        runtime.stash_setup_scene_request();
+
+        assert_eq!(runtime.take_setup_scene_request().as_deref(), Some("b"));
+        assert_eq!(runtime.take_setup_scene_request(), None, "taken once");
+        let mut signals = Vec::new();
+        runtime.drain_signal_commands_into(&mut signals);
+        assert!(matches!(
+            signals.as_slice(),
+            [
+                Ordered {
+                    cmd: SignalCmd::SetFlag { .. },
+                    ..
+                },
+                Ordered {
+                    cmd: SignalCmd::SetInteger { .. },
+                    ..
+                },
+            ]
+        ));
+    }
+
+    #[test]
+    fn stash_setup_scene_request_without_a_request_stores_nothing() {
+        let runtime = LuaRuntime::new().expect("LuaRuntime::new");
+        runtime
+            .lua()
+            .load("engine.set_flag('f')")
+            .exec()
+            .expect("script runs");
+
+        runtime.stash_setup_scene_request();
+
+        assert_eq!(runtime.take_setup_scene_request(), None);
     }
 }

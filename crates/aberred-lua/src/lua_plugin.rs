@@ -111,6 +111,8 @@ pub fn setup(
     {
         error!("Error calling on_setup: {}", e);
     }
+    // Set aside for `enter_play`: see `stash_setup_scene_request`.
+    lua_runtime.stash_setup_scene_request();
 
     // Process asset commands queued by Lua (setup runs once; no persistent
     // buffer needed): Music/Sound to the audio thread, the rest queued as
@@ -165,6 +167,10 @@ pub fn enter_play(
                 error!("Error calling on_enter_play: {}", e);
             }
         }
+    }
+
+    if let Some(name) = lua_runtime.take_setup_scene_request() {
+        next_scene.set(name);
     }
 
     // enter_play runs once; stack-local buffers are sufficient

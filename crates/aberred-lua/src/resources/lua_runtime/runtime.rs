@@ -94,6 +94,8 @@ crate::lua_queues! {app_data_struct {
     pub(super) last_input: RefCell<Option<(u64, InputSnapshot)>>,
     /// Next [`Ordered::seq`], shared by every stamped queue.
     pub(super) next_seq: Cell<u64>,
+    /// The scene `on_setup` requested; see `LuaRuntime::stash_setup_scene_request`.
+    pub(super) setup_scene_request: RefCell<Option<String>>,
 }}
 
 /// A queued command stamped with its place in the script's call order.

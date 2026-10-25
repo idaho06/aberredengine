@@ -3377,3 +3377,87 @@ fn test_world_rejects_an_overlong_tracked_group() {
         "{err}"
     );
 }
+
+// ── Lua on_setup scene request ───────────────────────────────────────────
+
+/// A Lua `on_setup` that requests a scene, logging each scene entered.
+#[cfg(feature = "lua")]
+const LUA_SETUP_REQUEST: &str = r#"
+function on_setup() engine.request_scene("b") end
+function on_scene_enter(scene) table.insert(LOG, "enter:" .. scene) end
+"#;
+
+/// `engine.request_scene` from `on_setup` picks the first scene.
+#[cfg(feature = "lua")]
+#[test]
+fn lua_on_setup_request_scene_enters_that_scene() {
+    let mut tw = lua_script_world_with("setup_request_scene", LUA_SETUP_REQUEST, |builder| {
+        builder.add_scene("a").add_scene("b").initial_scene("a")
+    });
+    tw.tick(1, DT);
+
+    assert_eq!(take_lua_log(&mut tw), ["enter:b"]);
+}
+
+/// The same request still picks the first scene when a loading scene is shown
+/// during Setup: the loading scene's own entry must not consume it.
+#[cfg(feature = "lua")]
+#[test]
+fn lua_on_setup_request_scene_survives_the_loading_scene() {
+    let mut tw = lua_script_world_unplayed_with(
+        "setup_request_scene_loading",
+        LUA_SETUP_REQUEST,
+        |builder| with_loading_scene(builder).add_scene("b"),
+    );
+    assert_eq!(play_through_loading(&mut tw), ["enter:b"]);
+    assert_eq!(
+        tw.world.resource::<WorldSignals>().get_string(sk::SCENE),
+        Some("b")
+    );
+}
+
+/// Ticks a Lua loading-scene world through Setup and into its first scene:
+/// returns the Lua log written after the loading scene was entered.
+#[cfg(feature = "lua")]
+fn play_through_loading(tw: &mut TestWorld) -> Vec<String> {
+    tw.tick(3, DT);
+    take_lua_log(tw);
+    tw.deliver_texture_dims("player", 8, 8);
+    tw.tick_to_play(DT, 8);
+    tw.tick(1, DT);
+    take_lua_log(tw)
+}
+
+/// An `on_enter_play` request replaces the `on_setup` one, loading scene or not.
+#[cfg(feature = "lua")]
+#[test]
+fn lua_on_enter_play_request_beats_the_on_setup_request_with_a_loading_scene() {
+    let mut tw = lua_script_world_unplayed_with(
+        "setup_then_enter_play_request",
+        r#"
+function on_setup() engine.request_scene("b") end
+function on_enter_play() engine.request_scene("c") return "" end
+function on_scene_enter(scene) table.insert(LOG, "enter:" .. scene) end
+"#,
+        |builder| with_loading_scene(builder).add_scene("b").add_scene("c"),
+    );
+    assert_eq!(play_through_loading(&mut tw), ["enter:c"]);
+}
+
+/// A request from the loading scene's own `on_scene_enter` is still refused by
+/// the Setup rule: only `on_setup` and `on_enter_play` pick the first scene.
+#[cfg(feature = "lua")]
+#[test]
+fn lua_loading_scene_enter_request_is_still_ignored_by_the_setup_rule() {
+    let mut tw = lua_script_world_unplayed_with(
+        "loading_enter_request",
+        r#"
+function on_scene_enter(scene)
+    table.insert(LOG, "enter:" .. scene)
+    if scene == "loading" then engine.request_scene("b") end
+end
+"#,
+        |builder| with_loading_scene(builder).add_scene("b"),
+    );
+    assert_eq!(play_through_loading(&mut tw), ["enter:game"]);
+}
