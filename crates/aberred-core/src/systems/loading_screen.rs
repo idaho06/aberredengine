@@ -1,5 +1,10 @@
-//! The engine's own loading screen: a dark-grey scene with the engine name
+//! The engine's own loading screen: a dark-grey overlay with the engine name
 //! and a progress bar drawn with default-font glyphs.
+//!
+//! It is shown while the game is in `Setup` and is not a scene: it fires no
+//! scene events and has no `SceneManager` entry. [`show_loading_screen`] and
+//! [`hide_loading_screen`] run as the `SHOW_LOADING_SCREEN` and
+//! `HIDE_LOADING_SCREEN` hooks on entering and leaving `Setup`.
 //!
 //! The layout functions are pure so the screen's text can be pinned without
 //! a window or font metrics.
@@ -9,17 +14,12 @@ use bevy_ecs::prelude::*;
 use crate::components::dynamic_text::DynamicText;
 use crate::components::screen_position::ScreenPosition;
 use crate::components::shadow::Shadow;
-use crate::events::scene::{SceneEntered, SceneExited};
 use crate::math::Color;
 use crate::resources::font_key::DEFAULT_FONT_KEY;
 use crate::resources::font_metrics::FontMetricsStore;
 use crate::resources::game_config::GameConfig;
 use crate::resources::pending_assets::PendingAssets;
 use crate::resources::render_size::RenderSize;
-
-/// Name of the loading scene. Prefixed so it cannot clash with a game's own
-/// scene names.
-pub const LOADING_SCENE: &str = "aberred_loading";
 
 /// Cells between the bar's two side borders.
 pub const BAR_INNER_WIDTH: usize = 30;
@@ -36,50 +36,35 @@ const BAR_OFFSET_ROWS: f32 = 4.0;
 /// Rows the whole screen occupies: the title block plus the three bar rows.
 const TOTAL_ROWS: f32 = BAR_OFFSET_ROWS + 3.0;
 
+/// Marks every entity of the loading screen, so hiding it despawns exactly
+/// these.
+#[derive(Component)]
+pub struct EngineLoadingScreen;
+
 /// Marks the bar's middle row, the only text that changes while loading.
 #[derive(Component)]
 pub struct LoadingBar;
 
-/// The game's background color, kept while the loading scene paints its own.
+/// The game's background color, kept while the loading screen paints its own.
 #[derive(Resource)]
 pub struct SavedBackground(pub Color);
 
-/// Saves the game's background color and paints [`BACKGROUND`] when the
-/// loading scene is entered.
-pub fn set_loading_background(
-    _: On<SceneEntered>,
-    mut commands: Commands,
-    mut config: ResMut<GameConfig>,
-) {
-    commands.insert_resource(SavedBackground(config.background_color));
-    config.background_color = BACKGROUND;
-}
-
-/// Gives the game's background color back when the loading scene is left.
-pub fn restore_background(
-    _: On<SceneExited>,
-    mut commands: Commands,
-    mut config: ResMut<GameConfig>,
-    saved: Option<Res<SavedBackground>>,
-) {
-    if let Some(saved) = saved {
-        config.background_color = saved.0;
-        commands.remove_resource::<SavedBackground>();
-    }
-}
-
-/// Spawns the loading screen's texts when the loading scene is entered,
-/// centered on the render size, with the bar at the current load progress.
+/// Shows the loading screen: saves the game's background color and paints
+/// [`BACKGROUND`], then spawns the texts centered on the render size, with
+/// the bar at the current load progress.
 ///
 /// Widths come from the default font's metrics; without them the texts
 /// center as if zero wide.
-pub fn spawn_loading_screen(
-    _: On<SceneEntered>,
+pub fn show_loading_screen(
     mut commands: Commands,
+    mut config: ResMut<GameConfig>,
     render_size: Res<RenderSize>,
     metrics: Res<FontMetricsStore>,
     pending: Res<PendingAssets>,
 ) {
+    commands.insert_resource(SavedBackground(config.background_color));
+    config.background_color = BACKGROUND;
+
     let width_of = |text: &str| {
         metrics
             .0
@@ -93,6 +78,7 @@ pub fn spawn_loading_screen(
 
     for (row, content) in [(0.0, "AberredEngine"), (2.0, "Loading...")] {
         commands.spawn((
+            EngineLoadingScreen,
             text(content),
             ScreenPosition::new(
                 centered_x(screen_width, width_of(content)),
@@ -111,10 +97,27 @@ pub fn spawn_loading_screen(
     for (index, content) in rows.iter().enumerate() {
         let position =
             ScreenPosition::new(bar_x, top + (BAR_OFFSET_ROWS + index as f32) * ROW_HEIGHT);
-        let mut row = commands.spawn((text(content), position));
+        let mut row = commands.spawn((EngineLoadingScreen, text(content), position));
         if index == 1 {
             row.insert(LoadingBar);
         }
+    }
+}
+
+/// Hides the loading screen: despawns its entities and gives the game's
+/// background color back.
+pub fn hide_loading_screen(
+    mut commands: Commands,
+    screens: Query<Entity, With<EngineLoadingScreen>>,
+    mut config: ResMut<GameConfig>,
+    saved: Option<Res<SavedBackground>>,
+) {
+    for entity in &screens {
+        commands.entity(entity).despawn();
+    }
+    if let Some(saved) = saved {
+        config.background_color = saved.0;
+        commands.remove_resource::<SavedBackground>();
     }
 }
 

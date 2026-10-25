@@ -73,6 +73,8 @@ pub(crate) struct LogicInit {
     pub(crate) scenes: Vec<String>,
     pub(crate) initial_scene: Option<String>,
     pub(crate) loading_scene: Option<String>,
+    /// `EngineBuilder::engine_loading_screen`: register the show/hide hooks.
+    pub(crate) engine_loading_screen: bool,
     /// Scene-persistent group names (`EngineBuilder::track_group`).
     pub(crate) tracked_groups: Vec<String>,
     #[cfg(feature = "lua")]

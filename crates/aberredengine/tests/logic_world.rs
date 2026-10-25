@@ -58,7 +58,7 @@ use aberredengine::core::resources::signal_keys as sk;
 use aberredengine::core::resources::world_signals::WorldSignals;
 use aberredengine::core::systems::asset_loader::{AssetError, AssetLoader};
 use aberredengine::core::systems::loading_screen::{
-    BACKGROUND, BAR_INNER_WIDTH, LOADING_SCENE, SavedBackground, bar_bottom, bar_middle, bar_top,
+    BACKGROUND, BAR_INNER_WIDTH, SavedBackground, bar_bottom, bar_middle, bar_top,
 };
 use aberredengine::core::systems::scene_dispatch::in_scene;
 use aberredengine::engine_app::SimSet;
@@ -1359,12 +1359,15 @@ fn engine_loading_screen_builder() -> TestWorldBuilder {
     TestWorld::builder()
         .add_scene("game")
         .initial_scene("game")
-        .on_setup(|mut assets: AssetLoader| -> Result {
-            for key in ["t0", "t1", "t2", "t3"] {
-                assets.load_texture(key, "player.png")?;
-            }
-            Ok(())
-        })
+        .on_setup(
+            |mut assets: AssetLoader, mut commands: Commands| -> Result {
+                commands.init_resource::<SceneLog>();
+                for key in ["t0", "t1", "t2", "t3"] {
+                    assets.load_texture(key, "player.png")?;
+                }
+                Ok(())
+            },
+        )
         .engine_loading_screen()
 }
 
@@ -1502,10 +1505,9 @@ fn the_loading_screen_paints_its_background_and_restores_the_old_one() {
     assert!(tw.world.get_resource::<SavedBackground>().is_none());
 }
 
-/// The loading scene is registered by `engine_loading_screen()` alone, and a
-/// second call changes nothing.
+/// A second call changes nothing: still one set of texts, and no scene.
 #[test]
-fn engine_loading_screen_twice_registers_once() {
+fn engine_loading_screen_twice_shows_one_screen_and_no_scene() {
     let mut tw = engine_loading_screen_builder()
         .engine_loading_screen()
         .build()
@@ -1513,20 +1515,170 @@ fn engine_loading_screen_twice_registers_once() {
     tw.tick(2, DT);
 
     assert_eq!(loading_screen_rows(&mut tw).len(), 5);
+    assert_eq!(tw.world.resource::<SceneManager>().loading_scene, None);
+}
+
+/// The engine screen is not a scene: a game's own scene observers see only
+/// the game's scenes.
+#[test]
+fn the_engine_loading_screen_fires_no_scene_events() {
+    let mut tw = engine_loading_screen_builder()
+        .add_observer(log_scene_entered)
+        .add_observer(log_scene_exited)
+        .build()
+        .expect("build should succeed");
+    tw.tick(2, DT);
+    for key in ["t0", "t1", "t2", "t3"] {
+        tw.deliver_texture_dims(key, 8, 8);
+    }
+    tw.tick(4, DT);
+
     assert_eq!(
-        tw.world.resource::<SceneManager>().loading_scene.as_deref(),
-        Some(LOADING_SCENE)
+        tw.world.resource::<SceneLog>().0,
+        ["enter game (entity game) from None"]
     );
 }
 
-/// `engine_loading_screen()` registers a scene like any other: without an
-/// initial scene the build fails the normal way.
+/// With no scene of its own, a game still builds with the engine screen: the
+/// implicit `"main"` scene is the initial one.
 #[test]
-fn engine_loading_screen_alone_needs_an_initial_scene() {
-    assert!(matches!(
-        build_err(TestWorld::builder().engine_loading_screen()),
-        aberredengine::EngineError::AddSceneRequiresInitialScene
-    ));
+fn engine_loading_screen_alone_builds_with_the_implicit_main_scene() {
+    TestWorld::builder()
+        .engine_loading_screen()
+        .build()
+        .expect("build should succeed");
+}
+
+// ── engine loading screen + Lua ──────────────────────────────────────────
+
+/// A Lua game behind the engine loading screen, still in Setup. `script` gets
+/// an `on_setup` texture load prepended so the screen stays up.
+#[cfg(feature = "lua")]
+fn engine_screen_lua_world(script: &str, extra_scenes: &[&str]) -> TestWorld {
+    let script =
+        format!("local function load() engine.load_texture('player', 'player.png') end\n{script}");
+    lua_script_world_unplayed_with(&script, |builder| {
+        extra_scenes
+            .iter()
+            .fold(
+                builder.add_scene("main").initial_scene("main"),
+                |builder, scene| builder.add_scene(*scene),
+            )
+            .engine_loading_screen()
+    })
+}
+
+/// Ticks an [`engine_screen_lua_world`] through Setup into its first scene:
+/// returns the Lua log written while the loading screen was up, then the log
+/// written from the first scene on.
+#[cfg(feature = "lua")]
+fn play_through_engine_screen(tw: &mut TestWorld) -> (Vec<String>, Vec<String>) {
+    tw.tick(3, DT);
+    let during_loading = take_lua_log(tw);
+    tw.deliver_texture_dims("player", 8, 8);
+    tw.tick_to_play(DT, 8);
+    tw.tick(1, DT);
+    (during_loading, take_lua_log(tw))
+}
+
+#[cfg(feature = "lua")]
+fn group_count(tw: &mut TestWorld, name: &str) -> usize {
+    tw.world
+        .query::<&Group>()
+        .iter(&tw.world)
+        .filter(|group| group.name() == name)
+        .count()
+}
+
+/// The script never sees the engine screen: `on_scene_enter` runs for the
+/// game's first scene only.
+#[cfg(feature = "lua")]
+#[test]
+fn lua_on_scene_enter_never_sees_the_engine_loading_screen() {
+    let mut tw = engine_screen_lua_world(
+        r#"
+function on_setup() load() end
+function on_scene_enter(scene) table.insert(LOG, "enter:" .. scene) end
+"#,
+        &[],
+    );
+    let (during_loading, after) = play_through_engine_screen(&mut tw);
+    assert_eq!(during_loading, Vec::<String>::new());
+    assert_eq!(after, ["enter:main"]);
+}
+
+/// A spawn queued by `on_enter_play` lands in the first scene: leaving the
+/// engine screen neither wipes the queue nor tears the entity down.
+#[cfg(feature = "lua")]
+#[test]
+fn lua_on_enter_play_spawn_survives_the_engine_loading_screen() {
+    let mut tw = engine_screen_lua_world(
+        r#"
+function on_setup() load() end
+function on_enter_play()
+    engine.spawn():with_group("from_enter_play"):with_position(0, 0):build()
+    return ""
+end
+"#,
+        &[],
+    );
+    play_through_engine_screen(&mut tw);
+    assert_eq!(group_count(&mut tw, "from_enter_play"), 1);
+}
+
+/// What `on_setup` spawns exists in the first scene, as it does without a
+/// loading screen.
+#[cfg(feature = "lua")]
+#[test]
+fn lua_on_setup_spawn_survives_the_engine_loading_screen() {
+    let mut tw = engine_screen_lua_world(
+        r#"
+function on_setup()
+    load()
+    engine.spawn():with_group("from_setup"):with_position(0, 0):build()
+end
+"#,
+        &[],
+    );
+    play_through_engine_screen(&mut tw);
+    assert_eq!(group_count(&mut tw, "from_setup"), 1);
+}
+
+/// A background color set in `on_setup` is the game's color once loading
+/// ends: the restore must not bring back the pre-script one.
+#[cfg(feature = "lua")]
+#[test]
+fn lua_on_setup_background_color_is_kept_after_the_engine_loading_screen() {
+    let mut tw = engine_screen_lua_world(
+        r#"
+function on_setup()
+    load()
+    engine.set_background_color(1, 2, 3)
+end
+"#,
+        &[],
+    );
+    play_through_engine_screen(&mut tw);
+    assert_eq!(
+        tw.world.resource::<GameConfig>().background_color,
+        Color::new(1, 2, 3, 255)
+    );
+}
+
+/// An `on_setup` scene request still picks the first scene behind the engine
+/// loading screen.
+#[cfg(feature = "lua")]
+#[test]
+fn lua_on_setup_request_scene_survives_the_engine_loading_screen() {
+    let mut tw = engine_screen_lua_world(
+        r#"
+function on_setup() load() engine.request_scene("level1") end
+function on_scene_enter(scene) table.insert(LOG, "enter:" .. scene) end
+"#,
+        &["level1"],
+    );
+    let (_, after) = play_through_engine_screen(&mut tw);
+    assert_eq!(after, ["enter:level1"]);
 }
 
 #[derive(Resource, Default)]

@@ -6,17 +6,14 @@ use bevy_ecs::system::IntoObserverSystem;
 use super::registrar::{
     HookRegistrar, ObserverRegistrar, UpdateRegistrar, hook_registrar, late_scene_system,
     observer_registrar, playing_late_system, playing_late_system_if, playing_system,
-    playing_system_if, scene_observer_registrar, scene_system,
+    playing_system_if, scene_observer_registrar, scene_system, setup_system,
 };
 #[cfg(doc)] // doc links
 use super::schedule::SimSet;
 use super::validate::record_scene_ref;
 use aberred_core::events::scene::{SceneEntered, SceneExited};
 use aberred_core::resources::systems_store as hook_keys;
-use aberred_core::systems::loading_screen::{
-    LOADING_SCENE, restore_background, set_loading_background, spawn_loading_screen,
-    update_loading_bar,
-};
+use aberred_core::systems::loading_screen::update_loading_bar;
 use aberred_core::systems::scene_dispatch::WorldDrawCallback;
 use aberred_render::resources::scene_table::{GuiCallback, RenderSceneTable, SceneRender};
 use rustc_hash::FxHashMap;
@@ -44,6 +41,8 @@ pub struct EngineBuilder {
     pub(super) initial_scene: Option<String>,
     /// `.loading_scene()`: the scene active during `Setup`.
     pub(super) loading_scene: Option<String>,
+    /// `.engine_loading_screen()`: the engine's own overlay during `Setup`.
+    pub(super) engine_loading_screen: bool,
     /// Group names from `.track_group()`, tracked across scene switches.
     pub(super) tracked_groups: Vec<String>,
     pub(super) extra_systems: Vec<UpdateRegistrar>,
@@ -80,6 +79,7 @@ impl EngineBuilder {
             scene_render: FxHashMap::default(),
             initial_scene: None,
             loading_scene: None,
+            engine_loading_screen: false,
             tracked_groups: Vec::new(),
             extra_systems: Vec::new(),
             extra_observers: Vec::new(),
@@ -506,13 +506,12 @@ impl EngineBuilder {
 
     /// Show the engine's own loading screen while `Setup` waits for assets.
     ///
-    /// Registers the reserved scene [`LOADING_SCENE`] and makes it the
-    /// [`loading_scene`](Self::loading_scene): a dark-grey screen with the
-    /// engine name and a progress bar that fills as the queued loads are
-    /// answered. The game's background color comes back when it ends. A
-    /// second call changes nothing; the engine screen replaces any other
-    /// loading scene. Still needs [`add_scene`](Self::add_scene) and
-    /// [`initial_scene`](Self::initial_scene) for the game's own scenes.
+    /// A dark-grey overlay with the engine name and a progress bar that fills
+    /// as the queued loads are answered. It is not a scene: it fires no scene
+    /// events, scripts never see it, and it is removed (and the game's
+    /// background color restored) when `Setup` ends, before the first scene is
+    /// entered. A second call changes nothing. It is independent of
+    /// [`loading_scene`](Self::loading_scene); using both shows both.
     ///
     /// ```rust,ignore
     /// EngineBuilder::new()
@@ -520,16 +519,12 @@ impl EngineBuilder {
     ///     .add_scene("level01")
     ///     .initial_scene("level01")
     /// ```
-    pub fn engine_loading_screen(self) -> Self {
-        if self.loading_scene.as_deref() == Some(LOADING_SCENE) {
-            return self;
+    pub fn engine_loading_screen(mut self) -> Self {
+        if !self.engine_loading_screen {
+            self.engine_loading_screen = true;
+            self.extra_systems.push(setup_system(update_loading_bar));
         }
-        self.add_scene(LOADING_SCENE)
-            .on_scene_enter(LOADING_SCENE, spawn_loading_screen)
-            .on_scene_enter(LOADING_SCENE, set_loading_background)
-            .on_scene_exit(LOADING_SCENE, restore_background)
-            .add_scene_system(LOADING_SCENE, update_loading_bar)
-            .loading_scene(LOADING_SCENE)
+        self
     }
 
     /// Track the entity count of group `name` for the whole game.

@@ -56,6 +56,7 @@ use aberred_core::resources::world_signals::WorldSignals;
 use aberred_core::resources::world_time::WorldTime;
 use aberred_core::systems::collision_rule::collision_rule_observer;
 use aberred_core::systems::game_state::{clean_all_entities, quit_game};
+use aberred_core::systems::loading_screen::{hide_loading_screen, show_loading_screen};
 use aberred_core::systems::map_spawn::spawn_map_observer;
 use aberred_core::systems::menu::{
     menu_controller_observer, menu_despawn, menu_selection_observer,
@@ -272,6 +273,20 @@ impl EngineBuilder {
                 &mut systems_store,
                 hook_keys::ENTER_SETUP,
                 scene_enter_loading,
+            );
+        }
+        if init.engine_loading_screen {
+            register_persistent_system(
+                world,
+                &mut systems_store,
+                hook_keys::SHOW_LOADING_SCREEN,
+                show_loading_screen,
+            );
+            register_persistent_system(
+                world,
+                &mut systems_store,
+                hook_keys::HIDE_LOADING_SCREEN,
+                hide_loading_screen,
             );
         }
         register_persistent_system(

@@ -6,7 +6,7 @@ use super::schedule::{LateUserSystems, SimSet};
 use aberred_core::components::persistent::Persistent;
 use aberred_core::resources::scene_manager::SceneManager;
 use aberred_core::resources::systems_store::SystemsStore;
-use aberred_core::systems::game_state::{state_is_playing, state_runs_scenes};
+use aberred_core::systems::game_state::{state_is_playing, state_is_setup, state_runs_scenes};
 use aberred_core::systems::scene_dispatch::{in_scene, past_scene_entry};
 
 /// Closure that registers a system into the world and inserts its ID into
@@ -78,6 +78,13 @@ pub(crate) fn playing_late_system_if<M, MC>(
         system,
         state_is_playing.and_then(condition),
     )
+}
+
+/// A system that runs while the game is in `Setup`, in [`SimSet::Update`].
+pub(crate) fn setup_system<M>(
+    system: impl IntoSystem<(), (), M> + Send + 'static,
+) -> UpdateRegistrar {
+    system_registrar(SimSet::Update, system, state_is_setup)
 }
 
 /// `add_scene_system`: runs while `scene` is active, in `Setup` (a loading

@@ -46,8 +46,8 @@ use crate::engine_app::{
     drain_logic_messages, ensure_main_scene, hold_back_deterministic_setup_input, hook_registrar,
     in_envelope, late_scene_system, observer_registrar, playing_late_system,
     playing_late_system_if, playing_system, playing_system_if, record_scene_ref, run_sim_tick,
-    scene_observer_registrar, scene_system, validate_scene_manager, validate_scene_refs,
-    validate_tracked_groups,
+    scene_observer_registrar, scene_system, setup_system, validate_scene_manager,
+    validate_scene_refs, validate_tracked_groups,
 };
 use aberred_core::events::scene::{SceneEntered, SceneExited};
 use aberred_core::protocol::audio::{AudioCmd, AudioMessage};
@@ -62,10 +62,7 @@ use aberred_core::resources::font_metrics::{FontMetrics, FontMetricsStore};
 use aberred_core::resources::game_config::GameConfig;
 use aberred_core::resources::game_state::{CurrentGameState, GameState};
 use aberred_core::resources::systems_store as hook_keys;
-use aberred_core::systems::loading_screen::{
-    LOADING_SCENE, restore_background, set_loading_background, spawn_loading_screen,
-    update_loading_bar,
-};
+use aberred_core::systems::loading_screen::update_loading_bar;
 use aberred_core::systems::time::update_world_time;
 
 /// A headless logic-thread `World` plus its `sim`/`present` schedules.
@@ -100,6 +97,7 @@ pub struct TestWorldBuilder {
     scenes: Vec<String>,
     initial_scene: Option<String>,
     loading_scene: Option<String>,
+    engine_loading_screen: bool,
     /// `(method, scene)` for every method that names a scene, checked at
     /// `build()` like `EngineBuilder`'s `scene_refs`.
     scene_refs: Vec<(&'static str, String)>,
@@ -131,6 +129,7 @@ impl TestWorldBuilder {
             scenes: Vec::new(),
             initial_scene: None,
             loading_scene: None,
+            engine_loading_screen: false,
             scene_refs: Vec::new(),
             tracked_groups: Vec::new(),
             #[cfg(feature = "lua")]
@@ -280,16 +279,12 @@ impl TestWorldBuilder {
 
     /// Show the engine's own loading screen, mirroring
     /// `EngineBuilder::engine_loading_screen`.
-    pub fn engine_loading_screen(self) -> Self {
-        if self.loading_scene.as_deref() == Some(LOADING_SCENE) {
-            return self;
+    pub fn engine_loading_screen(mut self) -> Self {
+        if !self.engine_loading_screen {
+            self.engine_loading_screen = true;
+            self.extra_systems.push(setup_system(update_loading_bar));
         }
-        self.add_scene(LOADING_SCENE)
-            .on_scene_enter(LOADING_SCENE, spawn_loading_screen)
-            .on_scene_enter(LOADING_SCENE, set_loading_background)
-            .on_scene_exit(LOADING_SCENE, restore_background)
-            .add_scene_system(LOADING_SCENE, update_loading_bar)
-            .loading_scene(LOADING_SCENE)
+        self
     }
 
     /// Records that `method` names `scene`, for the check at `build()` that
@@ -364,6 +359,7 @@ impl TestWorldBuilder {
             scenes: std::mem::take(&mut self.scenes),
             initial_scene: self.initial_scene.take(),
             loading_scene: self.loading_scene,
+            engine_loading_screen: self.engine_loading_screen,
             tracked_groups: std::mem::take(&mut self.tracked_groups),
             #[cfg(feature = "lua")]
             lua_script,
