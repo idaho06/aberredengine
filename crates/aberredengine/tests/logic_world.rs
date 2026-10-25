@@ -49,6 +49,7 @@ use aberredengine::core::resources::input::InputAction;
 use aberredengine::core::resources::input::InputState;
 use aberredengine::core::resources::input_bindings::MouseButton;
 use aberredengine::core::resources::loaded_assets::LoadedAssets;
+use aberredengine::core::resources::loading_hold::LoadingHold;
 use aberredengine::core::resources::next_scene::NextScene;
 use aberredengine::core::resources::pending_assets::PendingAssets;
 use aberredengine::core::resources::render_size::RenderSize;
@@ -1460,7 +1461,8 @@ fn the_loading_screen_is_torn_down_when_loading_ends() {
     for key in ["t0", "t1", "t2", "t3"] {
         tw.deliver_texture_dims(key, 8, 8);
     }
-    tw.tick(4, DT);
+    tw.tick_to_play(DT, 1000);
+    tw.tick(1, DT);
 
     assert_eq!(
         *tw.world.resource::<CurrentGameState>().get(),
@@ -1492,7 +1494,8 @@ fn the_loading_screen_paints_its_background_and_restores_the_old_one() {
     for key in ["t0", "t1", "t2", "t3"] {
         tw.deliver_texture_dims(key, 8, 8);
     }
-    tw.tick(4, DT);
+    tw.tick_to_play(DT, 1000);
+    tw.tick(1, DT);
     assert_eq!(
         *tw.world.resource::<CurrentGameState>().get(),
         GameState::Playing
@@ -1531,12 +1534,41 @@ fn the_engine_loading_screen_fires_no_scene_events() {
     for key in ["t0", "t1", "t2", "t3"] {
         tw.deliver_texture_dims(key, 8, 8);
     }
-    tw.tick(4, DT);
+    tw.tick_to_play(DT, 1000);
+    tw.tick(1, DT);
 
     assert_eq!(
         tw.world.resource::<SceneLog>().0,
         ["enter game (entity game) from None"]
     );
+}
+
+/// Setup lasts at least the screen's minimum display time, even when every
+/// load is answered at once, so the screen is on show for a moment.
+#[test]
+fn the_engine_loading_screen_stays_for_its_minimum_time() {
+    let mut config = GameConfig::new();
+    config.sim_hz = 20.0;
+    let mut tw = engine_loading_screen_builder()
+        .config(config)
+        .build()
+        .expect("build should succeed");
+    tw.tick(2, DT);
+    for key in ["t0", "t1", "t2", "t3"] {
+        tw.deliver_texture_dims(key, 8, 8);
+    }
+
+    tw.tick(10, DT);
+    assert_eq!(
+        *tw.world.resource::<CurrentGameState>().get(),
+        GameState::Setup,
+        "held although every load is answered"
+    );
+    assert_eq!(loading_screen_rows(&mut tw).len(), 5);
+
+    tw.tick_to_play(DT, 10);
+    assert!(loading_screen_rows(&mut tw).is_empty());
+    assert!(tw.world.get_resource::<LoadingHold>().is_none());
 }
 
 /// With no scene of its own, a game still builds with the engine screen: the
@@ -1576,7 +1608,7 @@ fn play_through_engine_screen(tw: &mut TestWorld) -> (Vec<String>, Vec<String>) 
     tw.tick(3, DT);
     let during_loading = take_lua_log(tw);
     tw.deliver_texture_dims("player", 8, 8);
-    tw.tick_to_play(DT, 8);
+    tw.tick_to_play(DT, 1000);
     tw.tick(1, DT);
     (during_loading, take_lua_log(tw))
 }

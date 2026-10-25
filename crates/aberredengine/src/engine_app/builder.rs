@@ -4,16 +4,16 @@ use bevy_ecs::prelude::*;
 use bevy_ecs::system::IntoObserverSystem;
 
 use super::registrar::{
-    HookRegistrar, ObserverRegistrar, UpdateRegistrar, hook_registrar, late_scene_system,
-    observer_registrar, playing_late_system, playing_late_system_if, playing_system,
-    playing_system_if, scene_observer_registrar, scene_system, setup_system,
+    HookRegistrar, ObserverRegistrar, UpdateRegistrar, engine_loading_screen_systems,
+    hook_registrar, late_scene_system, observer_registrar, playing_late_system,
+    playing_late_system_if, playing_system, playing_system_if, scene_observer_registrar,
+    scene_system,
 };
 #[cfg(doc)] // doc links
 use super::schedule::SimSet;
 use super::validate::record_scene_ref;
 use aberred_core::events::scene::{SceneEntered, SceneExited};
 use aberred_core::resources::systems_store as hook_keys;
-use aberred_core::systems::loading_screen::update_loading_bar;
 use aberred_core::systems::scene_dispatch::WorldDrawCallback;
 use aberred_render::resources::scene_table::{GuiCallback, RenderSceneTable, SceneRender};
 use rustc_hash::FxHashMap;
@@ -522,7 +522,7 @@ impl EngineBuilder {
     pub fn engine_loading_screen(mut self) -> Self {
         if !self.engine_loading_screen {
             self.engine_loading_screen = true;
-            self.extra_systems.push(setup_system(update_loading_bar));
+            self.extra_systems.extend(engine_loading_screen_systems());
         }
         self
     }

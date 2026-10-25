@@ -18,6 +18,7 @@ use crate::math::Color;
 use crate::resources::font_key::DEFAULT_FONT_KEY;
 use crate::resources::font_metrics::FontMetricsStore;
 use crate::resources::game_config::GameConfig;
+use crate::resources::loading_hold::LoadingHold;
 use crate::resources::pending_assets::PendingAssets;
 use crate::resources::render_size::RenderSize;
 
@@ -26,6 +27,10 @@ pub const BAR_INNER_WIDTH: usize = 30;
 
 /// Background shown while the loading scene is active.
 pub const BACKGROUND: Color = Color::new(32, 32, 32, 255);
+
+/// Seconds `Setup` lasts at least while the screen is up, so a fast load
+/// still shows it.
+pub const MIN_DISPLAY_SECONDS: f32 = 1.0;
 
 /// Height of one text row: the default font's cell height in pixels.
 const ROW_HEIGHT: f32 = 14.0;
@@ -63,6 +68,7 @@ pub fn show_loading_screen(
     pending: Res<PendingAssets>,
 ) {
     commands.insert_resource(SavedBackground(config.background_color));
+    commands.insert_resource(LoadingHold::for_seconds(MIN_DISPLAY_SECONDS, config.sim_hz));
     config.background_color = BACKGROUND;
 
     let width_of = |text: &str| {
@@ -104,8 +110,15 @@ pub fn show_loading_screen(
     }
 }
 
-/// Hides the loading screen: despawns its entities and gives the game's
-/// background color back.
+/// Counts the minimum display time down, one sim tick at a time.
+pub fn tick_loading_hold(hold: Option<ResMut<LoadingHold>>) {
+    if let Some(mut hold) = hold {
+        hold.tick();
+    }
+}
+
+/// Hides the loading screen: despawns its entities, drops the minimum display
+/// time and gives the game's background color back.
 pub fn hide_loading_screen(
     mut commands: Commands,
     screens: Query<Entity, With<EngineLoadingScreen>>,
@@ -115,6 +128,7 @@ pub fn hide_loading_screen(
     for entity in &screens {
         commands.entity(entity).despawn();
     }
+    commands.remove_resource::<LoadingHold>();
     if let Some(saved) = saved {
         config.background_color = saved.0;
         commands.remove_resource::<SavedBackground>();

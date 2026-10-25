@@ -43,11 +43,11 @@ use std::path::PathBuf;
 
 use crate::engine_app::{
     EngineBuilder, HookRegistrar, LogicInit, ObserverRegistrar, UpdateRegistrar, apply_tick_input,
-    drain_logic_messages, ensure_main_scene, hold_back_deterministic_setup_input, hook_registrar,
-    in_envelope, late_scene_system, observer_registrar, playing_late_system,
-    playing_late_system_if, playing_system, playing_system_if, record_scene_ref, run_sim_tick,
-    scene_observer_registrar, scene_system, setup_system, validate_scene_manager,
-    validate_scene_refs, validate_tracked_groups,
+    drain_logic_messages, engine_loading_screen_systems, ensure_main_scene,
+    hold_back_deterministic_setup_input, hook_registrar, in_envelope, late_scene_system,
+    observer_registrar, playing_late_system, playing_late_system_if, playing_system,
+    playing_system_if, record_scene_ref, run_sim_tick, scene_observer_registrar, scene_system,
+    validate_scene_manager, validate_scene_refs, validate_tracked_groups,
 };
 use aberred_core::events::scene::{SceneEntered, SceneExited};
 use aberred_core::protocol::audio::{AudioCmd, AudioMessage};
@@ -62,7 +62,6 @@ use aberred_core::resources::font_metrics::{FontMetrics, FontMetricsStore};
 use aberred_core::resources::game_config::GameConfig;
 use aberred_core::resources::game_state::{CurrentGameState, GameState};
 use aberred_core::resources::systems_store as hook_keys;
-use aberred_core::systems::loading_screen::update_loading_bar;
 use aberred_core::systems::time::update_world_time;
 
 /// A headless logic-thread `World` plus its `sim`/`present` schedules.
@@ -282,7 +281,7 @@ impl TestWorldBuilder {
     pub fn engine_loading_screen(mut self) -> Self {
         if !self.engine_loading_screen {
             self.engine_loading_screen = true;
-            self.extra_systems.push(setup_system(update_loading_bar));
+            self.extra_systems.extend(engine_loading_screen_systems());
         }
         self
     }
