@@ -212,7 +212,8 @@ mod tests {
 
     #[test]
     fn the_list_contains_the_characters_games_rely_on() {
-        for c in "█▏▎▍▌▋▊▉░▒▓━┃ñ¿€≤→★♥".chars() {
+        for c in "█▏▎▍▌▋▊▉░▒▓━┃┌─┐│└┘ñ¿€≤→★♥".chars()
+        {
             assert!(DEFAULT_FONT_CHARS.contains(c), "missing {c:?}");
         }
     }
