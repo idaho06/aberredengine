@@ -54,6 +54,7 @@ pub mod gui_theme;
 pub mod input;
 pub mod input_bindings;
 pub mod loaded_assets;
+pub mod loading_hold;
 pub mod map_data;
 pub mod next_scene;
 pub mod pending_assets;

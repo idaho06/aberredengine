@@ -16,6 +16,7 @@ use crate::protocol::endpoints::RenderTx;
 use crate::protocol::render_logic::RenderMsg;
 use crate::resources::collision_contacts::CollisionContacts;
 use crate::resources::game_state::{CurrentGameState, GameState, NextGameState};
+use crate::resources::loading_hold::LoadingHold;
 use crate::resources::pending_assets::PendingAssets;
 use bevy_ecs::prelude::*;
 use log::info;
@@ -36,16 +37,18 @@ pub fn check_pending_state(
 }
 
 /// Applies a requested `Setup` → `Playing` transition once [`PendingAssets`]
-/// is empty, whether the engine or the setup hook made the request. Runs
-/// last in the sim tick, after both asset forwarders, so every load queued
-/// so far (including this tick's) is counted.
+/// is empty and any [`LoadingHold`] has elapsed, whether the engine or the
+/// setup hook made the request. Runs last in the sim tick, after both asset
+/// forwarders, so every load queued so far (including this tick's) is counted.
 pub fn finish_setup(
     mut commands: Commands,
     next_state: Res<NextGameState>,
     state: Res<CurrentGameState>,
     pending: Res<PendingAssets>,
+    hold: Option<Res<LoadingHold>>,
 ) {
-    if ends_setup(&state, &next_state) && pending.is_empty() {
+    let held = hold.is_some_and(|hold| !hold.is_done());
+    if ends_setup(&state, &next_state) && pending.is_empty() && !held {
         commands.trigger(GameStateChanged {});
     }
 }
@@ -227,6 +230,20 @@ mod tests {
         world
             .resource_mut::<PendingAssets>()
             .settle(AssetKind::Texture, "player");
+        world.run_system_once(finish_setup).unwrap();
+        assert_eq!(world.resource::<ChangedCount>().0, 1);
+    }
+
+    #[test]
+    fn finish_setup_waits_for_the_loading_hold() {
+        let mut world = setup_world(GameState::Playing, false);
+        world.insert_resource(LoadingHold::for_seconds(1.0, 2.0));
+
+        for _ in 0..2 {
+            world.run_system_once(finish_setup).unwrap();
+            assert_eq!(world.resource::<ChangedCount>().0, 0, "still held");
+            world.resource_mut::<LoadingHold>().tick();
+        }
         world.run_system_once(finish_setup).unwrap();
         assert_eq!(world.resource::<ChangedCount>().0, 1);
     }
