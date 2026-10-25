@@ -59,7 +59,7 @@ use aberredengine::core::resources::signal_keys as sk;
 use aberredengine::core::resources::world_signals::WorldSignals;
 use aberredengine::core::systems::asset_loader::{AssetError, AssetLoader};
 use aberredengine::core::systems::loading_screen::{
-    BACKGROUND, BAR_INNER_WIDTH, SavedBackground, bar_bottom, bar_middle, bar_top,
+    BACKGROUND, BAR_INNER_WIDTH, SavedBackground, bar_bottom, bar_middle, bar_top, centered_x,
 };
 use aberredengine::core::systems::scene_dispatch::in_scene;
 use aberredengine::engine_app::SimSet;
@@ -1435,6 +1435,15 @@ fn the_loading_screen_texts_reach_the_snapshot() {
     tw.tick(2, DT);
 
     let snapshot = tw.present();
+    let screen_width = tw.world.resource::<RenderSize>().w as f32;
+    for entry in &snapshot.screen_texts {
+        assert_eq!(
+            entry.position.pos.x,
+            centered_x(screen_width, entry.text.size().x),
+            "{:?} is centered",
+            entry.text.text
+        );
+    }
     let mut texts: Vec<String> = snapshot
         .screen_texts
         .iter()

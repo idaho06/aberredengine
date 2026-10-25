@@ -6,8 +6,11 @@ use super::schedule::{LateUserSystems, SimSet};
 use aberred_core::components::persistent::Persistent;
 use aberred_core::resources::scene_manager::SceneManager;
 use aberred_core::resources::systems_store::SystemsStore;
+use aberred_core::systems::dynamic_text_size::dynamic_text_size_system;
 use aberred_core::systems::game_state::{state_is_playing, state_is_setup, state_runs_scenes};
-use aberred_core::systems::loading_screen::{tick_loading_hold, update_loading_bar};
+use aberred_core::systems::loading_screen::{
+    center_loading_screen, tick_loading_hold, update_loading_bar,
+};
 use aberred_core::systems::scene_dispatch::{in_scene, past_scene_entry};
 
 /// Closure that registers a system into the world and inserts its ID into
@@ -89,11 +92,20 @@ pub(crate) fn setup_system<M>(
 }
 
 /// The systems the engine loading screen runs while `Setup` lasts: the bar
-/// update and the minimum display time countdown.
-pub(crate) fn engine_loading_screen_systems() -> [UpdateRegistrar; 2] {
+/// update, the minimum display time countdown, and the centering that follows
+/// the text measurement (a text has no width before its font's metrics land).
+pub(crate) fn engine_loading_screen_systems() -> [UpdateRegistrar; 3] {
     [
         setup_system(update_loading_bar),
         setup_system(tick_loading_hold),
+        Box::new(|schedule| {
+            schedule.add_systems(
+                center_loading_screen
+                    .after(dynamic_text_size_system)
+                    .run_if(state_is_setup)
+                    .in_set(SimSet::Bookkeeping),
+            );
+        }),
     ]
 }
 

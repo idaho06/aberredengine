@@ -17,7 +17,6 @@ use crate::components::shadow::Shadow;
 use crate::components::z_index::ZIndex;
 use crate::math::Color;
 use crate::resources::font_key::DEFAULT_FONT_KEY;
-use crate::resources::font_metrics::FontMetricsStore;
 use crate::resources::game_config::GameConfig;
 use crate::resources::loading_hold::LoadingHold;
 use crate::resources::pending_assets::PendingAssets;
@@ -36,8 +35,14 @@ pub const MIN_DISPLAY_SECONDS: f32 = 1.0;
 /// Height of one text row: the default font's cell height in pixels.
 const ROW_HEIGHT: f32 = 14.0;
 
+/// Rows the engine name is tall: it is drawn three cells high.
+const TITLE_ROWS: f32 = 3.0;
+
+/// Rows from the title's top to the subtitle's: the title and a gap.
+const SUBTITLE_OFFSET_ROWS: f32 = TITLE_ROWS + 1.0;
+
 /// Rows from the title's top to the bar's top: title, gap, subtitle, gap.
-const BAR_OFFSET_ROWS: f32 = 4.0;
+const BAR_OFFSET_ROWS: f32 = SUBTITLE_OFFSET_ROWS + 2.0;
 
 /// Rows the whole screen occupies: the title block plus the three bar rows.
 const TOTAL_ROWS: f32 = BAR_OFFSET_ROWS + 3.0;
@@ -56,43 +61,37 @@ pub struct LoadingBar;
 pub struct SavedBackground(pub Color);
 
 /// Shows the loading screen: saves the game's background color and paints
-/// [`BACKGROUND`], then spawns the texts centered on the render size, with
-/// the bar at the current load progress.
+/// [`BACKGROUND`], then spawns the texts stacked on the render size's
+/// vertical center, with the bar at the current load progress.
 ///
-/// Widths come from the default font's metrics; without them the texts
-/// center as if zero wide.
+/// The texts start at x 0: they are measured once the default font's metrics
+/// arrive, which is after this runs, and [`center_loading_screen`] centers
+/// them then.
 pub fn show_loading_screen(
     mut commands: Commands,
     mut config: ResMut<GameConfig>,
     render_size: Res<RenderSize>,
-    metrics: Res<FontMetricsStore>,
     pending: Res<PendingAssets>,
 ) {
     commands.insert_resource(SavedBackground(config.background_color));
     commands.insert_resource(LoadingHold::for_seconds(MIN_DISPLAY_SECONDS, config.sim_hz));
     config.background_color = BACKGROUND;
 
-    let width_of = |text: &str| {
-        metrics
-            .0
-            .get(DEFAULT_FONT_KEY)
-            .map_or(0.0, |font| font.measure_text(text, ROW_HEIGHT).x)
-    };
-    let screen_width = render_size.w as f32;
     let top = ((render_size.h as f32 - TOTAL_ROWS * ROW_HEIGHT) / 2.0).floor();
     let text =
-        |content: &str| DynamicText::new(content, DEFAULT_FONT_KEY, ROW_HEIGHT, Color::WHITE);
+        |content: &str, size: f32| DynamicText::new(content, DEFAULT_FONT_KEY, size, Color::WHITE);
 
-    for (row, content) in [(0.0, "AberredEngine"), (2.0, "Loading...")] {
+    // The shadow is one source pixel at the text's scale.
+    for (row, content, rows_tall) in [
+        (0.0, "AberredEngine", TITLE_ROWS),
+        (SUBTITLE_OFFSET_ROWS, "Loading...", 1.0),
+    ] {
         commands.spawn((
             EngineLoadingScreen,
-            text(content),
-            ScreenPosition::new(
-                centered_x(screen_width, width_of(content)),
-                top + row * ROW_HEIGHT,
-            ),
+            text(content, rows_tall * ROW_HEIGHT),
+            ScreenPosition::new(0.0, top + row * ROW_HEIGHT),
             ZIndex(0.0),
-            Shadow::default_color(1.0, 1.0),
+            Shadow::default_color(rows_tall, rows_tall),
         ));
     }
 
@@ -101,13 +100,38 @@ pub fn show_loading_screen(
         bar_middle(pending.progress(), BAR_INNER_WIDTH),
         bar_bottom(BAR_INNER_WIDTH),
     ];
-    let bar_x = centered_x(screen_width, width_of(&rows[0]));
     for (index, content) in rows.iter().enumerate() {
         let position =
-            ScreenPosition::new(bar_x, top + (BAR_OFFSET_ROWS + index as f32) * ROW_HEIGHT);
-        let mut row = commands.spawn((EngineLoadingScreen, text(content), position, ZIndex(0.0)));
+            ScreenPosition::new(0.0, top + (BAR_OFFSET_ROWS + index as f32) * ROW_HEIGHT);
+        let mut row = commands.spawn((
+            EngineLoadingScreen,
+            text(content, ROW_HEIGHT),
+            position,
+            ZIndex(0.0),
+        ));
         if index == 1 {
             row.insert(LoadingBar);
+        }
+    }
+}
+
+/// Centers each loading-screen text horizontally on its measured width.
+///
+/// Texts have no width until their font's metrics arrive and
+/// `dynamic_text_size_system` measures them; a text re-centers whenever its
+/// content changes size.
+pub fn center_loading_screen(
+    render_size: Res<RenderSize>,
+    mut texts: Query<(&DynamicText, &mut ScreenPosition), With<EngineLoadingScreen>>,
+) {
+    for (text, mut position) in &mut texts {
+        let width = text.size().x;
+        if width <= 0.0 {
+            continue;
+        }
+        let x = centered_x(render_size.w as f32, width);
+        if position.pos.x != x {
+            position.pos.x = x;
         }
     }
 }
@@ -179,6 +203,95 @@ pub fn centered_x(screen_width: f32, content_width: f32) -> f32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    use crate::math::Vec2;
+    use crate::resources::font_metrics::test_support::default_font_metrics;
+    use crate::resources::font_metrics::{FontMetricsStore, FontMetricsWarnCache};
+    use crate::resources::loading_hold::LoadingHold;
+    use crate::systems::dynamic_text_size::dynamic_text_size_system;
+    use bevy_ecs::system::RunSystemOnce;
+
+    /// A world as it is when `Setup` is entered: render size and config, but
+    /// no font metrics yet (they arrive with the first message drain).
+    fn world_before_font_metrics() -> World {
+        let mut world = World::new();
+        world.insert_resource(RenderSize { w: 640, h: 360 });
+        world.insert_resource(GameConfig::new());
+        world.insert_resource(PendingAssets::default());
+        world.insert_resource(FontMetricsStore::default());
+        world.insert_resource(FontMetricsWarnCache::default());
+        world
+    }
+
+    /// Every loading-screen text as `(content, font size, position)`, top to
+    /// bottom.
+    fn rows(world: &mut World) -> Vec<(String, f32, Vec2)> {
+        let mut rows: Vec<_> = world
+            .query_filtered::<(&DynamicText, &ScreenPosition), With<EngineLoadingScreen>>()
+            .iter(world)
+            .map(|(text, position)| (text.text.to_string(), text.font_size, position.pos))
+            .collect();
+        rows.sort_by(|a, b| a.2.y.total_cmp(&b.2.y));
+        rows
+    }
+
+    /// The screen is shown before the default font's metrics are in the
+    /// store, so it centers once they arrive and the texts are measured.
+    #[test]
+    fn texts_are_centered_once_their_font_metrics_arrive() {
+        let mut world = world_before_font_metrics();
+        world.run_system_once(show_loading_screen).unwrap();
+
+        world
+            .resource_mut::<FontMetricsStore>()
+            .0
+            .insert(DEFAULT_FONT_KEY.to_owned(), default_font_metrics());
+        world.run_system_once(dynamic_text_size_system).unwrap();
+        world.run_system_once(center_loading_screen).unwrap();
+
+        let mut checked = 0;
+        for (text, position) in world
+            .query_filtered::<(&DynamicText, &ScreenPosition), With<EngineLoadingScreen>>()
+            .iter(&world)
+        {
+            assert!(text.size().x > 0.0, "{:?} is measured", text.text);
+            assert_eq!(position.pos.x, centered_x(640.0, text.size().x));
+            checked += 1;
+        }
+        assert_eq!(checked, 5);
+    }
+
+    /// The name is three cells tall; the subtitle and the bar stack below it
+    /// on whole cells without overlapping.
+    #[test]
+    fn the_title_is_three_cells_tall_and_nothing_overlaps_it() {
+        let mut world = world_before_font_metrics();
+        world.run_system_once(show_loading_screen).unwrap();
+
+        let rows = rows(&mut world);
+        assert_eq!(rows[0].0, "AberredEngine");
+        assert_eq!(rows[0].1, 42.0);
+        for row in &rows[1..] {
+            assert_eq!(row.1, 14.0);
+        }
+        assert!(rows[0].2.y + 42.0 <= rows[1].2.y, "subtitle below the name");
+        assert!(rows[1].2.y + 14.0 <= rows[2].2.y, "bar below the subtitle");
+        for row in &rows {
+            assert_eq!((row.2.y - rows[0].2.y) % 14.0, 0.0, "on the cell grid");
+        }
+    }
+
+    /// The hold counts from showing the screen to hiding it.
+    #[test]
+    fn showing_starts_the_hold_and_hiding_ends_it() {
+        let mut world = world_before_font_metrics();
+        world.run_system_once(show_loading_screen).unwrap();
+        assert!(world.contains_resource::<LoadingHold>());
+
+        world.run_system_once(hide_loading_screen).unwrap();
+        assert!(!world.contains_resource::<LoadingHold>());
+        assert!(rows(&mut world).is_empty());
+    }
 
     #[test]
     fn the_top_and_bottom_rows_close_the_box() {
