@@ -13,6 +13,10 @@ use super::schedule::SimSet;
 use super::validate::record_scene_ref;
 use aberred_core::events::scene::{SceneEntered, SceneExited};
 use aberred_core::resources::systems_store as hook_keys;
+use aberred_core::systems::loading_screen::{
+    LOADING_SCENE, restore_background, set_loading_background, spawn_loading_screen,
+    update_loading_bar,
+};
 use aberred_core::systems::scene_dispatch::WorldDrawCallback;
 use aberred_render::resources::scene_table::{GuiCallback, RenderSceneTable, SceneRender};
 use rustc_hash::FxHashMap;
@@ -498,6 +502,34 @@ impl EngineBuilder {
         let scene = self.scene_ref("loading_scene", scene);
         self.loading_scene = Some(scene);
         self
+    }
+
+    /// Show the engine's own loading screen while `Setup` waits for assets.
+    ///
+    /// Registers the reserved scene [`LOADING_SCENE`] and makes it the
+    /// [`loading_scene`](Self::loading_scene): a dark-grey screen with the
+    /// engine name and a progress bar that fills as the queued loads are
+    /// answered. The game's background color comes back when it ends. A
+    /// second call changes nothing; the engine screen replaces any other
+    /// loading scene. Still needs [`add_scene`](Self::add_scene) and
+    /// [`initial_scene`](Self::initial_scene) for the game's own scenes.
+    ///
+    /// ```rust,ignore
+    /// EngineBuilder::new()
+    ///     .engine_loading_screen()
+    ///     .add_scene("level01")
+    ///     .initial_scene("level01")
+    /// ```
+    pub fn engine_loading_screen(self) -> Self {
+        if self.loading_scene.as_deref() == Some(LOADING_SCENE) {
+            return self;
+        }
+        self.add_scene(LOADING_SCENE)
+            .on_scene_enter(LOADING_SCENE, spawn_loading_screen)
+            .on_scene_enter(LOADING_SCENE, set_loading_background)
+            .on_scene_exit(LOADING_SCENE, restore_background)
+            .add_scene_system(LOADING_SCENE, update_loading_bar)
+            .loading_scene(LOADING_SCENE)
     }
 
     /// Track the entity count of group `name` for the whole game.

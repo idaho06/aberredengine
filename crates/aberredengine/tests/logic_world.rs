@@ -59,7 +59,6 @@ use aberredengine::core::resources::world_signals::WorldSignals;
 use aberredengine::core::systems::asset_loader::{AssetError, AssetLoader};
 use aberredengine::core::systems::loading_screen::{
     BACKGROUND, BAR_INNER_WIDTH, LOADING_SCENE, SavedBackground, bar_bottom, bar_middle, bar_top,
-    restore_background, set_loading_background, spawn_loading_screen, update_loading_bar,
 };
 use aberredengine::core::systems::scene_dispatch::in_scene;
 use aberredengine::engine_app::SimSet;
@@ -1348,7 +1347,7 @@ fn a_switch_to_another_scene_during_loading_is_ignored() {
 }
 
 /// A game whose setup hook queues four texture loads, with the engine
-/// loading screen's pieces registered by hand on the `LOADING_SCENE`.
+/// loading screen in front of its `"game"` scene.
 fn engine_loading_screen_world() -> TestWorld {
     engine_loading_screen_builder()
         .build()
@@ -1358,20 +1357,15 @@ fn engine_loading_screen_world() -> TestWorld {
 /// [`engine_loading_screen_world`]'s builder, before `build()`.
 fn engine_loading_screen_builder() -> TestWorldBuilder {
     TestWorld::builder()
-        .add_scene(LOADING_SCENE)
         .add_scene("game")
         .initial_scene("game")
-        .loading_scene(LOADING_SCENE)
         .on_setup(|mut assets: AssetLoader| -> Result {
             for key in ["t0", "t1", "t2", "t3"] {
                 assets.load_texture(key, "player.png")?;
             }
             Ok(())
         })
-        .on_scene_enter(LOADING_SCENE, spawn_loading_screen)
-        .on_scene_enter(LOADING_SCENE, set_loading_background)
-        .on_scene_exit(LOADING_SCENE, restore_background)
-        .add_scene_system(LOADING_SCENE, update_loading_bar)
+        .engine_loading_screen()
 }
 
 /// Every loading-screen text as `(content, screen position, has shadow)`,
@@ -1506,6 +1500,33 @@ fn the_loading_screen_paints_its_background_and_restores_the_old_one() {
     );
     assert_eq!(tw.present().game_config.background_color, game_background);
     assert!(tw.world.get_resource::<SavedBackground>().is_none());
+}
+
+/// The loading scene is registered by `engine_loading_screen()` alone, and a
+/// second call changes nothing.
+#[test]
+fn engine_loading_screen_twice_registers_once() {
+    let mut tw = engine_loading_screen_builder()
+        .engine_loading_screen()
+        .build()
+        .expect("build should succeed");
+    tw.tick(2, DT);
+
+    assert_eq!(loading_screen_rows(&mut tw).len(), 5);
+    assert_eq!(
+        tw.world.resource::<SceneManager>().loading_scene.as_deref(),
+        Some(LOADING_SCENE)
+    );
+}
+
+/// `engine_loading_screen()` registers a scene like any other: without an
+/// initial scene the build fails the normal way.
+#[test]
+fn engine_loading_screen_alone_needs_an_initial_scene() {
+    assert!(matches!(
+        build_err(TestWorld::builder().engine_loading_screen()),
+        aberredengine::EngineError::AddSceneRequiresInitialScene
+    ));
 }
 
 #[derive(Resource, Default)]

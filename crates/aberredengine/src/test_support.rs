@@ -62,6 +62,10 @@ use aberred_core::resources::font_metrics::{FontMetrics, FontMetricsStore};
 use aberred_core::resources::game_config::GameConfig;
 use aberred_core::resources::game_state::{CurrentGameState, GameState};
 use aberred_core::resources::systems_store as hook_keys;
+use aberred_core::systems::loading_screen::{
+    LOADING_SCENE, restore_background, set_loading_background, spawn_loading_screen,
+    update_loading_bar,
+};
 use aberred_core::systems::time::update_world_time;
 
 /// A headless logic-thread `World` plus its `sim`/`present` schedules.
@@ -272,6 +276,20 @@ impl TestWorldBuilder {
         let scene = self.scene_ref("loading_scene", scene);
         self.loading_scene = Some(scene);
         self
+    }
+
+    /// Show the engine's own loading screen, mirroring
+    /// `EngineBuilder::engine_loading_screen`.
+    pub fn engine_loading_screen(self) -> Self {
+        if self.loading_scene.as_deref() == Some(LOADING_SCENE) {
+            return self;
+        }
+        self.add_scene(LOADING_SCENE)
+            .on_scene_enter(LOADING_SCENE, spawn_loading_screen)
+            .on_scene_enter(LOADING_SCENE, set_loading_background)
+            .on_scene_exit(LOADING_SCENE, restore_background)
+            .add_scene_system(LOADING_SCENE, update_loading_bar)
+            .loading_scene(LOADING_SCENE)
     }
 
     /// Records that `method` names `scene`, for the check at `build()` that
