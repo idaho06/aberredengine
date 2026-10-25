@@ -6,7 +6,7 @@
 //! -- no raylib window, no
 //! GL, no real audio thread (a stub `AudioBridge` is inserted instead, see
 //! [`aberred_core::protocol::endpoints::setup_audio_stub`]), and Lua only if
-//! [`TestWorldBuilder::with_lua`] is used. This is deliberately NOT a
+//! a `TestWorldBuilder::with_lua*` method is used. This is deliberately NOT a
 //! from-scratch minimal `World` like the ones per-system unit tests build
 //! -- if this harness ever
 //! forks the production construction path instead of calling into it, its
@@ -101,7 +101,7 @@ pub struct TestWorldBuilder {
     scene_refs: Vec<(&'static str, String)>,
     tracked_groups: Vec<String>,
     #[cfg(feature = "lua")]
-    lua_script: Option<PathBuf>,
+    lua: Option<LuaScript>,
     deterministic_seed: Option<u64>,
     window_w: i32,
     window_h: i32,
@@ -130,7 +130,7 @@ impl TestWorldBuilder {
             scene_refs: Vec::new(),
             tracked_groups: Vec::new(),
             #[cfg(feature = "lua")]
-            lua_script: None,
+            lua: None,
             deterministic_seed: None,
             window_w: 800,
             window_h: 600,
@@ -296,7 +296,15 @@ impl TestWorldBuilder {
     #[cfg(feature = "lua")]
     /// Configure the harness for a Lua game, mirroring `EngineBuilder::with_lua`.
     pub fn with_lua(mut self, script_path: impl Into<PathBuf>) -> Self {
-        self.lua_script = Some(script_path.into());
+        self.lua = Some(LuaScript::Path(script_path.into()));
+        self
+    }
+
+    #[cfg(feature = "lua")]
+    /// Like [`with_lua`](Self::with_lua), with the script inline (`build()`
+    /// writes it to a temp file for the build). The later call wins.
+    pub fn with_lua_source(mut self, source: impl Into<String>) -> Self {
+        self.lua = Some(LuaScript::Inline(source.into()));
         self
     }
 
@@ -311,6 +319,18 @@ impl TestWorldBuilder {
         validate_scene_manager(&self.scenes, &self.initial_scene, &self.loading_scene)?;
         validate_scene_refs(&self.scenes, &self.scene_refs)?;
         validate_tracked_groups(&self.tracked_groups)?;
+
+        // Outlives `setup_logic_world`, which reads the script; removes the file on drop.
+        #[cfg(feature = "lua")]
+        let (lua_script, _inline_script) = match self.lua.take() {
+            Some(LuaScript::Path(path)) => (Some(path), None),
+            Some(LuaScript::Inline(source)) => {
+                let script = TempScript::write(&source)
+                    .map_err(|e| aberred_core::error::EngineError::Lua(e.to_string()))?;
+                (Some(script.0.clone()), Some(script))
+            }
+            None => (None, None),
+        };
 
         let (_tx_logic, rx_logic) = unbounded::<LogicMsg>();
         let (tx_render, rx_render) = unbounded::<RenderMsg>();
@@ -328,7 +348,7 @@ impl TestWorldBuilder {
             loading_scene: self.loading_scene,
             tracked_groups: std::mem::take(&mut self.tracked_groups),
             #[cfg(feature = "lua")]
-            lua_script: self.lua_script.take(),
+            lua_script,
             deterministic_seed: self.deterministic_seed,
             window_w: self.window_w,
             window_h: self.window_h,
@@ -552,9 +572,58 @@ pub fn validate_replay_header(
     crate::engine_app::validate_replay_header(header, config)
 }
 
+/// The Lua script of a [`TestWorldBuilder`]: a file, or source for `build()` to
+/// write out.
+#[cfg(feature = "lua")]
+enum LuaScript {
+    Path(PathBuf),
+    Inline(String),
+}
+
+/// A Lua script written to its own temp file, removed on drop.
+#[cfg(feature = "lua")]
+struct TempScript(PathBuf);
+
+#[cfg(feature = "lua")]
+impl TempScript {
+    /// Writes `source` to `aberred_lua_source_<pid>_<n>.lua` in the temp
+    /// directory, `n` unique per call.
+    fn write(source: &str) -> std::io::Result<Self> {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static NEXT: AtomicU64 = AtomicU64::new(0);
+        let path = std::env::temp_dir().join(format!(
+            "aberred_lua_source_{}_{}.lua",
+            std::process::id(),
+            NEXT.fetch_add(1, Ordering::Relaxed)
+        ));
+        std::fs::write(&path, source)?;
+        Ok(Self(path))
+    }
+}
+
+#[cfg(feature = "lua")]
+impl Drop for TempScript {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(&self.0);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A temp script exists while its guard lives and is removed when it drops.
+    #[cfg(feature = "lua")]
+    #[test]
+    fn temp_script_is_removed_on_drop() {
+        let script = TempScript::write("LOG = {}").expect("write");
+        let path = script.0.clone();
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "LOG = {}");
+
+        drop(script);
+
+        assert!(!path.exists());
+    }
 
     #[test]
     fn default_test_world_builds_and_ticks_without_panicking() {

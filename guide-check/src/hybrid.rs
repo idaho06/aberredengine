@@ -49,28 +49,20 @@ mod tests {
     /// Entities the script spawns into the `"swarm"` group become `Boid`s.
     #[test]
     fn lua_swarm_entities_are_adopted_by_rust() {
-        let script = std::env::temp_dir().join(format!(
-            "guide_check_hybrid_{}.lua",
-            std::process::id()
-        ));
-        std::fs::write(
-            &script,
-            r#"
+        let mut tw = TestWorld::builder()
+            .with_lua_source(
+                r#"
 function on_scene_enter(scene)
     engine.spawn():with_group("swarm"):build()
     engine.spawn():with_group("swarm"):build()
 end
 "#,
-        )
-        .unwrap();
-        let mut tw = TestWorld::builder()
-            .with_lua(&script)
+            )
             .add_scene("asteroids_level01")
             .initial_scene("asteroids_level01")
             .add_observer(adopt_swarm)
             .build()
             .expect("test world");
-        std::fs::remove_file(&script).ok();
         tw.tick_to_play(DT, 8);
 
         let boids = tw

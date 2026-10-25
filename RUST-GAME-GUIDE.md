@@ -2837,7 +2837,7 @@ aberredengine = { path = "../aberredengine/crates/aberredengine", default-featur
 
 Repeat the exact source of your `[dependencies]` entry (the same `path`, or the same `git` plus `branch`/`tag`/`rev`): Cargo rejects a crate whose dependency and dev-dependency point to different sources.
 
-`TestWorld::builder()` takes the same registration calls as `EngineBuilder` (`on_setup`, `add_system`, `add_system_if`, `add_scene_system`, `add_late_system`, `add_late_system_if`, `add_late_scene_system`, `on_scene_enter`/`on_scene_exit`, `configure_schedule`, `add_observer`, `add_scene`/`initial_scene`, `deterministic`, plus `config(GameConfig)`). Like a real game, it moves from `Setup` to `Playing` on its own. `tick(n, dt)` runs `n` sim ticks with a fixed `dt`, and `tw.world` is a plain Bevy `World` to spawn into and inspect:
+`TestWorld::builder()` takes the same registration calls as `EngineBuilder` (`on_setup`, `add_system`, `add_system_if`, `add_scene_system`, `add_late_system`, `add_late_system_if`, `add_late_scene_system`, `on_scene_enter`/`on_scene_exit`, `configure_schedule`, `add_observer`, `add_scene`/`initial_scene`, `deterministic`, plus `config(GameConfig)`). With the `lua` feature, `with_lua(path)` runs a script file and `with_lua_source(script)` takes the script inline. Like a real game, it moves from `Setup` to `Playing` on its own. `tick(n, dt)` runs `n` sim ticks with a fixed `dt`, and `tw.world` is a plain Bevy `World` to spawn into and inspect:
 
 ```rust
 #[cfg(test)]

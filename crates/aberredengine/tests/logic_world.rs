@@ -1687,7 +1687,7 @@ fn gui_click_observer_fires_once_without_lua() {
 fn lua_collision_rules_join_the_core_rule_index() {
     use aberredengine::core::resources::collision_rule_index::CollisionRuleIndex;
 
-    let mut tw = lua_script_world("rule_index", "-- empty game script\n");
+    let mut tw = lua_script_world("-- empty game script\n");
     spawn_lua_rule(&mut tw, Some("on_hit"), "");
     // The spawn drains in Bookkeeping, after this tick's index rebuild.
     tw.tick(1, DT);
@@ -1704,7 +1704,6 @@ fn lua_collision_rules_join_the_core_rule_index() {
 #[test]
 fn lua_spawned_core_phase_entity_runs_its_lifecycle() {
     let mut tw = lua_script_world(
-        "phase_builders",
         r#"
 function on_enter(ctx) table.insert(LOG, "enter:" .. ctx.phase .. ":" .. tostring(ctx.previous_phase)) end
 function on_exit(ctx) table.insert(LOG, "exit:" .. ctx.previous_phase .. "->" .. ctx.phase) end
@@ -1750,7 +1749,7 @@ function on_update(ctx, input, dt)
 end
 "#;
     let run = || {
-        let mut tw = lua_script_world_with("float_two_worlds", SCRIPT, |b| b.deterministic(7));
+        let mut tw = lua_script_world_with(SCRIPT, |b| b.deterministic(7));
         exec_lua(
             &mut tw,
             "engine.spawn():register_as('probe'):with_position(0.1, 1 / 3)\
@@ -1785,7 +1784,6 @@ fn lua_collision_phase_transition_applies_next_tick() {
     use aberredengine::lua::components::lua_on_phase::LuaOnPhaseEntered;
 
     let mut tw = lua_script_world(
-        "collision_phase",
         r#"
 function on_enter(ctx) table.insert(LOG, "enter:" .. ctx.phase) end
 function on_hit(ctx)
@@ -1822,7 +1820,7 @@ end
 #[cfg(feature = "lua")]
 #[test]
 fn lua_phase_transition_drives_a_rust_phase_entity() {
-    let mut tw = lua_script_world("rust_phase", "-- empty game script\n");
+    let mut tw = lua_script_world("-- empty game script\n");
     tw.world.init_resource::<PhaseLog>();
     tw.world.add_observer(log_phase_entered);
     tw.world.add_observer(log_phase_exited);
@@ -1855,7 +1853,6 @@ fn lua_phase_enter_sees_this_ticks_collision() {
     use aberredengine::lua::components::lua_on_phase::LuaOnPhaseEntered;
 
     let mut tw = lua_script_world(
-        "phase_after_collision",
         r#"
 function on_hit(ctx) engine.collision_entity_signal_set_flag(ctx.a.id, "touching") end
 function on_enter(ctx)
@@ -1894,7 +1891,6 @@ fn lua_phase_enter_during_setup_runs_once_playing() {
     use aberredengine::lua::components::lua_on_phase::LuaOnPhaseEntered;
 
     let mut tw = lua_script_world_unplayed(
-        "phase_setup_enter",
         r#"
 function on_enter_play()
     function on_enter(ctx) table.insert(LOG, "enter:" .. ctx.phase) end
@@ -1919,7 +1915,6 @@ end
 #[test]
 fn lua_request_scene_in_on_enter_play_enters_that_scene() {
     let mut tw = lua_script_world(
-        "request_scene_enter_play",
         r#"
 function on_enter_play()
     engine.request_scene("a")
@@ -1944,7 +1939,6 @@ function on_scene_enter(scene) table.insert(LOG, "switch:" .. scene) end
 #[test]
 fn hybrid_game_runs_rust_scene_systems_in_lua_scenes() {
     let mut tw = lua_script_world_unplayed_with(
-        "hybrid_rust_scene_systems",
         r#"
 LEVEL_TICKS = 0
 function on_enter_play()
@@ -2002,7 +1996,6 @@ end
 #[test]
 fn lua_scene_enter_sees_rust_scene_enter_work() {
     let mut tw = lua_script_world_with(
-        "lua_sees_rust_scene_enter",
         r#"
 function on_enter_play()
     engine.request_scene("level")
@@ -2049,7 +2042,6 @@ fn hybrid_setup_runs_lua_then_rust() {
     struct SawLuaAnimation(bool);
 
     let mut tw = lua_script_world_unplayed_with(
-        "hybrid_setup",
         r#"
 function on_setup()
     table.insert(LOG, "lua setup")
@@ -2096,7 +2088,6 @@ end
 #[test]
 fn hybrid_loading_scene_ticks_rust_and_enters_lua_once() {
     let mut tw = lua_script_world_unplayed_with(
-        "hybrid_loading_scene",
         r#"
 function on_enter_play()
     engine.request_scene("game")
@@ -2164,11 +2155,9 @@ function on_scene_enter(scene) table.insert(LOG, "switch:" .. scene) end
 #[cfg(feature = "lua")]
 #[test]
 fn lua_game_without_a_request_enters_its_initial_scene() {
-    let mut tw = lua_script_world_with(
-        "first_scene_initial",
-        &lua_first_scene_script("nil"),
-        |builder| builder.add_scene("level").initial_scene("level"),
-    );
+    let mut tw = lua_script_world_with(&lua_first_scene_script("nil"), |builder| {
+        builder.add_scene("level").initial_scene("level")
+    });
 
     assert_eq!(take_lua_log(&mut tw), ["switch:level"]);
 }
@@ -2177,11 +2166,9 @@ fn lua_game_without_a_request_enters_its_initial_scene() {
 #[cfg(feature = "lua")]
 #[test]
 fn lua_on_enter_play_request_beats_the_initial_scene() {
-    let mut tw = lua_script_world_with(
-        "first_scene_request",
-        &lua_first_scene_script(r#""intro""#),
-        |builder| builder.add_scene("level").initial_scene("level"),
-    );
+    let mut tw = lua_script_world_with(&lua_first_scene_script(r#""intro""#), |builder| {
+        builder.add_scene("level").initial_scene("level")
+    });
 
     assert_eq!(take_lua_log(&mut tw), ["switch:intro"]);
 }
@@ -2191,11 +2178,9 @@ fn lua_on_enter_play_request_beats_the_initial_scene() {
 #[cfg(feature = "lua")]
 #[test]
 fn lua_game_without_scenes_enters_the_main_scene() {
-    let mut tw = lua_script_world_unplayed_with(
-        "first_scene_main",
-        &lua_first_scene_script("nil"),
-        |builder| builder.add_scene_system(sk::MAIN_SCENE, count_scene_ticks),
-    );
+    let mut tw = lua_script_world_unplayed_with(&lua_first_scene_script("nil"), |builder| {
+        builder.add_scene_system(sk::MAIN_SCENE, count_scene_ticks)
+    });
     tw.world.init_resource::<SceneTicks>();
     tw.tick_to_play(DT, 8);
     let before = tw.world.resource::<SceneTicks>().0;
@@ -2215,7 +2200,6 @@ fn lua_game_without_scenes_enters_the_main_scene() {
 #[test]
 fn gui_scene_request_switches_a_lua_game() {
     let mut tw = lua_script_world(
-        "gui_scene_request",
         r#"
 function on_enter_play()
     engine.request_scene("a")
@@ -2247,7 +2231,6 @@ function on_scene_enter(scene) table.insert(LOG, "switch:" .. scene) end
 #[test]
 fn lua_engine_request_quit_quits_exactly_once() {
     let mut tw = lua_script_world(
-        "engine_request_quit",
         r#"
 function on_enter_play() engine.request_scene("menu") return "" end
 function on_update_menu(input, dt) engine.request_quit() end
@@ -2284,7 +2267,7 @@ end
 #[cfg(feature = "lua")]
 #[test]
 fn lua_menu_action_request_scene_switches_the_scene() {
-    let mut tw = lua_script_world("menu_action_request_scene", LUA_MENU_GO_TO_B);
+    let mut tw = lua_script_world(LUA_MENU_GO_TO_B);
     tw.tick(1, DT);
 
     press_space(&mut tw);
@@ -2303,7 +2286,6 @@ fn lua_menu_action_request_scene_switches_the_scene() {
 #[test]
 fn lua_raw_scene_signals_switch_nothing() {
     let mut tw = lua_script_world(
-        "raw_scene_signals",
         r#"
 function on_enter_play() engine.request_scene("menu") return "" end
 function on_scene_enter(scene) table.insert(LOG, "switch:" .. scene) end
@@ -2328,7 +2310,6 @@ end
 #[test]
 fn lua_scene_switch_publishes_the_scene_it_left() {
     let mut tw = lua_script_world(
-        "previous_scene",
         r#"
 function on_enter_play()
     engine.request_scene("a")
@@ -2363,7 +2344,6 @@ fn lua_scene_switch_forgets_collision_contacts() {
     use aberredengine::core::components::persistent::Persistent;
 
     let mut tw = lua_script_world(
-        "switch_contacts",
         "function on_started(ctx) LOG[#LOG + 1] = 'started' end\n\
          function on_ended(ctx) LOG[#LOG + 1] = 'ended' end\n",
     );
@@ -2391,7 +2371,6 @@ fn lua_scene_switch_keeps_only_persistent_tracked_groups() {
     use aberredengine::core::resources::group::TrackedGroups;
 
     let mut tw = lua_script_world_with(
-        "switch_tracked_groups",
         r#"
 function on_enter_play() engine.request_scene("menu") return "" end
 function on_scene_enter(scene)
@@ -2419,7 +2398,6 @@ end
 #[test]
 fn lua_on_scene_enter_does_not_see_the_old_scene_registrations() {
     let mut tw = lua_script_world(
-        "switch_registrations",
         r#"
 function on_enter_play()
     engine.request_scene("a")
@@ -2454,7 +2432,6 @@ end
 #[test]
 fn lua_quit_wins_over_a_scene_request_in_the_same_update() {
     let mut tw = lua_script_world(
-        "quit_over_scene",
         r#"
 function on_enter_play() engine.request_scene("menu") return "" end
 function on_scene_enter(scene) table.insert(LOG, "switch:" .. scene) end
@@ -2480,7 +2457,6 @@ end
 #[test]
 fn lua_game_triggers_rust_scene_events() {
     let mut tw = lua_script_world_unplayed_with(
-        "rust_scene_events",
         "function on_enter_play() engine.request_scene('menu') return '' end\n",
         |builder| {
             builder
@@ -2510,7 +2486,6 @@ fn lua_game_triggers_rust_scene_events() {
 #[test]
 fn in_scene_gates_a_system_in_a_lua_game() {
     let mut tw = lua_script_world_unplayed_with(
-        "in_scene",
         "function on_enter_play() engine.request_scene('menu') return '' end\n",
         |builder| builder.add_system_if(count_scene_ticks, in_scene("menu")),
     );
@@ -2528,7 +2503,6 @@ fn in_scene_gates_a_system_in_a_lua_game() {
 #[test]
 fn lua_on_enter_play_spawn_survives_the_first_scene_entry() {
     let mut tw = lua_script_world(
-        "enter_play_spawn",
         r#"
 function on_enter_play()
     engine.request_scene("menu")
@@ -2555,7 +2529,6 @@ end
 #[test]
 fn lua_request_scene_from_on_update_switches_next_tick_and_updates_after() {
     let mut tw = lua_script_world(
-        "update_switch_timing",
         r#"
 function on_enter_play()
     engine.request_scene("a")
@@ -2595,7 +2568,6 @@ fn lua_timer_request_scene_switches_in_the_same_tick() {
     use aberredengine::lua::components::lua_on_timer_fired::LuaOnTimerFired;
 
     let mut tw = lua_script_world(
-        "timer_switch_timing",
         r#"
 function on_enter_play()
     engine.request_scene("a")
@@ -2626,17 +2598,14 @@ function on_timer(ctx) engine.request_scene("b") end
 #[cfg(feature = "lua")]
 #[test]
 fn lua_menu_confirm_switches_at_lifecycle_without_an_update_that_tick() {
-    let mut tw = lua_script_world(
-        "menu_confirm_timing",
-        &format!(
-            r#"{LUA_MENU_GO_TO_B}
+    let mut tw = lua_script_world(&format!(
+        r#"{LUA_MENU_GO_TO_B}
 function on_update_menu(input, dt) table.insert(LOG, "update:menu") end
 function on_update_b(input, dt)
     table.insert(LOG, "update:b:" .. tostring(input.digital.action_1.just_pressed))
 end
 "#
-        ),
-    );
+    ));
     tw.tick(1, DT);
     take_lua_log(&mut tw);
 
@@ -2651,45 +2620,36 @@ end
 /// Lua game running `script_body`, after `LOG = {}` (a global table its
 /// callbacks can append to; see `take_lua_log`), ticked to Playing.
 #[cfg(feature = "lua")]
-fn lua_script_world(name: &str, script_body: &str) -> TestWorld {
-    lua_script_world_with(name, script_body, |builder| builder)
+fn lua_script_world(script_body: &str) -> TestWorld {
+    lua_script_world_with(script_body, |builder| builder)
 }
 
 /// [`lua_script_world`] with extra builder settings from `configure`.
 #[cfg(feature = "lua")]
 fn lua_script_world_with(
-    name: &str,
     script_body: &str,
     configure: impl FnOnce(TestWorldBuilder) -> TestWorldBuilder,
 ) -> TestWorld {
-    let mut tw = lua_script_world_unplayed_with(name, script_body, configure);
+    let mut tw = lua_script_world_unplayed_with(script_body, configure);
     tw.tick_to_play(DT, 8);
     tw
 }
 
 /// [`lua_script_world`] before its first tick, still in Setup.
 #[cfg(feature = "lua")]
-fn lua_script_world_unplayed(name: &str, script_body: &str) -> TestWorld {
-    lua_script_world_unplayed_with(name, script_body, |builder| builder)
+fn lua_script_world_unplayed(script_body: &str) -> TestWorld {
+    lua_script_world_unplayed_with(script_body, |builder| builder)
 }
 
 /// [`lua_script_world_with`] before its first tick, still in Setup.
 #[cfg(feature = "lua")]
 fn lua_script_world_unplayed_with(
-    name: &str,
     script_body: &str,
     configure: impl FnOnce(TestWorldBuilder) -> TestWorldBuilder,
 ) -> TestWorld {
-    let script = std::env::temp_dir().join(format!(
-        "aberred_lua_script_{name}_{}.lua",
-        std::process::id()
-    ));
-    std::fs::write(&script, format!("LOG = {{}}\n{script_body}")).unwrap();
-    let tw = configure(TestWorld::builder().with_lua(&script))
+    configure(TestWorld::builder().with_lua_source(format!("LOG = {{}}\n{script_body}")))
         .build()
-        .expect("build should succeed");
-    std::fs::remove_file(&script).ok();
-    tw
+        .expect("build should succeed")
 }
 
 /// Drains the script's `LOG` table.
@@ -2749,7 +2709,6 @@ fn spawn_started_ended_rule(tw: &mut TestWorld, ongoing: Option<&str>) {
 #[test]
 fn lua_collision_started_runs_before_ongoing_and_ended_gets_ids_and_groups() {
     let mut tw = lua_script_world(
-        "order",
         "function on_started(ctx) LOG[#LOG + 1] = 'started ' .. ctx.a.group .. ' ' .. ctx.b.group end\n\
          function on_ongoing(ctx) LOG[#LOG + 1] = 'ongoing' end\n\
          function on_ended(ctx)\n\
@@ -2786,7 +2745,6 @@ fn lua_collision_started_runs_before_ongoing_and_ended_gets_ids_and_groups() {
 #[test]
 fn lua_collision_ongoing_sees_what_started_applied() {
     let mut tw = lua_script_world(
-        "drain",
         "function on_started(ctx) engine.collision_set_flag('started') end\n\
          function on_ongoing(ctx) LOG[#LOG + 1] = tostring(engine.has_flag('started')) end\n",
     );
@@ -2805,7 +2763,6 @@ fn lua_collision_ongoing_sees_what_started_applied() {
 #[test]
 fn lua_collision_ongoing_sees_started_entity_write() {
     let mut tw = lua_script_world(
-        "started_entity_write",
         "function on_started(ctx) engine.collision_entity_set_position(ctx.b.id, 3, 0) end\n\
          function on_ongoing(ctx) LOG[#LOG + 1] = tostring(ctx.b.pos.x) end\n",
     );
@@ -2826,7 +2783,6 @@ fn lua_collision_ongoing_sees_started_entity_write() {
 fn lua_collision_clone_then_move_template_clones_the_old_position() {
     use aberredengine::core::resources::world_signals::WorldSignals;
     let mut tw = lua_script_world(
-        "collision_clone_order",
         "function on_started(ctx)\n\
            engine.collision_clone('tpl'):build()\n\
            engine.collision_entity_set_position(engine.get_entity('tpl'), 50, 0)\n\
@@ -2863,7 +2819,6 @@ fn lua_collision_clone_then_move_template_clones_the_old_position() {
 #[test]
 fn lua_collision_started_and_ended_apply_collision_commands() {
     let mut tw = lua_script_world(
-        "commands",
         "function on_started(ctx) engine.collision_set_flag('started') end\n\
          function on_ended(ctx) engine.collision_set_flag('ended') end\n",
     );
@@ -2889,7 +2844,6 @@ fn lua_game_clean_all_entities_hook_forgets_contacts() {
     use aberredengine::core::resources::systems_store::{self as hook_keys, SystemsStore};
 
     let mut tw = lua_script_world(
-        "clean_all",
         "function on_started(ctx) LOG[#LOG + 1] = 'started' end\n\
          function on_ended(ctx) LOG[#LOG + 1] = 'ended' end\n",
     );
@@ -2918,7 +2872,6 @@ fn lua_game_clean_all_entities_hook_forgets_contacts() {
 #[test]
 fn lua_collision_ended_fires_after_a_despawn() {
     let mut tw = lua_script_world(
-        "ended_despawn",
         "function on_started(ctx) end\n\
          function on_ended(ctx)\n\
            LOG[#LOG + 1] = string.format('ended %d %d %s %s', ctx.a.id, ctx.b.id, ctx.a.group, ctx.b.group)\n\
@@ -2955,7 +2908,7 @@ fn lua_rule_entity(tw: &mut TestWorld) -> Entity {
 fn lua_collision_observers_watch_only_lua_rules() {
     use aberredengine::bevy_ecs::observer::ObservedBy;
 
-    let mut tw = lua_script_world("observed_rules", "function on_started(ctx) end\n");
+    let mut tw = lua_script_world("function on_started(ctx) end\n");
     spawn_started_ended_rule(&mut tw, None);
     let rust_rule = tw.world.spawn(CollisionRule::new("c", "d")).id();
     tw.tick(1, DT);
@@ -2974,7 +2927,6 @@ fn lua_collision_callbacks_reinserted_still_run_once() {
     use aberredengine::lua::components::lua_on_collision::LuaOnCollision;
 
     let mut tw = lua_script_world(
-        "reinsert",
         "function on_started(ctx) LOG[#LOG + 1] = 'started' end\nfunction on_ended(ctx) end\n",
     );
     spawn_started_ended_rule(&mut tw, None);
@@ -2997,7 +2949,6 @@ fn lua_collision_callbacks_reinserted_still_run_once() {
 #[test]
 fn lua_collision_rule_clone_keeps_its_callbacks() {
     let mut tw = lua_script_world(
-        "clone_rule",
         "function on_started(ctx) LOG[#LOG + 1] = 'started' end\nfunction on_ended(ctx) end\n",
     );
     spawn_lua_rule(
@@ -3023,7 +2974,6 @@ fn lua_collision_rule_clone_keeps_its_callbacks() {
 #[test]
 fn lua_collision_despawned_rule_never_calls_ended() {
     let mut tw = lua_script_world(
-        "despawned_rule",
         "function on_started(ctx) LOG[#LOG + 1] = 'started' end\n\
          function on_ended(ctx) LOG[#LOG + 1] = 'ended' end\n",
     );
@@ -3046,10 +2996,7 @@ fn lua_collision_despawned_rule_never_calls_ended() {
 #[cfg(feature = "lua")]
 #[test]
 fn lua_collision_ongoing_only_rule_runs_every_touching_tick() {
-    let mut tw = lua_script_world(
-        "ongoing_only",
-        "function on_ongoing(ctx) LOG[#LOG + 1] = 'ongoing' end\n",
-    );
+    let mut tw = lua_script_world("function on_ongoing(ctx) LOG[#LOG + 1] = 'ongoing' end\n");
     spawn_lua_rule(&mut tw, Some("on_ongoing"), "");
     spawn_box(&mut tw, "a", 0.0, ());
     let b = spawn_box(&mut tw, "b", 5.0, ());
@@ -3072,10 +3019,7 @@ fn count_ongoing(_: On<CollisionOngoing>, mut counter: ResMut<Counter>) {
 #[cfg(feature = "lua")]
 #[test]
 fn lua_and_rust_rules_on_one_pair_fire_once_per_tick() {
-    let mut tw = lua_script_world(
-        "compete",
-        "function on_ongoing(ctx) LOG[#LOG + 1] = 'ongoing' end\n",
-    );
+    let mut tw = lua_script_world("function on_ongoing(ctx) LOG[#LOG + 1] = 'ongoing' end\n");
     tw.world.init_resource::<Counter>();
     spawn_lua_rule(&mut tw, Some("on_ongoing"), "");
     tw.world
@@ -3102,7 +3046,6 @@ fn lua_timer_callback_sees_this_ticks_animation_state() {
     use aberredengine::lua::components::lua_on_timer_fired::LuaOnTimerFired;
 
     let mut tw = lua_script_world(
-        "timer_order",
         "function on_timer(ctx)\n\
            LOG[#LOG + 1] = ctx.animation.key .. ' ' .. tostring(ctx.animation.elapsed > 0)\n\
          end\n",
@@ -3261,7 +3204,6 @@ fn record_n(signals: Res<WorldSignals>, mut seen: ResMut<SeenN>) {
 #[test]
 fn rust_late_system_sees_lua_update_signal_same_tick() {
     let mut tw = lua_script_world_with(
-        "late_after_lua_update",
         r#"
 N = 0
 function on_enter_play()
@@ -3391,7 +3333,7 @@ function on_scene_enter(scene) table.insert(LOG, "enter:" .. scene) end
 #[cfg(feature = "lua")]
 #[test]
 fn lua_on_setup_request_scene_enters_that_scene() {
-    let mut tw = lua_script_world_with("setup_request_scene", LUA_SETUP_REQUEST, |builder| {
+    let mut tw = lua_script_world_with(LUA_SETUP_REQUEST, |builder| {
         builder.add_scene("a").add_scene("b").initial_scene("a")
     });
     tw.tick(1, DT);
@@ -3404,11 +3346,9 @@ fn lua_on_setup_request_scene_enters_that_scene() {
 #[cfg(feature = "lua")]
 #[test]
 fn lua_on_setup_request_scene_survives_the_loading_scene() {
-    let mut tw = lua_script_world_unplayed_with(
-        "setup_request_scene_loading",
-        LUA_SETUP_REQUEST,
-        |builder| with_loading_scene(builder).add_scene("b"),
-    );
+    let mut tw = lua_script_world_unplayed_with(LUA_SETUP_REQUEST, |builder| {
+        with_loading_scene(builder).add_scene("b")
+    });
     assert_eq!(play_through_loading(&mut tw), ["enter:b"]);
     assert_eq!(
         tw.world.resource::<WorldSignals>().get_string(sk::SCENE),
@@ -3433,7 +3373,6 @@ fn play_through_loading(tw: &mut TestWorld) -> Vec<String> {
 #[test]
 fn lua_on_enter_play_request_beats_the_on_setup_request_with_a_loading_scene() {
     let mut tw = lua_script_world_unplayed_with(
-        "setup_then_enter_play_request",
         r#"
 function on_setup() engine.request_scene("b") end
 function on_enter_play() engine.request_scene("c") return "" end
@@ -3450,7 +3389,6 @@ function on_scene_enter(scene) table.insert(LOG, "enter:" .. scene) end
 #[test]
 fn lua_loading_scene_enter_request_is_still_ignored_by_the_setup_rule() {
     let mut tw = lua_script_world_unplayed_with(
-        "loading_enter_request",
         r#"
 function on_scene_enter(scene)
     table.insert(LOG, "enter:" .. scene)
@@ -3460,4 +3398,50 @@ end
         |builder| with_loading_scene(builder).add_scene("b"),
     );
     assert_eq!(play_through_loading(&mut tw), ["enter:game"]);
+}
+
+// ── with_lua_source ──────────────────────────────────────────────────────
+
+#[cfg(feature = "lua")]
+#[test]
+fn with_lua_source_runs_the_inline_script() {
+    let mut tw = TestWorld::builder()
+        .with_lua_source(
+            "LOG = {}\nfunction on_scene_enter(scene) table.insert(LOG, 'entered:' .. scene) end",
+        )
+        .build()
+        .expect("build should succeed");
+    tw.tick_to_play(DT, 8);
+    tw.tick(1, DT);
+
+    assert_eq!(take_lua_log(&mut tw), ["entered:main"]);
+}
+
+/// Worlds built at the same time from different sources each run their own
+/// script: every build writes to its own temp file.
+#[cfg(feature = "lua")]
+#[test]
+fn with_lua_source_worlds_built_in_parallel_do_not_share_a_script() {
+    let logs: Vec<Vec<String>> = std::thread::scope(|scope| {
+        let handles: Vec<_> = (0..8)
+            .map(|i| {
+                scope.spawn(move || {
+                    let mut tw = TestWorld::builder()
+                        .with_lua_source(format!(
+                            "LOG = {{}}\nfunction on_scene_enter() table.insert(LOG, 'world{i}') end"
+                        ))
+                        .build()
+                        .expect("build should succeed");
+                    tw.tick_to_play(DT, 8);
+                    tw.tick(1, DT);
+                    take_lua_log(&mut tw)
+                })
+            })
+            .collect();
+        handles.into_iter().map(|h| h.join().unwrap()).collect()
+    });
+
+    for (i, log) in logs.iter().enumerate() {
+        assert_eq!(log, &[format!("world{i}")]);
+    }
 }
