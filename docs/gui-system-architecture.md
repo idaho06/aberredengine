@@ -142,40 +142,28 @@ There is no Lua-style builder API for Rust theming. Mutate `GuiThemeStore` direc
 system registered via `EngineBuilder::on_setup`:
 
 ```rust
-use std::sync::Arc;
-use bevy_ecs::prelude::ResMut;
-use aberredengine::core::math::{Color, Rect, Vec2};
 use aberredengine::core::components::shadow::Shadow;
-use aberredengine::core::resources::gui_theme::{GuiButtonSkin, GuiNinePatch, GuiTheme, GuiThemeStore};
+use aberredengine::core::resources::gui_theme::GuiTheme;
+use aberredengine::prelude::*;
 
 fn setup_gui_theme(mut theme_store: ResMut<GuiThemeStore>) {
-    let panel_shadow = Some(Shadow { offset: Vec2::new(2.0, 2.0), color: Color::new(0, 0, 0, 120) });
-    let theme = GuiTheme {
-        panel: GuiNinePatch {
-            tex_key: Arc::from("gui-window"),
-            source: Rect::new(0.0, 0.0, 64.0, 64.0),
-            left: 6, top: 6, right: 6, bottom: 6,
-        },
-        button: Some(GuiButtonSkin {
-            normal: GuiNinePatch {
-                tex_key: Arc::from("gui-buttons"),
-                source: Rect::new(0.0, 0.0, 64.0, 64.0),
-                left: 8, top: 8, right: 8, bottom: 8,
-            },
-            hover: None, pressed: None, disabled: None, // all fall back to normal
-            shadow: panel_shadow.clone(),
-            pressed_shadow: Some(Shadow { offset: Vec2::new(0.0, 0.0), color: Color::new(0, 0, 0, 0) }), // collapse on press
-            hover_shadow: None, disabled_shadow: None,
-        }),
-        label: None,
-        progress_bar: None,
-        font: Arc::from("ui_font"),
-        font_size: 16.0,
-        text_color: Color::WHITE,
-        panel_shadow,
-        text_shadow: None,
-    };
-    theme_store.themes.insert(Arc::from("default"), theme);
+    let panel_shadow = Shadow { offset: Vec2::new(2.0, 2.0), color: Color::new(0, 0, 0, 120) };
+    let no_shadow = Shadow { offset: Vec2::new(0.0, 0.0), color: Color::new(0, 0, 0, 0) };
+
+    // `GuiTheme` is `#[non_exhaustive]`: start from `Default` and assign fields.
+    let mut theme = GuiTheme::default();
+    theme.panel = GuiNinePatch::new("gui-window", Rect::new(0.0, 0.0, 64.0, 64.0), 6);
+    // Only `normal` is required.
+    theme.button = Some(
+        GuiButtonSkin::new(GuiNinePatch::new("gui-buttons", Rect::new(0.0, 0.0, 64.0, 64.0), 8))
+            .with_shadow(panel_shadow)
+            .with_pressed_shadow(no_shadow), // collapse the shadow on press
+    );
+    theme.font = "ui_font".into();
+    theme.font_size = 16.0;
+    theme.text_color = Color::WHITE;
+    theme.panel_shadow = Some(panel_shadow);
+    theme_store.themes.insert("default".into(), theme);
 }
 
 // Registration:
@@ -683,8 +671,7 @@ engine.entity_set_gui_disabled(entity_id, true)   -- disable
 engine.entity_set_gui_disabled(entity_id, false)  -- re-enable
 ```
 
-From Rust, mutate `GuiInteractable.state` directly via `Query<&mut GuiInteractable>` (available
-in `GameCtx.gui_interactables`).
+From Rust, take a `Query<&mut GuiInteractable>` in a system or observer and set its `state`.
 
 > **Spawn-frame caveat:** `entity_set_gui_disabled` is a no-op on the same frame as spawn, because
 > `GuiInteractable` doesn't exist yet. Use `:with_gui_button_disabled()` (Lua) or
@@ -881,65 +868,44 @@ return M
 Equivalent setup in a Rust-only game (no Lua).
 
 ```rust
-use std::sync::Arc;
-use bevy_ecs::prelude::*;
-use aberredengine::engine_app::{EngineBuilder, SceneDescriptor};
-use aberredengine::core::{
-    math::{Color, Rect, Vec2},
-    components::{
-        gui_button::GuiButton,
-        gui_label::GuiLabel,
-        gui_interactable::GuiInteractable,
-        gui_window::GuiWindow,
-        gui_offset::GuiOffset,
-        screen_position::ScreenPosition,
-        z_index::ZIndex,
-    },
-    resources::{gui_theme::*, next_scene::NextScene},
-    systems::GameCtx,
-};
-use bevy_ecs::hierarchy::ChildOf;
+use aberredengine::core::components::gui_label::GuiLabel;
+use aberredengine::core::resources::gui_theme::GuiTheme;
+use aberredengine::prelude::*;
 
-// ── Theme setup (runs once at startup) ──────────────────────────────────────
+// ── Setup hook: assets and theme (runs once, logic thread) ──────────────────
 
-fn setup_gui_theme(mut theme_store: ResMut<GuiThemeStore>) {
-    theme_store.themes.insert(Arc::from("default"), GuiTheme {
-        panel: GuiNinePatch {
-            tex_key: Arc::from("gui-window"),
-            source: Rect::new(0.0, 0.0, 64.0, 64.0),
-            left: 6, top: 6, right: 6, bottom: 6,
-        },
-        button: Some(GuiButtonSkin {
-            normal: GuiNinePatch {
-                tex_key: Arc::from("gui-buttons"),
-                source: Rect::new(0.0, 0.0, 64.0, 64.0),
-                left: 8, top: 8, right: 8, bottom: 8,
-            },
-            hover: None, pressed: None, disabled: None,
-            shadow: None, hover_shadow: None, pressed_shadow: None, disabled_shadow: None,
-        }),
-        label: None,
-        progress_bar: None,
-        font: Arc::from("ui_font"),
-        font_size: 16.0,
-        text_color: Color::WHITE,
-        panel_shadow: None,
-        text_shadow: None,
-    });
+fn setup(mut assets: AssetLoader, mut themes: ResMut<GuiThemeStore>) -> Result {
+    assets.load_texture("gui-window", "./assets/textures/gui/window.png")?;
+    assets.load_texture("gui-buttons", "./assets/textures/gui/button_atlas.png")?;
+    assets.load_font("ui_font", "./assets/fonts/MyFont.ttf", 128)?;
+
+    // `GuiTheme` is `#[non_exhaustive]`: start from `Default` and assign fields.
+    let mut theme = GuiTheme::default();
+    theme.panel = GuiNinePatch::new("gui-window", Rect::new(0.0, 0.0, 64.0, 64.0), 6);
+    theme.button = Some(GuiButtonSkin::new(GuiNinePatch::new(
+        "gui-buttons",
+        Rect::new(0.0, 0.0, 64.0, 64.0),
+        8,
+    )));
+    theme.font = "ui_font".into();
+    themes.themes.insert("default".into(), theme);
+    Ok(())
 }
 
-// ── Scene enter callback ─────────────────────────────────────────────────────
+// ── Scene enter observer ─────────────────────────────────────────────────────
 
-fn scene_enter(ctx: &mut GameCtx) {
+fn enter_game(_: On<SceneEntered>, mut commands: Commands) {
     // Window
-    let window = ctx.commands.spawn((
-        GuiWindow::new(200.0, 130.0),
-        ScreenPosition { pos: Vec2::new(10.0, 80.0) },
-        ZIndex(0.0),
-    )).id();
+    let window = commands
+        .spawn((
+            GuiWindow::new(200.0, 130.0),
+            ScreenPosition::new(10.0, 80.0),
+            ZIndex(0.0),
+        ))
+        .id();
 
     // HP label child
-    ctx.commands.spawn((
+    commands.spawn((
         GuiLabel::new(160.0, 20.0, "HP: 100")
             .with_signal_binding("player_hp")
             .with_signal_binding_format("HP: {}"),
@@ -949,31 +915,30 @@ fn scene_enter(ctx: &mut GameCtx) {
     ));
 
     // Retreat button, observed for clicks
-    ctx.commands.spawn((
-        GuiButton::new(100.0, 24.0, "Retreat"),
-        ChildOf(window),
-        GuiOffset(Vec2::new(16.0, 50.0)),
-        ZIndex(2.0),
-    )).observe(on_retreat_clicked);
+    commands
+        .spawn((
+            GuiButton::new(100.0, 24.0, "Retreat"),
+            ChildOf(window),
+            GuiOffset(Vec2::new(16.0, 50.0)),
+            ZIndex(2.0),
+        ))
+        .observe(on_retreat_clicked);
 }
 
-fn on_retreat_clicked(_ev: On<GuiClicked>, mut next_scene: ResMut<NextScene>) {
+fn on_retreat_clicked(_: On<GuiClicked>, mut next_scene: ResMut<NextScene>) {
     next_scene.set("menu");
 }
 
 // ── Engine setup ─────────────────────────────────────────────────────────────
 
-fn main() {
+fn main() -> Result<(), EngineError> {
     EngineBuilder::new()
-        .on_setup(setup_gui_theme)
-        .add_scene("game", SceneDescriptor {
-            on_enter: scene_enter,
-            on_update: None,
-            on_exit: None,
-            gui_callback: None,
-            world_draw_callback: None,
-        })
-        .run();
+        .on_setup(setup)
+        .add_scene("game")
+        .add_scene("menu")
+        .initial_scene("game")
+        .on_scene_enter("game", enter_game)
+        .try_run()
 }
 ```
 
