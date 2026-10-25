@@ -149,11 +149,7 @@ pub fn bar_bottom(inner: usize) -> String {
 /// `progress` (clamped to `0..=1`, NaN counts as 0). The fill rounds down, so
 /// the bar is full only when `progress` is complete.
 pub fn bar_middle(progress: f32, inner: usize) -> String {
-    let progress = if progress.is_nan() {
-        0.0
-    } else {
-        progress.clamp(0.0, 1.0)
-    };
+    // A float-to-integer `as` cast saturates: NaN and negatives become 0.
     let filled = ((progress * inner as f32) as usize).min(inner);
     format!("│{}{}│", "█".repeat(filled), " ".repeat(inner - filled))
 }
