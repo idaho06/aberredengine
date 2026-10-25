@@ -45,8 +45,9 @@ use crate::engine_app::{
     EngineBuilder, HookRegistrar, LogicInit, ObserverRegistrar, UpdateRegistrar, apply_tick_input,
     drain_logic_messages, ensure_main_scene, hold_back_deterministic_setup_input, hook_registrar,
     in_envelope, late_scene_system, observer_registrar, playing_late_system,
-    playing_late_system_if, playing_system, playing_system_if, run_sim_tick,
-    scene_observer_registrar, scene_system,
+    playing_late_system_if, playing_system, playing_system_if, record_scene_ref, run_sim_tick,
+    scene_observer_registrar, scene_system, validate_scene_manager, validate_scene_refs,
+    validate_tracked_groups,
 };
 use aberred_core::events::scene::{SceneEntered, SceneExited};
 use aberred_core::protocol::audio::{AudioCmd, AudioMessage};
@@ -95,6 +96,9 @@ pub struct TestWorldBuilder {
     scenes: Vec<String>,
     initial_scene: Option<String>,
     loading_scene: Option<String>,
+    /// `(method, scene)` for every method that names a scene, checked at
+    /// `build()` like `EngineBuilder`'s `scene_refs`.
+    scene_refs: Vec<(&'static str, String)>,
     tracked_groups: Vec<String>,
     #[cfg(feature = "lua")]
     lua_script: Option<PathBuf>,
@@ -123,6 +127,7 @@ impl TestWorldBuilder {
             scenes: Vec::new(),
             initial_scene: None,
             loading_scene: None,
+            scene_refs: Vec::new(),
             tracked_groups: Vec::new(),
             #[cfg(feature = "lua")]
             lua_script: None,
@@ -192,7 +197,8 @@ impl TestWorldBuilder {
         scene: impl Into<String>,
         system: impl IntoSystem<(), (), M> + Send + 'static,
     ) -> Self {
-        self.extra_systems.push(scene_system(scene.into(), system));
+        let scene = self.scene_ref("add_scene_system", scene);
+        self.extra_systems.push(scene_system(scene, system));
         self
     }
 
@@ -202,8 +208,8 @@ impl TestWorldBuilder {
         scene: impl Into<String>,
         system: impl IntoSystem<(), (), M> + Send + 'static,
     ) -> Self {
-        self.extra_systems
-            .push(late_scene_system(scene.into(), system));
+        let scene = self.scene_ref("add_late_scene_system", scene);
+        self.extra_systems.push(late_scene_system(scene, system));
         self
     }
 
@@ -213,8 +219,9 @@ impl TestWorldBuilder {
         scene: impl Into<String>,
         observer: impl IntoObserverSystem<SceneEntered, B, M>,
     ) -> Self {
+        let scene = self.scene_ref("on_scene_enter", scene);
         self.extra_observers
-            .push(scene_observer_registrar(scene.into(), observer));
+            .push(scene_observer_registrar(scene, observer));
         self
     }
 
@@ -224,8 +231,9 @@ impl TestWorldBuilder {
         scene: impl Into<String>,
         observer: impl IntoObserverSystem<SceneExited, B, M>,
     ) -> Self {
+        let scene = self.scene_ref("on_scene_exit", scene);
         self.extra_observers
-            .push(scene_observer_registrar(scene.into(), observer));
+            .push(scene_observer_registrar(scene, observer));
         self
     }
 
@@ -261,8 +269,15 @@ impl TestWorldBuilder {
     /// Set the scene shown while `Setup` waits for assets, mirroring
     /// `EngineBuilder::loading_scene`.
     pub fn loading_scene(mut self, scene: impl Into<String>) -> Self {
-        self.loading_scene = Some(scene.into());
+        let scene = self.scene_ref("loading_scene", scene);
+        self.loading_scene = Some(scene);
         self
+    }
+
+    /// Records that `method` names `scene`, for the check at `build()` that
+    /// every named scene is registered, and returns the owned name.
+    fn scene_ref(&mut self, method: &'static str, scene: impl Into<String>) -> String {
+        record_scene_ref(&mut self.scene_refs, method, scene)
     }
 
     /// Track a scene-persistent group, mirroring [`EngineBuilder::track_group`].
@@ -287,9 +302,15 @@ impl TestWorldBuilder {
 
     /// Build the [`TestWorld`], calling the same production `EngineBuilder`
     /// functions `logic_thread_main` calls (`setup_logic_world`, then
-    /// `init_logic_world`).
+    /// `init_logic_world`). Validates scenes and tracked groups like
+    /// `EngineBuilder::try_run`; the replay checks and Lua with
+    /// `.deterministic()` are skipped (no replay methods here, and the Lua
+    /// determinism audits build that combination on purpose).
     pub fn build(mut self) -> Result<TestWorld, aberred_core::error::EngineError> {
         ensure_main_scene(&mut self.scenes, &mut self.initial_scene);
+        validate_scene_manager(&self.scenes, &self.initial_scene, &self.loading_scene)?;
+        validate_scene_refs(&self.scenes, &self.scene_refs)?;
+        validate_tracked_groups(&self.tracked_groups)?;
 
         let (_tx_logic, rx_logic) = unbounded::<LogicMsg>();
         let (tx_render, rx_render) = unbounded::<RenderMsg>();

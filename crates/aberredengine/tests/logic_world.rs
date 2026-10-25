@@ -1961,6 +1961,7 @@ end
         |builder| {
             builder
                 .add_scene("level")
+                .initial_scene("level")
                 .add_scene_system("level", count_scene_ticks)
                 .on_scene_enter(
                     "level",
@@ -2015,6 +2016,7 @@ end
         |builder| {
             builder
                 .add_scene("level")
+                .initial_scene("level")
                 .on_scene_enter(
                     "level",
                     |_: On<SceneEntered>,
@@ -3286,4 +3288,92 @@ end
         assert_eq!(lua_n.len(), 1, "on_update_s runs once per tick");
         assert_eq!(tw.world.resource::<SeenN>().0, Some(lua_n[0]));
     }
+}
+
+// ── Builder validation ───────────────────────────────────────────────────
+//
+/// The error `build()` returns (`TestWorld` is not `Debug`, so no `unwrap_err`).
+fn build_err(builder: TestWorldBuilder) -> aberredengine::EngineError {
+    match builder.build() {
+        Ok(_) => panic!("build() should have been rejected"),
+        Err(err) => err,
+    }
+}
+
+#[test]
+fn test_world_rejects_a_scene_system_for_an_unregistered_scene() {
+    let err = build_err(
+        TestWorld::builder()
+            .add_scene("a")
+            .initial_scene("a")
+            .add_scene_system("typo", || {}),
+    );
+    assert!(
+        matches!(
+            err,
+            aberredengine::EngineError::SceneNotRegistered {
+                method: "add_scene_system",
+                ..
+            }
+        ),
+        "{err}"
+    );
+}
+
+#[test]
+fn test_world_rejects_a_scene_observer_for_an_unregistered_scene() {
+    let err = build_err(
+        TestWorld::builder()
+            .add_scene("a")
+            .initial_scene("a")
+            .on_scene_enter("typo", |_: On<SceneEntered>| {}),
+    );
+    assert!(
+        matches!(
+            err,
+            aberredengine::EngineError::SceneNotRegistered {
+                method: "on_scene_enter",
+                ..
+            }
+        ),
+        "{err}"
+    );
+}
+
+#[test]
+fn test_world_rejects_add_scene_without_initial_scene() {
+    let err = build_err(TestWorld::builder().add_scene("a"));
+    assert!(
+        matches!(
+            err,
+            aberredengine::EngineError::AddSceneRequiresInitialScene
+        ),
+        "{err}"
+    );
+}
+
+#[test]
+fn test_world_rejects_a_loading_scene_equal_to_the_initial_scene() {
+    let err = build_err(
+        TestWorld::builder()
+            .add_scene("a")
+            .initial_scene("a")
+            .loading_scene("a"),
+    );
+    assert!(
+        matches!(
+            err,
+            aberredengine::EngineError::LoadingSceneIsInitialScene { .. }
+        ),
+        "{err}"
+    );
+}
+
+#[test]
+fn test_world_rejects_an_overlong_tracked_group() {
+    let err = build_err(TestWorld::builder().track_group("g".repeat(1000)));
+    assert!(
+        matches!(err, aberredengine::EngineError::GroupNameTooLong { .. }),
+        "{err}"
+    );
 }

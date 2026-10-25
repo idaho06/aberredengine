@@ -13,6 +13,85 @@ pub(crate) fn ensure_main_scene(scenes: &mut Vec<String>, initial_scene: &mut Op
     }
 }
 
+/// Records that `method` names `scene` in `scene_refs`, for the check that
+/// every named scene is registered ([`validate_scene_refs`]), and returns the
+/// owned name. Shared by `EngineBuilder` and `TestWorldBuilder`.
+pub(crate) fn record_scene_ref(
+    scene_refs: &mut Vec<(&'static str, String)>,
+    method: &'static str,
+    scene: impl Into<String>,
+) -> String {
+    let scene = scene.into();
+    scene_refs.push((method, scene.clone()));
+    scene
+}
+
+/// Checks `.add_scene()`/`.initial_scene()` consistency: `initial_scene` is
+/// set and matches a registered scene name. Runs after [`ensure_main_scene`],
+/// so no scenes means `.initial_scene()` was set without `.add_scene()`.
+/// Shared by `EngineBuilder::try_run` and `TestWorldBuilder::build`.
+pub(crate) fn validate_scene_manager(
+    scenes: &[String],
+    initial_scene: &Option<String>,
+    loading_scene: &Option<String>,
+) -> Result<(), EngineError> {
+    if scenes.is_empty() {
+        return Err(EngineError::InitialSceneWithoutScenes);
+    }
+
+    let Some(initial_scene) = initial_scene else {
+        return Err(EngineError::AddSceneRequiresInitialScene);
+    };
+    if !scenes.contains(initial_scene) {
+        return Err(EngineError::InitialSceneNotRegistered {
+            name: initial_scene.clone(),
+            registered: scenes.join(", "),
+        });
+    }
+    if loading_scene.as_deref() == Some(initial_scene.as_str()) {
+        return Err(EngineError::LoadingSceneIsInitialScene {
+            name: initial_scene.clone(),
+        });
+    }
+    Ok(())
+}
+
+/// Every scene named by `add_scene_system`/`on_scene_enter`/`on_scene_exit`
+/// must be registered with `.add_scene()`; otherwise the system would never
+/// run, or the observer would have no scene entity to attach to. `scene_refs`
+/// holds the `(method, scene)` pairs those methods recorded. Shared by
+/// `EngineBuilder::try_run` and `TestWorldBuilder::build`.
+pub(crate) fn validate_scene_refs(
+    scenes: &[String],
+    scene_refs: &[(&'static str, String)],
+) -> Result<(), EngineError> {
+    let registered = |name: &str| scenes.iter().any(|scene| scene == name);
+    if let Some((method, name)) = scene_refs.iter().find(|(_, name)| !registered(name)) {
+        return Err(EngineError::SceneNotRegistered {
+            method,
+            name: name.clone(),
+            registered: scenes.join(", "),
+        });
+    }
+    Ok(())
+}
+
+/// Rejects `.track_group()` names whose group-count signal key would not fit
+/// (see `TrackedGroups::add_group`, which only warns at runtime). Shared by
+/// `EngineBuilder::try_run` and `TestWorldBuilder::build`.
+pub(crate) fn validate_tracked_groups(tracked_groups: &[String]) -> Result<(), EngineError> {
+    if let Some(name) = tracked_groups
+        .iter()
+        .find(|name| name.len() > MAX_GROUP_NAME_LEN)
+    {
+        return Err(EngineError::GroupNameTooLong {
+            name: name.clone(),
+            len: name.len(),
+        });
+    }
+    Ok(())
+}
+
 impl EngineBuilder {
     /// See [`ensure_main_scene`]. Runs before validation, so
     /// `.add_scene_system("main", ..)` and friends validate against it.
@@ -21,27 +100,11 @@ impl EngineBuilder {
     }
 
     pub(super) fn validate_builder(&self) -> Result<(), EngineError> {
-        self.validate_scene_manager()?;
-        self.validate_scene_refs()?;
+        validate_scene_manager(&self.scenes, &self.initial_scene, &self.loading_scene)?;
+        validate_scene_refs(&self.scenes, &self.scene_refs)?;
         self.validate_deterministic()?;
         self.validate_replay()?;
-        self.validate_tracked_groups()?;
-        Ok(())
-    }
-
-    /// Rejects `.track_group()` names whose group-count signal key would not
-    /// fit (see `TrackedGroups::add_group`, which only warns at runtime).
-    fn validate_tracked_groups(&self) -> Result<(), EngineError> {
-        if let Some(name) = self
-            .tracked_groups
-            .iter()
-            .find(|name| name.len() > MAX_GROUP_NAME_LEN)
-        {
-            return Err(EngineError::GroupNameTooLong {
-                name: name.clone(),
-                len: name.len(),
-            });
-        }
+        validate_tracked_groups(&self.tracked_groups)?;
         Ok(())
     }
 
@@ -56,52 +119,6 @@ impl EngineBuilder {
         {
             false
         }
-    }
-
-    /// Checks `.add_scene()`/`.initial_scene()` consistency: `initial_scene` is
-    /// set and matches a registered scene name. Runs after
-    /// [`ensure_main_scene`], so no scenes means `.initial_scene()` was set
-    /// without `.add_scene()`.
-    fn validate_scene_manager(&self) -> Result<(), EngineError> {
-        if self.scenes.is_empty() {
-            return Err(EngineError::InitialSceneWithoutScenes);
-        }
-
-        let Some(initial_scene) = &self.initial_scene else {
-            return Err(EngineError::AddSceneRequiresInitialScene);
-        };
-        if !self.scenes.contains(initial_scene) {
-            return Err(EngineError::InitialSceneNotRegistered {
-                name: initial_scene.clone(),
-                registered: self.registered_scene_list(),
-            });
-        }
-        if self.loading_scene.as_deref() == Some(initial_scene.as_str()) {
-            return Err(EngineError::LoadingSceneIsInitialScene {
-                name: initial_scene.clone(),
-            });
-        }
-        Ok(())
-    }
-
-    /// Every scene named by `add_scene_system`/`on_scene_enter`/`on_scene_exit`
-    /// must be registered with `.add_scene()`; otherwise the system would never
-    /// run, or the observer would have no scene entity to attach to.
-    fn validate_scene_refs(&self) -> Result<(), EngineError> {
-        let registered = |name: &str| self.scenes.iter().any(|scene| scene == name);
-        if let Some((method, name)) = self.scene_refs.iter().find(|(_, name)| !registered(name)) {
-            return Err(EngineError::SceneNotRegistered {
-                method,
-                name: name.clone(),
-                registered: self.registered_scene_list(),
-            });
-        }
-        Ok(())
-    }
-
-    /// `"menu, level"`: registered scene names in registration order, for errors.
-    fn registered_scene_list(&self) -> String {
-        self.scenes.join(", ")
     }
 
     /// `.deterministic(seed)` and `.with_lua()` are mutually exclusive --

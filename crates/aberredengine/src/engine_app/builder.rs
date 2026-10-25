@@ -10,6 +10,7 @@ use super::registrar::{
 };
 #[cfg(doc)] // doc links
 use super::schedule::SimSet;
+use super::validate::record_scene_ref;
 use aberred_core::events::scene::{SceneEntered, SceneExited};
 use aberred_core::resources::systems_store as hook_keys;
 use aberred_core::systems::scene_dispatch::WorldDrawCallback;
@@ -324,9 +325,7 @@ impl EngineBuilder {
     /// Records that `method` names `scene`, for the startup check that every
     /// named scene is registered, and returns the owned name.
     fn scene_ref(&mut self, method: &'static str, scene: impl Into<String>) -> String {
-        let scene = scene.into();
-        self.scene_refs.push((method, scene.clone()));
-        scene
+        record_scene_ref(&mut self.scene_refs, method, scene)
     }
 
     /// Add systems to the sim schedule with full control over ordering and
