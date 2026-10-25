@@ -18,6 +18,7 @@ Built with:
 - Custom engine bootstrap via `EngineBuilder`
 - Optional Lua-driven game logic through `assets/scripts/main.lua`
 - Rust-native scene support via `SceneManager`
+- A built-in loading screen while `Setup` loads assets (`EngineBuilder::engine_loading_screen`; the binary shows it for Lua games)
 - Sprites, animation, text, menus, tweening, collision, timers, phases, signals, particles, shaders, and camera follow
 - Parent-child hierarchy support using Bevy relationships plus `GlobalTransform2D`
 - Generated Lua stubs for editor support in `assets/scripts/engine.lua`

@@ -102,6 +102,7 @@ fn main() {
     {
         if let Err(err) = EngineBuilder::new()
             .with_lua("./assets/scripts/main.lua")
+            .engine_loading_screen()
             .try_run()
         {
             error!("Error starting engine: {err}");
