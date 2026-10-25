@@ -1427,6 +1427,31 @@ fn the_loading_screen_spawns_its_texts() {
     assert_eq!(fonts, ["default"; 5]);
 }
 
+/// The texts are published to the render thread: the snapshot carries all
+/// five (a screen text without a `ZIndex` never reaches it).
+#[test]
+fn the_loading_screen_texts_reach_the_snapshot() {
+    let mut tw = engine_loading_screen_world();
+    tw.tick(2, DT);
+
+    let snapshot = tw.present();
+    let mut texts: Vec<String> = snapshot
+        .screen_texts
+        .iter()
+        .map(|entry| entry.text.text.to_string())
+        .collect();
+    texts.sort();
+    let mut expected = vec![
+        "AberredEngine".to_owned(),
+        "Loading...".to_owned(),
+        bar_top(BAR_INNER_WIDTH),
+        bar_middle(0.0, BAR_INNER_WIDTH),
+        bar_bottom(BAR_INNER_WIDTH),
+    ];
+    expected.sort();
+    assert_eq!(texts, expected);
+}
+
 /// The bar's middle row follows the share of answered loads; the other texts
 /// don't change.
 #[test]

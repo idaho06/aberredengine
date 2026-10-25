@@ -14,6 +14,7 @@ use bevy_ecs::prelude::*;
 use crate::components::dynamic_text::DynamicText;
 use crate::components::screen_position::ScreenPosition;
 use crate::components::shadow::Shadow;
+use crate::components::z_index::ZIndex;
 use crate::math::Color;
 use crate::resources::font_key::DEFAULT_FONT_KEY;
 use crate::resources::font_metrics::FontMetricsStore;
@@ -90,6 +91,7 @@ pub fn show_loading_screen(
                 centered_x(screen_width, width_of(content)),
                 top + row * ROW_HEIGHT,
             ),
+            ZIndex(0.0),
             Shadow::default_color(1.0, 1.0),
         ));
     }
@@ -103,7 +105,7 @@ pub fn show_loading_screen(
     for (index, content) in rows.iter().enumerate() {
         let position =
             ScreenPosition::new(bar_x, top + (BAR_OFFSET_ROWS + index as f32) * ROW_HEIGHT);
-        let mut row = commands.spawn((EngineLoadingScreen, text(content), position));
+        let mut row = commands.spawn((EngineLoadingScreen, text(content), position, ZIndex(0.0)));
         if index == 1 {
             row.insert(LoadingBar);
         }

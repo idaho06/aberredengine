@@ -66,6 +66,7 @@ mod loading_screen {
         commands.spawn((
             LoadingText,
             ScreenPosition::new(10.0, 10.0),
+            ZIndex(0.0),
             DynamicText::new("Loading…", "default", 14.0, Color::WHITE),
         ));
     }

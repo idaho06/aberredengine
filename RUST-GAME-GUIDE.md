@@ -868,6 +868,7 @@ fn show_loading(_: On<SceneEntered>, mut commands: Commands) {
     commands.spawn((
         LoadingText,
         ScreenPosition::new(10.0, 10.0),
+        ZIndex(0.0),
         DynamicText::new("Loading…", "default", 14.0, Color::WHITE),
     ));
 }
@@ -897,7 +898,7 @@ fn main() -> Result<(), EngineError> {
 ```
 
 - `WorldTime` doesn't advance during Setup, so a loading scene shows progress, not time-based animation (tweens, sprite animations).
-- Its text can use the [default font](#default-font), which is available before any load is answered; a font queued in the setup hook is not ready yet.
+- Its text can use the [default font](#default-font), which is available before any load is answered; a font queued in the setup hook is not ready yet. A screen-space text needs a `ZIndex` to be drawn.
 - Leaving it tears it down along with everything spawned during Setup, the setup hook's spawns included. Mark what must survive `Persistent`, or spawn it in the initial scene.
 
 `.engine_loading_screen()` shows the engine's own screen instead: a dark-grey background, the engine name and a progress bar that fills as the queued loads are answered. It is not a scene. It fires no scene events, has no `SceneManager` entry and is invisible to Lua; it exists while the game is in `Setup`, which lasts at least one second while it is up so a fast load still shows it, and the game's background color comes back when `Setup` ends, before the first scene is entered. Nothing spawned during `Setup` is torn down by it. It is independent of `.loading_scene()`; a game using both shows both. Calling it twice changes nothing.
