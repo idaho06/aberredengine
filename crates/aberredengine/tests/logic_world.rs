@@ -43,6 +43,7 @@ use aberredengine::core::protocol::tick_input::TickInput;
 use aberredengine::core::resources::font_metrics::{
     FontMetrics, FontMetricsWarnCache, GlyphMetrics,
 };
+use aberredengine::core::resources::game_config::GameConfig;
 use aberredengine::core::resources::game_state::{CurrentGameState, GameState, NextGameState};
 use aberredengine::core::resources::input::InputAction;
 use aberredengine::core::resources::input::InputState;
@@ -57,8 +58,8 @@ use aberredengine::core::resources::signal_keys as sk;
 use aberredengine::core::resources::world_signals::WorldSignals;
 use aberredengine::core::systems::asset_loader::{AssetError, AssetLoader};
 use aberredengine::core::systems::loading_screen::{
-    BAR_INNER_WIDTH, LOADING_SCENE, bar_bottom, bar_middle, bar_top, spawn_loading_screen,
-    update_loading_bar,
+    BACKGROUND, BAR_INNER_WIDTH, LOADING_SCENE, SavedBackground, bar_bottom, bar_middle, bar_top,
+    restore_background, set_loading_background, spawn_loading_screen, update_loading_bar,
 };
 use aberredengine::core::systems::scene_dispatch::in_scene;
 use aberredengine::engine_app::SimSet;
@@ -1349,6 +1350,13 @@ fn a_switch_to_another_scene_during_loading_is_ignored() {
 /// A game whose setup hook queues four texture loads, with the engine
 /// loading screen's pieces registered by hand on the `LOADING_SCENE`.
 fn engine_loading_screen_world() -> TestWorld {
+    engine_loading_screen_builder()
+        .build()
+        .expect("build should succeed")
+}
+
+/// [`engine_loading_screen_world`]'s builder, before `build()`.
+fn engine_loading_screen_builder() -> TestWorldBuilder {
     TestWorld::builder()
         .add_scene(LOADING_SCENE)
         .add_scene("game")
@@ -1361,9 +1369,9 @@ fn engine_loading_screen_world() -> TestWorld {
             Ok(())
         })
         .on_scene_enter(LOADING_SCENE, spawn_loading_screen)
+        .on_scene_enter(LOADING_SCENE, set_loading_background)
+        .on_scene_exit(LOADING_SCENE, restore_background)
         .add_scene_system(LOADING_SCENE, update_loading_bar)
-        .build()
-        .expect("build should succeed")
 }
 
 /// Every loading-screen text as `(content, screen position, has shadow)`,
@@ -1462,6 +1470,42 @@ fn the_loading_screen_is_torn_down_when_loading_ends() {
         GameState::Playing
     );
     assert!(loading_screen_rows(&mut tw).is_empty());
+}
+
+/// The loading scene paints the dark-grey background, in the config and in
+/// the published snapshot, and gives the game's own color back when it ends.
+#[test]
+fn the_loading_screen_paints_its_background_and_restores_the_old_one() {
+    let game_background = Color::new(10, 200, 55, 255);
+    let mut config = GameConfig::new();
+    config.background_color = game_background;
+    let mut tw = engine_loading_screen_builder()
+        .config(config)
+        .build()
+        .expect("build should succeed");
+
+    tw.tick(2, DT);
+    assert_eq!(
+        tw.world.resource::<GameConfig>().background_color,
+        BACKGROUND
+    );
+    assert_eq!(tw.present().game_config.background_color, BACKGROUND);
+    assert_eq!(tw.world.resource::<SavedBackground>().0, game_background);
+
+    for key in ["t0", "t1", "t2", "t3"] {
+        tw.deliver_texture_dims(key, 8, 8);
+    }
+    tw.tick(4, DT);
+    assert_eq!(
+        *tw.world.resource::<CurrentGameState>().get(),
+        GameState::Playing
+    );
+    assert_eq!(
+        tw.world.resource::<GameConfig>().background_color,
+        game_background
+    );
+    assert_eq!(tw.present().game_config.background_color, game_background);
+    assert!(tw.world.get_resource::<SavedBackground>().is_none());
 }
 
 #[derive(Resource, Default)]

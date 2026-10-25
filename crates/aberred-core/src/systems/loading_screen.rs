@@ -9,10 +9,11 @@ use bevy_ecs::prelude::*;
 use crate::components::dynamic_text::DynamicText;
 use crate::components::screen_position::ScreenPosition;
 use crate::components::shadow::Shadow;
-use crate::events::scene::SceneEntered;
+use crate::events::scene::{SceneEntered, SceneExited};
 use crate::math::Color;
 use crate::resources::font_key::DEFAULT_FONT_KEY;
 use crate::resources::font_metrics::FontMetricsStore;
+use crate::resources::game_config::GameConfig;
 use crate::resources::pending_assets::PendingAssets;
 use crate::resources::render_size::RenderSize;
 
@@ -38,6 +39,34 @@ const TOTAL_ROWS: f32 = BAR_OFFSET_ROWS + 3.0;
 /// Marks the bar's middle row, the only text that changes while loading.
 #[derive(Component)]
 pub struct LoadingBar;
+
+/// The game's background color, kept while the loading scene paints its own.
+#[derive(Resource)]
+pub struct SavedBackground(pub Color);
+
+/// Saves the game's background color and paints [`BACKGROUND`] when the
+/// loading scene is entered.
+pub fn set_loading_background(
+    _: On<SceneEntered>,
+    mut commands: Commands,
+    mut config: ResMut<GameConfig>,
+) {
+    commands.insert_resource(SavedBackground(config.background_color));
+    config.background_color = BACKGROUND;
+}
+
+/// Gives the game's background color back when the loading scene is left.
+pub fn restore_background(
+    _: On<SceneExited>,
+    mut commands: Commands,
+    mut config: ResMut<GameConfig>,
+    saved: Option<Res<SavedBackground>>,
+) {
+    if let Some(saved) = saved {
+        config.background_color = saved.0;
+        commands.remove_resource::<SavedBackground>();
+    }
+}
 
 /// Spawns the loading screen's texts when the loading scene is entered,
 /// centered on the render size, with the bar at the current load progress.
