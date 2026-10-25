@@ -4,7 +4,17 @@
 //! The layout functions are pure so the screen's text can be pinned without
 //! a window or font metrics.
 
+use bevy_ecs::prelude::*;
+
+use crate::components::dynamic_text::DynamicText;
+use crate::components::screen_position::ScreenPosition;
+use crate::components::shadow::Shadow;
+use crate::events::scene::SceneEntered;
 use crate::math::Color;
+use crate::resources::font_key::DEFAULT_FONT_KEY;
+use crate::resources::font_metrics::FontMetricsStore;
+use crate::resources::pending_assets::PendingAssets;
+use crate::resources::render_size::RenderSize;
 
 /// Name of the loading scene. Prefixed so it cannot clash with a game's own
 /// scene names.
@@ -15,6 +25,83 @@ pub const BAR_INNER_WIDTH: usize = 30;
 
 /// Background shown while the loading scene is active.
 pub const BACKGROUND: Color = Color::new(32, 32, 32, 255);
+
+/// Height of one text row: the default font's cell height in pixels.
+const ROW_HEIGHT: f32 = 14.0;
+
+/// Rows from the title's top to the bar's top: title, gap, subtitle, gap.
+const BAR_OFFSET_ROWS: f32 = 4.0;
+
+/// Rows the whole screen occupies: the title block plus the three bar rows.
+const TOTAL_ROWS: f32 = BAR_OFFSET_ROWS + 3.0;
+
+/// Marks the bar's middle row, the only text that changes while loading.
+#[derive(Component)]
+pub struct LoadingBar;
+
+/// Spawns the loading screen's texts when the loading scene is entered,
+/// centered on the render size, with the bar at the current load progress.
+///
+/// Widths come from the default font's metrics; without them the texts
+/// center as if zero wide.
+pub fn spawn_loading_screen(
+    _: On<SceneEntered>,
+    mut commands: Commands,
+    render_size: Res<RenderSize>,
+    metrics: Res<FontMetricsStore>,
+    pending: Res<PendingAssets>,
+) {
+    let width_of = |text: &str| {
+        metrics
+            .0
+            .get(DEFAULT_FONT_KEY)
+            .map_or(0.0, |font| font.measure_text(text, ROW_HEIGHT).x)
+    };
+    let screen_width = render_size.w as f32;
+    let top = ((render_size.h as f32 - TOTAL_ROWS * ROW_HEIGHT) / 2.0).floor();
+    let text =
+        |content: &str| DynamicText::new(content, DEFAULT_FONT_KEY, ROW_HEIGHT, Color::WHITE);
+
+    for (row, content) in [(0.0, "AberredEngine"), (2.0, "Loading...")] {
+        commands.spawn((
+            text(content),
+            ScreenPosition::new(
+                centered_x(screen_width, width_of(content)),
+                top + row * ROW_HEIGHT,
+            ),
+            Shadow::default_color(1.0, 1.0),
+        ));
+    }
+
+    let rows = [
+        bar_top(BAR_INNER_WIDTH),
+        bar_middle(pending.progress(), BAR_INNER_WIDTH),
+        bar_bottom(BAR_INNER_WIDTH),
+    ];
+    let bar_x = centered_x(screen_width, width_of(&rows[0]));
+    for (index, content) in rows.iter().enumerate() {
+        let position =
+            ScreenPosition::new(bar_x, top + (BAR_OFFSET_ROWS + index as f32) * ROW_HEIGHT);
+        let mut row = commands.spawn((text(content), position));
+        if index == 1 {
+            row.insert(LoadingBar);
+        }
+    }
+}
+
+/// Redraws the bar's middle row when the pending loads change.
+pub fn update_loading_bar(
+    pending: Res<PendingAssets>,
+    mut bars: Query<&mut DynamicText, With<LoadingBar>>,
+) {
+    if !pending.is_changed() {
+        return;
+    }
+    let row = bar_middle(pending.progress(), BAR_INNER_WIDTH);
+    for mut bar in &mut bars {
+        bar.set_text(&row);
+    }
+}
 
 /// The bar's top border for `inner` cells between the corners.
 pub fn bar_top(inner: usize) -> String {

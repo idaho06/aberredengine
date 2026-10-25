@@ -21,6 +21,7 @@ use aberredengine::core::components::phase::Phase;
 use aberredengine::core::components::rigid_body::RigidBody;
 use aberredengine::core::components::scene::SceneName;
 use aberredengine::core::components::screen_position::ScreenPosition;
+use aberredengine::core::components::shadow::Shadow;
 use aberredengine::core::components::signals::Signals;
 use aberredengine::core::components::sprite::Sprite;
 use aberredengine::core::components::timer::Timer;
@@ -55,6 +56,10 @@ use aberredengine::core::resources::signal_intents::SignalIntent;
 use aberredengine::core::resources::signal_keys as sk;
 use aberredengine::core::resources::world_signals::WorldSignals;
 use aberredengine::core::systems::asset_loader::{AssetError, AssetLoader};
+use aberredengine::core::systems::loading_screen::{
+    BAR_INNER_WIDTH, LOADING_SCENE, bar_bottom, bar_middle, bar_top, spawn_loading_screen,
+    update_loading_bar,
+};
 use aberredengine::core::systems::scene_dispatch::in_scene;
 use aberredengine::engine_app::SimSet;
 use aberredengine::raylib::ffi::KeyboardKey;
@@ -1339,6 +1344,124 @@ fn a_switch_to_another_scene_during_loading_is_ignored() {
             "enter game (entity game) from Some(\"loading\")",
         ]
     );
+}
+
+/// A game whose setup hook queues four texture loads, with the engine
+/// loading screen's pieces registered by hand on the `LOADING_SCENE`.
+fn engine_loading_screen_world() -> TestWorld {
+    TestWorld::builder()
+        .add_scene(LOADING_SCENE)
+        .add_scene("game")
+        .initial_scene("game")
+        .loading_scene(LOADING_SCENE)
+        .on_setup(|mut assets: AssetLoader| -> Result {
+            for key in ["t0", "t1", "t2", "t3"] {
+                assets.load_texture(key, "player.png")?;
+            }
+            Ok(())
+        })
+        .on_scene_enter(LOADING_SCENE, spawn_loading_screen)
+        .add_scene_system(LOADING_SCENE, update_loading_bar)
+        .build()
+        .expect("build should succeed")
+}
+
+/// Every loading-screen text as `(content, screen position, has shadow)`,
+/// top to bottom.
+fn loading_screen_rows(tw: &mut TestWorld) -> Vec<(String, Vec2, bool)> {
+    let mut rows: Vec<_> = tw
+        .world
+        .query::<(&DynamicText, &ScreenPosition, Has<Shadow>)>()
+        .iter(&tw.world)
+        .map(|(text, position, shadow)| (text.text.to_string(), position.pos, shadow))
+        .collect();
+    rows.sort_by(|a, b| a.1.y.total_cmp(&b.1.y));
+    rows
+}
+
+/// The engine's loading screen shows the name, a subtitle and a three-row bar,
+/// all in the default font, the two titles shadowed, on whole pixels.
+#[test]
+fn the_loading_screen_spawns_its_texts() {
+    let mut tw = engine_loading_screen_world();
+    tw.tick(2, DT);
+
+    let rows = loading_screen_rows(&mut tw);
+    let texts: Vec<&str> = rows.iter().map(|row| row.0.as_str()).collect();
+    assert_eq!(
+        texts,
+        [
+            "AberredEngine",
+            "Loading...",
+            bar_top(BAR_INNER_WIDTH).as_str(),
+            bar_middle(0.0, BAR_INNER_WIDTH).as_str(),
+            bar_bottom(BAR_INNER_WIDTH).as_str(),
+        ]
+    );
+    assert_eq!(
+        rows.iter().map(|row| row.2).collect::<Vec<_>>(),
+        [true, true, false, false, false]
+    );
+    for (_, position, _) in &rows {
+        assert_eq!(position.x, position.x.floor());
+        assert_eq!(position.y, position.y.floor());
+    }
+    let bar = &rows[2..];
+    assert_eq!(bar[0].1.x, bar[1].1.x);
+    assert_eq!(bar[1].1.x, bar[2].1.x);
+    assert_eq!(bar[1].1.y - bar[0].1.y, 14.0);
+    assert_eq!(bar[2].1.y - bar[1].1.y, 14.0);
+
+    let fonts: Vec<String> = tw
+        .world
+        .query::<&DynamicText>()
+        .iter(&tw.world)
+        .map(|text| text.font.to_string())
+        .collect();
+    assert_eq!(fonts, ["default"; 5]);
+}
+
+/// The bar's middle row follows the share of answered loads; the other texts
+/// don't change.
+#[test]
+fn the_loading_bar_fills_as_loads_are_answered() {
+    let mut tw = engine_loading_screen_world();
+    tw.tick(2, DT);
+    let before = loading_screen_rows(&mut tw);
+
+    tw.deliver_texture_dims("t0", 8, 8);
+    tw.tick(2, DT);
+    assert_eq!(
+        loading_screen_rows(&mut tw)[3].0,
+        bar_middle(0.25, BAR_INNER_WIDTH)
+    );
+
+    tw.deliver_texture_dims("t1", 8, 8);
+    tw.tick(2, DT);
+    let rows = loading_screen_rows(&mut tw);
+    assert_eq!(rows[3].0, bar_middle(0.5, BAR_INNER_WIDTH));
+    for index in [0, 1, 2, 4] {
+        assert_eq!(rows[index], before[index]);
+    }
+}
+
+/// The loading screen's entities go with the loading scene.
+#[test]
+fn the_loading_screen_is_torn_down_when_loading_ends() {
+    let mut tw = engine_loading_screen_world();
+    tw.tick(2, DT);
+    assert_eq!(loading_screen_rows(&mut tw).len(), 5);
+
+    for key in ["t0", "t1", "t2", "t3"] {
+        tw.deliver_texture_dims(key, 8, 8);
+    }
+    tw.tick(4, DT);
+
+    assert_eq!(
+        *tw.world.resource::<CurrentGameState>().get(),
+        GameState::Playing
+    );
+    assert!(loading_screen_rows(&mut tw).is_empty());
 }
 
 #[derive(Resource, Default)]
