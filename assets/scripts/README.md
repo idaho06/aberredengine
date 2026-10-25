@@ -277,7 +277,9 @@ Request scenes with `engine.request_scene(name)` and quit with `engine.request_q
 immediately: every scene request is applied by the next scene switch poll.
 
 An `engine.request_scene` in `on_setup` picks the first scene, with or without a loading scene; one in `on_enter_play`
-replaces it. Entering the first scene despawns nothing: spawns and other commands queued in `on_setup`/`on_enter_play` apply
+replaces it.
+
+Entering the first scene despawns nothing: spawns and other commands queued in `on_setup`/`on_enter_play` apply
 when the first scene is entered. Each later switch despawns the scene it leaves (every entity not built with
 `:with_persistent()`). The engine's Rust scene events (`SceneEntered`/`SceneExited`) fire in Lua games too. A game
 can combine `main.lua` with Rust scenes, setup and systems (see
