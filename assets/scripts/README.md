@@ -285,19 +285,20 @@ can combine `main.lua` with Rust scenes, setup and systems (see
 
 ### 3. Callback Command Processing
 
-Different callbacks process different types of engine commands. Here's what commands are processed after each callback type:
+Different callbacks process different types of engine commands. Here's what commands are processed after each callback type, with the kinds listed in processing order (see the next table):
 
 | Callback | Processed Commands | Use Cases |
 |----------|-------------------|-----------|
 | `on_setup()` | Asset, Animation | Load textures, fonts, audio, shaders; register animations |
 | `on_enter_play()` | Signal, Group | Initialize world signals; configure group tracking |
-| `on_scene_enter(name)` | Signal, Entity, Phase, Audio, Spawn, Clone, Group, Camera, Render, GameConfig, CameraFollow, InputBinding | **Most complete** - spawn/clone entities; set signals; play audio; set camera; set post-process shader; configure fullscreen/vsync/fps; rebind keys |
-| `on_update_<scene>(input, dt)` | Signal, Entity, Spawn, Clone, Phase, Audio, Camera, Render, GameConfig, CameraFollow, InputBinding | Per-frame logic - camera effects, post-process control, game config changes, key rebinding; but avoid spawning/cloning in hot loops unless you really mean to |
-| Phase callbacks | Phase, Audio, Signal, Spawn, Clone, Entity, Camera | Transition phases; play sounds; spawn/clone/modify entities; camera effects |
-| Timer callbacks | Phase, Audio, Signal, Spawn, Clone, Entity, Camera | Same command surface as phase callbacks |
-| LuaSetup callbacks | Signal, Entity, Spawn, Clone, Audio, Camera | One-shot entity initialisation — add phases, animations, collision rules, etc. |
-| `on_animation_finished` callbacks | Phase, Audio, Signal, Spawn, Clone, Entity, Camera | Fired once when a non-looped animation first reaches its last frame |
-| Collision callbacks | Entity, Signal, Audio, Spawn, Clone, Phase, Camera | Collision-safe entity changes, effects, and camera reactions |
+| `on_scene_enter(name)` | Animation, Signal, Entity, Spawn, Clone, Audio, Camera, Phase, Render, GameConfig, CameraFollow, InputBinding, Group | **Most complete** - spawn/clone entities; set signals; play audio; set camera; set post-process shader; configure fullscreen/vsync/fps; rebind keys |
+| `on_update_<scene>(input, dt)` | Animation, Signal, Entity, Spawn, Clone, Audio, Camera, Phase, Render, GameConfig, CameraFollow, InputBinding, Group | Per-frame logic - camera effects, post-process control, game config changes, key rebinding; but avoid spawning/cloning in hot loops unless you really mean to |
+| Phase callbacks | Signal, Entity, Spawn, Clone, Audio, Camera, Phase | Transition phases; play sounds; spawn/clone/modify entities; camera effects |
+| Timer callbacks | Signal, Entity, Spawn, Clone, Audio, Camera, Phase | Same command surface as phase callbacks |
+| LuaSetup callbacks | Signal, Entity, Spawn, Clone, Audio, Camera, Phase | One-shot entity initialisation — add phases, animations, collision rules, etc. |
+| `on_animation_finished` callbacks | Signal, Entity, Spawn, Clone, Audio, Camera, Phase | Fired once when a non-looped animation first reaches its last frame |
+| Menu and GUI click callbacks | Signal, Entity, Spawn, Clone, Audio, Camera, Phase | React to menu selections and widget clicks |
+| Collision callbacks | Signal, Entity, Spawn, Clone, Audio, Camera, Phase | Collision-safe entity changes, effects, and camera reactions |
 
 **Processing Order by Callback**:
 
