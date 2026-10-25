@@ -61,6 +61,7 @@ pub mod gui_spawn;
 pub mod input;
 pub mod input_acceleration_controller;
 pub mod input_simple_controller;
+pub mod loading_screen;
 pub mod logic_bridge;
 pub mod map_spawn;
 pub mod menu;
