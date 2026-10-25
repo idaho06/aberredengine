@@ -440,6 +440,8 @@ Every scene switch is a request through the `NextScene` resource (in the prelude
 
 Each of these only records the request (so does a Lua script's `engine.request_scene`); none switches immediately.
 
+During Setup, the only scene a request may enter is the [loading scene](#loading-screen); any other request is ignored with a warning, and the engine enters the first scene once Setup ends.
+
 The engine's `scene_switch_poll` system (registered automatically for every game) checks `NextScene` in `SimSet::Lifecycle`, late in the tick after your `.add_system()`/`.add_scene_system()` systems and before your late ones, and runs `scene_switch_system`, a one-shot system registered in `SystemsStore` under the key `"switch_scene"`; a request made after that point (from a late system, for example) is picked up on the next tick. The last request before the poll wins. A quit requested in the same tick wins over a scene request: the game quits without switching.
 
 ```rust
@@ -458,7 +460,7 @@ The new scene's `.add_scene_system()` systems start on the next sim tick.
 
 When the `scene_switch_system` runs, it performs these steps in order:
 
-1. **Take and check the target scene** — takes the requested name from `NextScene`. If no scene is registered under that name, the system logs "No scene registered" and returns: nothing below runs, and the current scene keeps running untouched. The request is consumed either way; it is not retried. **Lua builds only:** in a `.with_lua()` game an unknown name is registered instead, and the switch goes ahead
+1. **Take and check the target scene** — takes the requested name from `NextScene`. If no scene is registered under that name, the system logs "No scene registered" and returns: nothing below runs, and the current scene keeps running untouched. The request is consumed either way; it is not retried. During Setup, a target other than the loading scene is refused the same way: a warning, and the request is consumed. **Lua builds only:** in a `.with_lua()` game an unknown name is registered instead, and the switch goes ahead
 2. **Forget collision contacts, then trigger `SceneExited`** — if a scene was active, the touching pairs are forgotten without a `CollisionEnded` (see [Contact events](#contact-events)), then its exit observers run while its entities, `WorldSignals` entity registrations and group counts are all still in place
 3. **Despawn non-persistent entities** — every entity *without* the `Persistent` component is despawned
 4. **Clear entity registrations** — non-persistent entity refs stored in `WorldSignals` are removed
