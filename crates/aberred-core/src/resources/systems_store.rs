@@ -71,6 +71,14 @@ pub const SETUP: &str = "setup";
 /// hook: enters the loading scene. Registered only when the game has one.
 pub const ENTER_SETUP: &str = "enter_setup";
 
+/// Engine-installed system run on entering `Setup`, after [`ENTER_SETUP`]:
+/// shows the engine loading screen. Registered only when the game asked for it.
+pub const SHOW_LOADING_SCREEN: &str = "show_loading_screen";
+
+/// Engine-installed system run on leaving `Setup`, before [`SCRIPT_ENTER_PLAY`]
+/// and [`ENTER_PLAY`]: removes the engine loading screen.
+pub const HIDE_LOADING_SCREEN: &str = "hide_loading_screen";
+
 /// The scripting layer's one-shot `Playing` entry (`main.lua`'s
 /// `on_enter_play()`), run before [`ENTER_PLAY`].
 pub const SCRIPT_ENTER_PLAY: &str = "script_enter_play";

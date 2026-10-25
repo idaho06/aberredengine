@@ -55,6 +55,11 @@ fn ends_setup(state: &CurrentGameState, next_state: &NextGameState) -> bool {
     *state.get() == GameState::Setup && next_state.get() == Some(&GameState::Playing)
 }
 
+/// Returns true when the current game state is `Setup`.
+pub fn state_is_setup(state: Res<CurrentGameState>) -> bool {
+    matches!(state.get(), GameState::Setup)
+}
+
 /// Returns true when the current game state is `Playing`.
 pub fn state_is_playing(state: Res<CurrentGameState>) -> bool {
     matches!(state.get(), GameState::Playing)
@@ -107,6 +112,21 @@ mod tests {
         assert!(!runs_in(GameState::None));
         assert!(runs_in(GameState::Setup));
         assert!(runs_in(GameState::Playing));
+        assert!(!runs_in(GameState::Quitting));
+    }
+
+    /// The engine loading screen's systems run in `Setup` only.
+    #[test]
+    fn state_is_setup_holds_in_setup_only() {
+        let mut world = World::new();
+        world.init_resource::<CurrentGameState>();
+        let mut runs_in = |state| {
+            world.resource_mut::<CurrentGameState>().set(state);
+            world.run_system_once(state_is_setup).unwrap()
+        };
+        assert!(!runs_in(GameState::None));
+        assert!(runs_in(GameState::Setup));
+        assert!(!runs_in(GameState::Playing));
         assert!(!runs_in(GameState::Quitting));
     }
 

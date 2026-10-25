@@ -85,11 +85,13 @@ fn on_state_enter(state: &GameState, commands: &mut Commands, systems_store: &Sy
         GameState::None => debug!("Entered None state"),
         GameState::Setup => {
             // In order, each seeing what the previous one inserted: the
-            // script setup, the setup hook, then the loading scene.
+            // script setup, the setup hook, the loading scene, then the
+            // engine loading screen.
             for key in [
                 hook_keys::SCRIPT_SETUP,
                 hook_keys::SETUP,
                 hook_keys::ENTER_SETUP,
+                hook_keys::SHOW_LOADING_SCREEN,
             ] {
                 if let Some(id) = systems_store.get(key) {
                     commands.run_system(*id);
@@ -128,10 +130,15 @@ fn request_playing_if_unchanged(world: &mut World) {
 }
 
 /// Internal: run state-specific "exit" systems for the given state.
-fn on_state_exit(state: &GameState, _commands: &mut Commands, _systems_store: &SystemsStore) {
+fn on_state_exit(state: &GameState, commands: &mut Commands, systems_store: &SystemsStore) {
     match state {
         GameState::None => debug!("Exited None state"),
-        GameState::Setup => debug!("Exited Setup state"),
+        GameState::Setup => {
+            debug!("Exited Setup state");
+            if let Some(id) = systems_store.get(hook_keys::HIDE_LOADING_SCREEN) {
+                commands.run_system(*id);
+            }
+        }
         GameState::Playing => debug!("Exited Playing state"),
         // GameState::Paused => debug!("Exited Paused state"),
         GameState::Quitting => debug!("Exited Quitting state"),
@@ -165,6 +172,45 @@ mod tests {
 
     fn next(world: &World) -> Option<GameState> {
         world.resource::<NextGameState>().get().copied()
+    }
+
+    #[derive(Resource, Default)]
+    struct HookLog(Vec<&'static str>);
+
+    /// The overlay hooks run around `Setup`: shown after the setup hooks and
+    /// the loading scene, hidden before the first scene is entered.
+    #[test]
+    fn the_loading_screen_is_shown_after_setup_hooks_and_hidden_before_play() {
+        let mut world = world_with_setup(None);
+        world.init_resource::<HookLog>();
+        let mut store = SystemsStore::new();
+        for (key, name) in [
+            (hook_keys::SETUP, "setup"),
+            (hook_keys::ENTER_SETUP, "enter_setup"),
+            (hook_keys::SHOW_LOADING_SCREEN, "show"),
+            (hook_keys::HIDE_LOADING_SCREEN, "hide"),
+            (hook_keys::SCRIPT_ENTER_PLAY, "script_enter_play"),
+            (hook_keys::ENTER_PLAY, "enter_play"),
+        ] {
+            let id = world.register_system(move |mut log: ResMut<HookLog>| log.0.push(name));
+            store.insert(key, id);
+        }
+        world.insert_resource(store);
+
+        enter(&mut world, GameState::Setup);
+        enter(&mut world, GameState::Playing);
+
+        assert_eq!(
+            world.resource::<HookLog>().0,
+            [
+                "setup",
+                "enter_setup",
+                "show",
+                "hide",
+                "script_enter_play",
+                "enter_play"
+            ]
+        );
     }
 
     #[test]
