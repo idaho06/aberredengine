@@ -16,7 +16,7 @@ pub fn is_reserved_font_key(key: &str) -> bool {
 
 /// The key to use for `key`: `key` itself when `is_known` accepts it, else
 /// [`DEFAULT_FONT_KEY`] (the empty alias included).
-pub fn resolve_font_key<'a>(key: &'a str, is_known: impl Fn(&str) -> bool) -> &'a str {
+pub fn resolve_font_key(key: &str, is_known: impl Fn(&str) -> bool) -> &str {
     if !key.is_empty() && is_known(key) {
         key
     } else {
