@@ -27,7 +27,7 @@ pub(super) fn draw_screen_panel_item(
 /// Draw one screen-space progress bar: optional track nine-patch at full size,
 /// then fill nine-patch at the precomputed proportional destination. The track
 /// is always drawn before the fill — this ordering is guaranteed by the single
-/// `ScreenDrawItem::ProgressBar` variant design (no sort ambiguity).
+/// `ScreenProgressBarBufferItem` per bar (no sort ambiguity).
 pub(super) fn draw_screen_progress_bar_item(
     d: &mut impl RaylibDraw,
     item: &ScreenProgressBarBufferItem,

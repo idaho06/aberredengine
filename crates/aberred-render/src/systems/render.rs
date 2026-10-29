@@ -112,7 +112,7 @@ pub(super) struct TextBufferItem {
 /// has no Scale/Rotation/GlobalTransform2D resolution, no `EntityShader` support
 /// (screen-space shaders are out of scope), and no view-bounds culling.
 pub(super) struct ScreenSpriteBufferItem {
-    /// Sim entity, used only as [`ScreenDrawItem::sort_key`]'s tie-break --
+    /// Sim entity, used only as `cmp_screen_draw_order`'s tie-break --
     /// mirror query iteration order carries no ordering guarantee, so this
     /// is what makes draw order deterministic. Same field name/type as
     /// [`SpriteBufferItem::entity`]/
@@ -131,10 +131,9 @@ pub(super) struct ScreenSpriteBufferItem {
 /// Stores only the fields [`draw_screen_text_item`](text::draw_screen_text_item)
 /// actually reads, rather than a full [`DynamicText`] clone — `DynamicText` also
 /// carries `initial_text`/`initial_color`, which exist for editor round-tripping
-/// and are never read at draw time. Avoiding them keeps this struct (and thus
-/// every element of the [`ScreenDrawItem`] enum it's wrapped in, sprites
-/// included) smaller, which matters for cache density when sorting/iterating
-/// tens of thousands of items per frame.
+/// and are never read at draw time. Avoiding them keeps this struct smaller,
+/// which matters for cache density when drawing tens of thousands of items per
+/// frame.
 pub(super) struct ScreenTextBufferItem {
     /// See [`ScreenSpriteBufferItem::entity`].
     pub(super) entity: Entity,
@@ -150,9 +149,9 @@ pub(super) struct ScreenTextBufferItem {
 }
 
 /// Screen-space GUI window panel draw item. Window backgrounds sit below
-/// sprites/text drawn on top of them (see [`ScreenDrawItem::variant_rank`]).
+/// sprites/text drawn on top of them (see `ScreenDrawKind::rank`).
 pub(super) struct ScreenPanelBufferItem {
-    /// Sim entity, used only as [`ScreenDrawItem::sort_key`]'s
+    /// Sim entity, used only as `cmp_screen_draw_order`'s
     /// tie-break -- see [`ScreenSpriteBufferItem::entity`].
     pub(super) entity: Entity,
     pub(super) panel: GuiNinePatch,
@@ -175,78 +174,6 @@ pub(super) struct ScreenProgressBarBufferItem {
     pub(super) fill_dest: Rectangle,
     pub(super) z_index: ZIndex,
     pub(super) maybe_shadow: Option<Shadow>,
-}
-
-/// Tagged union of screen-space draw items, sorted together by [`ZIndex`] into
-/// one dispatch order. Add new variants here by updating this enum plus one
-/// match arm each in [`ScreenDrawItem::z_index`],
-/// [`ScreenDrawItem::variant_rank`], the collect step, and the dispatch loop
-/// in [`draw_screen_space`]; the sort/dispatch skeleton itself stays the
-/// same.
-pub(super) enum ScreenDrawItem {
-    Panel(ScreenPanelBufferItem),
-    ProgressBar(ScreenProgressBarBufferItem),
-    Sprite(ScreenSpriteBufferItem),
-    Text(ScreenTextBufferItem),
-}
-
-impl ScreenDrawItem {
-    fn z_index(&self) -> ZIndex {
-        match self {
-            ScreenDrawItem::Panel(p) => p.z_index,
-            ScreenDrawItem::ProgressBar(pb) => pb.z_index,
-            ScreenDrawItem::Sprite(s) => s.z_index,
-            ScreenDrawItem::Text(t) => t.z_index,
-        }
-    }
-
-    /// Secondary sort key, used only to break ties at equal `z_index`: panel
-    /// backgrounds (0) sort below sprites (1), which sort below text (2), so
-    /// a caption draws on top of its own widget's background. Encoding the
-    /// tie-break here (rather than relying on `sort_by`'s stability +
-    /// insertion order) lets the buffer use the faster in-place
-    /// `sort_unstable_by` instead of an allocating stable sort.
-    ///
-    /// `ProgressBar` shares rank 0 with `Panel`: the bar is an opaque
-    /// background element and should appear beneath any screen-space sprite or
-    /// text at the same `ZIndex`.
-    fn variant_rank(&self) -> u8 {
-        match self {
-            ScreenDrawItem::Panel(_) | ScreenDrawItem::ProgressBar(_) => 0,
-            ScreenDrawItem::Sprite(_) => 1,
-            ScreenDrawItem::Text(_) => 2,
-        }
-    }
-
-    /// Tertiary sort key (all 4 variants are mirror-sourced, each carrying
-    /// its sim entity), used only to break ties at equal `(z_index,
-    /// variant_rank)`: ascending sim entity. Mirror query iteration order
-    /// carries no ordering guarantee, so this is what makes draw order
-    /// deterministic -- including among `Panel`/`ProgressBar` items, which
-    /// would otherwise have no entity to compare and tie in whatever order
-    /// `sort_unstable_by` happens to produce.
-    fn sort_key(&self) -> Entity {
-        match self {
-            ScreenDrawItem::Panel(p) => p.entity,
-            ScreenDrawItem::ProgressBar(pb) => pb.entity,
-            ScreenDrawItem::Sprite(s) => s.entity,
-            ScreenDrawItem::Text(t) => t.entity,
-        }
-    }
-
-    /// Draw-order comparator: ascending `z_index`, then `variant_rank`, then
-    /// `sort_key` as tie-breaks. Shared by `draw_screen_space` and its tests
-    /// so the two can't drift apart.
-    fn cmp_draw_order(a: &Self, b: &Self) -> std::cmp::Ordering {
-        // `total_cmp`, not `partial_cmp(..).unwrap_or(Equal)`: a NaN z-index
-        // would otherwise break the comparator's total order, which
-        // `sort_unstable_by` may panic on.
-        a.z_index()
-            .0
-            .total_cmp(&b.z_index().0)
-            .then_with(|| a.variant_rank().cmp(&b.variant_rank()))
-            .then_with(|| a.sort_key().cmp(&b.sort_key()))
-    }
 }
 
 /// Which typed screen buffer a [`ScreenDrawKey`] points into.
@@ -384,13 +311,16 @@ pub struct RenderLocals {
     text_buffer: Vec<TextBufferItem>,
     // Sorted draw order of the two world buffers above: one key per item.
     world_order: Vec<WorldDrawKey>,
-    // Scratch buffers for the mirror-query-sourced screen-space items,
-    // drained into screen_draw_buffer by draw_screen_space (rather than
-    // passing the query directly, this keeps the same
-    // Local-buffer-capacity-reuse convention the other 2 buffers above use).
+    // Scratch buffers for the screen-space items: sprites and texts built from
+    // their mirror queries by render_system, panels and progress bars built
+    // from the GUI mirror queries by draw_screen_space. Each frame refills
+    // them (keeping their capacity, like the world buffers above) and
+    // screen_order holds their sorted draw order, one key per item.
     screen_sprite_buffer: Vec<ScreenSpriteBufferItem>,
     screen_text_buffer: Vec<ScreenTextBufferItem>,
-    screen_draw_buffer: Vec<ScreenDrawItem>,
+    screen_panel_buffer: Vec<ScreenPanelBufferItem>,
+    screen_progress_bar_buffer: Vec<ScreenProgressBarBufferItem>,
+    screen_order: Vec<ScreenDrawKey>,
 }
 
 /// Bundled render resources to reduce system parameter count.
@@ -495,7 +425,9 @@ pub fn render_system(
         world_order,
         screen_sprite_buffer,
         screen_text_buffer,
-        screen_draw_buffer,
+        screen_panel_buffer,
+        screen_progress_bar_buffer,
+        screen_order,
     } = &mut *locals;
 
     // Unpack bundled resources for easier access
@@ -787,10 +719,10 @@ pub fn render_system(
         {
             aberred_core::tracy::tracy_span!("render/screen_space");
             // All 8 screen-space categories source from
-            // retained mirror entities. Built into their own scratch
-            // buffers (not directly into screen_draw_buffer) so
-            // draw_screen_space can stay agnostic to where its items came
-            // from -- it just drains/iterates whatever's here.
+            // retained mirror entities. Sprites and texts are built into
+            // their own scratch buffers here so draw_screen_space can stay
+            // agnostic to where those items came from -- it just orders and
+            // draws whatever's here.
             screen_sprite_buffer.clear();
             screen_sprite_buffer.extend(mirrors.screen_sprites.iter().map(
                 |(mirror, sprite, pos, z_index, tint, shadow)| ScreenSpriteBufferItem {
@@ -834,7 +766,9 @@ pub fn render_system(
                 &mut res.gui_theme_warn_cache,
                 textures,
                 fonts,
-                screen_draw_buffer,
+                screen_panel_buffer,
+                screen_progress_bar_buffer,
+                screen_order,
                 debug_sprites,
                 debug_texts,
             );
@@ -1109,14 +1043,14 @@ fn screen_panel_item(
     dest: Rectangle,
     z_index: ZIndex,
     maybe_shadow: Option<Shadow>,
-) -> ScreenDrawItem {
-    ScreenDrawItem::Panel(ScreenPanelBufferItem {
+) -> ScreenPanelBufferItem {
+    ScreenPanelBufferItem {
         entity,
         panel,
         dest,
         z_index,
         maybe_shadow,
-    })
+    }
 }
 
 fn warn_missing_theme(
@@ -1130,28 +1064,22 @@ fn warn_missing_theme(
     }
 }
 
-/// Collects screen-space sprites, texts and GUI items (panels, progress
-/// bars) into one merged buffer, sorts by [`ZIndex`], and dispatches draw
-/// calls in that order.
+/// Collects the GUI items (panels, progress bars) into their typed buffers,
+/// orders those and the screen-space sprites and texts together by [`ZIndex`]
+/// (see `build_screen_order`), and dispatches draw calls in that order.
 ///
-/// Uses the same in-place `sort_unstable_by` as the world-space buffers — the
-/// equal-z tie-break (text drawn on top of a same-z sprite, the sane default
-/// for UI captions over panel backgrounds) is encoded directly in the
-/// comparator via [`ScreenDrawItem::variant_rank`] instead of relying on
-/// `sort_by`'s stability and a fixed collection order. This keeps the merged,
-/// heterogeneous buffer on the cheaper allocation-free sort even though it
-/// holds several item types, which matters once this buffer holds tens of
-/// thousands of items (e.g. a screen-space bunnymark-style stress scene).
+/// Sorts small [`ScreenDrawKey`]s rather than the buffer items, like the
+/// world pass, with the same in-place `sort_unstable_by`. The equal-z
+/// tie-break (text drawn on top of a same-z sprite, the sane default for UI
+/// captions over panel backgrounds) is encoded in the comparator via
+/// `ScreenDrawKind::rank` instead of relying on `sort_by`'s stability and a
+/// fixed collection order.
 #[allow(clippy::too_many_arguments)]
 fn draw_screen_space<'m>(
     d: &mut impl RaylibDraw,
-    // Already-resolved mirror-query-sourced items, drained (not iterated)
-    // into `buffer` -- draining reuses each item's capacity for the
-    // caller's next-frame scratch buffer with zero clone, matching the
-    // Local-buffer-reuse convention `sprite_buffer`/`text_buffer` already
-    // use above.
-    screen_sprites: &mut Vec<ScreenSpriteBufferItem>,
-    screen_texts: &mut Vec<ScreenTextBufferItem>,
+    // Already-resolved mirror-query-sourced items, read in place by index.
+    screen_sprites: &[ScreenSpriteBufferItem],
+    screen_texts: &[ScreenTextBufferItem],
     // Read straight off the mirror query iterators (borrowed, no per-frame
     // Vec<Entry> materialization) -- several GuiX component fields
     // (caption, tex_key, ...) are heap-allocated Strings that an
@@ -1179,14 +1107,17 @@ fn draw_screen_space<'m>(
     gui_theme_warn_cache: &mut GuiThemeWarnCache,
     textures: &TextureStore,
     fonts: &FontStore,
-    buffer: &mut Vec<ScreenDrawItem>,
+    panels: &mut Vec<ScreenPanelBufferItem>,
+    bars: &mut Vec<ScreenProgressBarBufferItem>,
+    order: &mut Vec<ScreenDrawKey>,
     debug_sprites: bool,
     debug_texts: bool,
 ) {
-    buffer.clear();
+    panels.clear();
+    bars.clear();
     for (mirror, window, p, z) in gui_windows {
         match gui_theme_store.get(&window.theme_key) {
-            Some(theme) => buffer.push(screen_panel_item(
+            Some(theme) => panels.push(screen_panel_item(
                 mirror.0,
                 theme.panel.clone(),
                 Rectangle {
@@ -1217,7 +1148,7 @@ fn draw_screen_space<'m>(
             continue;
         };
         if let Some(skin) = theme.button.as_ref() {
-            buffer.push(screen_panel_item(
+            panels.push(screen_panel_item(
                 mirror.0,
                 resolve_button_patch(skin, interactable.state).clone(),
                 Rectangle {
@@ -1249,7 +1180,7 @@ fn draw_screen_space<'m>(
             continue;
         };
         if let Some(patch) = theme.label.as_ref() {
-            buffer.push(screen_panel_item(
+            panels.push(screen_panel_item(
                 mirror.0,
                 patch.clone(),
                 Rectangle {
@@ -1291,7 +1222,7 @@ fn draw_screen_space<'m>(
         };
         let (track_dest, fill_dest) =
             progress_bar_rects(p.pos, bar.size, bar.value, bar.max, &bar.direction);
-        buffer.push(ScreenDrawItem::ProgressBar(ScreenProgressBarBufferItem {
+        bars.push(ScreenProgressBarBufferItem {
             entity: mirror.0,
             track: skin.track.clone(),
             fill: skin.fill.clone(),
@@ -1299,21 +1230,28 @@ fn draw_screen_space<'m>(
             fill_dest,
             z_index: *z,
             maybe_shadow: theme.panel_shadow,
-        }));
+        });
     }
-    buffer.extend(screen_sprites.drain(..).map(ScreenDrawItem::Sprite));
-    buffer.extend(screen_texts.drain(..).map(ScreenDrawItem::Text));
 
-    buffer.sort_unstable_by(ScreenDrawItem::cmp_draw_order);
+    {
+        aberred_core::tracy::tracy_span!("render/sort_screen");
+        build_screen_order(order, panels, bars, screen_sprites, screen_texts);
+    }
 
-    for item in buffer.iter() {
-        match item {
-            ScreenDrawItem::Panel(p) => draw_screen_panel_item(d, p, textures),
-            ScreenDrawItem::ProgressBar(pb) => {
-                gui_panel::draw_screen_progress_bar_item(d, pb, textures)
+    aberred_core::tracy::tracy_span!("render/draw_screen");
+    for key in order.iter() {
+        let index = key.index as usize;
+        match key.kind {
+            ScreenDrawKind::Panel => draw_screen_panel_item(d, &panels[index], textures),
+            ScreenDrawKind::ProgressBar => {
+                gui_panel::draw_screen_progress_bar_item(d, &bars[index], textures)
             }
-            ScreenDrawItem::Sprite(s) => draw_screen_sprite_item(d, s, textures, debug_sprites),
-            ScreenDrawItem::Text(t) => draw_screen_text_item(d, t, fonts, debug_texts),
+            ScreenDrawKind::Sprite => {
+                draw_screen_sprite_item(d, &screen_sprites[index], textures, debug_sprites)
+            }
+            ScreenDrawKind::Text => {
+                draw_screen_text_item(d, &screen_texts[index], fonts, debug_texts)
+            }
         }
     }
 }
@@ -1340,191 +1278,6 @@ mod needs_imgui_tests {
     #[test]
     fn both_debug_and_gui_callback_needs_imgui() {
         assert!(needs_imgui(true, true));
-    }
-}
-
-#[cfg(test)]
-mod screen_draw_buffer_tests {
-    use super::*;
-    use aberred_core::components::screen_position::ScreenPosition;
-
-    fn sprite_item(z: f32) -> ScreenDrawItem {
-        sprite_item_with_entity(z, Entity::from_raw_u32(0).unwrap())
-    }
-
-    fn sprite_item_with_entity(z: f32, entity: Entity) -> ScreenDrawItem {
-        ScreenDrawItem::Sprite(ScreenSpriteBufferItem {
-            entity,
-            sprite: Sprite::new("tex", 1.0, 1.0),
-            z_index: ZIndex(z),
-            pos: ScreenPosition::new(0.0, 0.0),
-            maybe_tint: None,
-            maybe_shadow: None,
-        })
-    }
-
-    fn text_item(z: f32) -> ScreenDrawItem {
-        text_item_with_entity(z, Entity::from_raw_u32(0).unwrap())
-    }
-
-    fn text_item_with_entity(z: f32, entity: Entity) -> ScreenDrawItem {
-        ScreenDrawItem::Text(ScreenTextBufferItem {
-            entity,
-            text: Arc::from("hi"),
-            font: Arc::from("font"),
-            font_size: 12.0,
-            color: aberred_core::math::Color::WHITE,
-            size: Vector2::zero(),
-            z_index: ZIndex(z),
-            pos: ScreenPosition::new(0.0, 0.0),
-            maybe_tint: None,
-            maybe_shadow: None,
-        })
-    }
-
-    fn panel_item_with_entity(z: f32, entity: Entity) -> ScreenDrawItem {
-        ScreenDrawItem::Panel(ScreenPanelBufferItem {
-            entity,
-            panel: GuiNinePatch::default(),
-            dest: Rectangle::new(0.0, 0.0, 1.0, 1.0),
-            z_index: ZIndex(z),
-            maybe_shadow: None,
-        })
-    }
-
-    fn progress_bar_item_with_entity(z: f32, entity: Entity) -> ScreenDrawItem {
-        ScreenDrawItem::ProgressBar(ScreenProgressBarBufferItem {
-            entity,
-            track: None,
-            fill: GuiNinePatch::default(),
-            track_dest: Rectangle::new(0.0, 0.0, 1.0, 1.0),
-            fill_dest: Rectangle::new(0.0, 0.0, 1.0, 1.0),
-            z_index: ZIndex(z),
-            maybe_shadow: None,
-        })
-    }
-
-    fn sort(mut buffer: Vec<ScreenDrawItem>) -> Vec<ScreenDrawItem> {
-        buffer.sort_unstable_by(ScreenDrawItem::cmp_draw_order);
-        buffer
-    }
-
-    /// A NaN z-index must not break the comparator's total order (which
-    /// `sort_unstable_by` may panic on); it sorts after every finite value.
-    #[test]
-    fn nan_z_index_sorts_last_without_panicking() {
-        let mut buffer: Vec<ScreenDrawItem> = (0..40)
-            .map(|i| {
-                sprite_item(if i % 3 == 0 {
-                    f32::NAN
-                } else {
-                    (40 - i) as f32
-                })
-            })
-            .collect();
-        buffer.push(text_item(0.0));
-        let sorted = sort(buffer);
-        let zs: Vec<f32> = sorted.iter().map(|item| item.z_index().0).collect();
-        let first_nan = zs.iter().position(|z| z.is_nan()).unwrap();
-        assert!(zs[first_nan..].iter().all(|z| z.is_nan()));
-        assert!(zs[..first_nan].windows(2).all(|w| w[0] <= w[1]));
-    }
-
-    /// All 4 `ScreenDrawItem` variants are mirror-sourced (GUI
-    /// windows/buttons/labels all become `Panel` items, progress bars their
-    /// own variant), so ties at equal `(z_index, variant_rank)` must resolve
-    /// deterministically via `sort_key()`'s `Entity` ordering across EVERY
-    /// variant. `Panel`/`ProgressBar` share `variant_rank` 0, so this
-    /// specifically exercises their tie-break against each other.
-    #[test]
-    fn all_four_variants_tie_break_ascending_by_entity_at_equal_rank() {
-        let mut entities: Vec<Entity> = [50, 1, 20]
-            .into_iter()
-            .map(|i| Entity::from_raw_u32(i).unwrap())
-            .collect();
-        // Panel and ProgressBar share variant_rank 0 -- build one of each
-        // sharing this entity set so their relative order is exercised.
-        let buffer: Vec<ScreenDrawItem> = vec![
-            panel_item_with_entity(1.0, entities[0]),
-            progress_bar_item_with_entity(1.0, entities[1]),
-            panel_item_with_entity(1.0, entities[2]),
-        ];
-        let sorted = sort(buffer);
-        let ids: Vec<Entity> = sorted.iter().map(ScreenDrawItem::sort_key).collect();
-
-        entities.sort();
-        assert_eq!(
-            ids, entities,
-            "Panel/ProgressBar ties must now resolve by ascending Entity"
-        );
-    }
-
-    #[test]
-    fn sorts_mixed_items_by_ascending_z_index() {
-        let buffer = vec![sprite_item(5.0), text_item(-2.0), sprite_item(0.0)];
-        let sorted = sort(buffer);
-        let zs: Vec<f32> = sorted.iter().map(|i| i.z_index().0).collect();
-        assert_eq!(zs, vec![-2.0, 0.0, 5.0]);
-    }
-
-    #[test]
-    fn equal_z_index_ties_break_with_text_on_top() {
-        let buffer = vec![sprite_item(1.0), text_item(1.0)];
-        let sorted = sort(buffer);
-        assert!(matches!(sorted[0], ScreenDrawItem::Sprite(_)));
-        assert!(matches!(sorted[1], ScreenDrawItem::Text(_)));
-    }
-
-    #[test]
-    fn equal_z_index_tie_break_is_independent_of_insertion_order() {
-        // The tie-break is encoded in `variant_rank`, not insertion order, so
-        // it must hold even when texts are pushed before sprites.
-        let buffer = vec![text_item(1.0), sprite_item(1.0)];
-        let sorted = sort(buffer);
-        assert!(matches!(sorted[0], ScreenDrawItem::Sprite(_)));
-        assert!(matches!(sorted[1], ScreenDrawItem::Text(_)));
-    }
-
-    #[test]
-    fn equal_z_index_and_variant_ties_break_ascending_by_entity() {
-        // Two sprites at the same z_index (so variant_rank ties too) must
-        // order deterministically by Entity's own Ord impl, since mirror
-        // query iteration order carries no ordering guarantee.
-        // Compares against `entities.sort()` rather than a hand-guessed
-        // order: Entity's internal bit layout (NonMaxU32-niched index) does
-        // NOT correlate monotonically with `from_raw_u32`'s input, so the
-        // only correct oracle for "ascending by Entity" is `Entity`'s own
-        // `Ord` impl, not raw index magnitude.
-        let mut entities: Vec<Entity> = [42, 7, 100]
-            .into_iter()
-            .map(|i| Entity::from_raw_u32(i).unwrap())
-            .collect();
-        let buffer: Vec<ScreenDrawItem> = entities
-            .iter()
-            .map(|&e| sprite_item_with_entity(1.0, e))
-            .collect();
-        let sorted = sort(buffer);
-        let ids: Vec<Entity> = sorted.iter().map(ScreenDrawItem::sort_key).collect();
-
-        entities.sort();
-        assert_eq!(ids, entities);
-    }
-
-    #[test]
-    fn equal_z_index_and_variant_ties_break_ascending_by_entity_for_text() {
-        let mut entities: Vec<Entity> = [9, 3]
-            .into_iter()
-            .map(|i| Entity::from_raw_u32(i).unwrap())
-            .collect();
-        let buffer: Vec<ScreenDrawItem> = entities
-            .iter()
-            .map(|&e| text_item_with_entity(1.0, e))
-            .collect();
-        let sorted = sort(buffer);
-        let ids: Vec<Entity> = sorted.iter().map(ScreenDrawItem::sort_key).collect();
-
-        entities.sort();
-        assert_eq!(ids, entities);
     }
 }
 
