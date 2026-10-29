@@ -249,6 +249,48 @@ impl ScreenDrawItem {
     }
 }
 
+/// Which typed world buffer a [`WorldDrawKey`] points into.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum WorldDrawKind {
+    Sprite,
+    Text,
+}
+
+impl WorldDrawKind {
+    /// Secondary sort key, used only to break ties at equal `z`: a text (1)
+    /// draws over a sprite (0), as in screen space.
+    fn rank(self) -> u8 {
+        match self {
+            WorldDrawKind::Sprite => 0,
+            WorldDrawKind::Text => 1,
+        }
+    }
+}
+
+/// Small sortable handle to one world draw item: the world pass sorts these
+/// instead of the (much larger) buffer items, then reads each item from its
+/// typed buffer at `index`.
+pub(super) struct WorldDrawKey {
+    pub(super) z: f32,
+    pub(super) kind: WorldDrawKind,
+    pub(super) entity: Entity,
+    pub(super) index: u32,
+}
+
+/// World draw-order comparator: ascending `z`, then [`WorldDrawKind`] rank,
+/// then ascending sim entity. Mirror query iteration order carries no
+/// ordering guarantee, so the entity tie-break (`Entity: Ord`, equivalent to
+/// sorting by `Entity::to_bits()`) is what makes draw order deterministic:
+/// items sharing an exact `z` and kind draw in ascending sim-entity order.
+fn cmp_world_draw_order(a: &WorldDrawKey, b: &WorldDrawKey) -> std::cmp::Ordering {
+    // `total_cmp`, not `partial_cmp(..).unwrap_or(Equal)`: a NaN z-index would
+    // otherwise break the comparator's total order, which `sort_unstable_by`
+    // may panic on.
+    a.z.total_cmp(&b.z)
+        .then_with(|| a.kind.rank().cmp(&b.kind.rank()))
+        .then_with(|| a.entity.cmp(&b.entity))
+}
+
 #[derive(Default)]
 pub struct RenderLocals {
     sprite_buffer: Vec<SpriteBufferItem>,
@@ -1543,5 +1585,111 @@ mod progress_bar_rects_tests {
         assert_eq!(fill(-5.0, 100.0, Horizontal), (10.0, 20.0, 0.0, 50.0));
         assert_eq!(fill(5.0, 0.0, Horizontal), (10.0, 20.0, 0.0, 50.0));
         assert_eq!(fill(5.0, -1.0, Horizontal), (10.0, 20.0, 0.0, 50.0));
+    }
+}
+
+#[cfg(test)]
+mod world_draw_order_tests {
+    use super::*;
+
+    fn entity(i: u32) -> Entity {
+        Entity::from_raw_u32(i).unwrap()
+    }
+
+    fn key(z: f32, kind: WorldDrawKind, entity: Entity) -> WorldDrawKey {
+        WorldDrawKey {
+            z,
+            kind,
+            entity,
+            index: 0,
+        }
+    }
+
+    fn sprite_key(z: f32, entity: Entity) -> WorldDrawKey {
+        key(z, WorldDrawKind::Sprite, entity)
+    }
+
+    fn text_key(z: f32, entity: Entity) -> WorldDrawKey {
+        key(z, WorldDrawKind::Text, entity)
+    }
+
+    fn sort(mut keys: Vec<WorldDrawKey>) -> Vec<WorldDrawKey> {
+        keys.sort_unstable_by(cmp_world_draw_order);
+        keys
+    }
+
+    /// A NaN z-index must not break the comparator's total order (which
+    /// `sort_unstable_by` may panic on); it sorts after every finite value.
+    #[test]
+    fn nan_z_index_sorts_last_without_panicking() {
+        let mut keys: Vec<WorldDrawKey> = (0..40)
+            .map(|i| {
+                sprite_key(
+                    if i % 3 == 0 {
+                        f32::NAN
+                    } else {
+                        (40 - i) as f32
+                    },
+                    entity(i),
+                )
+            })
+            .collect();
+        keys.push(text_key(0.0, entity(99)));
+        let sorted = sort(keys);
+        let zs: Vec<f32> = sorted.iter().map(|k| k.z).collect();
+        let first_nan = zs.iter().position(|z| z.is_nan()).unwrap();
+        assert!(zs[first_nan..].iter().all(|z| z.is_nan()));
+        assert!(zs[..first_nan].windows(2).all(|w| w[0] <= w[1]));
+    }
+
+    #[test]
+    fn mixed_kinds_sort_by_ascending_z_index() {
+        let sorted = sort(vec![
+            sprite_key(5.0, entity(0)),
+            text_key(-2.0, entity(1)),
+            sprite_key(0.0, entity(2)),
+        ]);
+        let zs: Vec<f32> = sorted.iter().map(|k| k.z).collect();
+        assert_eq!(zs, vec![-2.0, 0.0, 5.0]);
+    }
+
+    /// The visible behavior change: a text below a sprite draws behind it.
+    #[test]
+    fn a_text_at_a_lower_z_draws_before_a_sprite_at_a_higher_z() {
+        let sorted = sort(vec![sprite_key(5.0, entity(0)), text_key(1.0, entity(1))]);
+        assert_eq!(sorted[0].kind, WorldDrawKind::Text);
+        assert_eq!(sorted[1].kind, WorldDrawKind::Sprite);
+    }
+
+    #[test]
+    fn equal_z_index_draws_the_text_after_the_sprite_whatever_the_insertion_order() {
+        for keys in [
+            vec![sprite_key(1.0, entity(5)), text_key(1.0, entity(1))],
+            vec![text_key(1.0, entity(1)), sprite_key(1.0, entity(5))],
+        ] {
+            let sorted = sort(keys);
+            assert_eq!(sorted[0].kind, WorldDrawKind::Sprite);
+            assert_eq!(sorted[1].kind, WorldDrawKind::Text);
+        }
+    }
+
+    /// `Entity`'s bit layout does not follow `from_raw_u32`'s input, so the
+    /// oracle is `Entity`'s own `Ord`, not the raw index.
+    #[test]
+    fn equal_z_index_and_kind_tie_break_ascending_by_entity_in_any_insertion_order() {
+        let source: Vec<Entity> = [42, 7, 100, 3].into_iter().map(entity).collect();
+        let mut expected = source.clone();
+        expected.sort();
+        let orders: [[usize; 4]; 3] = [[0, 1, 2, 3], [3, 2, 1, 0], [2, 0, 3, 1]];
+        for order in orders {
+            let keys: Vec<WorldDrawKey> = order.iter().map(|&i| text_key(1.0, source[i])).collect();
+            let ids: Vec<Entity> = sort(keys).iter().map(|k| k.entity).collect();
+            assert_eq!(ids, expected);
+        }
+    }
+
+    #[test]
+    fn a_sprite_ranks_below_a_text() {
+        assert!(WorldDrawKind::Sprite.rank() < WorldDrawKind::Text.rank());
     }
 }
