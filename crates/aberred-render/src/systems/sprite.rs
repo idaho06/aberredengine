@@ -99,7 +99,6 @@ pub(super) fn draw_world_sprite_item(
         );
         let dest = rect_to_raylib(geom.dest);
         let origin_scaled = vec2_to_raylib(geom.origin);
-        let rotation = geom.rotation;
 
         let tint_color = resolve_sprite_tint(item.maybe_tint);
 
@@ -110,7 +109,7 @@ pub(super) fn draw_world_sprite_item(
                 src,
                 shadow_dest,
                 origin_scaled,
-                rotation,
+                geom.rotation,
                 shadow_color(shadow),
             );
         }
@@ -143,13 +142,13 @@ pub(super) fn draw_world_sprite_item(
                 set_uniform_value(&mut entry.shader, &mut entry.locations, name, value);
             }
             let mut d_shader = d.begin_shader_mode(&mut entry.shader);
-            d_shader.draw_texture_pro(tex, src, dest, origin_scaled, rotation, tint_color);
+            d_shader.draw_texture_pro(tex, src, dest, origin_scaled, geom.rotation, tint_color);
         } else {
-            d.draw_texture_pro(tex, src, dest, origin_scaled, rotation, tint_color);
+            d.draw_texture_pro(tex, src, dest, origin_scaled, geom.rotation, tint_color);
         }
 
         if env.show_sprite_bounds {
-            draw_rotated_rect_lines(d, dest, origin_scaled, rotation, Color::BLUE);
+            draw_rotated_rect_lines(d, dest, origin_scaled, geom.rotation, Color::BLUE);
         }
     }
 }

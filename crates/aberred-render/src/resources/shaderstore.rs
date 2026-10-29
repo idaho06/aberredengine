@@ -3,8 +3,11 @@
 //! Stores loaded shaders keyed by string IDs for use in post-processing effects.
 //! Each shader entry caches uniform locations for efficient uniform setting.
 
+use std::sync::Arc;
+
+use aberred_core::resources::warn_once::first_seen;
 use raylib::prelude::Shader;
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 
 /// Entry containing a shader and its cached uniform locations.
 pub struct ShaderEntry {
@@ -19,6 +22,8 @@ pub struct ShaderEntry {
 /// This is a `NonSend` resource because shaders are tied to the OpenGL context.
 pub struct ShaderStore {
     shaders: FxHashMap<String, ShaderEntry>,
+    /// Shader keys already reported as unusable by [`ShaderStore::warn_once`].
+    warned: FxHashSet<Arc<str>>,
 }
 
 impl ShaderStore {
@@ -26,6 +31,7 @@ impl ShaderStore {
     pub fn new() -> Self {
         Self {
             shaders: FxHashMap::default(),
+            warned: FxHashSet::default(),
         }
     }
 
@@ -52,6 +58,13 @@ impl ShaderStore {
         self.shaders.get_mut(id)
     }
 
+    /// Returns `true` the first time `id` is reported unusable (missing or
+    /// invalid), `false` on every later call, so a bad shader used by many
+    /// entities logs once rather than per entity per frame.
+    pub fn warn_once(&mut self, id: &str) -> bool {
+        first_seen(&mut self.warned, id)
+    }
+
     /// Checks if a shader with the given ID exists.
     pub fn contains(&self, id: &str) -> bool {
         self.shaders.contains_key(id)
@@ -71,5 +84,27 @@ impl ShaderStore {
 impl Default for ShaderStore {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn warn_once_is_true_only_the_first_time_for_a_shader_key() {
+        let mut store = ShaderStore::new();
+        assert!(store.warn_once("glow"));
+        assert!(!store.warn_once("glow"));
+        assert!(!store.warn_once("glow"));
+    }
+
+    #[test]
+    fn warn_once_tracks_each_shader_key_separately() {
+        let mut store = ShaderStore::new();
+        assert!(store.warn_once("glow"));
+        assert!(store.warn_once("outline"));
+        assert!(!store.warn_once("glow"));
+        assert!(!store.warn_once("outline"));
     }
 }

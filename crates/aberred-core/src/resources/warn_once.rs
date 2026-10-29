@@ -13,7 +13,7 @@ use rustc_hash::FxHashSet;
 
 /// Returns `true` the first time `key` is passed for a given `set`, `false`
 /// on every subsequent call with the same `key`.
-pub(crate) fn first_seen(set: &mut FxHashSet<Arc<str>>, key: &str) -> bool {
+pub fn first_seen(set: &mut FxHashSet<Arc<str>>, key: &str) -> bool {
     if set.contains(key) {
         return false;
     }

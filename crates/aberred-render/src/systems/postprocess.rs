@@ -375,27 +375,32 @@ fn set_vec4(
 
 /// The entry an entity's shader draws through, paired with that shader, or
 /// `None` when the item must draw without one: it has no entity shader, or the
-/// shader is missing from the store or fails validation (both log a warning).
+/// shader is missing from the store or fails validation (each logs one warning
+/// per shader key).
 pub(super) fn active_entity_shader<'a>(
     store: &'a mut ShaderStore,
     entity_shader: Option<&'a EntityShader>,
 ) -> Option<(&'a EntityShader, &'a mut ShaderEntry)> {
     let entity_shader = entity_shader?;
-    let Some(entry) = store.get_mut(&entity_shader.shader_key) else {
-        warn!(
-            "Entity shader '{}' not found, rendering without shader",
-            entity_shader.shader_key
-        );
-        return None;
-    };
-    if !entry.shader.is_shader_valid() {
-        warn!(
-            "Entity shader '{}' is invalid, rendering without shader",
-            entity_shader.shader_key
-        );
-        return None;
+    let key = &*entity_shader.shader_key;
+    // Validity is read through a shared borrow first: logging needs `&mut
+    // store`, which the entry returned on success would otherwise keep
+    // borrowed on the failure path too.
+    match store.get(key).map(|entry| entry.shader.is_shader_valid()) {
+        Some(true) => store.get_mut(key).map(|entry| (entity_shader, entry)),
+        Some(false) => {
+            if store.warn_once(key) {
+                warn!("Entity shader '{key}' is invalid, rendering without shader");
+            }
+            None
+        }
+        None => {
+            if store.warn_once(key) {
+                warn!("Entity shader '{key}' not found, rendering without shader");
+            }
+            None
+        }
     }
-    Some((entity_shader, entry))
 }
 
 /// Set standard uniforms on a shader for post-processing.
@@ -539,5 +544,18 @@ mod active_entity_shader_tests {
         let mut store = ShaderStore::new();
         let entity_shader = EntityShader::new("never-loaded");
         assert!(active_entity_shader(&mut store, Some(&entity_shader)).is_none());
+    }
+
+    /// Many items using one bad shader log one warning, not one per item.
+    #[test]
+    fn an_unloaded_shader_is_reported_once_however_many_items_use_it() {
+        let mut store = ShaderStore::new();
+        let entity_shader = EntityShader::new("never-loaded");
+        assert!(active_entity_shader(&mut store, Some(&entity_shader)).is_none());
+        assert!(active_entity_shader(&mut store, Some(&entity_shader)).is_none());
+        assert!(
+            !store.warn_once("never-loaded"),
+            "the first lookup already reported it"
+        );
     }
 }
