@@ -298,6 +298,44 @@ fn cmp_screen_draw_order(a: &ScreenDrawKey, b: &ScreenDrawKey) -> std::cmp::Orde
         .then_with(|| a.index.cmp(&b.index))
 }
 
+/// Rebuilds `order` as the sorted draw order of the four typed screen
+/// buffers: one [`ScreenDrawKey`] per item, `index` addressing the item in its
+/// own buffer. Reuses `order`'s capacity.
+fn build_screen_order(
+    order: &mut Vec<ScreenDrawKey>,
+    panels: &[ScreenPanelBufferItem],
+    bars: &[ScreenProgressBarBufferItem],
+    sprites: &[ScreenSpriteBufferItem],
+    texts: &[ScreenTextBufferItem],
+) {
+    order.clear();
+    order.extend(panels.iter().enumerate().map(|(i, item)| ScreenDrawKey {
+        z: item.z_index.0,
+        kind: ScreenDrawKind::Panel,
+        entity: item.entity,
+        index: i as u32,
+    }));
+    order.extend(bars.iter().enumerate().map(|(i, item)| ScreenDrawKey {
+        z: item.z_index.0,
+        kind: ScreenDrawKind::ProgressBar,
+        entity: item.entity,
+        index: i as u32,
+    }));
+    order.extend(sprites.iter().enumerate().map(|(i, item)| ScreenDrawKey {
+        z: item.z_index.0,
+        kind: ScreenDrawKind::Sprite,
+        entity: item.entity,
+        index: i as u32,
+    }));
+    order.extend(texts.iter().enumerate().map(|(i, item)| ScreenDrawKey {
+        z: item.z_index.0,
+        kind: ScreenDrawKind::Text,
+        entity: item.entity,
+        index: i as u32,
+    }));
+    order.sort_unstable_by(cmp_screen_draw_order);
+}
+
 /// Which typed world buffer a [`WorldDrawKey`] points into.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum WorldDrawKind {
@@ -1913,5 +1951,132 @@ mod screen_draw_order_tests {
         );
         assert!(ScreenDrawKind::ProgressBar.rank() < ScreenDrawKind::Sprite.rank());
         assert!(ScreenDrawKind::Sprite.rank() < ScreenDrawKind::Text.rank());
+    }
+
+    fn panel(z: f32, entity: Entity) -> ScreenPanelBufferItem {
+        ScreenPanelBufferItem {
+            entity,
+            panel: GuiNinePatch::default(),
+            dest: Rectangle::new(0.0, 0.0, 1.0, 1.0),
+            z_index: ZIndex(z),
+            maybe_shadow: None,
+        }
+    }
+
+    fn bar(z: f32, entity: Entity) -> ScreenProgressBarBufferItem {
+        ScreenProgressBarBufferItem {
+            entity,
+            track: None,
+            fill: GuiNinePatch::default(),
+            track_dest: Rectangle::new(0.0, 0.0, 1.0, 1.0),
+            fill_dest: Rectangle::new(0.0, 0.0, 1.0, 1.0),
+            z_index: ZIndex(z),
+            maybe_shadow: None,
+        }
+    }
+
+    fn sprite(z: f32, entity: Entity) -> ScreenSpriteBufferItem {
+        ScreenSpriteBufferItem {
+            entity,
+            sprite: Sprite::new("tex", 1.0, 1.0),
+            z_index: ZIndex(z),
+            pos: aberred_core::components::screen_position::ScreenPosition::new(0.0, 0.0),
+            maybe_tint: None,
+            maybe_shadow: None,
+        }
+    }
+
+    fn text(z: f32, entity: Entity) -> ScreenTextBufferItem {
+        ScreenTextBufferItem {
+            entity,
+            text: Arc::from("hi"),
+            font: Arc::from("font"),
+            font_size: 12.0,
+            color: aberred_core::math::Color::WHITE,
+            size: Vector2::zero(),
+            z_index: ZIndex(z),
+            pos: aberred_core::components::screen_position::ScreenPosition::new(0.0, 0.0),
+            maybe_tint: None,
+            maybe_shadow: None,
+        }
+    }
+
+    /// The entity of the buffer item each key addresses.
+    fn addressed_entities(
+        order: &[ScreenDrawKey],
+        panels: &[ScreenPanelBufferItem],
+        bars: &[ScreenProgressBarBufferItem],
+        sprites: &[ScreenSpriteBufferItem],
+        texts: &[ScreenTextBufferItem],
+    ) -> Vec<Entity> {
+        order
+            .iter()
+            .map(|k| {
+                let i = k.index as usize;
+                match k.kind {
+                    ScreenDrawKind::Panel => panels[i].entity,
+                    ScreenDrawKind::ProgressBar => bars[i].entity,
+                    ScreenDrawKind::Sprite => sprites[i].entity,
+                    ScreenDrawKind::Text => texts[i].entity,
+                }
+            })
+            .collect()
+    }
+
+    #[test]
+    fn built_keys_address_their_own_buffer_item_in_draw_order() {
+        let [e1, e2, e3, e4, e5, e6] = [1, 2, 3, 4, 5, 6].map(entity);
+        let panels = [panel(2.0, e1), panel(1.0, e2)];
+        let bars = [bar(1.0, e3)];
+        let sprites = [sprite(1.0, e4), sprite(0.0, e5)];
+        let texts = [text(1.0, e6)];
+
+        let mut order = Vec::new();
+        build_screen_order(&mut order, &panels, &bars, &sprites, &texts);
+
+        // z 0 sprite; z 1: the panel and the bar (rank 0, by entity), the
+        // sprite, the text; z 2 panel.
+        let mut backgrounds = vec![e2, e3];
+        backgrounds.sort();
+        let mut expected = vec![e5];
+        expected.extend(backgrounds);
+        expected.extend([e4, e6, e1]);
+        let addressed = addressed_entities(&order, &panels, &bars, &sprites, &texts);
+        assert_eq!(addressed, expected);
+        let keyed: Vec<Entity> = order.iter().map(|k| k.entity).collect();
+        assert_eq!(keyed, expected, "a key carries its item's entity");
+    }
+
+    #[test]
+    fn a_key_carries_the_z_and_kind_of_its_item() {
+        let (panels, sprites) = ([panel(7.0, entity(1))], [sprite(-3.0, entity(2))]);
+        let mut order = Vec::new();
+        build_screen_order(&mut order, &panels, &[], &sprites, &[]);
+        let zk: Vec<(f32, ScreenDrawKind)> = order.iter().map(|k| (k.z, k.kind)).collect();
+        assert_eq!(
+            zk,
+            vec![(-3.0, ScreenDrawKind::Sprite), (7.0, ScreenDrawKind::Panel)]
+        );
+    }
+
+    #[test]
+    fn empty_buffers_give_an_empty_order() {
+        let mut order = vec![key(1.0, ScreenDrawKind::Text, entity(1))];
+        build_screen_order(&mut order, &[], &[], &[], &[]);
+        assert!(order.is_empty());
+    }
+
+    #[test]
+    fn rebuilding_replaces_the_previous_order_and_keeps_its_capacity() {
+        let many: Vec<ScreenSpriteBufferItem> =
+            (0..64).map(|i| sprite(i as f32, entity(i))).collect();
+        let mut order = Vec::new();
+        build_screen_order(&mut order, &[], &[], &many, &[]);
+        assert_eq!(order.len(), 64);
+        let capacity = order.capacity();
+
+        build_screen_order(&mut order, &[], &[], &many[..3], &[]);
+        assert_eq!(order.len(), 3);
+        assert!(order.capacity() >= capacity);
     }
 }
