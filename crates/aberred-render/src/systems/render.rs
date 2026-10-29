@@ -295,6 +295,8 @@ fn cmp_world_draw_order(a: &WorldDrawKey, b: &WorldDrawKey) -> std::cmp::Orderin
 pub struct RenderLocals {
     sprite_buffer: Vec<SpriteBufferItem>,
     text_buffer: Vec<TextBufferItem>,
+    // Sorted draw order of the two world buffers above: one key per item.
+    world_order: Vec<WorldDrawKey>,
     // Scratch buffers for the mirror-query-sourced screen-space items,
     // drained into screen_draw_buffer by draw_screen_space (rather than
     // passing the query directly, this keeps the same
@@ -400,6 +402,7 @@ pub fn render_system(
     let RenderLocals {
         sprite_buffer,
         text_buffer,
+        world_order,
         screen_sprite_buffer,
         screen_text_buffer,
         screen_draw_buffer,
@@ -462,6 +465,7 @@ pub fn render_system(
             {
                 aberred_core::tracy::tracy_span!("render/build_sprite_buffer");
                 sprite_buffer.clear();
+                world_order.clear();
                 sprite_buffer.extend(mirrors.map_sprites.iter().filter_map(
                     |(
                         mirror,
@@ -508,29 +512,15 @@ pub fn render_system(
                     },
                 ));
 
-                // Tie-break by sim entity (equivalent to sorting by
-                // Entity::to_bits(), since Entity: Ord is defined that way)
-                // after the primary z_index sort: mirror-entity query
-                // iteration order carries no guarantee, unlike the old
-                // snapshot Vec's stable (if arbitrary) build order. This
-                // makes draw order deterministic again -- note for
-                // reviewers: sprites sharing an exact z_index now draw in
-                // ascending sim-Entity order rather than snapshot-build
-                // iteration order, a minor observable ordering change.
-                sprite_buffer.sort_unstable_by(|a, b| {
-                    a.z_index
-                        .0
-                        .total_cmp(&b.z_index.0)
-                        .then_with(|| a.entity.cmp(&b.entity))
-                });
+                world_order.extend(sprite_buffer.iter().enumerate().map(|(i, item)| {
+                    WorldDrawKey {
+                        z: item.z_index.0,
+                        kind: WorldDrawKind::Sprite,
+                        entity: item.entity,
+                        index: i as u32,
+                    }
+                }));
             } // build_sprite_buffer
-            {
-                aberred_core::tracy::tracy_span!("render/draw_world_sprites");
-                for item in sprite_buffer.iter() {
-                    draw_world_sprite_item(&mut d2, item, &mut shader_store, &env);
-                }
-            } // draw_world_sprites
-
             {
                 aberred_core::tracy::tracy_span!("render/build_text_buffer");
                 text_buffer.clear();
@@ -573,22 +563,42 @@ pub fn render_system(
                         })
                     },
                 ));
-                // Tie-break by sim entity, same rationale as sprite_buffer's
-                // sort above -- mirror query iteration order carries no
-                // ordering guarantee.
-                text_buffer.sort_unstable_by(|a, b| {
-                    a.z_index
-                        .0
-                        .total_cmp(&b.z_index.0)
-                        .then_with(|| a.entity.cmp(&b.entity))
-                });
+                world_order.extend(
+                    text_buffer
+                        .iter()
+                        .enumerate()
+                        .map(|(i, item)| WorldDrawKey {
+                            z: item.z_index.0,
+                            kind: WorldDrawKind::Text,
+                            entity: item.entity,
+                            index: i as u32,
+                        }),
+                );
             } // build_text_buffer
             {
-                aberred_core::tracy::tracy_span!("render/draw_world_texts");
-                for item in text_buffer.iter() {
-                    draw_world_text_item(&mut d2, item, &mut shader_store, &env);
+                aberred_core::tracy::tracy_span!("render/sort_world");
+                world_order.sort_unstable_by(cmp_world_draw_order);
+            } // sort_world
+            {
+                aberred_core::tracy::tracy_span!("render/draw_world");
+                for key in world_order.iter() {
+                    let index = key.index as usize;
+                    match key.kind {
+                        WorldDrawKind::Sprite => draw_world_sprite_item(
+                            &mut d2,
+                            &sprite_buffer[index],
+                            &mut shader_store,
+                            &env,
+                        ),
+                        WorldDrawKind::Text => draw_world_text_item(
+                            &mut d2,
+                            &text_buffer[index],
+                            &mut shader_store,
+                            &env,
+                        ),
+                    }
                 }
-            } // draw_world_texts
+            } // draw_world
 
             if let Some(debug_snapshot) = &debug_res.debug_snapshot.0 {
                 if debug_res.overlay_config.show_collider_boxes {
