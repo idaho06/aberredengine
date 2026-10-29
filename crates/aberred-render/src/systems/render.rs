@@ -67,12 +67,9 @@ use log::warn;
 use super::debug_overlay::{PerfPanelStats, draw_imgui_debug};
 use super::geometry::{compute_sprite_cull_bounds, compute_view_bounds};
 use super::gui_panel::{self, draw_screen_panel_item};
-use super::math::{resolve_text_tint, shadow_color};
-use super::postprocess::{
-    apply_postprocess_passes, set_entity_uniforms, set_standard_uniforms, set_uniform_value,
-};
+use super::postprocess::apply_postprocess_passes;
 use super::sprite::{draw_screen_sprite_item, draw_world_sprite_item};
-use super::text::draw_screen_text_item;
+use super::text::{draw_screen_text_item, draw_world_text_item};
 use aberred_core::systems::sprite_geometry::resolve_world_transform;
 
 pub(super) struct SpriteBufferItem {
@@ -91,22 +88,24 @@ pub(super) struct SpriteBufferItem {
 /// Per-frame read-only values shared by the world-space draw functions.
 pub(super) struct WorldDrawEnv<'a> {
     pub(super) textures: &'a TextureStore,
+    pub(super) fonts: &'a FontStore,
     pub(super) world_time: &'a WorldTime,
     pub(super) render_size: &'a RenderSize,
     pub(super) window_size: &'a WindowSize,
     pub(super) show_sprite_bounds: bool,
+    pub(super) show_text_bounds: bool,
 }
 
 pub(super) struct TextBufferItem {
-    entity: Entity,
-    text: DynamicText,
-    z_index: ZIndex,
-    resolved_pos: WorldPosition,
-    text_size: Vector2,
-    maybe_shader: Option<EntityShader>,
-    maybe_tint: Option<Tint>,
-    maybe_shadow: Option<Shadow>,
-    velocity: Option<Vector2>,
+    pub(super) entity: Entity,
+    pub(super) text: DynamicText,
+    pub(super) z_index: ZIndex,
+    pub(super) resolved_pos: WorldPosition,
+    pub(super) text_size: Vector2,
+    pub(super) maybe_shader: Option<EntityShader>,
+    pub(super) maybe_tint: Option<Tint>,
+    pub(super) maybe_shadow: Option<Shadow>,
+    pub(super) velocity: Option<Vector2>,
 }
 
 /// Screen-space sprite draw item. Simpler than [`SpriteBufferItem`]: screen-space
@@ -408,6 +407,16 @@ pub fn render_system(
                 |pos, _cam| super::math::screen_to_world2d_raylib(pos, &render_cam_core),
             );
 
+            let env = WorldDrawEnv {
+                textures,
+                fonts,
+                world_time: &res.world_time.0,
+                render_size,
+                window_size,
+                show_sprite_bounds: debug_active && debug_res.overlay_config.show_sprite_bounds,
+                show_text_bounds: debug_active && debug_res.overlay_config.show_text_bounds,
+            };
+
             {
                 aberred_core::tracy::tracy_span!("render/build_sprite_buffer");
                 sprite_buffer.clear();
@@ -475,13 +484,6 @@ pub fn render_system(
             } // build_sprite_buffer
             {
                 aberred_core::tracy::tracy_span!("render/draw_world_sprites");
-                let env = WorldDrawEnv {
-                    textures,
-                    world_time: &res.world_time.0,
-                    render_size,
-                    window_size,
-                    show_sprite_bounds: debug_active && debug_res.overlay_config.show_sprite_bounds,
-                };
                 for item in sprite_buffer.iter() {
                     draw_world_sprite_item(&mut d2, item, &mut shader_store, &env);
                 }
@@ -542,118 +544,7 @@ pub fn render_system(
             {
                 aberred_core::tracy::tracy_span!("render/draw_world_texts");
                 for item in text_buffer.iter() {
-                    if let Some((font, spacing)) = fonts.get_or_default(&item.text.font) {
-                        let final_color = resolve_text_tint(item.maybe_tint, item.text.color);
-                        let draw_pos = vec2_to_raylib(item.resolved_pos.pos);
-
-                        if let Some(shadow) = item.maybe_shadow {
-                            let shadow_pos = Vector2 {
-                                x: item.resolved_pos.pos.x + shadow.offset.x,
-                                y: item.resolved_pos.pos.y + shadow.offset.y,
-                            };
-                            d2.draw_text_ex(
-                                font,
-                                &item.text.text,
-                                shadow_pos,
-                                item.text.font_size,
-                                spacing,
-                                shadow_color(shadow),
-                            );
-                        }
-
-                        if let Some(entity_shader) = &item.maybe_shader {
-                            if let Some(entry) = shader_store.get_mut(&entity_shader.shader_key) {
-                                if entry.shader.is_shader_valid() {
-                                    let dest = Rectangle {
-                                        x: item.resolved_pos.pos.x,
-                                        y: item.resolved_pos.pos.y,
-                                        width: item.text_size.x,
-                                        height: item.text_size.y,
-                                    };
-                                    set_standard_uniforms(
-                                        &mut entry.shader,
-                                        &mut entry.locations,
-                                        &res.world_time.0,
-                                        render_size,
-                                        window_size,
-                                        &dest,
-                                    );
-                                    set_entity_uniforms(
-                                        &mut entry.shader,
-                                        &mut entry.locations,
-                                        item.entity,
-                                        &item.resolved_pos,
-                                        None,
-                                        None,
-                                        item.text_size,
-                                        item.velocity,
-                                    );
-                                    for (name, value) in entity_shader.uniforms.iter() {
-                                        set_uniform_value(
-                                            &mut entry.shader,
-                                            &mut entry.locations,
-                                            name,
-                                            value,
-                                        );
-                                    }
-                                    let mut d_shader = d2.begin_shader_mode(&mut entry.shader);
-                                    d_shader.draw_text_ex(
-                                        font,
-                                        &item.text.text,
-                                        draw_pos,
-                                        item.text.font_size,
-                                        spacing,
-                                        final_color,
-                                    );
-                                } else {
-                                    warn!(
-                                        "Entity shader '{}' is invalid, rendering without shader",
-                                        entity_shader.shader_key
-                                    );
-                                    d2.draw_text_ex(
-                                        font,
-                                        &item.text.text,
-                                        draw_pos,
-                                        item.text.font_size,
-                                        spacing,
-                                        final_color,
-                                    );
-                                }
-                            } else {
-                                warn!(
-                                    "Entity shader '{}' not found, rendering without shader",
-                                    entity_shader.shader_key
-                                );
-                                d2.draw_text_ex(
-                                    font,
-                                    &item.text.text,
-                                    draw_pos,
-                                    item.text.font_size,
-                                    spacing,
-                                    final_color,
-                                );
-                            }
-                        } else {
-                            d2.draw_text_ex(
-                                font,
-                                &item.text.text,
-                                draw_pos,
-                                item.text.font_size,
-                                spacing,
-                                final_color,
-                            );
-                        }
-
-                        if debug_active && debug_res.overlay_config.show_text_bounds {
-                            d2.draw_rectangle_lines(
-                                item.resolved_pos.pos.x as i32,
-                                item.resolved_pos.pos.y as i32,
-                                item.text_size.x as i32,
-                                item.text_size.y as i32,
-                                Color::ORANGE,
-                            );
-                        }
-                    }
+                    draw_world_text_item(&mut d2, item, &mut shader_store, &env);
                 }
             } // draw_world_texts
 
