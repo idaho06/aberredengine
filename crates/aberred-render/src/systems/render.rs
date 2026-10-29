@@ -372,6 +372,9 @@ fn needs_imgui(debug_active: bool, has_gui_callback: bool) -> bool {
 /// - Renders all game content to a fixed-resolution render target.
 /// - Scales and blits the render target to the window with letterboxing.
 /// - Uses `Camera2D` for world rendering, then overlays UI/debug in screen space.
+/// - Draws world sprites and texts in one pass sorted by `ZIndex` (see
+///   `cmp_world_draw_order`); debug overlays and the scene's world-draw
+///   callback follow it.
 /// - When `DebugMode` is present, draws additional information (entity counts,
 ///   camera parameters, and optional collider boxes/signals).
 /// - When the active scene's `gui_callback` is set, opens an ImGui frame and

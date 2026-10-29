@@ -1466,7 +1466,7 @@ When `WorldSignals` has a value for key `"score"`, the text automatically update
 | `Animation` | `Animation::new("anim_key")` |
 | `AnimationController` | `AnimationController::new("fallback_key").with_rule(condition, "key")`, `condition` a `Condition` (see below) |
 | `Group` | `Group::new("name")` |
-| `ZIndex` | `ZIndex(f32)` |
+| `ZIndex` | `ZIndex(f32)` — higher draws later (on top), sprites and texts sorted together; at equal z a text draws over a sprite |
 | `Rotation` | `Rotation::new(degrees)` |
 | `Scale` | `Scale::new(sx, sy)` |
 | `Tint` | `Tint::new(r, g, b, a)` — values are `u8` (0–255) |
