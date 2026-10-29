@@ -249,6 +249,55 @@ impl ScreenDrawItem {
     }
 }
 
+/// Which typed screen buffer a [`ScreenDrawKey`] points into.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum ScreenDrawKind {
+    Panel,
+    ProgressBar,
+    Sprite,
+    Text,
+}
+
+impl ScreenDrawKind {
+    /// Secondary sort key, used only to break ties at equal `z`: panel
+    /// backgrounds and progress bars (0) sort below sprites (1), which sort
+    /// below text (2), so a caption draws on top of its own widget's
+    /// background. A progress bar is an opaque background element and appears
+    /// beneath any screen-space sprite or text at the same `z`.
+    fn rank(self) -> u8 {
+        match self {
+            ScreenDrawKind::Panel | ScreenDrawKind::ProgressBar => 0,
+            ScreenDrawKind::Sprite => 1,
+            ScreenDrawKind::Text => 2,
+        }
+    }
+}
+
+/// Small sortable handle to one screen draw item: the screen pass sorts these
+/// instead of the (much larger) buffer items, then reads each item from its
+/// typed buffer at `index`.
+pub(super) struct ScreenDrawKey {
+    pub(super) z: f32,
+    pub(super) kind: ScreenDrawKind,
+    pub(super) entity: Entity,
+    pub(super) index: u32,
+}
+
+/// Screen draw-order comparator: ascending `z`, then [`ScreenDrawKind`] rank,
+/// then ascending sim entity, then buffer index. Mirror query iteration order
+/// carries no ordering guarantee, so the entity tie-break (`Entity: Ord`) is
+/// what makes draw order deterministic, and the index orders two items of one
+/// kind that come from the same entity.
+fn cmp_screen_draw_order(a: &ScreenDrawKey, b: &ScreenDrawKey) -> std::cmp::Ordering {
+    // `total_cmp`, not `partial_cmp(..).unwrap_or(Equal)`: a NaN z-index would
+    // otherwise break the comparator's total order, which `sort_unstable_by`
+    // may panic on.
+    a.z.total_cmp(&b.z)
+        .then_with(|| a.kind.rank().cmp(&b.kind.rank()))
+        .then_with(|| a.entity.cmp(&b.entity))
+        .then_with(|| a.index.cmp(&b.index))
+}
+
 /// Which typed world buffer a [`WorldDrawKey`] points into.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum WorldDrawKind {
@@ -1704,5 +1753,165 @@ mod world_draw_order_tests {
     #[test]
     fn a_sprite_ranks_below_a_text() {
         assert!(WorldDrawKind::Sprite.rank() < WorldDrawKind::Text.rank());
+    }
+}
+
+#[cfg(test)]
+mod screen_draw_order_tests {
+    use super::*;
+
+    fn entity(i: u32) -> Entity {
+        Entity::from_raw_u32(i).unwrap()
+    }
+
+    fn key(z: f32, kind: ScreenDrawKind, entity: Entity) -> ScreenDrawKey {
+        indexed_key(z, kind, entity, 0)
+    }
+
+    fn indexed_key(z: f32, kind: ScreenDrawKind, entity: Entity, index: u32) -> ScreenDrawKey {
+        ScreenDrawKey {
+            z,
+            kind,
+            entity,
+            index,
+        }
+    }
+
+    fn sort(mut keys: Vec<ScreenDrawKey>) -> Vec<ScreenDrawKey> {
+        keys.sort_unstable_by(cmp_screen_draw_order);
+        keys
+    }
+
+    fn kinds(keys: &[ScreenDrawKey]) -> Vec<ScreenDrawKind> {
+        keys.iter().map(|k| k.kind).collect()
+    }
+
+    /// A NaN z-index must not break the comparator's total order (which
+    /// `sort_unstable_by` may panic on); it sorts after every finite value.
+    #[test]
+    fn nan_z_index_sorts_last_without_panicking() {
+        let mut keys: Vec<ScreenDrawKey> = (0..40)
+            .map(|i| {
+                key(
+                    if i % 3 == 0 {
+                        f32::NAN
+                    } else {
+                        (40 - i) as f32
+                    },
+                    ScreenDrawKind::Sprite,
+                    entity(i),
+                )
+            })
+            .collect();
+        keys.push(key(0.0, ScreenDrawKind::Text, entity(99)));
+        let sorted = sort(keys);
+        let zs: Vec<f32> = sorted.iter().map(|k| k.z).collect();
+        let first_nan = zs.iter().position(|z| z.is_nan()).unwrap();
+        assert!(zs[first_nan..].iter().all(|z| z.is_nan()));
+        assert!(zs[..first_nan].windows(2).all(|w| w[0] <= w[1]));
+    }
+
+    #[test]
+    fn mixed_kinds_sort_by_ascending_z_index() {
+        let sorted = sort(vec![
+            key(5.0, ScreenDrawKind::Sprite, entity(0)),
+            key(-2.0, ScreenDrawKind::Text, entity(1)),
+            key(0.0, ScreenDrawKind::Panel, entity(2)),
+            key(3.0, ScreenDrawKind::ProgressBar, entity(3)),
+        ]);
+        let zs: Vec<f32> = sorted.iter().map(|k| k.z).collect();
+        assert_eq!(zs, vec![-2.0, 0.0, 3.0, 5.0]);
+    }
+
+    /// At equal z a panel/progress bar is a background (rank 0), under a
+    /// sprite (1), under a text (2), whatever the insertion order.
+    #[test]
+    fn equal_z_index_draws_backgrounds_then_sprites_then_texts() {
+        let ordered = [
+            (ScreenDrawKind::Panel, entity(40)),
+            (ScreenDrawKind::Sprite, entity(30)),
+            (ScreenDrawKind::Text, entity(20)),
+        ];
+        let orders: [[usize; 3]; 3] = [[0, 1, 2], [2, 1, 0], [1, 2, 0]];
+        for order in orders {
+            let keys = order
+                .iter()
+                .map(|&i| key(1.0, ordered[i].0, ordered[i].1))
+                .collect();
+            assert_eq!(
+                kinds(&sort(keys)),
+                vec![
+                    ScreenDrawKind::Panel,
+                    ScreenDrawKind::Sprite,
+                    ScreenDrawKind::Text
+                ]
+            );
+        }
+    }
+
+    /// Four kinds share three ranks: Panel and ProgressBar tie on rank, so they
+    /// order by entity alone, not by which kind they are.
+    #[test]
+    fn panel_and_progress_bar_at_equal_z_tie_by_entity_not_by_kind() {
+        let mut entities: Vec<Entity> = [50, 1, 20, 7].into_iter().map(entity).collect();
+        entities.sort();
+        // Kinds alternate along the entity order, so any comparison by kind
+        // (rather than by rank) would regroup them and change the result.
+        let kind_of = |i: usize| {
+            if i.is_multiple_of(2) {
+                ScreenDrawKind::ProgressBar
+            } else {
+                ScreenDrawKind::Panel
+            }
+        };
+        let keys = [2, 0, 3, 1]
+            .into_iter()
+            .map(|i| key(1.0, kind_of(i), entities[i]))
+            .collect();
+        let ids: Vec<Entity> = sort(keys).iter().map(|k| k.entity).collect();
+        assert_eq!(ids, entities);
+    }
+
+    /// `Entity`'s bit layout does not follow `from_raw_u32`'s input, so the
+    /// oracle is `Entity`'s own `Ord`, not the raw index.
+    #[test]
+    fn equal_z_index_and_rank_tie_break_ascending_by_entity_in_any_insertion_order() {
+        let source: Vec<Entity> = [42, 7, 100, 3].into_iter().map(entity).collect();
+        let mut expected = source.clone();
+        expected.sort();
+        let orders: [[usize; 4]; 3] = [[0, 1, 2, 3], [3, 2, 1, 0], [2, 0, 3, 1]];
+        for order in orders {
+            let keys = order
+                .iter()
+                .map(|&i| key(1.0, ScreenDrawKind::Text, source[i]))
+                .collect();
+            let ids: Vec<Entity> = sort(keys).iter().map(|k| k.entity).collect();
+            assert_eq!(ids, expected);
+        }
+    }
+
+    /// One entity can emit two items of a kind; the buffer index then keeps
+    /// the order deterministic.
+    #[test]
+    fn equal_z_index_kind_and_entity_tie_break_ascending_by_index() {
+        let e = entity(5);
+        for indices in [[0u32, 1, 2], [2, 1, 0], [1, 2, 0]] {
+            let keys = indices
+                .iter()
+                .map(|&i| indexed_key(1.0, ScreenDrawKind::Panel, e, i))
+                .collect();
+            let sorted: Vec<u32> = sort(keys).iter().map(|k| k.index).collect();
+            assert_eq!(sorted, vec![0, 1, 2]);
+        }
+    }
+
+    #[test]
+    fn ranks_put_backgrounds_below_sprites_below_texts() {
+        assert_eq!(
+            ScreenDrawKind::Panel.rank(),
+            ScreenDrawKind::ProgressBar.rank()
+        );
+        assert!(ScreenDrawKind::ProgressBar.rank() < ScreenDrawKind::Sprite.rank());
+        assert!(ScreenDrawKind::Sprite.rank() < ScreenDrawKind::Text.rank());
     }
 }
