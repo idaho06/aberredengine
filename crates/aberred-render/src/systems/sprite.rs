@@ -1,8 +1,13 @@
 use raylib::prelude::*;
 
-use super::math::{resolve_sprite_tint, shadow_color};
-use super::render::ScreenSpriteBufferItem;
+use super::geometry::draw_rotated_rect_lines;
+use super::math::{rect_to_raylib, resolve_sprite_tint, shadow_color, vec2_to_raylib};
+use super::postprocess::{set_entity_uniforms, set_standard_uniforms, set_uniform_value};
+use super::render::{ScreenSpriteBufferItem, SpriteBufferItem, WorldDrawEnv};
+use crate::resources::shaderstore::ShaderStore;
 use aberred_core::components::sprite::Sprite;
+use aberred_core::systems::sprite_geometry::compute_sprite_geometry;
+use log::warn;
 
 /// Source rect of a sprite's atlas cell for `draw_texture_pro`: a flip is a
 /// negative width/height, which is how raylib mirrors the sampled region.
@@ -73,6 +78,106 @@ pub(super) fn draw_screen_sprite_item(
             pos.pos.y as i32 + 6,
             Color::PURPLE,
         );
+    }
+}
+
+/// Draw one already-resolved world-space sprite item: shadow pass, then the
+/// sprite itself (through its entity shader when it has a valid one), then the
+/// debug bounds box.
+pub(super) fn draw_world_sprite_item(
+    d: &mut impl RaylibDraw,
+    item: &SpriteBufferItem,
+    shader_store: &mut ShaderStore,
+    env: &WorldDrawEnv,
+) {
+    if let Some(tex) = env.textures.get(&item.sprite.tex_key) {
+        let src = sprite_src_rect(&item.sprite);
+
+        let geom = compute_sprite_geometry(
+            &item.resolved_pos,
+            &item.sprite,
+            item.resolved_scale.as_ref(),
+            item.resolved_rot.as_ref(),
+        );
+        let dest = rect_to_raylib(geom.dest);
+        let origin_scaled = vec2_to_raylib(geom.origin);
+        let rotation = geom.rotation;
+
+        let tint_color = resolve_sprite_tint(item.maybe_tint);
+
+        if let Some(shadow) = item.maybe_shadow {
+            let shadow_dest = Rectangle {
+                x: dest.x + shadow.offset.x,
+                y: dest.y + shadow.offset.y,
+                ..dest
+            };
+            d.draw_texture_pro(
+                tex,
+                src,
+                shadow_dest,
+                origin_scaled,
+                rotation,
+                shadow_color(shadow),
+            );
+        }
+
+        // Apply entity shader if present
+        if let Some(entity_shader) = &item.maybe_shader {
+            if let Some(entry) = shader_store.get_mut(&entity_shader.shader_key) {
+                if entry.shader.is_shader_valid() {
+                    // Set standard uniforms
+                    set_standard_uniforms(
+                        &mut entry.shader,
+                        &mut entry.locations,
+                        env.world_time,
+                        env.render_size,
+                        env.window_size,
+                        &dest,
+                    );
+
+                    // Set entity-specific uniforms
+                    set_entity_uniforms(
+                        &mut entry.shader,
+                        &mut entry.locations,
+                        item.entity,
+                        &item.resolved_pos,
+                        item.resolved_rot.as_ref(),
+                        item.resolved_scale.as_ref(),
+                        Vector2 {
+                            x: item.sprite.width,
+                            y: item.sprite.height,
+                        },
+                        item.velocity,
+                    );
+
+                    // Set user-defined uniforms
+                    for (name, value) in entity_shader.uniforms.iter() {
+                        set_uniform_value(&mut entry.shader, &mut entry.locations, name, value);
+                    }
+
+                    let mut d_shader = d.begin_shader_mode(&mut entry.shader);
+                    d_shader.draw_texture_pro(tex, src, dest, origin_scaled, rotation, tint_color);
+                } else {
+                    warn!(
+                        "Entity shader '{}' is invalid, rendering without shader",
+                        entity_shader.shader_key
+                    );
+                    d.draw_texture_pro(tex, src, dest, origin_scaled, rotation, tint_color);
+                }
+            } else {
+                warn!(
+                    "Entity shader '{}' not found, rendering without shader",
+                    entity_shader.shader_key
+                );
+                d.draw_texture_pro(tex, src, dest, origin_scaled, rotation, tint_color);
+            }
+        } else {
+            d.draw_texture_pro(tex, src, dest, origin_scaled, rotation, tint_color);
+        }
+
+        if env.show_sprite_bounds {
+            draw_rotated_rect_lines(d, dest, origin_scaled, rotation, Color::BLUE);
+        }
     }
 }
 

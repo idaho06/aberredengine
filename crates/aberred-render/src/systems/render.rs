@@ -20,8 +20,7 @@ use bevy_ecs::system::SystemParam;
 use raylib::prelude::*;
 
 use super::math::{
-    camera2d_from_raylib, camera2d_to_raylib, color_to_raylib, rect_to_raylib, vec2_from_raylib,
-    vec2_to_raylib,
+    camera2d_from_raylib, camera2d_to_raylib, color_to_raylib, vec2_from_raylib, vec2_to_raylib,
 };
 use crate::components::mirror::SimMirror;
 use crate::resources::fontstore::FontStore;
@@ -61,31 +60,41 @@ use crate::resources::texturestore::TextureStore;
 use crate::resources::thread_stats::RenderStats;
 use aberred_core::resources::render_size::RenderSize;
 use aberred_core::resources::window_size::WindowSize;
+use aberred_core::resources::world_time::WorldTime;
 use aberred_core::systems::scene_dispatch::WorldDrawCtx;
 use log::warn;
 
 use super::debug_overlay::{PerfPanelStats, draw_imgui_debug};
-use super::geometry::{compute_sprite_cull_bounds, compute_view_bounds, draw_rotated_rect_lines};
+use super::geometry::{compute_sprite_cull_bounds, compute_view_bounds};
 use super::gui_panel::{self, draw_screen_panel_item};
-use super::math::{resolve_sprite_tint, resolve_text_tint, shadow_color};
+use super::math::{resolve_text_tint, shadow_color};
 use super::postprocess::{
     apply_postprocess_passes, set_entity_uniforms, set_standard_uniforms, set_uniform_value,
 };
-use super::sprite::{draw_screen_sprite_item, sprite_src_rect};
+use super::sprite::{draw_screen_sprite_item, draw_world_sprite_item};
 use super::text::draw_screen_text_item;
-use aberred_core::systems::sprite_geometry::{compute_sprite_geometry, resolve_world_transform};
+use aberred_core::systems::sprite_geometry::resolve_world_transform;
 
 pub(super) struct SpriteBufferItem {
-    entity: Entity,
-    sprite: Sprite,
-    z_index: ZIndex,
-    resolved_pos: WorldPosition,
-    resolved_scale: Option<Scale>,
-    resolved_rot: Option<Rotation>,
-    maybe_shader: Option<EntityShader>,
-    maybe_tint: Option<Tint>,
-    maybe_shadow: Option<Shadow>,
-    velocity: Option<Vector2>,
+    pub(super) entity: Entity,
+    pub(super) sprite: Sprite,
+    pub(super) z_index: ZIndex,
+    pub(super) resolved_pos: WorldPosition,
+    pub(super) resolved_scale: Option<Scale>,
+    pub(super) resolved_rot: Option<Rotation>,
+    pub(super) maybe_shader: Option<EntityShader>,
+    pub(super) maybe_tint: Option<Tint>,
+    pub(super) maybe_shadow: Option<Shadow>,
+    pub(super) velocity: Option<Vector2>,
+}
+
+/// Per-frame read-only values shared by the world-space draw functions.
+pub(super) struct WorldDrawEnv<'a> {
+    pub(super) textures: &'a TextureStore,
+    pub(super) world_time: &'a WorldTime,
+    pub(super) render_size: &'a RenderSize,
+    pub(super) window_size: &'a WindowSize,
+    pub(super) show_sprite_bounds: bool,
 }
 
 pub(super) struct TextBufferItem {
@@ -466,135 +475,15 @@ pub fn render_system(
             } // build_sprite_buffer
             {
                 aberred_core::tracy::tracy_span!("render/draw_world_sprites");
+                let env = WorldDrawEnv {
+                    textures,
+                    world_time: &res.world_time.0,
+                    render_size,
+                    window_size,
+                    show_sprite_bounds: debug_active && debug_res.overlay_config.show_sprite_bounds,
+                };
                 for item in sprite_buffer.iter() {
-                    if let Some(tex) = textures.get(&item.sprite.tex_key) {
-                        let src = sprite_src_rect(&item.sprite);
-
-                        let geom = compute_sprite_geometry(
-                            &item.resolved_pos,
-                            &item.sprite,
-                            item.resolved_scale.as_ref(),
-                            item.resolved_rot.as_ref(),
-                        );
-                        let dest = rect_to_raylib(geom.dest);
-                        let origin_scaled = vec2_to_raylib(geom.origin);
-                        let rotation = geom.rotation;
-
-                        let tint_color = resolve_sprite_tint(item.maybe_tint);
-
-                        if let Some(shadow) = item.maybe_shadow {
-                            let shadow_dest = Rectangle {
-                                x: dest.x + shadow.offset.x,
-                                y: dest.y + shadow.offset.y,
-                                ..dest
-                            };
-                            d2.draw_texture_pro(
-                                tex,
-                                src,
-                                shadow_dest,
-                                origin_scaled,
-                                rotation,
-                                shadow_color(shadow),
-                            );
-                        }
-
-                        // Apply entity shader if present
-                        if let Some(entity_shader) = &item.maybe_shader {
-                            if let Some(entry) = shader_store.get_mut(&entity_shader.shader_key) {
-                                if entry.shader.is_shader_valid() {
-                                    // Set standard uniforms
-                                    set_standard_uniforms(
-                                        &mut entry.shader,
-                                        &mut entry.locations,
-                                        &res.world_time.0,
-                                        render_size,
-                                        window_size,
-                                        &dest,
-                                    );
-
-                                    // Set entity-specific uniforms
-                                    set_entity_uniforms(
-                                        &mut entry.shader,
-                                        &mut entry.locations,
-                                        item.entity,
-                                        &item.resolved_pos,
-                                        item.resolved_rot.as_ref(),
-                                        item.resolved_scale.as_ref(),
-                                        Vector2 {
-                                            x: item.sprite.width,
-                                            y: item.sprite.height,
-                                        },
-                                        item.velocity,
-                                    );
-
-                                    // Set user-defined uniforms
-                                    for (name, value) in entity_shader.uniforms.iter() {
-                                        set_uniform_value(
-                                            &mut entry.shader,
-                                            &mut entry.locations,
-                                            name,
-                                            value,
-                                        );
-                                    }
-
-                                    let mut d_shader = d2.begin_shader_mode(&mut entry.shader);
-                                    d_shader.draw_texture_pro(
-                                        tex,
-                                        src,
-                                        dest,
-                                        origin_scaled,
-                                        rotation,
-                                        tint_color,
-                                    );
-                                } else {
-                                    warn!(
-                                        "Entity shader '{}' is invalid, rendering without shader",
-                                        entity_shader.shader_key
-                                    );
-                                    d2.draw_texture_pro(
-                                        tex,
-                                        src,
-                                        dest,
-                                        origin_scaled,
-                                        rotation,
-                                        tint_color,
-                                    );
-                                }
-                            } else {
-                                warn!(
-                                    "Entity shader '{}' not found, rendering without shader",
-                                    entity_shader.shader_key
-                                );
-                                d2.draw_texture_pro(
-                                    tex,
-                                    src,
-                                    dest,
-                                    origin_scaled,
-                                    rotation,
-                                    tint_color,
-                                );
-                            }
-                        } else {
-                            d2.draw_texture_pro(
-                                tex,
-                                src,
-                                dest,
-                                origin_scaled,
-                                rotation,
-                                tint_color,
-                            );
-                        }
-
-                        if debug_active && debug_res.overlay_config.show_sprite_bounds {
-                            draw_rotated_rect_lines(
-                                &mut d2,
-                                dest,
-                                origin_scaled,
-                                rotation,
-                                Color::BLUE,
-                            );
-                        }
-                    }
+                    draw_world_sprite_item(&mut d2, item, &mut shader_store, &env);
                 }
             } // draw_world_sprites
 
