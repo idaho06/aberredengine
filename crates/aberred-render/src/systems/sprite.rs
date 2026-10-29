@@ -8,7 +8,6 @@ use super::render::{ScreenSpriteBufferItem, SpriteBufferItem, WorldDrawEnv};
 use crate::resources::shaderstore::ShaderStore;
 use aberred_core::components::sprite::Sprite;
 use aberred_core::systems::sprite_geometry::compute_sprite_geometry;
-use log::warn;
 
 /// Source rect of a sprite's atlas cell for `draw_texture_pro`: a flip is a
 /// negative width/height, which is how raylib mirrors the sampled region.
@@ -114,56 +113,39 @@ pub(super) fn draw_world_sprite_item(
             );
         }
 
-        // Apply entity shader if present
-        if let Some(entity_shader) = &item.maybe_shader {
-            if let Some(entry) = shader_store.get_mut(&entity_shader.shader_key) {
-                if entry.shader.is_shader_valid() {
-                    // Set standard uniforms
-                    set_standard_uniforms(
-                        &mut entry.shader,
-                        &mut entry.locations,
-                        env.world_time,
-                        env.render_size,
-                        env.window_size,
-                        &dest,
-                    );
-
-                    // Set entity-specific uniforms
-                    set_entity_uniforms(
-                        &mut entry.shader,
-                        &mut entry.locations,
-                        item.entity,
-                        &item.resolved_pos,
-                        item.resolved_rot.as_ref(),
-                        item.resolved_scale.as_ref(),
-                        Vector2 {
-                            x: item.sprite.width,
-                            y: item.sprite.height,
-                        },
-                        item.velocity,
-                    );
-
-                    // Set user-defined uniforms
-                    for (name, value) in entity_shader.uniforms.iter() {
-                        set_uniform_value(&mut entry.shader, &mut entry.locations, name, value);
-                    }
-
-                    let mut d_shader = d.begin_shader_mode(&mut entry.shader);
-                    d_shader.draw_texture_pro(tex, src, dest, origin_scaled, rotation, tint_color);
-                } else {
-                    warn!(
-                        "Entity shader '{}' is invalid, rendering without shader",
-                        entity_shader.shader_key
-                    );
-                    d.draw_texture_pro(tex, src, dest, origin_scaled, rotation, tint_color);
-                }
-            } else {
-                warn!(
-                    "Entity shader '{}' not found, rendering without shader",
-                    entity_shader.shader_key
-                );
-                d.draw_texture_pro(tex, src, dest, origin_scaled, rotation, tint_color);
+        let active = match &item.maybe_shader {
+            Some(entity_shader) => shader_store
+                .entity_shader_mut(entity_shader)
+                .map(|entry| (entity_shader, entry)),
+            None => None,
+        };
+        if let Some((entity_shader, entry)) = active {
+            set_standard_uniforms(
+                &mut entry.shader,
+                &mut entry.locations,
+                env.world_time,
+                env.render_size,
+                env.window_size,
+                &dest,
+            );
+            set_entity_uniforms(
+                &mut entry.shader,
+                &mut entry.locations,
+                item.entity,
+                &item.resolved_pos,
+                item.resolved_rot.as_ref(),
+                item.resolved_scale.as_ref(),
+                Vector2 {
+                    x: item.sprite.width,
+                    y: item.sprite.height,
+                },
+                item.velocity,
+            );
+            for (name, value) in entity_shader.uniforms.iter() {
+                set_uniform_value(&mut entry.shader, &mut entry.locations, name, value);
             }
+            let mut d_shader = d.begin_shader_mode(&mut entry.shader);
+            d_shader.draw_texture_pro(tex, src, dest, origin_scaled, rotation, tint_color);
         } else {
             d.draw_texture_pro(tex, src, dest, origin_scaled, rotation, tint_color);
         }

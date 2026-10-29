@@ -5,7 +5,6 @@ use super::postprocess::{set_entity_uniforms, set_standard_uniforms, set_uniform
 use super::render::{ScreenTextBufferItem, TextBufferItem, WorldDrawEnv};
 use crate::resources::fontstore::FontStore;
 use crate::resources::shaderstore::ShaderStore;
-use log::warn;
 
 /// Draw one already-resolved world-space text item: shadow pass, then the text
 /// itself (through its entity shader when it has a valid one), then the debug
@@ -35,73 +34,49 @@ pub(super) fn draw_world_text_item(
             );
         }
 
-        if let Some(entity_shader) = &item.maybe_shader {
-            if let Some(entry) = shader_store.get_mut(&entity_shader.shader_key) {
-                if entry.shader.is_shader_valid() {
-                    let dest = Rectangle {
-                        x: item.resolved_pos.pos.x,
-                        y: item.resolved_pos.pos.y,
-                        width: item.text_size.x,
-                        height: item.text_size.y,
-                    };
-                    set_standard_uniforms(
-                        &mut entry.shader,
-                        &mut entry.locations,
-                        env.world_time,
-                        env.render_size,
-                        env.window_size,
-                        &dest,
-                    );
-                    set_entity_uniforms(
-                        &mut entry.shader,
-                        &mut entry.locations,
-                        item.entity,
-                        &item.resolved_pos,
-                        None,
-                        None,
-                        item.text_size,
-                        item.velocity,
-                    );
-                    for (name, value) in entity_shader.uniforms.iter() {
-                        set_uniform_value(&mut entry.shader, &mut entry.locations, name, value);
-                    }
-                    let mut d_shader = d.begin_shader_mode(&mut entry.shader);
-                    d_shader.draw_text_ex(
-                        font,
-                        &item.text.text,
-                        draw_pos,
-                        item.text.font_size,
-                        spacing,
-                        final_color,
-                    );
-                } else {
-                    warn!(
-                        "Entity shader '{}' is invalid, rendering without shader",
-                        entity_shader.shader_key
-                    );
-                    d.draw_text_ex(
-                        font,
-                        &item.text.text,
-                        draw_pos,
-                        item.text.font_size,
-                        spacing,
-                        final_color,
-                    );
-                }
-            } else {
-                warn!(
-                    "Entity shader '{}' not found, rendering without shader",
-                    entity_shader.shader_key
-                );
-                d.draw_text_ex(
-                    font,
-                    &item.text.text,
-                    draw_pos,
-                    item.text.font_size,
-                    spacing,
-                    final_color,
-                );
+        let active = match &item.maybe_shader {
+            Some(entity_shader) => shader_store
+                .entity_shader_mut(entity_shader)
+                .map(|entry| (entity_shader, entry)),
+            None => None,
+        };
+        if let Some((entity_shader, entry)) = active {
+            let dest = Rectangle {
+                x: item.resolved_pos.pos.x,
+                y: item.resolved_pos.pos.y,
+                width: item.text_size.x,
+                height: item.text_size.y,
+            };
+            set_standard_uniforms(
+                &mut entry.shader,
+                &mut entry.locations,
+                env.world_time,
+                env.render_size,
+                env.window_size,
+                &dest,
+            );
+            set_entity_uniforms(
+                &mut entry.shader,
+                &mut entry.locations,
+                item.entity,
+                &item.resolved_pos,
+                None,
+                None,
+                item.text_size,
+                item.velocity,
+            );
+            for (name, value) in entity_shader.uniforms.iter() {
+                set_uniform_value(&mut entry.shader, &mut entry.locations, name, value);
             }
+            let mut d_shader = d.begin_shader_mode(&mut entry.shader);
+            d_shader.draw_text_ex(
+                font,
+                &item.text.text,
+                draw_pos,
+                item.text.font_size,
+                spacing,
+                final_color,
+            );
         } else {
             d.draw_text_ex(
                 font,
