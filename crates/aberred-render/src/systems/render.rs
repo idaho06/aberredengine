@@ -85,8 +85,9 @@ pub(super) struct SpriteBufferItem {
     pub(super) velocity: Option<Vector2>,
 }
 
-/// Per-frame read-only values shared by the world-space draw functions.
-pub(super) struct WorldDrawEnv<'a> {
+/// Per-frame read-only values shared by the draw functions of both spaces
+/// (the screen draws use `textures`, `fonts` and the two debug flags).
+pub(super) struct DrawEnv<'a> {
     pub(super) textures: &'a TextureStore,
     pub(super) fonts: &'a FontStore,
     pub(super) world_time: &'a WorldTime,
@@ -463,8 +464,15 @@ pub fn render_system(
     // earlier this frame. render_system takes no live Res<DebugMode> --
     // the render world doesn't have one.
     let debug_active = debug_res.debug_snapshot.0.is_some();
-    let debug_sprites = debug_active && debug_res.overlay_config.show_sprite_bounds;
-    let debug_texts = debug_active && debug_res.overlay_config.show_text_bounds;
+    let env = DrawEnv {
+        textures,
+        fonts,
+        world_time: &res.world_time.0,
+        render_size,
+        window_size,
+        show_sprite_bounds: debug_active && debug_res.overlay_config.show_sprite_bounds,
+        show_text_bounds: debug_active && debug_res.overlay_config.show_text_bounds,
+    };
 
     // ========== PHASE 1: Render game content to the render target ==========
     {
@@ -499,16 +507,6 @@ pub fn render_system(
                 render_cam,
                 |pos, _cam| super::math::screen_to_world2d_raylib(pos, &render_cam_core),
             );
-
-            let env = WorldDrawEnv {
-                textures,
-                fonts,
-                world_time: &res.world_time.0,
-                render_size,
-                window_size,
-                show_sprite_bounds: debug_sprites,
-                show_text_bounds: debug_texts,
-            };
 
             {
                 aberred_core::tracy::tracy_span!("render/build_sprite_buffer");
@@ -767,13 +765,10 @@ pub fn render_system(
                 mirrors.gui_progress_bars.iter(),
                 &res.gui_themes.0,
                 &mut res.gui_theme_warn_cache,
-                textures,
-                fonts,
+                &env,
                 screen_panel_buffer,
                 screen_progress_bar_buffer,
                 screen_order,
-                debug_sprites,
-                debug_texts,
             );
         }
     }
@@ -1105,13 +1100,10 @@ fn draw_screen_space<'m>(
     >,
     gui_theme_store: &GuiThemeStore,
     gui_theme_warn_cache: &mut GuiThemeWarnCache,
-    textures: &TextureStore,
-    fonts: &FontStore,
+    env: &DrawEnv,
     panels: &mut Vec<ScreenPanelBufferItem>,
     bars: &mut Vec<ScreenProgressBarBufferItem>,
     order: &mut Vec<ScreenDrawKey>,
-    debug_sprites: bool,
-    debug_texts: bool,
 ) {
     panels.clear();
     bars.clear();
@@ -1242,15 +1234,18 @@ fn draw_screen_space<'m>(
     for key in order.iter() {
         let index = key.index as usize;
         match key.kind {
-            ScreenDrawKind::Panel => draw_screen_panel_item(d, &panels[index], textures),
+            ScreenDrawKind::Panel => draw_screen_panel_item(d, &panels[index], env.textures),
             ScreenDrawKind::ProgressBar => {
-                gui_panel::draw_screen_progress_bar_item(d, &bars[index], textures)
+                gui_panel::draw_screen_progress_bar_item(d, &bars[index], env.textures)
             }
-            ScreenDrawKind::Sprite => {
-                draw_screen_sprite_item(d, &screen_sprites[index], textures, debug_sprites)
-            }
+            ScreenDrawKind::Sprite => draw_screen_sprite_item(
+                d,
+                &screen_sprites[index],
+                env.textures,
+                env.show_sprite_bounds,
+            ),
             ScreenDrawKind::Text => {
-                draw_screen_text_item(d, &screen_texts[index], fonts, debug_texts)
+                draw_screen_text_item(d, &screen_texts[index], env.fonts, env.show_text_bounds)
             }
         }
     }

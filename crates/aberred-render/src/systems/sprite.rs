@@ -4,7 +4,7 @@ use super::geometry::draw_rotated_rect_lines;
 use super::gui_panel::shadow_offset_rect;
 use super::math::{rect_to_raylib, resolve_sprite_tint, shadow_color, vec2_to_raylib};
 use super::postprocess::{set_entity_uniforms, set_standard_uniforms, set_uniform_value};
-use super::render::{ScreenSpriteBufferItem, SpriteBufferItem, WorldDrawEnv};
+use super::render::{DrawEnv, ScreenSpriteBufferItem, SpriteBufferItem};
 use crate::resources::shaderstore::ShaderStore;
 use aberred_core::components::sprite::Sprite;
 use aberred_core::systems::sprite_geometry::compute_sprite_geometry;
@@ -84,7 +84,7 @@ pub(super) fn draw_world_sprite_item(
     d: &mut impl RaylibDraw,
     item: &SpriteBufferItem,
     shader_store: &mut ShaderStore,
-    env: &WorldDrawEnv,
+    env: &DrawEnv,
 ) {
     if let Some(tex) = env.textures.get(&item.sprite.tex_key) {
         let src = sprite_src_rect(&item.sprite);

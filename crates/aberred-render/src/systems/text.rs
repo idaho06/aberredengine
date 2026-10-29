@@ -2,7 +2,7 @@ use raylib::prelude::*;
 
 use super::math::{resolve_text_tint, shadow_color, vec2_to_raylib};
 use super::postprocess::{set_entity_uniforms, set_standard_uniforms, set_uniform_value};
-use super::render::{ScreenTextBufferItem, TextBufferItem, WorldDrawEnv};
+use super::render::{DrawEnv, ScreenTextBufferItem, TextBufferItem};
 use crate::resources::fontstore::FontStore;
 use crate::resources::shaderstore::ShaderStore;
 
@@ -13,7 +13,7 @@ pub(super) fn draw_world_text_item(
     d: &mut impl RaylibDraw,
     item: &TextBufferItem,
     shader_store: &mut ShaderStore,
-    env: &WorldDrawEnv,
+    env: &DrawEnv,
 ) {
     if let Some((font, spacing)) = env.fonts.get_or_default(&item.text.font) {
         let final_color = resolve_text_tint(item.maybe_tint, item.text.color);
