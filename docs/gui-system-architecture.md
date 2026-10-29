@@ -949,10 +949,10 @@ fn main() -> Result<(), EngineError> {
 - All GUI widgets are rendered in screen space, unaffected by `Camera2D`.
 - `ZIndex` is required for all widgets. Lower values render first (behind); higher values render
   in front. Children should have a higher `ZIndex` than their parent window.
-- Within the same `ZIndex`, draw order is: **Panel and ProgressBar (tied) < Sprite < Text**. A
-  unified `ScreenDrawItem` enum merges GUI panels, progress bars, screen sprites, and screen texts
-  into one sorted buffer (`aberred-render`'s `render_system`); ties within a rank fall back to
-  ascending `Entity` id for determinism. Nine-patch backgrounds and progress bars render behind
+- Within the same `ZIndex`, draw order is: **Panel and ProgressBar (tied) < Sprite < Text**. One
+  sorted list of small keys orders GUI panels, progress bars, screen sprites, and screen texts
+  together (`aberred-render`'s `render_system`; each key addresses an item in its typed buffer);
+  ties within a rank fall back to ascending `Entity` id for determinism. Nine-patch backgrounds and progress bars render behind
   sprites, which render behind captions.
 - `GuiWindow.size` is the nine-patch draw size. `GuiInteractable.size` is the click/hover
   hit-test AABB. Both are set from the widget's constructor.
