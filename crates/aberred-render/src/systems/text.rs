@@ -1,7 +1,9 @@
 use raylib::prelude::*;
 
 use super::math::{resolve_text_tint, shadow_color, vec2_to_raylib};
-use super::postprocess::{set_entity_uniforms, set_standard_uniforms, set_uniform_value};
+use super::postprocess::{
+    active_entity_shader, set_entity_uniforms, set_standard_uniforms, set_uniform_value,
+};
 use super::render::{DrawEnv, ScreenTextBufferItem, TextBufferItem};
 use crate::resources::fontstore::FontStore;
 use crate::resources::shaderstore::ShaderStore;
@@ -34,13 +36,9 @@ pub(super) fn draw_world_text_item(
             );
         }
 
-        let active = match &item.maybe_shader {
-            Some(entity_shader) => shader_store
-                .entity_shader_mut(entity_shader)
-                .map(|entry| (entity_shader, entry)),
-            None => None,
-        };
-        if let Some((entity_shader, entry)) = active {
+        if let Some((entity_shader, entry)) =
+            active_entity_shader(shader_store, item.maybe_shader.as_ref())
+        {
             let dest = Rectangle {
                 x: item.resolved_pos.pos.x,
                 y: item.resolved_pos.pos.y,

@@ -5,7 +5,8 @@ use raylib::prelude::*;
 use rustc_hash::FxHashMap;
 
 use crate::resources::rendertarget::RenderTarget;
-use crate::resources::shaderstore::ShaderStore;
+use crate::resources::shaderstore::{ShaderEntry, ShaderStore};
+use aberred_core::components::entity_shader::EntityShader;
 use aberred_core::components::rotation::Rotation;
 use aberred_core::components::scale::Scale;
 use aberred_core::components::world_position::WorldPosition;
@@ -372,6 +373,31 @@ fn set_vec4(
     }
 }
 
+/// The entry an entity's shader draws through, paired with that shader, or
+/// `None` when the item must draw without one: it has no entity shader, or the
+/// shader is missing from the store or fails validation (both log a warning).
+pub(super) fn active_entity_shader<'a>(
+    store: &'a mut ShaderStore,
+    entity_shader: Option<&'a EntityShader>,
+) -> Option<(&'a EntityShader, &'a mut ShaderEntry)> {
+    let entity_shader = entity_shader?;
+    let Some(entry) = store.get_mut(&entity_shader.shader_key) else {
+        warn!(
+            "Entity shader '{}' not found, rendering without shader",
+            entity_shader.shader_key
+        );
+        return None;
+    };
+    if !entry.shader.is_shader_valid() {
+        warn!(
+            "Entity shader '{}' is invalid, rendering without shader",
+            entity_shader.shader_key
+        );
+        return None;
+    }
+    Some((entity_shader, entry))
+}
+
 /// Set standard uniforms on a shader for post-processing.
 ///
 /// Standard uniforms:
@@ -492,5 +518,26 @@ pub(super) fn set_entity_uniforms(
     // (velocity comes from the DrawableSnapshot entry, not a live query)
     if let Some(velocity) = velocity {
         set_vec2(shader, locations, "uVelocity", &[velocity.x, velocity.y]);
+    }
+}
+
+#[cfg(test)]
+mod active_entity_shader_tests {
+    use super::*;
+    use aberred_core::components::entity_shader::EntityShader;
+
+    #[test]
+    fn an_item_without_an_entity_shader_has_no_active_entry() {
+        let mut store = ShaderStore::new();
+        assert!(active_entity_shader(&mut store, None).is_none());
+    }
+
+    /// A shader key that was never loaded yields no entry, so the caller draws
+    /// without a shader.
+    #[test]
+    fn an_entity_shader_naming_an_unloaded_shader_has_no_active_entry() {
+        let mut store = ShaderStore::new();
+        let entity_shader = EntityShader::new("never-loaded");
+        assert!(active_entity_shader(&mut store, Some(&entity_shader)).is_none());
     }
 }

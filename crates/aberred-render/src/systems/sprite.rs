@@ -3,7 +3,9 @@ use raylib::prelude::*;
 use super::geometry::draw_rotated_rect_lines;
 use super::gui_panel::shadow_offset_rect;
 use super::math::{rect_to_raylib, resolve_sprite_tint, shadow_color, vec2_to_raylib};
-use super::postprocess::{set_entity_uniforms, set_standard_uniforms, set_uniform_value};
+use super::postprocess::{
+    active_entity_shader, set_entity_uniforms, set_standard_uniforms, set_uniform_value,
+};
 use super::render::{DrawEnv, ScreenSpriteBufferItem, SpriteBufferItem};
 use crate::resources::shaderstore::ShaderStore;
 use aberred_core::components::sprite::Sprite;
@@ -113,13 +115,9 @@ pub(super) fn draw_world_sprite_item(
             );
         }
 
-        let active = match &item.maybe_shader {
-            Some(entity_shader) => shader_store
-                .entity_shader_mut(entity_shader)
-                .map(|entry| (entity_shader, entry)),
-            None => None,
-        };
-        if let Some((entity_shader, entry)) = active {
+        if let Some((entity_shader, entry)) =
+            active_entity_shader(shader_store, item.maybe_shader.as_ref())
+        {
             set_standard_uniforms(
                 &mut entry.shader,
                 &mut entry.locations,

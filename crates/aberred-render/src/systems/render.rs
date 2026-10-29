@@ -85,8 +85,8 @@ pub(super) struct SpriteBufferItem {
     pub(super) velocity: Option<Vector2>,
 }
 
-/// Per-frame read-only values shared by the draw functions of both spaces
-/// (the screen draws use `textures`, `fonts` and the two debug flags).
+/// Per-frame read-only values shared by the world-space and screen-space draw
+/// functions.
 pub(super) struct DrawEnv<'a> {
     pub(super) textures: &'a TextureStore,
     pub(super) fonts: &'a FontStore,
