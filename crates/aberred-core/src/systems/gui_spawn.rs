@@ -36,11 +36,10 @@ use crate::resources::gui_theme::{GuiTheme, GuiThemeStore, GuiThemeWarnCache};
 /// Spawns a themed caption child entity for a `GuiButton`/`GuiLabel`,
 /// unless `text` is empty (the "captionless widget" signal). `DynamicText`
 /// plus `ChildOf(parent)`, `GuiOffset(padding)`, and the same `ZIndex` as
-/// the parent — the screen draw order's rank tie-break (`Panel` below `Text`, see
-/// `ScreenDrawKind::rank` in `aberred-render`) draws text above the parent's
-/// background at equal z, so no separate "caption z" is needed. Padding is a fixed
-/// constant rather than theme-driven: `DynamicText`'s size is only known
-/// after a frame (`dynamic_text_size_system`), so this helper anchors the
+/// the parent — the screen draw order breaks equal-z ties with backgrounds
+/// below text, so the caption draws above the parent's background and no
+/// separate "caption z" is needed. Padding is a fixed constant rather than
+/// theme-driven: `DynamicText`'s size is only known after a frame (`dynamic_text_size_system`), so this helper anchors the
 /// caption with fixed padding instead of centering from measured text size.
 /// `font`/`font_size`/`text_color` are resolved from the named theme (`theme_key`) in `GuiThemeStore` (or
 /// built-in defaults if the key isn't registered, with a one-time warn via

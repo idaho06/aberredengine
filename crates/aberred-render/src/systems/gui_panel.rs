@@ -55,7 +55,7 @@ fn draw_nine_patch(
     draw_nine_patch_tinted(d, patch, dest, Color::WHITE, textures);
 }
 
-fn shadow_offset_rect(rect: Rectangle, shadow: Shadow) -> Rectangle {
+pub(super) fn shadow_offset_rect(rect: Rectangle, shadow: Shadow) -> Rectangle {
     Rectangle {
         x: rect.x + shadow.offset.x,
         y: rect.y + shadow.offset.y,

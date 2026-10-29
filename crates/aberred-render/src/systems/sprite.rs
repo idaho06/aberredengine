@@ -1,6 +1,7 @@
 use raylib::prelude::*;
 
 use super::geometry::draw_rotated_rect_lines;
+use super::gui_panel::shadow_offset_rect;
 use super::math::{rect_to_raylib, resolve_sprite_tint, shadow_color, vec2_to_raylib};
 use super::postprocess::{set_entity_uniforms, set_standard_uniforms, set_uniform_value};
 use super::render::{ScreenSpriteBufferItem, SpriteBufferItem, WorldDrawEnv};
@@ -45,11 +46,7 @@ pub(super) fn draw_screen_sprite_item(
         };
 
         if let Some(shadow) = item.maybe_shadow {
-            let shadow_dest = Rectangle {
-                x: dest.x + shadow.offset.x,
-                y: dest.y + shadow.offset.y,
-                ..dest
-            };
+            let shadow_dest = shadow_offset_rect(dest, shadow);
             d.draw_texture_pro(tex, src, shadow_dest, origin, 0.0, shadow_color(shadow));
         }
 
@@ -106,11 +103,7 @@ pub(super) fn draw_world_sprite_item(
         let tint_color = resolve_sprite_tint(item.maybe_tint);
 
         if let Some(shadow) = item.maybe_shadow {
-            let shadow_dest = Rectangle {
-                x: dest.x + shadow.offset.x,
-                y: dest.y + shadow.offset.y,
-                ..dest
-            };
+            let shadow_dest = shadow_offset_rect(dest, shadow);
             d.draw_texture_pro(
                 tex,
                 src,

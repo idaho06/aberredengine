@@ -112,12 +112,10 @@ pub(super) struct TextBufferItem {
 /// has no Scale/Rotation/GlobalTransform2D resolution, no `EntityShader` support
 /// (screen-space shaders are out of scope), and no view-bounds culling.
 pub(super) struct ScreenSpriteBufferItem {
-    /// Sim entity, used only as `cmp_screen_draw_order`'s tie-break --
-    /// mirror query iteration order carries no ordering guarantee, so this
-    /// is what makes draw order deterministic. Same field name/type as
-    /// [`SpriteBufferItem::entity`]/
-    /// [`TextBufferItem::entity`], which tie-break the same way (`Entity`'s
-    /// own `Ord` impl) two structs above -- no separate `u64` mechanism.
+    /// Sim entity, used only as `cmp_screen_draw_order`'s tie-break: mirror
+    /// query iteration order carries no ordering guarantee, so this is what
+    /// makes draw order deterministic. [`SpriteBufferItem::entity`] and
+    /// [`TextBufferItem::entity`] tie-break the same way.
     pub(super) entity: Entity,
     pub(super) sprite: Sprite,
     pub(super) z_index: ZIndex,
@@ -178,7 +176,7 @@ pub(super) struct ScreenProgressBarBufferItem {
 
 /// Which typed screen buffer a [`ScreenDrawKey`] points into.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(super) enum ScreenDrawKind {
+enum ScreenDrawKind {
     Panel,
     ProgressBar,
     Sprite,
@@ -203,11 +201,11 @@ impl ScreenDrawKind {
 /// Small sortable handle to one screen draw item: the screen pass sorts these
 /// instead of the (much larger) buffer items, then reads each item from its
 /// typed buffer at `index`.
-pub(super) struct ScreenDrawKey {
-    pub(super) z: f32,
-    pub(super) kind: ScreenDrawKind,
-    pub(super) entity: Entity,
-    pub(super) index: u32,
+struct ScreenDrawKey {
+    z: f32,
+    kind: ScreenDrawKind,
+    entity: Entity,
+    index: u32,
 }
 
 /// Screen draw-order comparator: ascending `z`, then [`ScreenDrawKind`] rank,
@@ -223,6 +221,30 @@ fn cmp_screen_draw_order(a: &ScreenDrawKey, b: &ScreenDrawKey) -> std::cmp::Orde
         .then_with(|| a.kind.rank().cmp(&b.kind.rank()))
         .then_with(|| a.entity.cmp(&b.entity))
         .then_with(|| a.index.cmp(&b.index))
+}
+
+/// Rebuilds `order` as the sorted draw order of the two typed world buffers:
+/// one [`WorldDrawKey`] per item, `index` addressing the item in its own
+/// buffer. Reuses `order`'s capacity.
+fn build_world_order(
+    order: &mut Vec<WorldDrawKey>,
+    sprites: &[SpriteBufferItem],
+    texts: &[TextBufferItem],
+) {
+    order.clear();
+    order.extend(sprites.iter().enumerate().map(|(i, item)| WorldDrawKey {
+        z: item.z_index.0,
+        kind: WorldDrawKind::Sprite,
+        entity: item.entity,
+        index: i as u32,
+    }));
+    order.extend(texts.iter().enumerate().map(|(i, item)| WorldDrawKey {
+        z: item.z_index.0,
+        kind: WorldDrawKind::Text,
+        entity: item.entity,
+        index: i as u32,
+    }));
+    order.sort_unstable_by(cmp_world_draw_order);
 }
 
 /// Rebuilds `order` as the sorted draw order of the four typed screen
@@ -265,7 +287,7 @@ fn build_screen_order(
 
 /// Which typed world buffer a [`WorldDrawKey`] points into.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(super) enum WorldDrawKind {
+enum WorldDrawKind {
     Sprite,
     Text,
 }
@@ -284,11 +306,11 @@ impl WorldDrawKind {
 /// Small sortable handle to one world draw item: the world pass sorts these
 /// instead of the (much larger) buffer items, then reads each item from its
 /// typed buffer at `index`.
-pub(super) struct WorldDrawKey {
-    pub(super) z: f32,
-    pub(super) kind: WorldDrawKind,
-    pub(super) entity: Entity,
-    pub(super) index: u32,
+struct WorldDrawKey {
+    z: f32,
+    kind: WorldDrawKind,
+    entity: Entity,
+    index: u32,
 }
 
 /// World draw-order comparator: ascending `z`, then [`WorldDrawKind`] rank,
@@ -296,6 +318,8 @@ pub(super) struct WorldDrawKey {
 /// ordering guarantee, so the entity tie-break (`Entity: Ord`, equivalent to
 /// sorting by `Entity::to_bits()`) is what makes draw order deterministic:
 /// items sharing an exact `z` and kind draw in ascending sim-entity order.
+/// There is no index tie-break: an entity has at most one world sprite and one
+/// world text.
 fn cmp_world_draw_order(a: &WorldDrawKey, b: &WorldDrawKey) -> std::cmp::Ordering {
     // `total_cmp`, not `partial_cmp(..).unwrap_or(Equal)`: a NaN z-index would
     // otherwise break the comparator's total order, which `sort_unstable_by`
@@ -439,6 +463,8 @@ pub fn render_system(
     // earlier this frame. render_system takes no live Res<DebugMode> --
     // the render world doesn't have one.
     let debug_active = debug_res.debug_snapshot.0.is_some();
+    let debug_sprites = debug_active && debug_res.overlay_config.show_sprite_bounds;
+    let debug_texts = debug_active && debug_res.overlay_config.show_text_bounds;
 
     // ========== PHASE 1: Render game content to the render target ==========
     {
@@ -480,14 +506,13 @@ pub fn render_system(
                 world_time: &res.world_time.0,
                 render_size,
                 window_size,
-                show_sprite_bounds: debug_active && debug_res.overlay_config.show_sprite_bounds,
-                show_text_bounds: debug_active && debug_res.overlay_config.show_text_bounds,
+                show_sprite_bounds: debug_sprites,
+                show_text_bounds: debug_texts,
             };
 
             {
                 aberred_core::tracy::tracy_span!("render/build_sprite_buffer");
                 sprite_buffer.clear();
-                world_order.clear();
                 sprite_buffer.extend(mirrors.map_sprites.iter().filter_map(
                     |(
                         mirror,
@@ -533,15 +558,6 @@ pub fn render_system(
                         })
                     },
                 ));
-
-                world_order.extend(sprite_buffer.iter().enumerate().map(|(i, item)| {
-                    WorldDrawKey {
-                        z: item.z_index.0,
-                        kind: WorldDrawKind::Sprite,
-                        entity: item.entity,
-                        index: i as u32,
-                    }
-                }));
             } // build_sprite_buffer
             {
                 aberred_core::tracy::tracy_span!("render/build_text_buffer");
@@ -585,21 +601,10 @@ pub fn render_system(
                         })
                     },
                 ));
-                world_order.extend(
-                    text_buffer
-                        .iter()
-                        .enumerate()
-                        .map(|(i, item)| WorldDrawKey {
-                            z: item.z_index.0,
-                            kind: WorldDrawKind::Text,
-                            entity: item.entity,
-                            index: i as u32,
-                        }),
-                );
             } // build_text_buffer
             {
                 aberred_core::tracy::tracy_span!("render/sort_world");
-                world_order.sort_unstable_by(cmp_world_draw_order);
+                build_world_order(world_order, sprite_buffer, text_buffer);
             } // sort_world
             {
                 aberred_core::tracy::tracy_span!("render/draw_world");
@@ -714,8 +719,6 @@ pub fn render_system(
         }
 
         // Draw in screen coordinates (UI layer) - still on the render target
-        let debug_sprites = debug_active && debug_res.overlay_config.show_sprite_bounds;
-        let debug_texts = debug_active && debug_res.overlay_config.show_text_bounds;
         {
             aberred_core::tracy::tracy_span!("render/screen_space");
             // All 8 screen-space categories source from
@@ -750,10 +753,10 @@ pub fn render_system(
                 },
             ));
             // GUI categories are read straight off their mirror queries
-            // (borrowed, not cloned into an owned scratch buffer) --
-            // unlike sprites/texts above, several GuiX component fields
-            // (caption, tex_key, ...) are heap-allocated Strings that
-            // a per-frame Vec<Entry> rebuild would needlessly clone.
+            // (borrowed); draw_screen_space copies only what the draw reads
+            // into the typed panel and progress-bar buffers, instead of
+            // materializing an owned entry per widget with all its GuiX
+            // component fields (caption, tex_key, ...).
             draw_screen_space(
                 &mut d,
                 screen_sprite_buffer,
@@ -1068,12 +1071,10 @@ fn warn_missing_theme(
 /// orders those and the screen-space sprites and texts together by [`ZIndex`]
 /// (see `build_screen_order`), and dispatches draw calls in that order.
 ///
-/// Sorts small [`ScreenDrawKey`]s rather than the buffer items, like the
-/// world pass, with the same in-place `sort_unstable_by`. The equal-z
-/// tie-break (text drawn on top of a same-z sprite, the sane default for UI
-/// captions over panel backgrounds) is encoded in the comparator via
-/// `ScreenDrawKind::rank` instead of relying on `sort_by`'s stability and a
-/// fixed collection order.
+/// Sorts small [`ScreenDrawKey`]s rather than the buffer items. The equal-z
+/// tie-break (text drawn on top of a same-z sprite, the default for UI
+/// captions over panel backgrounds) is part of the comparator via
+/// `ScreenDrawKind::rank`.
 #[allow(clippy::too_many_arguments)]
 fn draw_screen_space<'m>(
     d: &mut impl RaylibDraw,
@@ -1081,9 +1082,8 @@ fn draw_screen_space<'m>(
     screen_sprites: &[ScreenSpriteBufferItem],
     screen_texts: &[ScreenTextBufferItem],
     // Read straight off the mirror query iterators (borrowed, no per-frame
-    // Vec<Entry> materialization) -- several GuiX component fields
-    // (caption, tex_key, ...) are heap-allocated Strings that an
-    // owned scratch-buffer rebuild would needlessly clone every frame.
+    // Vec<Entry> materialization); only the fields the draw reads are copied
+    // into `panels` and `bars`.
     gui_windows: impl Iterator<Item = (&'m SimMirror, &'m GuiWindow, &'m ScreenPosition, &'m ZIndex)>,
     gui_buttons: impl Iterator<
         Item = (
@@ -1506,7 +1506,7 @@ mod world_draw_order_tests {
         assert_eq!(zs, vec![-2.0, 0.0, 5.0]);
     }
 
-    /// The visible behavior change: a text below a sprite draws behind it.
+    /// A text below a sprite draws behind it.
     #[test]
     fn a_text_at_a_lower_z_draws_before_a_sprite_at_a_higher_z() {
         let sorted = sort(vec![sprite_key(5.0, entity(0)), text_key(1.0, entity(1))]);
@@ -1544,6 +1544,102 @@ mod world_draw_order_tests {
     #[test]
     fn a_sprite_ranks_below_a_text() {
         assert!(WorldDrawKind::Sprite.rank() < WorldDrawKind::Text.rank());
+    }
+
+    fn sprite_item(z: f32, entity: Entity) -> SpriteBufferItem {
+        SpriteBufferItem {
+            entity,
+            sprite: Sprite::new("tex", 1.0, 1.0),
+            z_index: ZIndex(z),
+            resolved_pos: WorldPosition::new(0.0, 0.0),
+            resolved_scale: None,
+            resolved_rot: None,
+            maybe_shader: None,
+            maybe_tint: None,
+            maybe_shadow: None,
+            velocity: None,
+        }
+    }
+
+    fn text_item(z: f32, entity: Entity) -> TextBufferItem {
+        TextBufferItem {
+            entity,
+            text: DynamicText::new("hi", "font", 12.0, aberred_core::math::Color::WHITE),
+            z_index: ZIndex(z),
+            resolved_pos: WorldPosition::new(0.0, 0.0),
+            text_size: Vector2::zero(),
+            maybe_shader: None,
+            maybe_tint: None,
+            maybe_shadow: None,
+            velocity: None,
+        }
+    }
+
+    /// The entity of the buffer item each key addresses.
+    fn addressed_entities(
+        order: &[WorldDrawKey],
+        sprites: &[SpriteBufferItem],
+        texts: &[TextBufferItem],
+    ) -> Vec<Entity> {
+        order
+            .iter()
+            .map(|k| match k.kind {
+                WorldDrawKind::Sprite => sprites[k.index as usize].entity,
+                WorldDrawKind::Text => texts[k.index as usize].entity,
+            })
+            .collect()
+    }
+
+    #[test]
+    fn built_keys_address_their_own_buffer_item_in_draw_order() {
+        let [e1, e2, e3, e4] = [1, 2, 3, 4].map(entity);
+        let sprites = [sprite_item(2.0, e1), sprite_item(1.0, e2)];
+        let texts = [text_item(1.0, e3), text_item(0.0, e4)];
+
+        let mut order = Vec::new();
+        build_world_order(&mut order, &sprites, &texts);
+
+        // z 0 text; z 1 sprite then text (rank); z 2 sprite.
+        let expected = vec![e4, e2, e3, e1];
+        assert_eq!(addressed_entities(&order, &sprites, &texts), expected);
+        let keyed: Vec<Entity> = order.iter().map(|k| k.entity).collect();
+        assert_eq!(keyed, expected, "a key carries its item's entity");
+    }
+
+    #[test]
+    fn a_key_carries_the_z_and_kind_of_its_item() {
+        let mut order = Vec::new();
+        build_world_order(
+            &mut order,
+            &[sprite_item(7.0, entity(1))],
+            &[text_item(-3.0, entity(2))],
+        );
+        let zk: Vec<(f32, WorldDrawKind)> = order.iter().map(|k| (k.z, k.kind)).collect();
+        assert_eq!(
+            zk,
+            vec![(-3.0, WorldDrawKind::Text), (7.0, WorldDrawKind::Sprite)]
+        );
+    }
+
+    #[test]
+    fn empty_buffers_give_an_empty_order() {
+        let mut order = vec![key(1.0, WorldDrawKind::Text, entity(1))];
+        build_world_order(&mut order, &[], &[]);
+        assert!(order.is_empty());
+    }
+
+    #[test]
+    fn rebuilding_replaces_the_previous_order_and_keeps_its_capacity() {
+        let many: Vec<SpriteBufferItem> =
+            (0..64).map(|i| sprite_item(i as f32, entity(i))).collect();
+        let mut order = Vec::new();
+        build_world_order(&mut order, &many, &[]);
+        assert_eq!(order.len(), 64);
+        let capacity = order.capacity();
+
+        build_world_order(&mut order, &many[..3], &[]);
+        assert_eq!(order.len(), 3);
+        assert!(order.capacity() >= capacity);
     }
 }
 
