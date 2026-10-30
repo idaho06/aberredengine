@@ -40,6 +40,7 @@ Complete reference for game developers using Lua scripting in Aberred Engine.
 - [Per-Entity Shaders](#per-entity-shaders)
 - [Tint Component](#tint-component)
 - [Shadow Component](#shadow-component)
+- [Shape Component](#shape-component)
 - [GUI Widgets](#gui-widgets)
   - [GUI Theme Configuration](#gui-widget-theme-configuration)
 - [Game Configuration](#game-configuration)
@@ -360,10 +361,12 @@ Collision callbacks process commands from their own dedicated queues, which are 
 - `engine.collision_entity_insert_tween_position()` instead of `engine.entity_insert_tween_position()`
 - `engine.collision_entity_insert_tween_rotation()` instead of `engine.entity_insert_tween_rotation()`
 - `engine.collision_entity_insert_tween_scale()` instead of `engine.entity_insert_tween_scale()`
+- `engine.collision_entity_insert_tween_tint()` instead of `engine.entity_insert_tween_tint()`
 - `engine.collision_entity_menu_despawn()` instead of `engine.entity_menu_despawn()`
 - `engine.collision_entity_remove_tween_position()` instead of `engine.entity_remove_tween_position()`
 - `engine.collision_entity_remove_tween_rotation()` instead of `engine.entity_remove_tween_rotation()`
 - `engine.collision_entity_remove_tween_scale()` instead of `engine.entity_remove_tween_scale()`
+- `engine.collision_entity_remove_tween_tint()` instead of `engine.entity_remove_tween_tint()`
 - `engine.collision_entity_add_force()` instead of `engine.entity_add_force()`
 - `engine.collision_entity_remove_force()` instead of `engine.entity_remove_force()`
 - `engine.collision_entity_set_force_enabled()` instead of `engine.entity_set_force_enabled()`
@@ -415,7 +418,7 @@ the event fires.
 | `GuiClicked` | `LuaOnGuiClicked` | `:with_lua_gui_clicked(callback)` | `fn(ctx)` (`ctx.entity_id`) |
 | `MenuSelected` | `LuaOnMenuSelected` | `:with_lua_menu_selected(callback)` | `fn(ctx)` (`menu_id`, `item_id`, `item_index`) |
 | `AnimationFinished` | `LuaOnAnimationFinished` | `:with_lua_animation_finished(callback)` | `fn(ctx, input)` |
-| `TweenFinished<T>` | `LuaOnTweenFinished<T>` | `:with_lua_tween_{position,rotation,scale,screen_position}_finished(callback)` | `fn(ctx, input)` |
+| `TweenFinished<T>` | `LuaOnTweenFinished<T>` | `:with_lua_tween_{position,rotation,scale,screen_position,tint}_finished(callback)` | `fn(ctx, input)` |
 | `TimerFired` | `LuaOnTimerFired` | `:with_lua_timer(duration, callback)` / `:with_lua_timer_once(duration, callback)` | `fn(ctx, input)` |
 | `PhaseEntered` | `LuaOnPhaseEntered` | `:with_lua_phase_entered(callback)` | `fn(ctx, input) -> phase?` |
 | `PhaseExited` | `LuaOnPhaseExited` | `:with_lua_phase_exited(callback)` | `fn(ctx)` |
@@ -2369,6 +2372,22 @@ Attach a one-shot callback fired when the tween stops playing (requires `:with_t
 :with_lua_tween_scale_finished("on_grow_done")
 ```
 
+#### `:with_tween_tint(from_r, from_g, from_b, from_a, to_r, to_g, to_b, to_a, duration)`
+
+Animate the entity's [tint](#tint-component) between two colors (channels are integers 0-255). Each channel interpolates and rounds to the nearest value. The entity needs a `Tint` to animate, so the builder adds one at the start color when the entity has none; an explicit `:with_tint()` is kept. `Tint` multiplies a shape's colors, so a white shape tweens to any color.
+
+```lua
+engine.spawn()
+    :with_shape_circle(16, 255, 255, 255, 255)
+    :with_shape_filled()
+    :with_position(200, 120):with_z_index(1)
+    :with_tween_tint(255, 255, 255, 255, 255, 80, 80, 255, 1.0)
+    :with_tween_tint_loop("ping_pong")
+    :build()
+```
+
+`:with_tween_tint_easing(easing)`, `:with_tween_tint_loop(loop_mode)` and `:with_tween_tint_backwards()` behave like the other tween modifiers (each requires `:with_tween_tint()` first), and `:with_lua_tween_tint_finished(callback)` attaches the one-shot `fn(ctx, input)` finished callback.
+
 ---
 
 ### Screen-Position Tween
@@ -3437,6 +3456,19 @@ function on_menu_close()
     engine.entity_remove_tween_scale(button)
 end
 ```
+
+### `engine.entity_insert_tween_tint(entity_id, from_r, from_g, from_b, from_a, to_r, to_g, to_b, to_a, duration, easing, loop_mode, backwards, callback?)`
+
+Add or replace a tint tween at runtime. The entity gets a `Tint` at the start color when it has none; an existing `Tint` is kept. Channels are integers 0-255; the other parameters match `entity_insert_tween_rotation`.
+
+```lua
+-- Fade a ghost between opaque and transparent
+engine.entity_insert_tween_tint(ghost, 255, 255, 255, 255, 255, 255, 255, 60, 1.5, "quad_in_out", "ping_pong", false)
+```
+
+### `engine.entity_remove_tween_tint(entity_id)`
+
+Remove the tint tween. The entity keeps its current `Tint`.
 
 ### `engine.entity_insert_tween_screen_position(entity_id, from_x, from_y, to_x, to_y, duration, easing, loop_mode, backwards, callback)`
 
@@ -4583,6 +4615,10 @@ Remove TweenScale component during collision handling.
 
 - `entity_id` - Entity to remove tween from
 
+#### `engine.collision_entity_insert_tween_tint(...)` / `engine.collision_entity_remove_tween_tint(entity_id)`
+
+Collision-context variants of `engine.entity_insert_tween_tint` and `engine.entity_remove_tween_tint`, with the same parameters.
+
 #### `engine.collision_entity_set_rotation(entity_id, degrees)`
 
 Set entity's rotation during collision handling.
@@ -5635,12 +5671,14 @@ engine.spawn()
 
 ## Tint Component
 
-The Tint component applies color modulation to sprites and text during rendering. This is useful for damage flashes, powerup effects, fade effects, or any color-based visual feedback.
+The Tint component applies color modulation to sprites, text and shapes during rendering. This is useful for damage flashes, powerup effects, fade effects, or any color-based visual feedback.
 
 ### How Tint Works
 
 - **For sprites**: The tint color replaces `Color::WHITE` in draw calls, effectively multiplying the sprite's colors
 - **For text**: The tint color is multiplied with the text's existing color (set via `:with_text()`)
+- **For shapes**: The tint color is multiplied with both the fill and the outline color (see [Shape Component](#shape-component))
+- **Animated**: `:with_tween_tint()` and `engine.entity_insert_tween_tint()` interpolate a tint over time (see [Tween Components](#tween-components))
 
 ### Adding Tint via Builder
 
@@ -5847,6 +5885,103 @@ Available collision variants:
 - Works in both world-space (`WorldPosition`) and screen-space (`ScreenPosition`) entities.
 - Shadow bypasses per-entity shaders — it renders with the default shader regardless of the entity's `EntityShader` component.
 - GUI themes also support drop shadows for all themed widgets (`GuiWindow`, `GuiButton`, `GuiLabel`, `GuiProgressBar`) — see [GUI Widgets](#gui-widgets).
+
+---
+
+## Shape Component
+
+The Shape component draws a point, line, rectangle, circle, ellipse or polygon with a color, in world space or screen space. Shapes are 1 px, hard-edged and unantialiased, which suits pixel-art games. They sort by `ZIndex` together with sprites and text.
+
+### Adding a Shape via Builder
+
+A shape needs a position and a z index to render: `:with_position()` draws it in the world (the camera applies), `:with_screen_position()` draws it on screen. A shape without `:with_z_index()` exists but never draws.
+
+```lua
+-- Outlined rectangle in the world
+engine.spawn()
+    :with_shape_rect(64, 32, 255, 200, 0, 255)      -- width, height, r, g, b, a
+    :with_position(100, 100)
+    :with_z_index(1)
+    :build()
+
+-- Filled circle with a white outline, pivoting on its own center
+engine.spawn()
+    :with_shape_circle(20, 255, 80, 80, 255)         -- radius, r, g, b, a
+    :with_shape_filled()
+    :with_shape_outline_color(255, 255, 255, 255)
+    :with_position(200, 100)
+    :with_z_index(1)
+    :build()
+
+-- Filled triangle from local-space points
+engine.spawn()
+    :with_shape_polygon({ {x = 0, y = 0}, {x = 40, y = 0}, {x = 20, y = 30} }, 80, 200, 120, 255)
+    :with_shape_filled()
+    :with_position(300, 100)
+    :with_z_index(1)
+    :build()
+```
+
+**Kinds** (each takes the color as trailing `r, g, b, a` integers 0-255; a later kind call replaces an earlier one):
+
+| Method | Geometry (local space) |
+|---|---|
+| `:with_shape_point(r, g, b, a)` | One pixel at `(0, 0)` |
+| `:with_shape_line(to_x, to_y, r, g, b, a)` | Line from `(0, 0)` to `(to_x, to_y)` |
+| `:with_shape_rect(width, height, r, g, b, a)` | Rectangle with its top-left corner at `(0, 0)` |
+| `:with_shape_circle(radius, r, g, b, a)` | Circle centered on `(0, 0)` |
+| `:with_shape_ellipse(radius_x, radius_y, r, g, b, a)` | Axis-aligned ellipse centered on `(0, 0)` |
+| `:with_shape_polygon(points, r, g, b, a)` | Polygon through `points`, a sequence of `{x = .., y = ..}` tables (convex or concave, no holes) |
+
+**Modifiers** (each requires a kind method first and raises `"with_shape_filled() requires a with_shape_*() first"` otherwise):
+
+- `:with_shape_filled()` fills the interior with the shape's color. Without it a rectangle, circle, ellipse or polygon is a 1 px outline.
+- `:with_shape_outline_color(r, g, b, a)` draws a 1 px outline in this color over a filled shape. It has no effect on an unfilled shape, a point or a line.
+- `:with_shape_origin(x, y)` sets the local pivot: the point that sits on the entity position and is the center of `Scale` and `Rotation`. The default is `(0, 0)`.
+
+An invalid polygon point raises an error naming its 1-based index (`point 2 must be a table with numeric x and y`). A polygon with two points draws one line, and fewer than two draw nothing.
+
+### How Shapes Render
+
+- `Tint` multiplies both the fill and the outline color, so a white shape tweens to any color with a [tint tween](#tween-components).
+- `Shadow` draws the shape's silhouette (the fill of a filled shape, the outline otherwise) at `position + offset` in the shadow color, ignoring `Tint`.
+- World shapes honor `Scale`, `Rotation` and parent-child hierarchy, pivoting on `origin`. Screen shapes honor `origin` but not `Scale`, `Rotation` or hierarchy.
+- A negative `Scale` mirrors a shape; filled shapes stay visible.
+- An ellipse ignores `Rotation` entirely. A circle rotates only its center about `origin` (the circle itself looks the same at every angle). Under a non-uniform `Scale` a circle becomes an ellipse.
+- Shapes do not use per-entity shaders.
+- Polygons are triangulated once, when `:with_shape_polygon()` or `engine.entity_set_shape_polygon()` runs. Build a polygon once and reuse it rather than rebuilding it every tick.
+- This `shape` is unrelated to the `shape` table of a particle emitter's configuration.
+
+### Runtime Shape Control
+
+Each function below changes the entity's existing `Shape` and does nothing if the entity has none; none of them inserts a shape. A shape is added at spawn time with the builder.
+
+| Function | Effect |
+|---|---|
+| `engine.entity_set_shape_color(entity_id, r, g, b, a)` | Set the shape's color |
+| `engine.entity_set_shape_outline_color(entity_id, r, g, b, a)` | Set the outline color drawn over a filled shape |
+| `engine.entity_remove_shape_outline_color(entity_id)` | Remove the outline color |
+| `engine.entity_set_shape_filled(entity_id, filled)` | Fill (`true`) or outline (`false`) the shape |
+| `engine.entity_set_shape_origin(entity_id, x, y)` | Set the pivot |
+| `engine.entity_set_shape_point(entity_id)` | Replace the geometry with a point |
+| `engine.entity_set_shape_line(entity_id, to_x, to_y)` | Replace the geometry with a line |
+| `engine.entity_set_shape_rect(entity_id, width, height)` | Replace the geometry with a rectangle |
+| `engine.entity_set_shape_circle(entity_id, radius)` | Replace the geometry with a circle |
+| `engine.entity_set_shape_ellipse(entity_id, radius_x, radius_y)` | Replace the geometry with an ellipse |
+| `engine.entity_set_shape_polygon(entity_id, points)` | Replace the geometry with a polygon; bad points raise at the call |
+| `engine.entity_remove_shape(entity_id)` | Remove the shape |
+
+The geometry functions keep the shape's color, fill, outline color and origin. Every function has a `collision_` variant for collision callbacks (`engine.collision_entity_set_shape_color(...)`, and so on).
+
+```lua
+-- Pulse a circle from on_update (`elapsed` is seconds accumulated from dt)
+local id = engine.get_entity("pulse")
+local radius = 20 + 6 * math.sin(elapsed * 4)
+engine.entity_set_shape_circle(id, radius)
+
+-- Flash a shape's fill on hit
+engine.entity_set_shape_color(id, 255, 255, 255, 255)
+```
 
 ---
 

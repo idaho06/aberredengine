@@ -74,9 +74,10 @@ crates/aberred-lua/src/resources/lua_runtime/
 │   ├── transform.rs     # with_position, with_screen_position, with_rotation, with_scale, with_parent, with_stuck_to*, with_camera_target, ...
 │   ├── physics.rs       # with_velocity, with_acceleration, with_friction, with_max_speed, with_frozen, with_box_collider*
 │   ├── sprite.rs        # with_sprite*, with_tint, with_shadow, with_animation*, with_lua_animation_finished, with_z_index
+│   ├── shape.rs          # with_shape_point/line/rect/circle/ellipse/polygon, with_shape_filled, with_shape_outline_color, with_shape_origin
 │   ├── gui.rs            # with_gui_window/button/label/image/progress_bar/offset/theme_key, their per-state offset variants, with_lua_gui_clicked
 │   ├── menu.rs           # with_menu and its with_menu_* configuration methods
-│   ├── tween.rs          # with_tween_position/rotation/scale/screen_position and their *_easing/*_loop/*_backwards variants, with_lua_tween_*_finished
+│   ├── tween.rs          # with_tween_position/rotation/scale/screen_position/tint and their *_easing/*_loop/*_backwards variants, with_lua_tween_*_finished
 │   └── behavior.rs       # with_phase, with_lua_phase_entered, with_lua_phase_exited, with_lua_phase_update, with_lua_timer, with_lua_timer_once, with_lua_collision_rule, with_lua_collision_started, with_lua_collision_ended, with_lua_setup, with_signal*, with_group, with_persistent, with_grid_layout, with_tilemap, with_particle_emitter, with_mouse_controlled, with_text
 ├── engine_api/          # engine.* API registration, split by category
 │   ├── mod.rs          # Re-exports, module declarations
@@ -502,6 +503,7 @@ All are registered in `engine_api/render.rs` and queue into `gui_theme_commands`
 - `entity_insert_tween_rotation`, `entity_remove_tween_rotation`
 - `entity_insert_tween_scale`, `entity_remove_tween_scale`
 - `entity_insert_tween_screen_position`, `entity_remove_tween_screen_position`
+- `entity_insert_tween_tint`, `entity_remove_tween_tint`
 - `entity_insert_stuck_to`, `release_stuck_to`
 - `entity_signal_set_scalar`, `entity_signal_set_integer`, `entity_signal_set_string`, `entity_signal_set_flag`
 - `entity_signal_remove_scalar`, `entity_signal_remove_integer`, `entity_signal_remove_string`, `entity_signal_remove_flag`
@@ -512,12 +514,14 @@ All are registered in `engine_api/render.rs` and queue into `gui_theme_commands`
 - `entity_shader_remove_uniform`, `entity_shader_clear_uniforms`
 - `entity_set_tint`, `entity_remove_tint`
 - `entity_set_shadow`, `entity_remove_shadow`
+- `entity_set_shape_color`, `entity_set_shape_outline_color`, `entity_remove_shape_outline_color`, `entity_set_shape_filled`, `entity_set_shape_origin`, `entity_remove_shape`
+- `entity_set_shape_point`, `entity_set_shape_line`, `entity_set_shape_rect`, `entity_set_shape_circle`, `entity_set_shape_ellipse`, `entity_set_shape_polygon` (all queue `EntityCmd::SetShapeKind`; the polygon row parses and triangulates at the Lua call)
 - `entity_set_parent`, `entity_remove_parent`
 - `entity_set_camera_target`, `entity_remove_camera_target`
 - `entity_set_gui_disabled` — enable/disable a `GuiButton`/`GuiImage` (cosmetic: `gui_hit_test_system` stops promoting it and skips its click callback)
 - `entity_set_gui_progress`, `entity_set_gui_progress_max` — set/re-clamp a `GuiProgressBar`'s value
 
-The four `entity_insert_tween_*` commands (`position`/`rotation`/`scale`/`screen_position`) all accept a trailing `callback` function-name string (empty string = no callback); when non-empty, the handler inserts a `LuaOnTweenFinished<T>` component (`T` being the tweened `WorldPosition`/`Rotation`/`Scale`/`ScreenPosition`) on the entity, fired once by the corresponding `lua_tween_finished_observer::<T>` when `TweenFinished<T>` triggers.
+The five `entity_insert_tween_*` commands (`position`/`rotation`/`scale`/`screen_position`/`tint`) all accept a trailing `callback` function-name string (empty string = no callback); when non-empty, the handler inserts a `LuaOnTweenFinished<T>` component (`T` being the tweened `WorldPosition`/`Rotation`/`Scale`/`ScreenPosition`/`Tint`) on the entity, fired once by the corresponding `lua_tween_finished_observer::<T>` when `TweenFinished<T>` triggers.
 
 #### Collision Context Functions
 
@@ -585,6 +589,20 @@ with_animation_controller
 with_animation_rule
 ```
 
+**Shapes** (`shape.rs`)
+
+```text
+with_shape_point
+with_shape_line
+with_shape_rect
+with_shape_circle
+with_shape_ellipse
+with_shape_polygon
+with_shape_filled
+with_shape_outline_color
+with_shape_origin
+```
+
 **GUI widgets** (`gui.rs`)
 
 ```text
@@ -645,6 +663,11 @@ with_tween_screen_position_backwards
 with_tween_screen_position_easing
 with_tween_screen_position_loop
 with_lua_tween_screen_position_finished
+with_tween_tint
+with_tween_tint_backwards
+with_tween_tint_easing
+with_tween_tint_loop
+with_lua_tween_tint_finished
 ```
 
 **Behavior / misc** (`behavior.rs`)
@@ -779,6 +802,7 @@ Current schema mappings:
 - `with_particle_emitter` → `"ParticleEmitterConfig"`
 - `with_animation_rule` → `"AnimationRuleCondition"`
 - `with_menu` → `"MenuItem[]"`
+- `with_shape_polygon` → `"Vec2[]"`
 
 When adding a new builder method that accepts a table, add a `schema_refs` entry in `register_builder_meta()`.
 
