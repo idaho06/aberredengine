@@ -474,6 +474,22 @@ pub enum EntityCmd {
     },
     /// Remove entity shadow
     RemoveShadow { entity_id: u64 },
+    /// Set the colour of an existing `Shape` (no-op without one)
+    SetShapeColor {
+        entity_id: u64,
+        color: (u8, u8, u8, u8),
+    },
+    /// Set (`Some`) or clear (`None`) the outline colour of an existing `Shape`
+    SetShapeOutlineColor {
+        entity_id: u64,
+        color: Option<(u8, u8, u8, u8)>,
+    },
+    /// Set whether an existing `Shape` is filled
+    SetShapeFilled { entity_id: u64, filled: bool },
+    /// Set the pivot of an existing `Shape`
+    SetShapeOrigin { entity_id: u64, x: f32, y: f32 },
+    /// Remove the `Shape` component
+    RemoveShape { entity_id: u64 },
     /// Set CameraTarget component on an entity. `priority`/`zoom` of `None`
     /// preserve the entity's existing value (or component default if absent).
     SetCameraTarget {

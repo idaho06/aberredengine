@@ -667,6 +667,14 @@ function engine.collision_entity_remove_shader(entity_id) end
 ---@param entity_id integer
 function engine.collision_entity_remove_shadow(entity_id) end
 
+---Remove an entity's Shape
+---@param entity_id integer
+function engine.collision_entity_remove_shape(entity_id) end
+
+---Remove the outline color of an entity's Shape
+---@param entity_id integer
+function engine.collision_entity_remove_shape_outline_color(entity_id) end
+
 ---Remove entity tint
 ---@param entity_id integer
 function engine.collision_entity_remove_tint(entity_id) end
@@ -782,6 +790,33 @@ function engine.collision_entity_set_shader(entity_id, key) end
 ---@param b integer
 ---@param a integer
 function engine.collision_entity_set_shadow(entity_id, dx, dy, r, g, b, a) end
+
+---Set the color (RGBA 0-255) of an entity's Shape; no-op without one
+---@param entity_id integer
+---@param r integer
+---@param g integer
+---@param b integer
+---@param a integer
+function engine.collision_entity_set_shape_color(entity_id, r, g, b, a) end
+
+---Fill (true) or outline (false) an entity's Shape; no-op without one
+---@param entity_id integer
+---@param filled boolean
+function engine.collision_entity_set_shape_filled(entity_id, filled) end
+
+---Set the pivot of an entity's Shape (the point that scale and rotation turn around); no-op without one
+---@param entity_id integer
+---@param x number
+---@param y number
+function engine.collision_entity_set_shape_origin(entity_id, x, y) end
+
+---Set the outline color (RGBA 0-255) drawn over a filled Shape; no-op without a Shape
+---@param entity_id integer
+---@param r integer
+---@param g integer
+---@param b integer
+---@param a integer
+function engine.collision_entity_set_shape_outline_color(entity_id, r, g, b, a) end
 
 ---Set entity speed (scales velocity to this magnitude)
 ---@param entity_id integer
@@ -1065,6 +1100,14 @@ function engine.entity_remove_shader(entity_id) end
 ---@param entity_id integer
 function engine.entity_remove_shadow(entity_id) end
 
+---Remove an entity's Shape
+---@param entity_id integer
+function engine.entity_remove_shape(entity_id) end
+
+---Remove the outline color of an entity's Shape
+---@param entity_id integer
+function engine.entity_remove_shape_outline_color(entity_id) end
+
 ---Remove entity tint
 ---@param entity_id integer
 function engine.entity_remove_tint(entity_id) end
@@ -1180,6 +1223,33 @@ function engine.entity_set_shader(entity_id, key) end
 ---@param b integer
 ---@param a integer
 function engine.entity_set_shadow(entity_id, dx, dy, r, g, b, a) end
+
+---Set the color (RGBA 0-255) of an entity's Shape; no-op without one
+---@param entity_id integer
+---@param r integer
+---@param g integer
+---@param b integer
+---@param a integer
+function engine.entity_set_shape_color(entity_id, r, g, b, a) end
+
+---Fill (true) or outline (false) an entity's Shape; no-op without one
+---@param entity_id integer
+---@param filled boolean
+function engine.entity_set_shape_filled(entity_id, filled) end
+
+---Set the pivot of an entity's Shape (the point that scale and rotation turn around); no-op without one
+---@param entity_id integer
+---@param x number
+---@param y number
+function engine.entity_set_shape_origin(entity_id, x, y) end
+
+---Set the outline color (RGBA 0-255) drawn over a filled Shape; no-op without a Shape
+---@param entity_id integer
+---@param r integer
+---@param g integer
+---@param b integer
+---@param a integer
+function engine.entity_set_shape_outline_color(entity_id, r, g, b, a) end
 
 ---Set entity speed (scales velocity to this magnitude)
 ---@param entity_id integer

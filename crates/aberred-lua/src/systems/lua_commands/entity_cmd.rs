@@ -12,7 +12,7 @@
 
 use log::warn;
 
-use aberred_core::math::Vec2;
+use aberred_core::math::{Color, Vec2};
 use bevy_ecs::component::Mutable;
 use bevy_ecs::hierarchy::ChildOf;
 use bevy_ecs::prelude::*;
@@ -31,6 +31,7 @@ use aberred_core::components::rotation::Rotation;
 use aberred_core::components::scale::Scale;
 use aberred_core::components::screen_position::ScreenPosition;
 use aberred_core::components::shadow::Shadow;
+use aberred_core::components::shape::Shape;
 use aberred_core::components::signals::Signals;
 use aberred_core::components::sprite::Sprite;
 use aberred_core::components::stuck_to::StuckTo;
@@ -166,6 +167,12 @@ pub fn process_entity_commands(
             | EntityCmd::RemoveTint { .. }
             | EntityCmd::SetShadow { .. }
             | EntityCmd::RemoveShadow { .. }) => process_shader_cmd(cmd, commands),
+
+            cmd @ (EntityCmd::SetShapeColor { .. }
+            | EntityCmd::SetShapeOutlineColor { .. }
+            | EntityCmd::SetShapeFilled { .. }
+            | EntityCmd::SetShapeOrigin { .. }
+            | EntityCmd::RemoveShape { .. }) => process_shape_cmd(cmd, commands),
 
             cmd @ (EntityCmd::SetPosition { .. }
             | EntityCmd::SetScreenPosition { .. }
@@ -519,6 +526,39 @@ where
         e.insert(tween);
         set_callback(e);
     });
+}
+
+/// Writes to an entity's existing `Shape`; none of these inserts a missing one.
+fn process_shape_cmd(cmd: EntityCmd, commands: &mut Commands) {
+    let rgba = |(r, g, b, a): (u8, u8, u8, u8)| Color::new(r, g, b, a);
+    match cmd {
+        EntityCmd::SetShapeColor { entity_id, color } => {
+            queue_on_component::<Shape>(commands, entity_id, move |shape| {
+                shape.color = rgba(color);
+            });
+        }
+        EntityCmd::SetShapeOutlineColor { entity_id, color } => {
+            queue_on_component::<Shape>(commands, entity_id, move |shape| {
+                shape.outline_color = color.map(rgba);
+            });
+        }
+        EntityCmd::SetShapeFilled { entity_id, filled } => {
+            queue_on_component::<Shape>(commands, entity_id, move |shape| {
+                shape.filled = filled;
+            });
+        }
+        EntityCmd::SetShapeOrigin { entity_id, x, y } => {
+            queue_on_component::<Shape>(commands, entity_id, move |shape| {
+                shape.origin = Vec2::new(x, y);
+            });
+        }
+        EntityCmd::RemoveShape { entity_id } => {
+            queue_on_entity(commands, entity_id, |mut e| {
+                e.remove::<Shape>();
+            });
+        }
+        _ => unreachable!(),
+    }
 }
 
 fn process_shader_cmd(cmd: EntityCmd, commands: &mut Commands) {
@@ -992,6 +1032,7 @@ mod tests {
                 a: 128,
             },
             EntityCmd::RemoveShadow { entity_id: id },
+            EntityCmd::RemoveShape { entity_id: id },
             EntityCmd::RemoveScreenPosition { entity_id: id },
             EntityCmd::SetRotation {
                 entity_id: id,
@@ -1521,11 +1562,113 @@ mod tests {
                     flip_h: true,
                     flip_v: true,
                 },
+                EntityCmd::SetShapeColor {
+                    entity_id: id,
+                    color: (1, 2, 3, 4),
+                },
+                EntityCmd::SetShapeOutlineColor {
+                    entity_id: id,
+                    color: Some((1, 2, 3, 4)),
+                },
+                EntityCmd::SetShapeFilled {
+                    entity_id: id,
+                    filled: true,
+                },
+                EntityCmd::SetShapeOrigin {
+                    entity_id: id,
+                    x: 1.0,
+                    y: 1.0,
+                },
             ],
         );
+        assert!(world.get::<Shape>(e).is_none());
         assert!(world.get::<RigidBody>(e).is_none());
         assert!(world.get::<Signals>(e).is_none());
         assert!(world.get::<Animation>(e).is_none());
+    }
+
+    #[test]
+    fn shape_style_cmds_change_only_their_own_field() {
+        let base = || Shape::rect(Vec2::new(4.0, 2.0), Color::RED);
+        // (name, command from the entity id, starting shape, expected shape)
+        type Case = (&'static str, fn(u64) -> EntityCmd, Shape, Shape);
+        let cases: [Case; 5] = [
+            (
+                "color",
+                |entity_id| EntityCmd::SetShapeColor {
+                    entity_id,
+                    color: (1, 2, 3, 4),
+                },
+                base(),
+                Shape {
+                    color: Color::new(1, 2, 3, 4),
+                    ..base()
+                },
+            ),
+            (
+                "outline color",
+                |entity_id| EntityCmd::SetShapeOutlineColor {
+                    entity_id,
+                    color: Some((5, 6, 7, 8)),
+                },
+                base(),
+                base().with_outline_color(Color::new(5, 6, 7, 8)),
+            ),
+            (
+                "outline color removed",
+                |entity_id| EntityCmd::SetShapeOutlineColor {
+                    entity_id,
+                    color: None,
+                },
+                base().with_outline_color(Color::WHITE),
+                base(),
+            ),
+            (
+                "filled",
+                |entity_id| EntityCmd::SetShapeFilled {
+                    entity_id,
+                    filled: true,
+                },
+                base(),
+                base().filled(),
+            ),
+            (
+                "origin",
+                |entity_id| EntityCmd::SetShapeOrigin {
+                    entity_id,
+                    x: 2.0,
+                    y: 1.0,
+                },
+                base(),
+                base().with_origin(Vec2::new(2.0, 1.0)),
+            ),
+        ];
+        for (name, cmd, start, expected) in cases {
+            let mut world = World::new();
+            let e = world.spawn(start).id();
+            run_entity_cmd(&mut world, cmd(e.to_bits()));
+            assert_eq!(*world.get::<Shape>(e).unwrap(), expected, "{name}");
+        }
+    }
+
+    #[test]
+    fn remove_shape_removes_it_and_wins_over_an_earlier_write_in_the_batch() {
+        let mut world = World::new();
+        let e = world.spawn(Shape::point(Color::RED)).id();
+        let id = e.to_bits();
+
+        run_entity_cmds(
+            &mut world,
+            [
+                EntityCmd::SetShapeColor {
+                    entity_id: id,
+                    color: (9, 9, 9, 9),
+                },
+                EntityCmd::RemoveShape { entity_id: id },
+            ],
+        );
+
+        assert!(world.get::<Shape>(e).is_none());
     }
 
     #[test]

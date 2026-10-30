@@ -131,6 +131,65 @@ mod tests {
     }
 
     #[test]
+    fn shape_style_functions_queue_one_command_each_and_have_collision_twins() {
+        use crate::resources::lua_runtime::EntityCmd;
+
+        let runtime = LuaRuntime::new().unwrap();
+        runtime
+            .lua()
+            .load(
+                "engine.entity_set_shape_color(1, 1, 2, 3, 4)\n\
+                 engine.entity_set_shape_outline_color(1, 5, 6, 7, 8)\n\
+                 engine.entity_remove_shape_outline_color(1)\n\
+                 engine.entity_set_shape_filled(1, true)\n\
+                 engine.entity_set_shape_origin(1, 2, 3)\n\
+                 engine.entity_remove_shape(1)\n\
+                 engine.collision_entity_set_shape_filled(1, false)\n\
+                 engine.collision_entity_remove_shape(1)",
+            )
+            .exec()
+            .unwrap();
+
+        let mut regular = Vec::new();
+        runtime.drain_entity_commands_into(&mut regular);
+        let regular: Vec<&EntityCmd> = regular.iter().map(|c| &c.cmd).collect();
+        assert!(
+            matches!(
+                regular.as_slice(),
+                [
+                    EntityCmd::SetShapeColor {
+                        color: (1, 2, 3, 4),
+                        ..
+                    },
+                    EntityCmd::SetShapeOutlineColor {
+                        color: Some((5, 6, 7, 8)),
+                        ..
+                    },
+                    EntityCmd::SetShapeOutlineColor { color: None, .. },
+                    EntityCmd::SetShapeFilled { filled: true, .. },
+                    EntityCmd::SetShapeOrigin { x: 2.0, y: 3.0, .. },
+                    EntityCmd::RemoveShape { .. },
+                ]
+            ),
+            "{regular:?}"
+        );
+
+        let mut collision = Vec::new();
+        runtime.drain_collision_entity_commands_into(&mut collision);
+        let collision: Vec<&EntityCmd> = collision.iter().map(|c| &c.cmd).collect();
+        assert!(
+            matches!(
+                collision.as_slice(),
+                [
+                    EntityCmd::SetShapeFilled { filled: false, .. },
+                    EntityCmd::RemoveShape { .. },
+                ]
+            ),
+            "{collision:?}"
+        );
+    }
+
+    #[test]
     fn runtime_tween_inserts_accept_documented_names() {
         let runtime = LuaRuntime::new().unwrap();
         runtime

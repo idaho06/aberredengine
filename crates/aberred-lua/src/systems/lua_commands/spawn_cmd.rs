@@ -144,8 +144,8 @@ pub(super) fn apply_components(
         cmd.tween_screen_position,
         cmd.tween_rotation,
         cmd.tween_scale,
-        cmd.tween_tint,
     );
+    apply_tint_tween(entity_commands, cmd.tween_tint);
     apply_signal_components(
         entity_commands,
         cmd.has_signals,
@@ -329,7 +329,6 @@ fn apply_animation_components(
     tween_screen_position: Option<TweenScreenPositionData>,
     tween_rotation: Option<TweenRotationData>,
     tween_scale: Option<TweenScaleData>,
-    tween_tint: Option<TweenTintData>,
 ) {
     if let Some(anim_data) = animation {
         entity_commands.insert(Animation::new(anim_data.animation_key));
@@ -387,19 +386,25 @@ fn apply_animation_components(
         ));
         entity_commands.queue_silenced(super::tween_finished_callback::<Scale>(&td.config));
     }
-    if let Some(td) = tween_tint {
-        let (fr, fg, fb, fa) = td.from;
-        let (tr, tg, tb, ta) = td.to;
-        let from = Tint::new(fr, fg, fb, fa);
-        // `apply_render_components` has already inserted an explicit `Tint`, which wins.
-        entity_commands.insert_if_new(from);
-        entity_commands.insert(super::build_tween(
-            from,
-            Tint::new(tr, tg, tb, ta),
-            &td.config,
-        ));
-        entity_commands.queue_silenced(super::tween_finished_callback::<Tint>(&td.config));
-    }
+}
+
+/// Inserts the tint tween. A tween needs a `Tint` to overwrite, so one seeded at `from`
+/// is added when the entity has none; an explicit `Tint` (already inserted by
+/// `apply_render_components`) wins.
+fn apply_tint_tween(entity_commands: &mut EntityCommands, tween_tint: Option<TweenTintData>) {
+    let Some(td) = tween_tint else {
+        return;
+    };
+    let (fr, fg, fb, fa) = td.from;
+    let (tr, tg, tb, ta) = td.to;
+    let from = Tint::new(fr, fg, fb, fa);
+    entity_commands.insert_if_new(from);
+    entity_commands.insert(super::build_tween(
+        from,
+        Tint::new(tr, tg, tb, ta),
+        &td.config,
+    ));
+    entity_commands.queue_silenced(super::tween_finished_callback::<Tint>(&td.config));
 }
 
 fn apply_signal_components(
