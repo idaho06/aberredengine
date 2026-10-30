@@ -2075,6 +2075,80 @@ function EntityBuilder:with_shader(shader_key, uniforms) end
 ---@return EntityBuilder
 function EntityBuilder:with_shadow(dx, dy, r, g, b, a) end
 
+---Draw a circle (outline; add with_shape_filled() to fill) centred on the local origin
+---@param radius number
+---@param r integer
+---@param g integer
+---@param b integer
+---@param a integer
+---@return EntityBuilder
+function EntityBuilder:with_shape_circle(radius, r, g, b, a) end
+
+---Draw an axis-aligned ellipse (outline; add with_shape_filled() to fill); it ignores rotation
+---@param radius_x number
+---@param radius_y number
+---@param r integer
+---@param g integer
+---@param b integer
+---@param a integer
+---@return EntityBuilder
+function EntityBuilder:with_shape_ellipse(radius_x, radius_y, r, g, b, a) end
+
+---Fill the shape's interior with its color
+---@return EntityBuilder
+function EntityBuilder:with_shape_filled() end
+
+---Draw a 1 px line from the local origin to (to_x, to_y)
+---@param to_x number
+---@param to_y number
+---@param r integer
+---@param g integer
+---@param b integer
+---@param a integer
+---@return EntityBuilder
+function EntityBuilder:with_shape_line(to_x, to_y, r, g, b, a) end
+
+---Set the shape's local pivot, the point that sits on the entity position and is the center of scale and rotation
+---@param x number
+---@param y number
+---@return EntityBuilder
+function EntityBuilder:with_shape_origin(x, y) end
+
+---Draw a 1 px outline in this color over a filled shape
+---@param r integer
+---@param g integer
+---@param b integer
+---@param a integer
+---@return EntityBuilder
+function EntityBuilder:with_shape_outline_color(r, g, b, a) end
+
+---Draw a single pixel (needs a position and a z index to render)
+---@param r integer
+---@param g integer
+---@param b integer
+---@param a integer
+---@return EntityBuilder
+function EntityBuilder:with_shape_point(r, g, b, a) end
+
+---Draw a polygon through local-space points (outline; add with_shape_filled() to fill); triangulated once here
+---@param points Vec2[]
+---@param r integer
+---@param g integer
+---@param b integer
+---@param a integer
+---@return EntityBuilder
+function EntityBuilder:with_shape_polygon(points, r, g, b, a) end
+
+---Draw a rectangle (outline; add with_shape_filled() to fill) with its top-left corner at the local origin
+---@param width number
+---@param height number
+---@param r integer
+---@param g integer
+---@param b integer
+---@param a integer
+---@return EntityBuilder
+function EntityBuilder:with_shape_rect(width, height, r, g, b, a) end
+
 ---Bind text to a WorldSignal value
 ---@param key string
 ---@return EntityBuilder
@@ -2701,6 +2775,80 @@ function CollisionEntityBuilder:with_shader(shader_key, uniforms) end
 ---@param a integer
 ---@return CollisionEntityBuilder
 function CollisionEntityBuilder:with_shadow(dx, dy, r, g, b, a) end
+
+---Draw a circle (outline; add with_shape_filled() to fill) centred on the local origin
+---@param radius number
+---@param r integer
+---@param g integer
+---@param b integer
+---@param a integer
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_shape_circle(radius, r, g, b, a) end
+
+---Draw an axis-aligned ellipse (outline; add with_shape_filled() to fill); it ignores rotation
+---@param radius_x number
+---@param radius_y number
+---@param r integer
+---@param g integer
+---@param b integer
+---@param a integer
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_shape_ellipse(radius_x, radius_y, r, g, b, a) end
+
+---Fill the shape's interior with its color
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_shape_filled() end
+
+---Draw a 1 px line from the local origin to (to_x, to_y)
+---@param to_x number
+---@param to_y number
+---@param r integer
+---@param g integer
+---@param b integer
+---@param a integer
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_shape_line(to_x, to_y, r, g, b, a) end
+
+---Set the shape's local pivot, the point that sits on the entity position and is the center of scale and rotation
+---@param x number
+---@param y number
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_shape_origin(x, y) end
+
+---Draw a 1 px outline in this color over a filled shape
+---@param r integer
+---@param g integer
+---@param b integer
+---@param a integer
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_shape_outline_color(r, g, b, a) end
+
+---Draw a single pixel (needs a position and a z index to render)
+---@param r integer
+---@param g integer
+---@param b integer
+---@param a integer
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_shape_point(r, g, b, a) end
+
+---Draw a polygon through local-space points (outline; add with_shape_filled() to fill); triangulated once here
+---@param points Vec2[]
+---@param r integer
+---@param g integer
+---@param b integer
+---@param a integer
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_shape_polygon(points, r, g, b, a) end
+
+---Draw a rectangle (outline; add with_shape_filled() to fill) with its top-left corner at the local origin
+---@param width number
+---@param height number
+---@param r integer
+---@param g integer
+---@param b integer
+---@param a integer
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_shape_rect(width, height, r, g, b, a) end
 
 ---Bind text to a WorldSignal value
 ---@param key string

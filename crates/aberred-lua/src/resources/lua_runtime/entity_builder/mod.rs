@@ -24,6 +24,7 @@ mod behavior;
 mod gui;
 mod menu;
 mod physics;
+mod shape;
 mod sprite;
 mod transform;
 mod tween;
@@ -258,6 +259,7 @@ fn register_methods<M: LuaUserDataMethods<LuaEntityBuilder>>(
     transform::register(methods, meta);
     physics::register(methods, meta);
     sprite::register(methods, meta);
+    shape::register(methods, meta);
     gui::register(methods, meta);
     menu::register(methods, meta);
     tween::register(methods, meta);

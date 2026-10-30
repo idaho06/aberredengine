@@ -54,6 +54,7 @@ impl LuaRuntime {
                 "AnimationRuleCondition",
             ),
             ("with_menu", "items", "MenuItem[]"),
+            ("with_shape_polygon", "points", "Vec2[]"),
         ];
 
         for class_name in &["EntityBuilder", "CollisionEntityBuilder"] {

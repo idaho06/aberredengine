@@ -10,8 +10,10 @@ use aberred_core::components::gui_label::GuiLabel;
 use aberred_core::components::gui_progress_bar::GuiProgressBar;
 use aberred_core::components::gui_window::GuiWindow;
 use aberred_core::components::menu::MenuAction;
+use aberred_core::components::shape::Shape;
 use aberred_core::components::timer::TimerMode;
 use aberred_core::components::tween::{Easing, LoopMode};
+use aberred_core::math::Vec2;
 use aberred_core::resources::uniform_value::UniformValue;
 
 /// Sprite component data for spawning.
@@ -145,6 +147,27 @@ pub(crate) fn checked_loop_mode(name: String) -> mlua::Result<LoopMode> {
             LoopMode::NAMES.join(", ")
         ))),
     }
+}
+
+/// Parses a Lua sequence of `{ x = .., y = .. }` tables into points, so a bad entry
+/// raises a Lua error naming its 1-based index instead of becoming a stray vertex.
+pub(crate) fn parse_points(points: &mlua::Table) -> mlua::Result<Vec<Vec2>> {
+    let mut out = Vec::new();
+    for (i, value) in points.sequence_values::<mlua::Value>().enumerate() {
+        let bad = || {
+            mlua::Error::runtime(format!(
+                "point {} must be a table with numeric x and y",
+                i + 1
+            ))
+        };
+        let mlua::Value::Table(point) = value? else {
+            return Err(bad());
+        };
+        let x: f32 = point.get("x").map_err(|_| bad())?;
+        let y: f32 = point.get("y").map_err(|_| bad())?;
+        out.push(Vec2::new(x, y));
+    }
+    Ok(out)
 }
 
 /// TweenPosition component data for spawning.
@@ -467,6 +490,8 @@ pub struct SpawnCmd {
     /// GuiWindow component (size, theme_key) — inserted as-is; themed panel
     /// rendered via the named theme looked up in `GuiThemeStore`.
     pub gui_window: Option<GuiWindow>,
+    /// Shape component (kind, color, fill, outline color, origin) — inserted as-is
+    pub shape: Option<Shape>,
     /// GuiOffset (x, y) — position relative to `parent`, resolved each frame by `gui_layout_system`
     pub gui_offset: Option<(f32, f32)>,
     /// LuaSetup callback name — calls the named Lua function once on `Added<LuaSetup>`

@@ -89,6 +89,9 @@ pub(super) fn apply_components(
     if let Some(window) = cmd.gui_window {
         entity_commands.insert(window);
     }
+    if let Some(shape) = cmd.shape {
+        entity_commands.insert(shape);
+    }
     // GuiButton/GuiLabel/GuiImage carry all their own spawn data; the
     // co-located GuiInteractable/caption/Sprite are spawned by
     // gui_button_spawn_system/gui_label_spawn_system/gui_image_spawn_system
@@ -1310,6 +1313,68 @@ mod tests {
         );
         assert_eq!(*world.get::<Tint>(tinted).unwrap(), Tint::new(9, 9, 9, 9));
         assert!(world.get::<LuaOnTweenFinished<Tint>>(tinted).is_none());
+    }
+
+    #[test]
+    fn lua_spawn_inserts_the_built_shape() {
+        use aberred_core::components::shape::{Shape, ShapeKind};
+
+        let mut world = World::new();
+        let mut signals = WorldSignals::default();
+        let rect = spawn_from_lua(
+            &mut world,
+            &mut signals,
+            "engine.spawn():with_shape_rect(64, 32, 255, 200, 0, 255):with_shape_filled()\
+             :with_shape_outline_color(255, 255, 255, 255):with_shape_origin(32, 16)\
+             :with_position(100, 100):with_z_index(1):build()",
+        );
+        assert_eq!(
+            *world.get::<Shape>(rect).unwrap(),
+            Shape::rect(Vec2::new(64.0, 32.0), Color::new(255, 200, 0, 255))
+                .filled()
+                .with_outline_color(Color::WHITE)
+                .with_origin(Vec2::new(32.0, 16.0))
+        );
+
+        let triangle = spawn_from_lua(
+            &mut world,
+            &mut signals,
+            "engine.spawn():with_shape_polygon({ {x=0,y=0}, {x=4,y=0}, {x=2,y=3} }, 1, 2, 3, 4)\
+             :build()",
+        );
+        let ShapeKind::Polygon(polygon) = &world.get::<Shape>(triangle).unwrap().kind else {
+            panic!("a polygon shape");
+        };
+        assert_eq!(polygon.triangles().len(), 1, "triangulated at build time");
+    }
+
+    #[test]
+    fn clone_copies_the_source_shape_and_an_override_replaces_it() {
+        use aberred_core::components::shape::Shape;
+
+        let mut world = World::new();
+        let source = world.spawn(Shape::circle(5.0, Color::WHITE).filled()).id();
+        let mut world_signals = WorldSignals::default();
+        world_signals.register_entity("tpl", source);
+
+        let copy = clone_tpl(&mut world, &mut world_signals, SpawnCmd::default());
+        assert_eq!(
+            *world.get::<Shape>(copy).unwrap(),
+            Shape::circle(5.0, Color::WHITE).filled()
+        );
+
+        let replaced = clone_tpl(
+            &mut world,
+            &mut world_signals,
+            SpawnCmd {
+                shape: Some(Shape::point(Color::RED)),
+                ..SpawnCmd::default()
+            },
+        );
+        assert_eq!(
+            *world.get::<Shape>(replaced).unwrap(),
+            Shape::point(Color::RED)
+        );
     }
 
     #[test]
