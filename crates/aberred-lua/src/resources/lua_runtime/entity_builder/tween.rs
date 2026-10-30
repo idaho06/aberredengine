@@ -1,4 +1,5 @@
 use super::*;
+use aberred_core::components::tint::Tint;
 
 pub(super) fn register<M: LuaUserDataMethods<LuaEntityBuilder>>(
     methods: &mut M,
@@ -390,8 +391,8 @@ pub(super) fn register<M: LuaUserDataMethods<LuaEntityBuilder>>(
          this: &mut LuaEntityBuilder,
          (fr, fg, fb, fa, tr, tg, tb, ta, duration): (u8, u8, u8, u8, u8, u8, u8, u8, f32)| {
             this.cmd.tween_tint = Some(TweenTintData {
-                from: (fr, fg, fb, fa),
-                to: (tr, tg, tb, ta),
+                from: Tint::new(fr, fg, fb, fa),
+                to: Tint::new(tr, tg, tb, ta),
                 config: TweenConfig::new(duration),
             });
             Ok(())
@@ -531,7 +532,10 @@ mod tests {
         let s = cmd.tween_scale.unwrap();
         assert_eq!((s.from_x, s.from_y, s.to_x, s.to_y), (1.0, 1.0, 2.0, 3.0));
         let t = cmd.tween_tint.unwrap();
-        assert_eq!((t.from, t.to), ((10, 20, 30, 40), (50, 60, 70, 80)));
+        assert_eq!(
+            (t.from, t.to),
+            (Tint::new(10, 20, 30, 40), Tint::new(50, 60, 70, 80))
+        );
 
         for (config, duration) in [
             (&p.config, 0.5),

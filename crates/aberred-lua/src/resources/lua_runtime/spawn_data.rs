@@ -12,6 +12,7 @@ use aberred_core::components::gui_window::GuiWindow;
 use aberred_core::components::menu::MenuAction;
 use aberred_core::components::shape::{Polygon, Shape, ShapeKind};
 use aberred_core::components::timer::TimerMode;
+use aberred_core::components::tint::Tint;
 use aberred_core::components::tween::{Easing, LoopMode};
 use aberred_core::math::Vec2;
 use aberred_core::resources::uniform_value::UniformValue;
@@ -214,11 +215,11 @@ pub struct TweenScaleData {
     pub config: TweenConfig,
 }
 
-/// TweenTint component data for spawning (RGBA endpoints, 0-255 per channel).
+/// TweenTint component data for spawning.
 #[derive(Debug, Clone)]
 pub struct TweenTintData {
-    pub from: (u8, u8, u8, u8),
-    pub to: (u8, u8, u8, u8),
+    pub from: Tint,
+    pub to: Tint,
     pub config: TweenConfig,
 }
 

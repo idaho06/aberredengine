@@ -11,8 +11,6 @@ local M = {}
 
 local SCREEN_W, SCREEN_H = 640, 360
 local PAGE_W = 800     -- world distance between page centres (wider than the screen, so a neighbour never peeks in)
-local PAGE_COUNT = 7
-local SCREEN_PAGE = 7  -- the page that spawns screen-space entities
 local TRANSITION_SECONDS = 0.25 -- camera travel time between neighbouring pages
 
 local TITLES = {
@@ -24,12 +22,16 @@ local TITLES = {
     "Z-order: shapes, sprite and text",
     "Screen space: ignores the camera",
 }
+local PAGE_COUNT = #TITLES
+local SCREEN_PAGE = PAGE_COUNT -- the last page spawns screen-space entities
 
 -- Page state, reset by M.spawn().
 local page
 local elapsed
 local last_blink
 local last_sides
+local last_bar_width
+local last_fill_width
 local camera_x     -- where the camera is now
 local camera_from  -- where the current transition started
 local camera_to    -- where it is heading (the active page's centre)
@@ -437,7 +439,11 @@ local function update_runtime()
     end
     local bar = engine.get_entity("rt_bar")
     if bar then
-        engine.entity_set_shape_rect(bar, 1 + math.floor(78 * ((elapsed * 0.4) % 1)), 14)
+        local width = 1 + math.floor(78 * ((elapsed * 0.4) % 1))
+        if width ~= last_bar_width then
+            last_bar_width = width
+            engine.entity_set_shape_rect(bar, width, 14)
+        end
     end
     local blink = engine.get_entity("rt_blink")
     if blink then
@@ -466,7 +472,11 @@ end
 local function update_screen()
     local fill = engine.get_entity("ss_fill")
     if fill then
-        engine.entity_set_shape_rect(fill, 1 + math.floor(195 * ((elapsed * 0.25) % 1)), 12)
+        local width = 1 + math.floor(195 * ((elapsed * 0.25) % 1))
+        if width ~= last_fill_width then
+            last_fill_width = width
+            engine.entity_set_shape_rect(fill, width, 12)
+        end
     end
 end
 
@@ -509,6 +519,8 @@ function M.spawn()
     elapsed = 0
     last_blink = nil
     last_sides = nil
+    last_bar_width = nil
+    last_fill_width = nil
     camera_from = 0
     camera_to = 0
     camera_t = 1

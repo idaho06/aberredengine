@@ -7,6 +7,7 @@
 pub use super::spawn_data::TweenConfig;
 use aberred_core::components::shape::ShapeKind;
 use aberred_core::components::timer::TimerMode;
+use aberred_core::components::tint::Tint;
 pub use aberred_core::resources::uniform_value::UniformValue;
 
 /// Commands that Lua can queue for asset loading.
@@ -311,8 +312,8 @@ pub enum EntityCmd {
     /// the entity has none; an existing `Tint` is kept)
     InsertTweenTint {
         entity_id: u64,
-        from: (u8, u8, u8, u8),
-        to: (u8, u8, u8, u8),
+        from: Tint,
+        to: Tint,
         config: TweenConfig,
     },
     /// Insert TweenScreenPosition component (also inserts ScreenPosition

@@ -395,15 +395,8 @@ fn apply_tint_tween(entity_commands: &mut EntityCommands, tween_tint: Option<Twe
     let Some(td) = tween_tint else {
         return;
     };
-    let (fr, fg, fb, fa) = td.from;
-    let (tr, tg, tb, ta) = td.to;
-    let from = Tint::new(fr, fg, fb, fa);
-    entity_commands.insert_if_new(from);
-    entity_commands.insert(super::build_tween(
-        from,
-        Tint::new(tr, tg, tb, ta),
-        &td.config,
-    ));
+    entity_commands.insert_if_new(td.from);
+    entity_commands.insert(super::build_tween(td.from, td.to, &td.config));
     entity_commands.queue_silenced(super::tween_finished_callback::<Tint>(&td.config));
 }
 

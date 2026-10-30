@@ -459,8 +459,6 @@ fn process_tween_cmd(cmd: EntityCmd, commands: &mut Commands) {
         } => {
             // Like ScreenPosition, a Tint is optional: seed one at `from` unless the
             // entity already has one, so the tween has a component to overwrite.
-            let from = Tint::new(from.0, from.1, from.2, from.3);
-            let to = Tint::new(to.0, to.1, to.2, to.3);
             let tween = super::build_tween(from, to, &config);
             let set_callback = super::tween_finished_callback::<Tint>(&config);
             queue_on_entity(commands, entity_id, move |mut e| {
@@ -1008,8 +1006,8 @@ mod tests {
             },
             EntityCmd::InsertTweenTint {
                 entity_id: id,
-                from: (0, 0, 0, 255),
-                to: (255, 255, 255, 255),
+                from: Tint::new(0, 0, 0, 255),
+                to: Tint::new(255, 255, 255, 255),
                 config: TweenConfig::new(1.0),
             },
             EntityCmd::RemoveTweenPosition { entity_id: id },
@@ -2483,8 +2481,8 @@ mod tests {
                 &mut world,
                 EntityCmd::InsertTweenTint {
                     entity_id: e.to_bits(),
-                    from: (1, 2, 3, 4),
-                    to: (5, 6, 7, 8),
+                    from: Tint::new(1, 2, 3, 4),
+                    to: Tint::new(5, 6, 7, 8),
                     config: TweenConfig::new(2.0),
                 },
             );
