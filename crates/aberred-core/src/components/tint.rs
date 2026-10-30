@@ -1,8 +1,9 @@
-//! Color tint component for rendering sprites and text.
+//! Color tint component for rendering sprites, text and shapes.
 //!
 //! The [`Tint`] component applies color modulation to entities during rendering:
 //! - For sprites: replaces `Color::WHITE` in draw calls
 //! - For text: multiplies with the existing `DynamicText.color`
+//! - For shapes: multiplies with the fill and outline colors
 
 use bevy_ecs::prelude::Component;
 
@@ -15,6 +16,9 @@ use crate::math::Color;
 ///
 /// When attached to an entity with [`DynamicText`](crate::components::dynamic_text::DynamicText),
 /// the tint color is multiplied with the text's existing color.
+///
+/// When attached to an entity with a [`Shape`](crate::components::shape::Shape),
+/// the tint color is multiplied with both of the shape's colors.
 #[derive(Component, Clone, Debug, Copy, PartialEq)]
 pub struct Tint {
     pub color: Color,

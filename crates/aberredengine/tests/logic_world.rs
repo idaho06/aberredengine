@@ -22,6 +22,7 @@ use aberredengine::core::components::rigid_body::RigidBody;
 use aberredengine::core::components::scene::SceneName;
 use aberredengine::core::components::screen_position::ScreenPosition;
 use aberredengine::core::components::shadow::Shadow;
+use aberredengine::core::components::shape::Shape;
 use aberredengine::core::components::signals::Signals;
 use aberredengine::core::components::sprite::Sprite;
 use aberredengine::core::components::timer::Timer;
@@ -524,6 +525,35 @@ fn present_publishes_spawned_sprite_in_snapshot() {
     assert_eq!(entry.position.pos.y, 4.0);
     assert_eq!(entry.z_index.0, 2.0);
     assert_eq!(entry.sprite.tex_key.as_ref(), "player");
+}
+
+/// A world shape and a screen shape reach the published snapshot through the
+/// real present schedule; a shape without a `ZIndex` never does.
+#[test]
+fn shapes_reach_the_snapshot() {
+    let mut tw = TestWorld::new();
+    let rect = Shape::rect(Vec2::new(4.0, 2.0), Color::RED).filled();
+    let world_shape = tw
+        .world
+        .spawn((rect.clone(), WorldPosition::new(3.0, 4.0), ZIndex(2.0)))
+        .id();
+    let screen_shape = tw
+        .world
+        .spawn((rect.clone(), ScreenPosition::new(5.0, 6.0), ZIndex(1.0)))
+        .id();
+    tw.world.spawn((rect.clone(), WorldPosition::new(0.0, 0.0)));
+    tw.world
+        .spawn((rect.clone(), ScreenPosition::new(0.0, 0.0)));
+
+    let snapshot = tw.present();
+
+    assert_eq!(snapshot.map_shapes.len(), 1, "only the shape with a ZIndex");
+    assert_eq!(snapshot.map_shapes[0].entity, world_shape);
+    assert_eq!(snapshot.map_shapes[0].position.pos, Vec2::new(3.0, 4.0));
+    assert_eq!(snapshot.map_shapes[0].shape, rect);
+    assert_eq!(snapshot.screen_shapes.len(), 1);
+    assert_eq!(snapshot.screen_shapes[0].entity, screen_shape);
+    assert_eq!(snapshot.screen_shapes[0].position.pos, Vec2::new(5.0, 6.0));
 }
 
 /// (d) Asset round-trip: queue a font load, assert it lands on

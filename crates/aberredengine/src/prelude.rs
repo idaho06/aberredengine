@@ -39,6 +39,7 @@ pub use aberred_core::components::rotation::Rotation;
 pub use aberred_core::components::scale::Scale;
 pub use aberred_core::components::scene::SceneName;
 pub use aberred_core::components::screen_position::ScreenPosition;
+pub use aberred_core::components::shape::{Shape, ShapeKind};
 pub use aberred_core::components::signal_binding::SignalBinding;
 pub use aberred_core::components::signals::Signals;
 pub use aberred_core::components::sprite::Sprite;

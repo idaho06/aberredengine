@@ -29,7 +29,7 @@
 //! - [`position2d`] – generic 2D position component shared by [`world_position`] and [`screen_position`]
 //! - [`rigid_body`] – simple kinematic body storing velocity
 //! - [`rotation`] – rotation angle in degrees
-//! - [`scale`] – 2D scale factor for sprites
+//! - [`scale`] – 2D scale factor for sprites and shapes
 //! - [`scene`] – the name carried by each registered scene's persistent entity
 //! - [`screen_position`] – screen-space position for UI elements
 //! - [`shape`] – point, line, rectangle, circle, ellipse and polygon primitives drawn in world or screen space
@@ -38,7 +38,7 @@
 //! - [`sprite`] – 2D sprite rendering component
 //! - [`stuck_to`] – attaches an entity's position to another entity
 //! - [`tilemap`] – tilemap root entity; spawns tile children from a directory path
-//! - [`tint`] – color tint for rendering sprites and text
+//! - [`tint`] – color tint for rendering sprites, text and shapes
 //! - [`tween`] – animated interpolation of position, rotation, and scale
 //! - [`z_index`] – rendering order hint for 2D drawing
 //!

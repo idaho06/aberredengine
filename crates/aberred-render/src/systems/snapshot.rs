@@ -27,8 +27,8 @@ use super::mirror::{
 /// `render_system` do, and both still run after this system either way, so
 /// this frame's asset loads and this frame's snapshot are visible together.
 ///
-/// The snapshot's 8 `Vec<...Entry>` drawable-list fields feed the 8
-/// `reconcile_*` calls below (`src/systems/mirror.rs`), which write
+/// Each of the snapshot's `Vec<...Entry>` drawable-list fields feeds one
+/// `reconcile_*` call below (`src/systems/mirror.rs`), which write
 /// their results into retained mirror entities rather than a resource --
 /// read by reference, never cloned. Only the 10 "global" fields below are
 /// actually kept, and each of those is copied/cloned into a
@@ -46,7 +46,7 @@ use super::mirror::{
 /// plus `ExclusiveSystemParam`s can. The snapshot itself is read through a
 /// `resource_scope::<SnapshotConsumer, _>` so `world` stays mutable for the
 /// reconcile/global-fan-out calls while the triple buffer's output stays
-/// borrowed (not moved) for the duration; the 8 `reconcile_*` functions
+/// borrowed (not moved) for the duration; the `reconcile_*` functions
 /// internally scope a *different* resource (`SimIdMap`), so there's no
 /// reentrant-borrow conflict with the outer `SnapshotConsumer` scope. There
 /// is no render-world `DrawableSnapshot` resource to write into at the end.

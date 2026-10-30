@@ -96,7 +96,7 @@ pub fn setup_render_world(
     world.insert_resource(RenderPostProcess::default());
     world.insert_resource(RenderGuiThemes::default());
     world.insert_resource(RenderCameraFollow::default());
-    // Backs all 8 categories' mirror-entity
+    // Backs every category's mirror-entity
     // reconciliation done by receive_snapshot/reconcile_*. Must be
     // inserted before the first snapshot arrives -- each reconcile_*'s
     // resource_scope panics if this resource is absent.

@@ -490,7 +490,7 @@ pub fn render_system(
     mut res: RenderResources,
     mut debug_res: DebugResources,
     mut locals: Local<RenderLocals>,
-    // Draw prep for all 8 drawable categories sources from retained mirror
+    // Draw prep for every drawable category sources from retained mirror
     // entities instead of a DrawableSnapshot Vec -- there is no
     // render-world DrawableSnapshot resource.
     mirrors: MirrorQueries,
@@ -823,7 +823,7 @@ pub fn render_system(
         // Draw in screen coordinates (UI layer) - still on the render target
         {
             aberred_core::tracy::tracy_span!("render/screen_space");
-            // All 8 screen-space categories source from
+            // Every screen-space category sources from
             // retained mirror entities. Sprites, shapes and texts are built into
             // their own scratch buffers here so draw_screen_space can stay
             // agnostic to where those items came from -- it just orders and

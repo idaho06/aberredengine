@@ -307,7 +307,7 @@ pub struct DrawableSnapshot {
 
 impl DrawableSnapshot {
     /// Clones `self`'s contents into `dst`, reusing `dst`'s existing `Vec`
-    /// backing storage for the 8 drawable lists via `Vec::clone_from`'s
+    /// backing storage for the drawable lists via `Vec::clone_from`'s
     /// capacity-reusing specialization.
     ///
     /// `#[derive(Clone)]` (on this struct) never generates a specialized
@@ -316,7 +316,7 @@ impl DrawableSnapshot {
     /// default `*self = source.clone()` and allocate fresh `Vec`s every
     /// call, same cost as `dst = self.clone()`. Calling `.clone_from()`
     /// field-by-field instead gets `Vec<T>`'s own hand-written
-    /// capacity-reusing `clone_from` on each of the 8 lists, which is the
+    /// capacity-reusing `clone_from` on each of the lists, which is the
     /// whole point of this method -- see `send_drawable_snapshot`
     /// (`systems/logic_bridge.rs`), the sole caller, publishing into the
     /// triple buffer's existing (stale but valid) input-side buffer instead

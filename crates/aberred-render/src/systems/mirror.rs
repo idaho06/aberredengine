@@ -3,9 +3,9 @@
 //! reconciled every time a new `DrawableSnapshot` arrives instead of rebuilt
 //! from a `Vec` every frame.
 //!
-//! All 8 `DrawableSnapshot` drawable categories -- map sprites, map texts,
-//! screen sprites, screen texts, and the 4 GUI categories (windows, buttons,
-//! labels, progress bars) -- are mirrored this way. The render world holds
+//! Every `DrawableSnapshot` drawable category -- map and screen sprites,
+//! shapes and texts, and the GUI categories (windows, buttons, labels,
+//! progress bars) -- is mirrored this way. The render world holds
 //! no `DrawableSnapshot` *resource* itself; the type survives only as the
 //! sim thread's wire format, see `src/protocol/snapshot.rs`.
 //!

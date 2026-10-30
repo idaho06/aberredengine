@@ -9,7 +9,7 @@ use rustc_hash::{FxHashMap, FxHashSet};
 /// can only ever prune its own ids -- never let one category's reconcile
 /// function reach another's field. `scratch_seen` is `reconcile`'s reusable
 /// working set (cleared at the start of every call) -- kept here rather than
-/// allocated fresh per call since the 8 `reconcile_*` entry points all run
+/// allocated fresh per call since the `reconcile_*` entry points all run
 /// sequentially from `receive_snapshot`, never concurrently, so one shared
 /// scratch buffer is always free to reuse.
 #[derive(Resource, Default)]

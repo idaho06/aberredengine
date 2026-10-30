@@ -1,15 +1,15 @@
 //! Scale component for 2D entities.
 //!
-//! The [`Scale`] component stores a 2D scale factor applied to sprites during
-//! rendering. Values greater than 1.0 enlarge the sprite; values less than 1.0
-//! shrink it. Negative values can be used to flip.
+//! The [`Scale`] component stores a 2D scale factor applied to sprites and
+//! shapes during rendering. Values greater than 1.0 enlarge them; values less
+//! than 1.0 shrink them. Negative values can be used to flip.
 
 use crate::math::Vec2;
 use bevy_ecs::prelude::Component;
 
-/// 2D scale factor for sprite rendering.
+/// 2D scale factor for sprite and shape rendering.
 ///
-/// The render system multiplies sprite dimensions by these values. Can be
+/// The render system multiplies sprite and shape dimensions by these values. Can be
 /// animated via `Tween<Scale>`.
 #[derive(Component, Clone, Debug, Copy, PartialEq)]
 pub struct Scale {

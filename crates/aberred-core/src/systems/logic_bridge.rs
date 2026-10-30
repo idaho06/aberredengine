@@ -62,7 +62,7 @@ pub fn forward_render_asset_cmds(
 /// `input_buffer_mut()`/`clone_into_buffer`/`publish()` instead of
 /// `Input::write(snapshot.clone())` -- `write` move-assigns a freshly
 /// cloned value over the input buffer, dropping whatever `Vec` capacity it
-/// held from three publishes ago and reallocating all 8 drawable lists
+/// held from three publishes ago and reallocating every drawable list
 /// every publish (see `GameConfig::snapshot_skip` for the publish cadence).
 /// `clone_into_buffer` reuses that capacity instead; see its doc comment
 /// (`resources/drawable_snapshot.rs`) for why a plain `clone_from` on the

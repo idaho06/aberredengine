@@ -3,10 +3,11 @@ use bevy_ecs::prelude::Component;
 
 use crate::math::Color;
 
-/// Drop shadow component for rendering sprites and text.
+/// Drop shadow component for rendering sprites, text and shapes.
 ///
-/// When attached to an entity with a [`Sprite`](crate::components::sprite::Sprite)
-/// or [`DynamicText`](crate::components::dynamic_text::DynamicText), draws a
+/// When attached to an entity with a [`Sprite`](crate::components::sprite::Sprite),
+/// [`DynamicText`](crate::components::dynamic_text::DynamicText) or
+/// [`Shape`](crate::components::shape::Shape), draws a
 /// shadow pre-pass at `position + offset` before the main draw. The shadow
 /// always uses `color` directly and bypasses entity shaders.
 ///
