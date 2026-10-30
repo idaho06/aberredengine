@@ -2,8 +2,8 @@
 //!
 //! These systems update entity properties over time based on [`Tween<T>`]
 //! components. Register one concrete system per tweened component type, such as
-//! `tween_system::<WorldPosition>`, `tween_system::<Rotation>`, and
-//! `tween_system::<Scale>`.
+//! `tween_system::<WorldPosition>`, `tween_system::<Rotation>`,
+//! `tween_system::<Scale>`, and `tween_system::<Tint>`.
 
 use crate::components::tween::{Easing, LoopMode, Tween, TweenValue};
 use crate::events::tween::TweenFinished;

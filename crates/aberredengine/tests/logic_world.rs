@@ -26,6 +26,8 @@ use aberredengine::core::components::shape::{Shape, ShapeKind};
 use aberredengine::core::components::signals::Signals;
 use aberredengine::core::components::sprite::Sprite;
 use aberredengine::core::components::timer::Timer;
+use aberredengine::core::components::tint::Tint;
+use aberredengine::core::components::tween::Tween;
 use aberredengine::core::components::world_position::WorldPosition;
 use aberredengine::core::components::z_index::ZIndex;
 use aberredengine::core::events::asset::{AssetLoadFailed, AssetLoaded};
@@ -142,6 +144,30 @@ fn spawn_and_collide_triggers_collision_ongoing_on_the_rule() {
     assert!(
         tw.world.resource::<WorldSignals>().has_flag("collided"),
         "overlapping colliders in matching groups must trigger CollisionOngoing on the rule"
+    );
+}
+
+/// A `Tween<Tint>` is advanced by the real sim schedule: the entity's `Tint`
+/// moves from its start toward the end colour as ticks pass.
+#[test]
+fn a_tint_tween_recolours_the_entity_each_tick() {
+    let mut tw = TestWorld::new();
+    tw.tick_to_play(DT, 8);
+
+    let e = tw
+        .world
+        .spawn((
+            Tint::new(0, 0, 0, 255),
+            Tween::new(Tint::new(0, 0, 0, 255), Tint::new(255, 255, 255, 255), 1.0),
+        ))
+        .id();
+
+    tw.tick(30, DT);
+
+    let tint = tw.world.get::<Tint>(e).expect("the tinted entity").color;
+    assert!(
+        tint.r > 0 && tint.r < 255,
+        "a tint tween mid-way must leave the start colour and not yet reach the end; got {tint:?}"
     );
 }
 

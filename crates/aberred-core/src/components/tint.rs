@@ -19,6 +19,9 @@ use crate::math::Color;
 ///
 /// When attached to an entity with a [`Shape`](crate::components::shape::Shape),
 /// the tint color is multiplied with both of the shape's colors.
+///
+/// Animate it with a [`Tween<Tint>`](crate::components::tween::Tween): each channel
+/// interpolates and rounds to the nearest value.
 #[derive(Component, Clone, Debug, Copy, PartialEq)]
 pub struct Tint {
     pub color: Color,

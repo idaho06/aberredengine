@@ -33,7 +33,7 @@ Built-in systems:
 - **Animation** — frame-based sprite animation with controller rules
 - **Particles** — emitter system with templates, shapes, arcs, speed ranges
 - **Scene management** — named scenes with `SceneEntered`/`SceneReady`/`SceneExited` events, scene-scoped systems, optional GUI and world-draw callbacks, and auto-despawn
-- **Tweens** — position, rotation, and scale interpolation with easing and loop modes
+- **Tweens** — position, rotation, scale, and tint interpolation with easing and loop modes
 - **Timers** — repeating or one-shot countdown timers that trigger a `TimerFired` event
 - **Phase state machines** — per-entity state machines over named phases, with `PhaseEntered`/`PhaseExited` events
 - **Parent-child hierarchy** — recursive transform propagation (position, rotation, scale)
@@ -1542,6 +1542,7 @@ commands.spawn((
 | `Tween<Rotation>` | `Tween::rotation(from_degrees, to_degrees, duration)` |
 | `Tween<Scale>` | `Tween::scale(from: Vec2, to: Vec2, duration)` |
 | `Tween<ScreenPosition>` | `Tween::screen_position(from: Vec2, to: Vec2, duration)` |
+| `Tween<Tint>` | `Tween::new(from: Tint, to: Tint, duration)` |
 | `GuiWindow` | `GuiWindow::new(w, h)` — `theme_key` defaults to `"default"`; override with `.with_theme_key("my_theme")` |
 | `GuiButton` | `GuiButton::new(width, height, "Caption")` — add `.with_theme_key(key)` to use a non-default theme |
 | `GuiLabel` | `GuiLabel::new(width, height, "Text")` — add `.with_signal_binding(key)` / `.with_signal_binding_format("fmt {}") ` to bind text to `WorldSignals` |
@@ -1579,10 +1580,11 @@ Use the target component type as `T`:
 - `Tween<Rotation>` for rotation animation
 - `Tween<Scale>` for scale animation
 - `Tween<ScreenPosition>` for screen-space (UI) position animation
+- `Tween<Tint>` for colour animation
 
-`EngineBuilder` registers the built-in tween systems for these four component types automatically, so in normal game code you only need to spawn the tween component itself.
+`EngineBuilder` registers the built-in tween systems for these five component types automatically, so in normal game code you only need to spawn the tween component itself.
 
-`Tween::position`, `Tween::rotation`, `Tween::scale` and `Tween::screen_position` take raw values (`Vec2`, or degrees for rotation); `Tween::new(from, to, duration)` takes the component values themselves.
+`Tween::position`, `Tween::rotation`, `Tween::scale` and `Tween::screen_position` take raw values (`Vec2`, or degrees for rotation); `Tween::new(from, to, duration)` takes the component values themselves (it is the constructor for `Tween<Tint>`).
 
 **Position tween example:**
 
@@ -1630,6 +1632,21 @@ commands.spawn((
     Tween::screen_position(Vec2::new(-200.0, 50.0), Vec2::new(20.0, 50.0), 0.4),
 ));
 ```
+
+**Tint tween example:**
+
+```rust
+use aberredengine::core::components::tint::Tint;
+use aberredengine::prelude::*;
+
+commands.spawn((
+    Tint::new(255, 255, 255, 255),
+    Tween::new(Tint::new(255, 255, 255, 255), Tint::new(255, 80, 80, 255), 1.0)
+        .with_loop_mode(LoopMode::PingPong),
+));
+```
+
+A tween overwrites its target component every tick, so the entity needs a `Tint` to animate. Each channel is interpolated and rounded to the nearest `u8`; an easing that overshoots (back, elastic) saturates at 0 and 255. `Tint` multiplies a shape's colours, so a white shape tweens to any colour.
 
 > **Important:** The generic parameter must match the component you want the engine to animate. For example, use `Tween<WorldPosition>` with `WorldPosition`, not `Tween<Vec2>`. The tween systems query concrete ECS component types, not raw value types.
 
@@ -2073,7 +2090,7 @@ pub struct TweenFinished<T: TweenValue> {
 }
 ```
 
-**Observing from Rust** — register a persistent observer per tweened type with `EngineBuilder::add_observer`. The engine already runs one monomorphized tween system per `T` (`WorldPosition`, `Rotation`, `Scale`, `ScreenPosition`), so register one observer per `T` you care about:
+**Observing from Rust** — register a persistent observer per tweened type with `EngineBuilder::add_observer`. The engine already runs one monomorphized tween system per `T` (`WorldPosition`, `Rotation`, `Scale`, `ScreenPosition`, `Tint`), so register one observer per `T` you care about:
 
 ```rust
 use aberredengine::prelude::*;

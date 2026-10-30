@@ -6,6 +6,7 @@ use super::registrar::UpdateRegistrar;
 use aberred_core::components::rotation::Rotation;
 use aberred_core::components::scale::Scale;
 use aberred_core::components::screen_position::ScreenPosition;
+use aberred_core::components::tint::Tint;
 use aberred_core::components::world_position::WorldPosition;
 use aberred_core::error::EngineError;
 use aberred_core::resources::drawable_snapshot::build_drawable_snapshot;
@@ -380,6 +381,7 @@ impl EngineBuilder {
         );
         sim.add_systems(tween_system::<Rotation>.in_set(SimSet::Movement));
         sim.add_systems(tween_system::<Scale>.in_set(SimSet::Movement));
+        sim.add_systems(tween_system::<Tint>.in_set(SimSet::Movement));
         // propagate_transforms/collision_detector's old .after(movement)/
         // .after(tween_system::<T>) edges are now implied by
         // SimSet::Movement preceding SimSet::Transforms/Collision.

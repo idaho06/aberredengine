@@ -6,6 +6,7 @@
 //! - `Tween<Rotation>` – animate [`Rotation`]
 //! - `Tween<Scale>` – animate [`Scale`]
 //! - `Tween<ScreenPosition>` – animate [`ScreenPosition`]
+//! - `Tween<Tint>` – animate [`Tint`]
 //!
 //! Each tween supports multiple [`Easing`] functions and [`LoopMode`] settings.
 //! See [`crate::systems::tween`] for the update systems.
@@ -20,6 +21,7 @@ use crate::components::position2d::{Position2D, PositionSpace};
 use crate::components::rotation::Rotation;
 use crate::components::scale::Scale;
 use crate::components::screen_position::ScreenPosition;
+use crate::components::tint::Tint;
 use crate::components::world_position::WorldPosition;
 
 /// Determines how a tween behaves when it reaches the end.
@@ -161,6 +163,26 @@ impl TweenValue for Scale {
         Self {
             scale: Lerp::lerp(from.scale, to.scale, t),
         }
+    }
+}
+
+impl TweenValue for Tint {
+    /// Interpolates each RGBA channel and rounds to the nearest value.
+    ///
+    /// An easing that overshoots `[0, 1]` (back, elastic) saturates at 0 and
+    /// 255 instead of wrapping.
+    fn interpolate(from: &Self, to: &Self, t: f32) -> Self {
+        let channel = |a: u8, b: u8| {
+            let a = f32::from(a);
+            let b = f32::from(b);
+            f32::lerp(a, b, t).round().clamp(0.0, 255.0) as u8
+        };
+        Tint::new(
+            channel(from.color.r, to.color.r),
+            channel(from.color.g, to.color.g),
+            channel(from.color.b, to.color.b),
+            channel(from.color.a, to.color.a),
+        )
     }
 }
 
@@ -382,5 +404,40 @@ mod tests {
         for bad in ["", "Once", "pingpong", "repeat"] {
             assert!(LoopMode::from_name(bad).is_none(), "{bad}");
         }
+    }
+
+    #[test]
+    fn tint_interpolates_each_channel_including_alpha() {
+        let from = Tint::new(0, 100, 200, 255);
+        let to = Tint::new(200, 0, 100, 55);
+        assert_eq!(Tint::interpolate(&from, &to, 0.0), from);
+        assert_eq!(Tint::interpolate(&from, &to, 1.0), to);
+        assert_eq!(
+            Tint::interpolate(&from, &to, 0.5),
+            Tint::new(100, 50, 150, 155)
+        );
+    }
+
+    #[test]
+    fn tint_interpolation_rounds_to_the_nearest_channel_value() {
+        let from = Tint::new(0, 0, 0, 0);
+        let to = Tint::new(1, 1, 1, 1);
+        assert_eq!(Tint::interpolate(&from, &to, 0.4), from);
+        assert_eq!(Tint::interpolate(&from, &to, 0.6), to);
+    }
+
+    #[test]
+    fn tint_interpolation_clamps_when_an_easing_overshoots() {
+        let from = Tint::new(10, 250, 128, 255);
+        let to = Tint::new(250, 10, 128, 255);
+        // Back/elastic easings leave [0, 1]; channels must saturate, not wrap.
+        assert_eq!(
+            Tint::interpolate(&from, &to, 1.2),
+            Tint::new(255, 0, 128, 255)
+        );
+        assert_eq!(
+            Tint::interpolate(&from, &to, -0.2),
+            Tint::new(0, 255, 128, 255)
+        );
     }
 }

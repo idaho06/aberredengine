@@ -168,6 +168,17 @@ mod tween_components_in_rust {
         Tween::screen_position(Vec2::new(-200.0, 50.0), Vec2::new(20.0, 50.0), 0.4),
     ));
     } // GLUE
+
+    fn tint(mut commands: Commands) { // GLUE
+    use aberredengine::core::components::tint::Tint;
+    use aberredengine::prelude::*;
+
+    commands.spawn((
+        Tint::new(255, 255, 255, 255),
+        Tween::new(Tint::new(255, 255, 255, 255), Tint::new(255, 80, 80, 255), 1.0)
+            .with_loop_mode(LoopMode::PingPong),
+    ));
+    } // GLUE
 }
 
 // Spawning context: observers and systems
