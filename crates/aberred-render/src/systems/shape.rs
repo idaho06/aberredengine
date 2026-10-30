@@ -6,12 +6,16 @@
 
 use raylib::prelude::*;
 
+use super::geometry::bounds_overlap_view;
 use super::math::{resolve_multiply_tint, shadow_color, vec2_to_raylib};
+use aberred_core::components::rotation::Rotation;
+use aberred_core::components::scale::Scale;
 use aberred_core::components::shadow::Shadow;
 use aberred_core::components::shape::Shape;
 use aberred_core::components::tint::Tint;
+use aberred_core::components::world_position::WorldPosition;
 use aberred_core::math::Vec2;
-use aberred_core::systems::shape_geometry::{DrawOp, shape_layers, shape_ops};
+use aberred_core::systems::shape_geometry::{DrawOp, shape_cull_bounds, shape_layers, shape_ops};
 
 /// Where and how a shape is drawn: the transform handed to `shape_ops`.
 #[derive(Clone, Copy)]
@@ -22,6 +26,20 @@ pub(super) struct ShapePlacement {
 }
 
 impl ShapePlacement {
+    /// Placement from a resolved world transform; an absent scale is 1 and an
+    /// absent rotation is 0 degrees.
+    pub(super) fn from_resolved(
+        pos: &WorldPosition,
+        scale: Option<&Scale>,
+        rotation: Option<&Rotation>,
+    ) -> Self {
+        Self {
+            pos: pos.pos,
+            scale: scale.map_or(Vec2::ONE, |s| s.scale),
+            rotation_degrees: rotation.map_or(0.0, |r| r.degrees),
+        }
+    }
+
     /// Unscaled, unrotated placement at `pos` (screen-space shapes).
     pub(super) fn at(pos: Vec2) -> Self {
         Self {
@@ -98,6 +116,25 @@ pub(super) fn draw_shape_ops(d: &mut impl RaylibDraw, ops: &[DrawOp], color: Col
             }
         }
     }
+}
+
+/// Whether any part of the shape (or its shadow) can overlap the view box
+/// `view_min..view_max`, with a 1 px margin for line width.
+pub(super) fn shape_in_view(
+    shape: &Shape,
+    place: ShapePlacement,
+    maybe_shadow: Option<Shadow>,
+    view_min: Vector2,
+    view_max: Vector2,
+) -> bool {
+    let (min, max) = shape_cull_bounds(shape, place.pos, place.scale, place.rotation_degrees);
+    let margin = Vec2::ONE + maybe_shadow.map_or(Vec2::ZERO, |s| s.offset.abs());
+    bounds_overlap_view(
+        vec2_to_raylib(min - margin),
+        vec2_to_raylib(max + margin),
+        view_min,
+        view_max,
+    )
 }
 
 /// Draws one already-resolved shape: shadow pass, then each layer.
@@ -250,5 +287,95 @@ mod tests {
         let empty = Shape::polygon(&[], RED);
         let p = passes(&empty, ShapePlacement::at(Vec2::ZERO), None, None);
         assert!(p.iter().all(|(ops, _)| ops.is_empty()));
+    }
+
+    fn view() -> (Vector2, Vector2) {
+        (Vector2::new(0.0, 0.0), Vector2::new(100.0, 100.0))
+    }
+
+    fn visible(shape: &Shape, place: ShapePlacement, shadow: Option<Shadow>) -> bool {
+        let (min, max) = view();
+        shape_in_view(shape, place, shadow, min, max)
+    }
+
+    #[test]
+    fn a_shape_inside_the_view_is_visible_and_one_far_outside_is_not() {
+        assert!(visible(
+            &rect(),
+            ShapePlacement::at(Vec2::new(50.0, 50.0)),
+            None
+        ));
+        assert!(!visible(
+            &rect(),
+            ShapePlacement::at(Vec2::new(500.0, 50.0)),
+            None
+        ));
+        assert!(!visible(
+            &rect(),
+            ShapePlacement::at(Vec2::new(-50.0, 50.0)),
+            None
+        ));
+    }
+
+    #[test]
+    fn a_one_pixel_line_just_outside_the_view_still_counts_as_visible() {
+        let line = Shape::line(Vec2::new(0.0, 10.0), RED);
+        // The line sits at x = 100.5: past the view edge by half a pixel, inside the 1 px margin.
+        assert!(visible(
+            &line,
+            ShapePlacement::at(Vec2::new(100.5, 0.0)),
+            None
+        ));
+        assert!(!visible(
+            &line,
+            ShapePlacement::at(Vec2::new(102.0, 0.0)),
+            None
+        ));
+    }
+
+    #[test]
+    fn a_shadow_widens_the_cull_box_by_its_offset() {
+        let place = ShapePlacement::at(Vec2::new(-10.0, 50.0));
+        assert!(!visible(&rect(), place, None));
+        let shadow = Shadow::new(20.0, 0.0, 0, 0, 0, 128);
+        assert!(visible(&rect(), place, Some(shadow)));
+        let flipped = Shadow::new(-20.0, 0.0, 0, 0, 0, 128);
+        assert!(visible(&rect(), place, Some(flipped)));
+    }
+
+    #[test]
+    fn rotation_and_scale_move_the_cull_box() {
+        let place = ShapePlacement {
+            pos: Vec2::new(-3.0, 50.0),
+            scale: Vec2::ONE,
+            rotation_degrees: 90.0,
+        };
+        // Rotated 90 degrees clockwise the (4, 2) rect spans x in [-5, -3]: left of the view.
+        assert!(!visible(&rect(), place, None));
+        // Mirroring y before the rotation flips that extent toward +x, into the view.
+        let mirrored = ShapePlacement {
+            scale: Vec2::new(1.0, -50.0),
+            ..place
+        };
+        assert!(visible(&rect(), mirrored, None));
+    }
+
+    #[test]
+    fn a_resolved_placement_defaults_an_absent_scale_and_rotation() {
+        let pos = WorldPosition::new(3.0, 4.0);
+        let bare = ShapePlacement::from_resolved(&pos, None, None);
+        assert_eq!(
+            (bare.pos, bare.scale, bare.rotation_degrees),
+            (Vec2::new(3.0, 4.0), Vec2::ONE, 0.0)
+        );
+        let full = ShapePlacement::from_resolved(
+            &pos,
+            Some(&Scale::new(2.0, 3.0)),
+            Some(&Rotation { degrees: 45.0 }),
+        );
+        assert_eq!(
+            (full.scale, full.rotation_degrees),
+            (Vec2::new(2.0, 3.0), 45.0)
+        );
     }
 }

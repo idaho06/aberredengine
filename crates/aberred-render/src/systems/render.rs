@@ -66,10 +66,10 @@ use aberred_core::systems::scene_dispatch::WorldDrawCtx;
 use log::warn;
 
 use super::debug_overlay::{PerfPanelStats, draw_imgui_debug};
-use super::geometry::{compute_sprite_cull_bounds, compute_view_bounds};
+use super::geometry::{bounds_overlap_view, compute_sprite_cull_bounds, compute_view_bounds};
 use super::gui_panel::{self, draw_screen_panel_item};
 use super::postprocess::apply_postprocess_passes;
-use super::shape::{ShapePlacement, draw_shape_item};
+use super::shape::{ShapePlacement, draw_shape_item, shape_in_view};
 use super::sprite::{draw_screen_sprite_item, draw_world_sprite_item};
 use super::text::{draw_screen_text_item, draw_world_text_item};
 use aberred_core::systems::shape_geometry::DrawOp;
@@ -86,6 +86,18 @@ pub(super) struct SpriteBufferItem {
     pub(super) maybe_tint: Option<Tint>,
     pub(super) maybe_shadow: Option<Shadow>,
     pub(super) velocity: Option<Vector2>,
+}
+
+/// World-space shape draw item: the shape with its resolved transform (the
+/// hierarchy's `GlobalTransform2D` applied), tint and shadow. Shapes never use
+/// an entity shader.
+pub(super) struct ShapeBufferItem {
+    pub(super) entity: Entity,
+    pub(super) shape: Shape,
+    pub(super) z_index: ZIndex,
+    pub(super) place: ShapePlacement,
+    pub(super) maybe_tint: Option<Tint>,
+    pub(super) maybe_shadow: Option<Shadow>,
 }
 
 /// Per-frame read-only values shared by the world-space and screen-space draw
@@ -191,8 +203,10 @@ pub(super) struct ScreenProgressBarBufferItem {
     pub(super) maybe_shadow: Option<Shadow>,
 }
 
-/// Which typed screen buffer a [`ScreenDrawKey`] points into.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+/// Which typed screen buffer a [`ScreenDrawKey`] points into. Variant order is
+/// the final draw-order tie-break before the buffer index (see
+/// `cmp_screen_draw_order`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 enum ScreenDrawKind {
     Panel,
     ProgressBar,
@@ -227,7 +241,7 @@ struct ScreenDrawKey {
 }
 
 /// Screen draw-order comparator: ascending `z`, then [`ScreenDrawKind`] rank,
-/// then ascending sim entity, then buffer index. Mirror query iteration order
+/// then ascending sim entity, then the kind itself, then buffer index. Mirror query iteration order
 /// carries no ordering guarantee, so the entity tie-break (`Entity: Ord`) is
 /// what makes draw order deterministic, and the index orders two items of one
 /// kind that come from the same entity.
@@ -238,21 +252,29 @@ fn cmp_screen_draw_order(a: &ScreenDrawKey, b: &ScreenDrawKey) -> std::cmp::Orde
     a.z.total_cmp(&b.z)
         .then_with(|| a.kind.rank().cmp(&b.kind.rank()))
         .then_with(|| a.entity.cmp(&b.entity))
+        .then_with(|| a.kind.cmp(&b.kind))
         .then_with(|| a.index.cmp(&b.index))
 }
 
-/// Rebuilds `order` as the sorted draw order of the two typed world buffers:
+/// Rebuilds `order` as the sorted draw order of the three typed world buffers:
 /// one [`WorldDrawKey`] per item, `index` addressing the item in its own
 /// buffer. Reuses `order`'s capacity.
 fn build_world_order(
     order: &mut Vec<WorldDrawKey>,
     sprites: &[SpriteBufferItem],
+    shapes: &[ShapeBufferItem],
     texts: &[TextBufferItem],
 ) {
     order.clear();
     order.extend(sprites.iter().enumerate().map(|(i, item)| WorldDrawKey {
         z: item.z_index.0,
         kind: WorldDrawKind::Sprite,
+        entity: item.entity,
+        index: i as u32,
+    }));
+    order.extend(shapes.iter().enumerate().map(|(i, item)| WorldDrawKey {
+        z: item.z_index.0,
+        kind: WorldDrawKind::Shape,
         entity: item.entity,
         index: i as u32,
     }));
@@ -310,19 +332,21 @@ fn build_screen_order(
     order.sort_unstable_by(cmp_screen_draw_order);
 }
 
-/// Which typed world buffer a [`WorldDrawKey`] points into.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+/// Which typed world buffer a [`WorldDrawKey`] points into. Variant order is
+/// the final draw-order tie-break (see `cmp_world_draw_order`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 enum WorldDrawKind {
     Sprite,
+    Shape,
     Text,
 }
 
 impl WorldDrawKind {
     /// Secondary sort key, used only to break ties at equal `z`: a text (1)
-    /// draws over a sprite (0), as in screen space.
+    /// draws over a sprite or shape (0), as in screen space.
     fn rank(self) -> u8 {
         match self {
-            WorldDrawKind::Sprite => 0,
+            WorldDrawKind::Sprite | WorldDrawKind::Shape => 0,
             WorldDrawKind::Text => 1,
         }
     }
@@ -339,12 +363,13 @@ struct WorldDrawKey {
 }
 
 /// World draw-order comparator: ascending `z`, then [`WorldDrawKind`] rank,
-/// then ascending sim entity. Mirror query iteration order carries no
-/// ordering guarantee, so the entity tie-break (`Entity: Ord`, equivalent to
-/// sorting by `Entity::to_bits()`) is what makes draw order deterministic:
-/// items sharing an exact `z` and kind draw in ascending sim-entity order.
-/// There is no index tie-break: an entity has at most one world sprite and one
-/// world text.
+/// then ascending sim entity, then the kind itself. Mirror query iteration
+/// order carries no ordering guarantee, so the entity tie-break (`Entity: Ord`,
+/// equivalent to sorting by `Entity::to_bits()`) is what makes draw order
+/// deterministic: items sharing an exact `z` and rank draw in ascending
+/// sim-entity order, and one entity's sprite and shape (same rank) draw in
+/// kind order. There is no index tie-break: an entity has at most one world
+/// item of each kind.
 fn cmp_world_draw_order(a: &WorldDrawKey, b: &WorldDrawKey) -> std::cmp::Ordering {
     // `total_cmp`, not `partial_cmp(..).unwrap_or(Equal)`: a NaN z-index would
     // otherwise break the comparator's total order, which `sort_unstable_by`
@@ -352,13 +377,15 @@ fn cmp_world_draw_order(a: &WorldDrawKey, b: &WorldDrawKey) -> std::cmp::Orderin
     a.z.total_cmp(&b.z)
         .then_with(|| a.kind.rank().cmp(&b.kind.rank()))
         .then_with(|| a.entity.cmp(&b.entity))
+        .then_with(|| a.kind.cmp(&b.kind))
 }
 
 #[derive(Default)]
 pub struct RenderLocals {
     sprite_buffer: Vec<SpriteBufferItem>,
+    shape_buffer: Vec<ShapeBufferItem>,
     text_buffer: Vec<TextBufferItem>,
-    // Sorted draw order of the two world buffers above: one key per item.
+    // Sorted draw order of the three world buffers above: one key per item.
     world_order: Vec<WorldDrawKey>,
     // Scratch buffers for the screen-space items: sprites, shapes and texts built
     // from their mirror queries by render_system, panels and progress bars built
@@ -441,7 +468,7 @@ fn needs_imgui(debug_active: bool, has_gui_callback: bool) -> bool {
 /// - Renders all game content to a fixed-resolution render target.
 /// - Scales and blits the render target to the window with letterboxing.
 /// - Uses `Camera2D` for world rendering, then overlays UI/debug in screen space.
-/// - Draws world sprites and texts in one pass sorted by `ZIndex` (see
+/// - Draws world sprites, shapes and texts in one pass sorted by `ZIndex` (see
 ///   `cmp_world_draw_order`); debug overlays and the scene's world-draw
 ///   callback follow it.
 /// - When `DebugMode` is present, draws additional information (entity counts,
@@ -473,6 +500,7 @@ pub fn render_system(
     let fonts = &res.fonts;
     let RenderLocals {
         sprite_buffer,
+        shape_buffer,
         text_buffer,
         world_order,
         screen_sprite_buffer,
@@ -567,25 +595,63 @@ pub fn render_system(
                             resolved_rot.as_ref(),
                         );
 
-                        let overlap = !(max.x < view_min.x
-                            || min.x > view_max.x
-                            || max.y < view_min.y
-                            || min.y > view_max.y);
-                        overlap.then_some(SpriteBufferItem {
-                            entity: mirror.0,
-                            sprite: sprite.clone(),
-                            z_index: *z_index,
-                            resolved_pos,
-                            resolved_scale,
-                            resolved_rot,
-                            maybe_shader: shader.cloned(),
-                            maybe_tint: tint.copied(),
-                            maybe_shadow: shadow.copied(),
-                            velocity: velocity.map(|v| v.0),
-                        })
+                        bounds_overlap_view(min, max, view_min, view_max).then_some(
+                            SpriteBufferItem {
+                                entity: mirror.0,
+                                sprite: sprite.clone(),
+                                z_index: *z_index,
+                                resolved_pos,
+                                resolved_scale,
+                                resolved_rot,
+                                maybe_shader: shader.cloned(),
+                                maybe_tint: tint.copied(),
+                                maybe_shadow: shadow.copied(),
+                                velocity: velocity.map(|v| v.0),
+                            },
+                        )
                     },
                 ));
             } // build_sprite_buffer
+            {
+                aberred_core::tracy::tracy_span!("render/build_shape_buffer");
+                shape_buffer.clear();
+                shape_buffer.extend(mirrors.map_shapes.iter().filter_map(
+                    |(
+                        mirror,
+                        shape,
+                        position,
+                        z_index,
+                        scale,
+                        rotation,
+                        tint,
+                        shadow,
+                        global_transform,
+                    )| {
+                        let (resolved_pos, resolved_scale, resolved_rot) = resolve_world_transform(
+                            *position,
+                            scale.copied(),
+                            rotation.copied(),
+                            global_transform.copied(),
+                        );
+                        let place = ShapePlacement::from_resolved(
+                            &resolved_pos,
+                            resolved_scale.as_ref(),
+                            resolved_rot.as_ref(),
+                        );
+                        let maybe_shadow = shadow.copied();
+                        shape_in_view(shape, place, maybe_shadow, view_min, view_max).then(|| {
+                            ShapeBufferItem {
+                                entity: mirror.0,
+                                shape: shape.clone(),
+                                z_index: *z_index,
+                                place,
+                                maybe_tint: tint.copied(),
+                                maybe_shadow,
+                            }
+                        })
+                    },
+                ));
+            } // build_shape_buffer
             {
                 aberred_core::tracy::tracy_span!("render/build_text_buffer");
                 text_buffer.clear();
@@ -605,33 +671,31 @@ pub fn render_system(
                             global_transform.map_or(position.pos, |gt| gt.position),
                         );
                         let text_size = text.size();
-                        let min = resolved_pos.pos;
+                        let min = vec2_to_raylib(resolved_pos.pos);
                         let max = Vector2 {
                             x: min.x + text_size.x,
                             y: min.y + text_size.y,
                         };
 
-                        let overlap = !(max.x < view_min.x
-                            || min.x > view_max.x
-                            || max.y < view_min.y
-                            || min.y > view_max.y);
-                        overlap.then_some(TextBufferItem {
-                            entity: mirror.0,
-                            text: text.clone(),
-                            z_index: *z_index,
-                            resolved_pos,
-                            text_size: vec2_to_raylib(text_size),
-                            maybe_shader: shader.cloned(),
-                            maybe_tint: tint.copied(),
-                            maybe_shadow: shadow.copied(),
-                            velocity: velocity.map(|v| v.0),
-                        })
+                        bounds_overlap_view(min, max, view_min, view_max).then_some(
+                            TextBufferItem {
+                                entity: mirror.0,
+                                text: text.clone(),
+                                z_index: *z_index,
+                                resolved_pos,
+                                text_size: vec2_to_raylib(text_size),
+                                maybe_shader: shader.cloned(),
+                                maybe_tint: tint.copied(),
+                                maybe_shadow: shadow.copied(),
+                                velocity: velocity.map(|v| v.0),
+                            },
+                        )
                     },
                 ));
             } // build_text_buffer
             {
                 aberred_core::tracy::tracy_span!("render/sort_world");
-                build_world_order(world_order, sprite_buffer, text_buffer);
+                build_world_order(world_order, sprite_buffer, shape_buffer, text_buffer);
             } // sort_world
             {
                 aberred_core::tracy::tracy_span!("render/draw_world");
@@ -644,6 +708,17 @@ pub fn render_system(
                             &mut shader_store,
                             &env,
                         ),
+                        WorldDrawKind::Shape => {
+                            let item = &shape_buffer[index];
+                            draw_shape_item(
+                                &mut d2,
+                                &item.shape,
+                                item.place,
+                                item.maybe_tint,
+                                item.maybe_shadow,
+                                shape_ops,
+                            );
+                        }
                         WorldDrawKind::Text => draw_world_text_item(
                             &mut d2,
                             &text_buffer[index],
@@ -1599,6 +1674,65 @@ mod world_draw_order_tests {
     }
 
     #[test]
+    fn a_shape_ranks_with_the_sprite_below_a_text() {
+        assert_eq!(WorldDrawKind::Shape.rank(), WorldDrawKind::Sprite.rank());
+        assert!(WorldDrawKind::Shape.rank() < WorldDrawKind::Text.rank());
+    }
+
+    #[test]
+    fn a_shape_between_two_sprites_in_z_draws_between_them() {
+        let sorted = sort(vec![
+            sprite_key(4.0, entity(1)),
+            key(3.0, WorldDrawKind::Shape, entity(2)),
+            sprite_key(2.0, entity(3)),
+        ]);
+        let kinds: Vec<WorldDrawKind> = sorted.iter().map(|k| k.kind).collect();
+        assert_eq!(
+            kinds,
+            vec![
+                WorldDrawKind::Sprite,
+                WorldDrawKind::Shape,
+                WorldDrawKind::Sprite
+            ]
+        );
+    }
+
+    #[test]
+    fn a_shape_and_a_sprite_at_equal_z_tie_break_by_entity() {
+        let mut es = [entity(3), entity(9)];
+        es.sort();
+        for (shape_e, sprite_e) in [(es[0], es[1]), (es[1], es[0])] {
+            let sorted = sort(vec![
+                sprite_key(1.0, sprite_e),
+                key(1.0, WorldDrawKind::Shape, shape_e),
+            ]);
+            let ids: Vec<Entity> = sorted.iter().map(|k| k.entity).collect();
+            assert_eq!(ids, es);
+        }
+    }
+
+    #[test]
+    fn a_shape_at_equal_z_draws_before_a_text() {
+        let sorted = sort(vec![
+            text_key(1.0, entity(1)),
+            key(1.0, WorldDrawKind::Shape, entity(2)),
+        ]);
+        assert_eq!(sorted[0].kind, WorldDrawKind::Shape);
+        assert_eq!(sorted[1].kind, WorldDrawKind::Text);
+    }
+
+    /// One entity can carry a sprite and a shape at the same z (same rank):
+    /// the draw order between them must not depend on insertion order.
+    #[test]
+    fn a_sprite_and_a_shape_on_one_entity_draw_in_a_fixed_order() {
+        let e = entity(5);
+        let a = sort(vec![sprite_key(1.0, e), key(1.0, WorldDrawKind::Shape, e)]);
+        let b = sort(vec![key(1.0, WorldDrawKind::Shape, e), sprite_key(1.0, e)]);
+        let kinds = |v: &[WorldDrawKey]| v.iter().map(|k| k.kind).collect::<Vec<_>>();
+        assert_eq!(kinds(&a), kinds(&b));
+    }
+
+    #[test]
     fn a_sprite_ranks_below_a_text() {
         assert!(WorldDrawKind::Sprite.rank() < WorldDrawKind::Text.rank());
     }
@@ -1615,6 +1749,17 @@ mod world_draw_order_tests {
             maybe_tint: None,
             maybe_shadow: None,
             velocity: None,
+        }
+    }
+
+    fn shape_item(z: f32, entity: Entity) -> ShapeBufferItem {
+        ShapeBufferItem {
+            entity,
+            shape: aberred_core::components::shape::Shape::point(aberred_core::math::Color::RED),
+            z_index: ZIndex(z),
+            place: ShapePlacement::at(aberred_core::math::Vec2::ZERO),
+            maybe_tint: None,
+            maybe_shadow: None,
         }
     }
 
@@ -1636,12 +1781,14 @@ mod world_draw_order_tests {
     fn addressed_entities(
         order: &[WorldDrawKey],
         sprites: &[SpriteBufferItem],
+        shapes: &[ShapeBufferItem],
         texts: &[TextBufferItem],
     ) -> Vec<Entity> {
         order
             .iter()
             .map(|k| match k.kind {
                 WorldDrawKind::Sprite => sprites[k.index as usize].entity,
+                WorldDrawKind::Shape => shapes[k.index as usize].entity,
                 WorldDrawKind::Text => texts[k.index as usize].entity,
             })
             .collect()
@@ -1649,16 +1796,25 @@ mod world_draw_order_tests {
 
     #[test]
     fn built_keys_address_their_own_buffer_item_in_draw_order() {
-        let [e1, e2, e3, e4] = [1, 2, 3, 4].map(entity);
+        let [e1, e2, e3, e4, e5] = [1, 2, 3, 4, 5].map(entity);
         let sprites = [sprite_item(2.0, e1), sprite_item(1.0, e2)];
+        let shapes = [shape_item(1.0, e5)];
         let texts = [text_item(1.0, e3), text_item(0.0, e4)];
 
         let mut order = Vec::new();
-        build_world_order(&mut order, &sprites, &texts);
+        build_world_order(&mut order, &sprites, &shapes, &texts);
 
-        // z 0 text; z 1 sprite then text (rank); z 2 sprite.
-        let expected = vec![e4, e2, e3, e1];
-        assert_eq!(addressed_entities(&order, &sprites, &texts), expected);
+        // z 0 text; z 1: the sprite and the shape (rank 0, by entity), then
+        // the text; z 2 sprite.
+        let mut middle = vec![e2, e5];
+        middle.sort();
+        let mut expected = vec![e4];
+        expected.extend(middle);
+        expected.extend([e3, e1]);
+        assert_eq!(
+            addressed_entities(&order, &sprites, &shapes, &texts),
+            expected
+        );
         let keyed: Vec<Entity> = order.iter().map(|k| k.entity).collect();
         assert_eq!(keyed, expected, "a key carries its item's entity");
     }
@@ -1669,19 +1825,24 @@ mod world_draw_order_tests {
         build_world_order(
             &mut order,
             &[sprite_item(7.0, entity(1))],
+            &[shape_item(2.0, entity(3))],
             &[text_item(-3.0, entity(2))],
         );
         let zk: Vec<(f32, WorldDrawKind)> = order.iter().map(|k| (k.z, k.kind)).collect();
         assert_eq!(
             zk,
-            vec![(-3.0, WorldDrawKind::Text), (7.0, WorldDrawKind::Sprite)]
+            vec![
+                (-3.0, WorldDrawKind::Text),
+                (2.0, WorldDrawKind::Shape),
+                (7.0, WorldDrawKind::Sprite)
+            ]
         );
     }
 
     #[test]
     fn empty_buffers_give_an_empty_order() {
         let mut order = vec![key(1.0, WorldDrawKind::Text, entity(1))];
-        build_world_order(&mut order, &[], &[]);
+        build_world_order(&mut order, &[], &[], &[]);
         assert!(order.is_empty());
     }
 
@@ -1690,11 +1851,11 @@ mod world_draw_order_tests {
         let many: Vec<SpriteBufferItem> =
             (0..64).map(|i| sprite_item(i as f32, entity(i))).collect();
         let mut order = Vec::new();
-        build_world_order(&mut order, &many, &[]);
+        build_world_order(&mut order, &many, &[], &[]);
         assert_eq!(order.len(), 64);
         let capacity = order.capacity();
 
-        build_world_order(&mut order, &many[..3], &[]);
+        build_world_order(&mut order, &many[..3], &[], &[]);
         assert_eq!(order.len(), 3);
         assert!(order.capacity() >= capacity);
     }
@@ -1896,6 +2057,22 @@ mod screen_draw_order_tests {
         ]);
         let zs: Vec<f32> = sorted.iter().map(|k| k.z).collect();
         assert_eq!(zs, vec![-1.0, 2.0, 5.0]);
+    }
+
+    /// One entity can carry a sprite and a shape at the same z (same rank):
+    /// the draw order between them must not depend on insertion order.
+    #[test]
+    fn a_sprite_and_a_shape_on_one_entity_draw_in_a_fixed_order() {
+        let e = entity(5);
+        let a = sort(vec![
+            key(1.0, ScreenDrawKind::Sprite, e),
+            key(1.0, ScreenDrawKind::Shape, e),
+        ]);
+        let b = sort(vec![
+            key(1.0, ScreenDrawKind::Shape, e),
+            key(1.0, ScreenDrawKind::Sprite, e),
+        ]);
+        assert_eq!(kinds(&a), kinds(&b));
     }
 
     #[test]

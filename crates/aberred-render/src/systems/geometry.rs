@@ -68,6 +68,17 @@ pub(super) fn compute_view_bounds(
     (view_min, view_max)
 }
 
+/// Whether the box `min..max` overlaps the view box `view_min..view_max`;
+/// boxes that only touch count as overlapping.
+pub(super) fn bounds_overlap_view(
+    min: Vector2,
+    max: Vector2,
+    view_min: Vector2,
+    view_max: Vector2,
+) -> bool {
+    !(max.x < view_min.x || min.x > view_max.x || max.y < view_min.y || min.y > view_max.y)
+}
+
 /// Compute the world-space AABB of a sprite for culling, accounting for scale and rotation.
 ///
 /// For rotated sprites, uses a bounding circle (conservative but fast): the radius is the
@@ -364,12 +375,47 @@ mod tests {
 
         // The bounding circle radius = sqrt(32^2 + 32^2) ≈ 45.25
         // So min.x ≈ 410 - 45.25 = 364.75, which is < view_max.x = 400
-        let overlap =
-            !(max.x < view_min.x || min.x > view_max.x || max.y < view_min.y || min.y > view_max.y);
         assert!(
-            overlap,
+            bounds_overlap_view(min, max, view_min, view_max),
             "Rotated sprite near edge should not be culled. Sprite bounds: ({}, {}) - ({}, {}), View: ({}, {}) - ({}, {})",
-            min.x, min.y, max.x, max.y, view_min.x, view_min.y, view_max.x, view_max.y,
+            min.x,
+            min.y,
+            max.x,
+            max.y,
+            view_min.x,
+            view_min.y,
+            view_max.x,
+            view_max.y,
         );
+    }
+
+    #[test]
+    fn overlap_includes_touching_edges_and_excludes_separated_boxes() {
+        let v = |x, y| Vector2::new(x, y);
+        let (view_min, view_max) = (v(0.0, 0.0), v(100.0, 100.0));
+        assert!(bounds_overlap_view(
+            v(100.0, 10.0),
+            v(120.0, 20.0),
+            view_min,
+            view_max
+        ));
+        assert!(bounds_overlap_view(
+            v(-5.0, -5.0),
+            v(500.0, 500.0),
+            view_min,
+            view_max
+        ));
+        assert!(!bounds_overlap_view(
+            v(100.5, 10.0),
+            v(120.0, 20.0),
+            view_min,
+            view_max
+        ));
+        assert!(!bounds_overlap_view(
+            v(10.0, -30.0),
+            v(20.0, -0.5),
+            view_min,
+            view_max
+        ));
     }
 }
