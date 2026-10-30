@@ -31,6 +31,7 @@ use crate::components::rotation::Rotation;
 use crate::components::scale::Scale;
 use crate::components::screen_position::ScreenPosition;
 use crate::components::shadow::Shadow;
+use crate::components::shape::Shape;
 use crate::components::signals::Signals;
 use crate::components::sprite::Sprite;
 use crate::components::tint::Tint;
@@ -112,6 +113,31 @@ pub struct ScreenSpriteEntry {
 pub struct ScreenTextEntry {
     pub entity: Entity,
     pub text: DynamicText,
+    pub position: ScreenPosition,
+    pub z_index: ZIndex,
+    pub tint: Option<Tint>,
+    pub shadow: Option<Shadow>,
+}
+
+/// One world-space shape, owned. Mirrors `MapShapeQueryData`.
+#[derive(Clone, Debug, PartialEq)]
+pub struct MapShapeEntry {
+    pub entity: Entity,
+    pub shape: Shape,
+    pub position: WorldPosition,
+    pub z_index: ZIndex,
+    pub scale: Option<Scale>,
+    pub rotation: Option<Rotation>,
+    pub tint: Option<Tint>,
+    pub shadow: Option<Shadow>,
+    pub global_transform: Option<GlobalTransform2D>,
+}
+
+/// One screen-space shape, owned. Mirrors `ScreenShapeQueryData`.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ScreenShapeEntry {
+    pub entity: Entity,
+    pub shape: Shape,
     pub position: ScreenPosition,
     pub z_index: ZIndex,
     pub tint: Option<Tint>,
@@ -230,6 +256,8 @@ pub struct DrawableSnapshot {
     pub map_texts: Vec<MapTextEntry>,
     pub screen_sprites: Vec<ScreenSpriteEntry>,
     pub screen_texts: Vec<ScreenTextEntry>,
+    pub map_shapes: Vec<MapShapeEntry>,
+    pub screen_shapes: Vec<ScreenShapeEntry>,
     pub gui_windows: Vec<GuiWindowEntry>,
     pub gui_buttons: Vec<GuiButtonEntry>,
     pub gui_labels: Vec<GuiLabelEntry>,
@@ -303,6 +331,8 @@ impl DrawableSnapshot {
         dst.map_texts.clone_from(&self.map_texts);
         dst.screen_sprites.clone_from(&self.screen_sprites);
         dst.screen_texts.clone_from(&self.screen_texts);
+        dst.map_shapes.clone_from(&self.map_shapes);
+        dst.screen_shapes.clone_from(&self.screen_shapes);
         dst.gui_windows.clone_from(&self.gui_windows);
         dst.gui_buttons.clone_from(&self.gui_buttons);
         dst.gui_labels.clone_from(&self.gui_labels);
@@ -372,6 +402,27 @@ type ScreenTextQueryData = (
     Option<&'static Shadow>,
 );
 
+type MapShapeQueryData = (
+    Entity,
+    &'static Shape,
+    &'static WorldPosition,
+    &'static ZIndex,
+    Option<&'static Scale>,
+    Option<&'static Rotation>,
+    Option<&'static Tint>,
+    Option<&'static Shadow>,
+    Option<&'static GlobalTransform2D>,
+);
+
+type ScreenShapeQueryData = (
+    Entity,
+    &'static Shape,
+    &'static ScreenPosition,
+    &'static ZIndex,
+    Option<&'static Tint>,
+    Option<&'static Shadow>,
+);
+
 type GuiButtonQueryData = (
     Entity,
     &'static GuiButton,
@@ -403,6 +454,8 @@ pub struct DrawableSnapshotQueries<'w, 's> {
     map_texts: Query<'w, 's, MapTextQueryData>,
     screen_sprites: Query<'w, 's, ScreenSpriteQueryData>,
     screen_texts: Query<'w, 's, ScreenTextQueryData>,
+    map_shapes: Query<'w, 's, MapShapeQueryData>,
+    screen_shapes: Query<'w, 's, ScreenShapeQueryData>,
     gui_windows: Query<
         'w,
         's,
@@ -547,6 +600,37 @@ pub fn build_drawable_snapshot(
         |(entity, text, position, z_index, tint, shadow)| ScreenTextEntry {
             entity,
             text: text.clone(),
+            position: *position,
+            z_index: *z_index,
+            tint: tint.copied(),
+            shadow: shadow.copied(),
+        },
+    );
+
+    refill(
+        &mut snapshot.map_shapes,
+        &queries.map_shapes,
+        |(entity, shape, position, z_index, scale, rotation, tint, shadow, global_transform)| {
+            MapShapeEntry {
+                entity,
+                shape: shape.clone(),
+                position: *position,
+                z_index: *z_index,
+                scale: scale.copied(),
+                rotation: rotation.copied(),
+                tint: tint.copied(),
+                shadow: shadow.copied(),
+                global_transform: global_transform.copied(),
+            }
+        },
+    );
+
+    refill(
+        &mut snapshot.screen_shapes,
+        &queries.screen_shapes,
+        |(entity, shape, position, z_index, tint, shadow)| ScreenShapeEntry {
+            entity,
+            shape: shape.clone(),
             position: *position,
             z_index: *z_index,
             tint: tint.copied(),
@@ -1063,5 +1147,115 @@ mod tests {
             world.resource::<DrawableSnapshot>().map_sprites.is_empty(),
             "snapshot must not retain entries for entities despawned in a prior tick"
         );
+    }
+
+    fn shape() -> Shape {
+        Shape::rect(Vec2::new(4.0, 2.0), Color::RED)
+    }
+
+    #[test]
+    fn captures_map_shape_with_optional_components() {
+        let mut world = new_test_world();
+        let entity = world
+            .spawn((
+                shape(),
+                WorldPosition::new(3.0, 4.0),
+                ZIndex(2.0),
+                Scale {
+                    scale: Vec2::new(2.0, 2.0),
+                },
+                Tint {
+                    color: Color::WHITE,
+                },
+            ))
+            .id();
+
+        world.run_system_once(build_drawable_snapshot).unwrap();
+
+        let snapshot = world.resource::<DrawableSnapshot>();
+        assert_eq!(snapshot.map_shapes.len(), 1);
+        let entry = &snapshot.map_shapes[0];
+        assert_eq!(entry.entity, entity);
+        assert_eq!(entry.shape, shape());
+        assert_eq!(entry.position.pos, Vec2::new(3.0, 4.0));
+        assert_eq!(entry.z_index, ZIndex(2.0));
+        assert!(entry.scale.is_some());
+        assert!(entry.tint.is_some());
+        assert!(entry.rotation.is_none(), "unset optionals stay None");
+        assert!(entry.shadow.is_none());
+        assert!(entry.global_transform.is_none());
+        assert!(snapshot.screen_shapes.is_empty());
+    }
+
+    #[test]
+    fn captures_screen_shape() {
+        let mut world = new_test_world();
+        let entity = world
+            .spawn((
+                shape(),
+                ScreenPosition::new(5.0, 6.0),
+                ZIndex(1.0),
+                Shadow::default_color(1.0, 1.0),
+            ))
+            .id();
+
+        world.run_system_once(build_drawable_snapshot).unwrap();
+
+        let snapshot = world.resource::<DrawableSnapshot>();
+        assert_eq!(snapshot.screen_shapes.len(), 1);
+        let entry = &snapshot.screen_shapes[0];
+        assert_eq!(entry.entity, entity);
+        assert_eq!(entry.shape, shape());
+        assert_eq!(entry.position.pos, Vec2::new(5.0, 6.0));
+        assert!(entry.shadow.is_some());
+        assert!(entry.tint.is_none());
+        assert!(snapshot.map_shapes.is_empty());
+    }
+
+    #[test]
+    fn a_shape_without_z_index_is_not_captured() {
+        let mut world = new_test_world();
+        world.spawn((shape(), WorldPosition::new(0.0, 0.0)));
+        world.spawn((shape(), ScreenPosition::new(0.0, 0.0)));
+
+        world.run_system_once(build_drawable_snapshot).unwrap();
+
+        let snapshot = world.resource::<DrawableSnapshot>();
+        assert!(snapshot.map_shapes.is_empty());
+        assert!(snapshot.screen_shapes.is_empty());
+    }
+
+    #[test]
+    fn shape_entry_is_cleared_when_entity_despawned_between_ticks() {
+        let mut world = new_test_world();
+        let entity = world
+            .spawn((shape(), WorldPosition::new(0.0, 0.0), ZIndex(0.0)))
+            .id();
+        world.run_system_once(build_drawable_snapshot).unwrap();
+        assert_eq!(world.resource::<DrawableSnapshot>().map_shapes.len(), 1);
+
+        world.despawn(entity);
+        world.run_system_once(build_drawable_snapshot).unwrap();
+
+        assert!(world.resource::<DrawableSnapshot>().map_shapes.is_empty());
+    }
+
+    #[test]
+    fn clone_into_buffer_round_trips_the_shape_lists() {
+        let mut world = new_test_world();
+        world.spawn((shape(), WorldPosition::new(1.0, 2.0), ZIndex(0.0)));
+        world.spawn((shape(), ScreenPosition::new(3.0, 4.0), ZIndex(0.0)));
+        world.run_system_once(build_drawable_snapshot).unwrap();
+        let src = world.resource::<DrawableSnapshot>().clone();
+
+        // A stale buffer holding different shapes must be fully overwritten.
+        let mut dst = DrawableSnapshot::default();
+        dst.map_shapes = vec![src.map_shapes[0].clone(), src.map_shapes[0].clone()];
+        dst.screen_shapes = vec![src.screen_shapes[0].clone(); 3];
+        dst.map_shapes[1].position = WorldPosition::new(99.0, 99.0);
+        src.clone_into_buffer(&mut dst);
+
+        assert_eq!(dst.map_shapes, src.map_shapes);
+        assert_eq!(dst.screen_shapes, src.screen_shapes);
     }
 }
