@@ -25,6 +25,22 @@ use crate::resources::render_size::RenderSize;
 /// Cells between the bar's two side borders.
 pub const BAR_INNER_WIDTH: usize = 30;
 
+/// Outer width of the progress bar's frame, in pixels.
+pub const BAR_WIDTH: f32 = 256.0;
+
+/// Outer height of the progress bar's frame, in pixels.
+pub const BAR_HEIGHT: f32 = 16.0;
+
+/// Gap between the frame's edge and the fill: the 1 px outline plus a 1 px
+/// gap, so the two never overlap.
+pub const BAR_PADDING: f32 = 2.0;
+
+/// Width of the fill when loading is complete.
+pub const BAR_FILL_WIDTH: f32 = BAR_WIDTH - 2.0 * BAR_PADDING;
+
+/// Height of the fill.
+pub const BAR_FILL_HEIGHT: f32 = BAR_HEIGHT - 2.0 * BAR_PADDING;
+
 /// Background shown while the loading scene is active.
 pub const BACKGROUND: Color = Color::new(32, 32, 32, 255);
 
@@ -194,6 +210,14 @@ pub fn bar_middle(progress: f32, inner: usize) -> String {
     format!("│{}{}│", "█".repeat(filled), " ".repeat(inner - filled))
 }
 
+/// The fill's width for `progress` of a bar `full` pixels wide: `progress`
+/// (clamped to `0..=1`, NaN counts as 0) of `full`, rounded down to a whole
+/// pixel, so the bar is full only when `progress` is complete.
+pub fn bar_fill_width(progress: f32, full: f32) -> f32 {
+    // A float-to-integer `as` cast saturates: NaN and negatives become 0.
+    ((progress * full) as u32 as f32).min(full)
+}
+
 /// The x that centers content of `content_width` in `screen_width`, floored
 /// so glyphs stay on the pixel grid.
 pub fn centered_x(screen_width: f32, content_width: f32) -> f32 {
@@ -291,6 +315,26 @@ mod tests {
         world.run_system_once(hide_loading_screen).unwrap();
         assert!(!world.contains_resource::<LoadingHold>());
         assert!(rows(&mut world).is_empty());
+    }
+
+    #[test]
+    fn the_fill_grows_from_zero_to_full_in_proportion_to_progress() {
+        assert_eq!(bar_fill_width(0.0, 252.0), 0.0);
+        assert_eq!(bar_fill_width(0.5, 252.0), 126.0);
+        assert_eq!(bar_fill_width(1.0, 252.0), 252.0);
+    }
+
+    #[test]
+    fn the_fill_rounds_down_so_only_complete_progress_fills_the_bar() {
+        assert_eq!(bar_fill_width(0.99, 10.0), 9.0);
+        assert_eq!(bar_fill_width(0.01, 10.0), 0.0);
+    }
+
+    #[test]
+    fn the_fill_clamps_progress_outside_the_unit_interval() {
+        assert_eq!(bar_fill_width(-1.0, 10.0), 0.0);
+        assert_eq!(bar_fill_width(2.0, 10.0), 10.0);
+        assert_eq!(bar_fill_width(f32::NAN, 10.0), 0.0);
     }
 
     #[test]
