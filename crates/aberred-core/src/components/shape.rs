@@ -71,18 +71,25 @@ pub enum ShapeKind {
 }
 
 /// A polygon's vertices in local coordinates, shared cheaply between clones.
-#[derive(Clone, Debug, PartialEq)]
+///
+/// The fill triangulation is computed once in [`Polygon::new`]. Two polygons
+/// are equal when they share their vertex storage or hold the same vertices.
+#[derive(Clone, Debug)]
 pub struct Polygon {
     vertices: Arc<[Vec2]>,
     triangles: Arc<[[u32; 3]]>,
 }
 
 impl Polygon {
-    /// Create a polygon from its vertices.
+    /// Create a polygon from its vertices and triangulate it by ear clipping.
+    ///
+    /// Either winding works. Fewer than three vertices give no triangles, and
+    /// degenerate or self-intersecting input still terminates, falling back to
+    /// a fan over the vertices left when no ear exists.
     pub fn new(vertices: &[Vec2]) -> Self {
         Self {
             vertices: vertices.into(),
-            triangles: Arc::from([]),
+            triangles: triangulate(vertices).into(),
         }
     }
 
@@ -95,6 +102,72 @@ impl Polygon {
     pub fn triangles(&self) -> &[[u32; 3]] {
         &self.triangles
     }
+}
+
+impl PartialEq for Polygon {
+    fn eq(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.vertices, &other.vertices) || self.vertices == other.vertices
+    }
+}
+
+fn cross(o: Vec2, a: Vec2, b: Vec2) -> f32 {
+    (a - o).perp_dot(b - o)
+}
+
+/// Whether `p` lies inside or on the boundary of triangle `abc`.
+fn in_triangle(p: Vec2, a: Vec2, b: Vec2, c: Vec2) -> bool {
+    let (d1, d2, d3) = (cross(a, b, p), cross(b, c, p), cross(c, a, p));
+    let has_neg = d1 < 0.0 || d2 < 0.0 || d3 < 0.0;
+    let has_pos = d1 > 0.0 || d2 > 0.0 || d3 > 0.0;
+    !(has_neg && has_pos)
+}
+
+/// Appends triangle `t` (indices into `pts`) unless it has zero area.
+fn push_triangle(tris: &mut Vec<[u32; 3]>, pts: &[Vec2], t: [usize; 3]) {
+    if cross(pts[t[0]], pts[t[1]], pts[t[2]]) != 0.0 {
+        tris.push(t.map(|i| i as u32));
+    }
+}
+
+/// Ear-clips `pts` into index triples that refer to the original array.
+fn triangulate(pts: &[Vec2]) -> Vec<[u32; 3]> {
+    if pts.len() < 3 {
+        return Vec::new();
+    }
+    let mut tris = Vec::with_capacity(pts.len() - 2);
+    let twice_area: f32 = (0..pts.len())
+        .map(|i| pts[i].perp_dot(pts[(i + 1) % pts.len()]))
+        .sum();
+    let orient = twice_area.signum();
+    let mut rest: Vec<usize> = (0..pts.len()).collect();
+    while rest.len() > 3 {
+        let n = rest.len();
+        let ear = (0..n).find(|&i| {
+            let (p, c, q) = (rest[(i + n - 1) % n], rest[i], rest[(i + 1) % n]);
+            let tri = [pts[p], pts[c], pts[q]];
+            let turn = cross(tri[0], tri[1], tri[2]);
+            // A flat vertex is dropped without emitting a triangle.
+            turn == 0.0
+                || (turn * orient > 0.0
+                    && rest.iter().all(|&o| {
+                        tri.contains(&pts[o]) || !in_triangle(pts[o], tri[0], tri[1], tri[2])
+                    }))
+        });
+        let Some(i) = ear else {
+            break;
+        };
+        push_triangle(
+            &mut tris,
+            pts,
+            [rest[(i + n - 1) % n], rest[i], rest[(i + 1) % n]],
+        );
+        rest.remove(i);
+    }
+    // Three vertices remain, or no ear exists: fan over what is left.
+    for k in 1..rest.len() - 1 {
+        push_triangle(&mut tris, pts, [rest[0], rest[k], rest[k + 1]]);
+    }
+    tris
 }
 
 impl Shape {
@@ -219,5 +292,123 @@ mod tests {
                 size: Vec2::new(2.0, 2.0)
             }
         );
+    }
+
+    fn v(x: f32, y: f32) -> Vec2 {
+        Vec2::new(x, y)
+    }
+
+    fn shoelace_area(pts: &[Vec2]) -> f32 {
+        let n = pts.len();
+        let twice: f32 = (0..n)
+            .map(|i| {
+                let (a, b) = (pts[i], pts[(i + 1) % n]);
+                a.x * b.y - b.x * a.y
+            })
+            .sum();
+        twice.abs() / 2.0
+    }
+
+    fn triangle_area_sum(poly: &Polygon) -> f32 {
+        let pts = poly.vertices();
+        poly.triangles()
+            .iter()
+            .map(|t| shoelace_area(&[pts[t[0] as usize], pts[t[1] as usize], pts[t[2] as usize]]))
+            .sum()
+    }
+
+    fn l_shape() -> Vec<Vec2> {
+        vec![
+            v(0.0, 0.0),
+            v(4.0, 0.0),
+            v(4.0, 2.0),
+            v(2.0, 2.0),
+            v(2.0, 4.0),
+            v(0.0, 4.0),
+        ]
+    }
+
+    #[test]
+    fn a_triangle_is_one_triangle() {
+        let poly = Polygon::new(&[v(0.0, 0.0), v(4.0, 0.0), v(0.0, 4.0)]);
+        assert_eq!(poly.triangles().len(), 1);
+        assert_eq!(triangle_area_sum(&poly), 8.0);
+    }
+
+    #[test]
+    fn a_convex_quad_is_two_triangles() {
+        let poly = Polygon::new(&[v(0.0, 0.0), v(4.0, 0.0), v(4.0, 4.0), v(0.0, 4.0)]);
+        assert_eq!(poly.triangles().len(), 2);
+        assert_eq!(triangle_area_sum(&poly), 16.0);
+    }
+
+    #[test]
+    fn a_concave_l_shape_triangulates_to_its_exact_area() {
+        let pts = l_shape();
+        let poly = Polygon::new(&pts);
+        assert_eq!(poly.triangles().len(), 4);
+        assert_eq!(triangle_area_sum(&poly), shoelace_area(&pts));
+    }
+
+    #[test]
+    fn winding_does_not_change_the_triangulated_area() {
+        let ccw = l_shape();
+        let cw: Vec<Vec2> = ccw.iter().rev().copied().collect();
+        let (a, b) = (Polygon::new(&ccw), Polygon::new(&cw));
+        assert_eq!(b.triangles().len(), 4);
+        assert_eq!(triangle_area_sum(&a), triangle_area_sum(&b));
+    }
+
+    #[test]
+    fn a_vertex_collinear_with_its_neighbours_keeps_area_and_emits_no_flat_triangle() {
+        let pts = [
+            v(0.0, 0.0),
+            v(2.0, 0.0),
+            v(4.0, 0.0),
+            v(4.0, 4.0),
+            v(0.0, 4.0),
+        ];
+        let poly = Polygon::new(&pts);
+        assert!(poly.triangles().len() <= pts.len() - 2);
+        assert_eq!(triangle_area_sum(&poly), 16.0);
+        for t in poly.triangles() {
+            let tri = t.map(|i| pts[i as usize]);
+            assert_ne!(shoelace_area(&tri), 0.0);
+        }
+    }
+
+    #[test]
+    fn degenerate_input_terminates_without_panicking() {
+        let bow_tie = Polygon::new(&[v(0.0, 0.0), v(4.0, 4.0), v(4.0, 0.0), v(0.0, 4.0)]);
+        let line = Polygon::new(&[v(0.0, 0.0), v(1.0, 0.0), v(2.0, 0.0), v(3.0, 0.0)]);
+        assert!(bow_tie.triangles().iter().flatten().all(|&i| i < 4));
+        assert!(line.triangles().is_empty());
+    }
+
+    #[test]
+    fn fewer_than_three_vertices_have_no_triangles() {
+        assert!(Polygon::new(&[]).triangles().is_empty());
+        assert!(Polygon::new(&[v(0.0, 0.0)]).triangles().is_empty());
+        assert!(
+            Polygon::new(&[v(0.0, 0.0), v(1.0, 1.0)])
+                .triangles()
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn triangle_indices_address_the_original_vertices() {
+        let poly = Polygon::new(&l_shape());
+        let n = poly.vertices().len() as u32;
+        assert!(poly.triangles().iter().flatten().all(|&i| i < n));
+    }
+
+    #[test]
+    fn polygons_compare_by_vertex_content() {
+        let pts = l_shape();
+        let a = Polygon::new(&pts);
+        assert_eq!(a, a.clone());
+        assert_eq!(a, Polygon::new(&pts));
+        assert_ne!(a, Polygon::new(&pts[..4]));
     }
 }
