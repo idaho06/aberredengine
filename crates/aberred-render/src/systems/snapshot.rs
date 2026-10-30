@@ -14,8 +14,8 @@ use aberred_core::protocol::snapshot::SnapshotConsumer;
 use super::math::camera2d_to_raylib;
 use super::mirror::{
     reconcile_gui_buttons, reconcile_gui_labels, reconcile_gui_progress_bars,
-    reconcile_gui_windows, reconcile_map_sprites, reconcile_map_texts, reconcile_screen_sprites,
-    reconcile_screen_texts,
+    reconcile_gui_windows, reconcile_map_shapes, reconcile_map_sprites, reconcile_map_texts,
+    reconcile_screen_shapes, reconcile_screen_sprites, reconcile_screen_texts,
 };
 
 /// Reads the newest published snapshot off the triple buffer (latest-wins,
@@ -61,6 +61,8 @@ pub fn receive_snapshot(world: &mut World) {
         reconcile_map_texts(world, &snap.map_texts);
         reconcile_screen_sprites(world, &snap.screen_sprites);
         reconcile_screen_texts(world, &snap.screen_texts);
+        reconcile_map_shapes(world, &snap.map_shapes);
+        reconcile_screen_shapes(world, &snap.screen_shapes);
         reconcile_gui_windows(world, &snap.gui_windows);
         reconcile_gui_buttons(world, &snap.gui_buttons);
         reconcile_gui_labels(world, &snap.gui_labels);

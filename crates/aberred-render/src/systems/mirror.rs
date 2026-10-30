@@ -20,8 +20,9 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use super::math::vec2_to_raylib;
 
 use crate::components::mirror::{
-    MirrorGuiButton, MirrorGuiLabel, MirrorGuiProgressBar, MirrorGuiWindow, MirrorMapSprite,
-    MirrorMapText, MirrorScreenSprite, MirrorScreenText, MirrorVelocity, SimMirror,
+    MirrorGuiButton, MirrorGuiLabel, MirrorGuiProgressBar, MirrorGuiWindow, MirrorMapShape,
+    MirrorMapSprite, MirrorMapText, MirrorScreenShape, MirrorScreenSprite, MirrorScreenText,
+    MirrorVelocity, SimMirror,
 };
 use crate::resources::sim_id_map::SimIdMap;
 use aberred_core::components::dynamic_text::DynamicText;
@@ -36,13 +37,14 @@ use aberred_core::components::rotation::Rotation;
 use aberred_core::components::scale::Scale;
 use aberred_core::components::screen_position::ScreenPosition;
 use aberred_core::components::shadow::Shadow;
+use aberred_core::components::shape::Shape;
 use aberred_core::components::sprite::Sprite;
 use aberred_core::components::tint::Tint;
 use aberred_core::components::world_position::WorldPosition;
 use aberred_core::components::z_index::ZIndex;
 use aberred_core::resources::drawable_snapshot::{
-    GuiButtonEntry, GuiLabelEntry, GuiProgressBarEntry, GuiWindowEntry, MapSpriteEntry,
-    MapTextEntry, ScreenSpriteEntry, ScreenTextEntry,
+    GuiButtonEntry, GuiLabelEntry, GuiProgressBarEntry, GuiWindowEntry, MapShapeEntry,
+    MapSpriteEntry, MapTextEntry, ScreenShapeEntry, ScreenSpriteEntry, ScreenTextEntry,
 };
 
 /// Implemented by every `DrawableSnapshot` entry type [`reconcile`] accepts,
@@ -70,6 +72,16 @@ impl SimEntry for ScreenSpriteEntry {
     }
 }
 impl SimEntry for ScreenTextEntry {
+    fn sim_entity(&self) -> Entity {
+        self.entity
+    }
+}
+impl SimEntry for MapShapeEntry {
+    fn sim_entity(&self) -> Entity {
+        self.entity
+    }
+}
+impl SimEntry for ScreenShapeEntry {
     fn sim_entity(&self) -> Entity {
         self.entity
     }
@@ -304,6 +316,61 @@ pub fn reconcile_screen_texts(world: &mut World, entries: &[ScreenTextEntry]) {
     });
 }
 
+/// Reconcile the render world's map-shape mirror entities against this
+/// snapshot tick's `MapShapeEntry` list. Mirrors [`reconcile_map_sprites`]
+/// minus the shader and velocity components: shapes never use an entity shader.
+pub fn reconcile_map_shapes(world: &mut World, entries: &[MapShapeEntry]) {
+    world.resource_scope::<SimIdMap, _>(|world, mut id_map| {
+        let SimIdMap {
+            map_shapes,
+            scratch_seen,
+            ..
+        } = &mut *id_map;
+        reconcile::<MirrorMapShape, _>(
+            world,
+            map_shapes,
+            scratch_seen,
+            entries,
+            |entry, entity_mut| {
+                insert_if_changed(entity_mut, &entry.shape);
+                insert_if_changed(entity_mut, &entry.position);
+                insert_if_changed(entity_mut, &entry.z_index);
+                set_optional::<Scale>(entity_mut, entry.scale.as_ref());
+                set_optional::<Rotation>(entity_mut, entry.rotation.as_ref());
+                set_optional::<Tint>(entity_mut, entry.tint.as_ref());
+                set_optional::<Shadow>(entity_mut, entry.shadow.as_ref());
+                set_optional::<GlobalTransform2D>(entity_mut, entry.global_transform.as_ref());
+            },
+        );
+    });
+}
+
+/// Reconcile the render world's screen-shape mirror entities against this
+/// snapshot tick's `ScreenShapeEntry` list. Mirrors [`reconcile_screen_sprites`],
+/// swapping `Sprite` for `Shape`.
+pub fn reconcile_screen_shapes(world: &mut World, entries: &[ScreenShapeEntry]) {
+    world.resource_scope::<SimIdMap, _>(|world, mut id_map| {
+        let SimIdMap {
+            screen_shapes,
+            scratch_seen,
+            ..
+        } = &mut *id_map;
+        reconcile::<MirrorScreenShape, _>(
+            world,
+            screen_shapes,
+            scratch_seen,
+            entries,
+            |entry, entity_mut| {
+                insert_if_changed(entity_mut, &entry.shape);
+                insert_if_changed(entity_mut, &entry.position);
+                insert_if_changed(entity_mut, &entry.z_index);
+                set_optional::<Tint>(entity_mut, entry.tint.as_ref());
+                set_optional::<Shadow>(entity_mut, entry.shadow.as_ref());
+            },
+        );
+    });
+}
+
 /// Reconcile the render world's GUI-window mirror entities against this
 /// snapshot tick's `GuiWindowEntry` list. Simpler than every prior category:
 /// `GuiWindowEntry` has no `Option<...>` fields, so the whole bundle is a
@@ -449,6 +516,27 @@ type MirrorScreenTextQueryData = (
     Option<&'static Shadow>,
 );
 
+type MirrorMapShapeQueryData = (
+    &'static SimMirror,
+    &'static Shape,
+    &'static WorldPosition,
+    &'static ZIndex,
+    Option<&'static Scale>,
+    Option<&'static Rotation>,
+    Option<&'static Tint>,
+    Option<&'static Shadow>,
+    Option<&'static GlobalTransform2D>,
+);
+
+type MirrorScreenShapeQueryData = (
+    &'static SimMirror,
+    &'static Shape,
+    &'static ScreenPosition,
+    &'static ZIndex,
+    Option<&'static Tint>,
+    Option<&'static Shadow>,
+);
+
 type MirrorGuiWindowQueryData = (
     &'static SimMirror,
     &'static GuiWindow,
@@ -491,6 +579,8 @@ pub struct MirrorQueries<'w, 's> {
     pub map_texts: Query<'w, 's, MirrorMapTextQueryData, With<MirrorMapText>>,
     pub screen_sprites: Query<'w, 's, MirrorScreenSpriteQueryData, With<MirrorScreenSprite>>,
     pub screen_texts: Query<'w, 's, MirrorScreenTextQueryData, With<MirrorScreenText>>,
+    pub map_shapes: Query<'w, 's, MirrorMapShapeQueryData, With<MirrorMapShape>>,
+    pub screen_shapes: Query<'w, 's, MirrorScreenShapeQueryData, With<MirrorScreenShape>>,
     pub gui_windows: Query<'w, 's, MirrorGuiWindowQueryData, With<MirrorGuiWindow>>,
     pub gui_buttons: Query<'w, 's, MirrorGuiButtonQueryData, With<MirrorGuiButton>>,
     pub gui_labels: Query<'w, 's, MirrorGuiLabelQueryData, With<MirrorGuiLabel>>,
@@ -1512,5 +1602,197 @@ mod mirror_tests {
         assert!(world.resource::<SimIdMap>().gui_windows.is_empty());
         assert!(world.get_entity(button_mirror).is_ok());
         assert_eq!(world.resource::<SimIdMap>().gui_buttons.len(), 1);
+    }
+
+    // ---- shapes ----
+
+    use aberred_core::math::Color;
+
+    fn make_map_shape_entry(entity: Entity, z_index: f32) -> MapShapeEntry {
+        MapShapeEntry {
+            entity,
+            shape: Shape::rect(Vec2::new(4.0, 2.0), Color::RED),
+            position: WorldPosition::from_vec(Vec2::new(1.0, 2.0)),
+            z_index: ZIndex(z_index),
+            scale: None,
+            rotation: None,
+            tint: None,
+            shadow: None,
+            global_transform: None,
+        }
+    }
+
+    fn make_screen_shape_entry(entity: Entity, z_index: f32) -> ScreenShapeEntry {
+        ScreenShapeEntry {
+            entity,
+            shape: Shape::circle(3.0, Color::RED),
+            position: ScreenPosition::new(1.0, 2.0),
+            z_index: ZIndex(z_index),
+            tint: None,
+            shadow: None,
+        }
+    }
+
+    fn polygon_shape() -> Shape {
+        let pts = [
+            Vec2::new(0.0, 0.0),
+            Vec2::new(4.0, 0.0),
+            Vec2::new(0.0, 4.0),
+        ];
+        Shape::polygon(&pts, Color::RED)
+    }
+
+    fn map_shape_mirror(world: &World, sim: Entity) -> Entity {
+        *world
+            .resource::<SimIdMap>()
+            .map_shapes
+            .get(&sim.to_bits())
+            .unwrap()
+    }
+
+    fn screen_shape_mirror(world: &World, sim: Entity) -> Entity {
+        *world
+            .resource::<SimIdMap>()
+            .screen_shapes
+            .get(&sim.to_bits())
+            .unwrap()
+    }
+
+    fn changed<T: Component>(world: &World, mirror: Entity) -> bool {
+        world.entity(mirror).get_ref::<T>().unwrap().is_changed()
+    }
+
+    #[test]
+    fn map_shape_spawns_mirror_with_its_components() {
+        let mut world = new_test_world();
+        let sim_entity = world.spawn_empty().id();
+        let mut entry = make_map_shape_entry(sim_entity, 3.0);
+        entry.scale = Some(Scale::new(2.0, 2.0));
+        entry.rotation = Some(Rotation { degrees: 45.0 });
+
+        reconcile_map_shapes(&mut world, &[entry.clone()]);
+
+        let mirror = map_shape_mirror(&world, sim_entity);
+        assert_eq!(world.get::<SimMirror>(mirror).unwrap().0, sim_entity);
+        assert!(world.get::<MirrorMapShape>(mirror).is_some());
+        assert_eq!(world.get::<Shape>(mirror), Some(&entry.shape));
+        assert_eq!(world.get::<WorldPosition>(mirror), Some(&entry.position));
+        assert_eq!(world.get::<ZIndex>(mirror).unwrap().0, 3.0);
+        assert_eq!(world.get::<Scale>(mirror), entry.scale.as_ref());
+        assert_eq!(world.get::<Rotation>(mirror), entry.rotation.as_ref());
+    }
+
+    #[test]
+    fn map_shape_updates_in_place_and_rewrites_only_what_changed() {
+        let mut world = new_test_world();
+        let sim_entity = world.spawn_empty().id();
+        let mut first = make_map_shape_entry(sim_entity, 1.0);
+        first.shape = polygon_shape();
+        reconcile_map_shapes(&mut world, &[first.clone()]);
+        let mirror = map_shape_mirror(&world, sim_entity);
+        world.clear_trackers();
+
+        // Same Arc-backed polygon, and a separately built equal one: no rewrite.
+        reconcile_map_shapes(&mut world, &[first.clone()]);
+        let mut rebuilt = first.clone();
+        rebuilt.shape = polygon_shape();
+        reconcile_map_shapes(&mut world, &[rebuilt]);
+        assert!(!changed::<Shape>(&world, mirror));
+        assert!(!changed::<ZIndex>(&world, mirror));
+
+        let mut moved = first.clone();
+        moved.z_index = ZIndex(9.0);
+        reconcile_map_shapes(&mut world, &[moved]);
+        assert_eq!(map_shape_mirror(&world, sim_entity), mirror);
+        assert!(changed::<ZIndex>(&world, mirror));
+        assert!(!changed::<Shape>(&world, mirror));
+
+        let mut reshaped = first;
+        reshaped.shape = Shape::point(Color::RED);
+        reconcile_map_shapes(&mut world, &[reshaped.clone()]);
+        assert!(changed::<Shape>(&world, mirror));
+        assert_eq!(world.get::<Shape>(mirror), Some(&reshaped.shape));
+    }
+
+    #[test]
+    fn map_shape_optionals_are_removed_when_the_source_drops_them() {
+        let mut world = new_test_world();
+        let sim_entity = world.spawn_empty().id();
+        let mut full = make_map_shape_entry(sim_entity, 1.0);
+        full.scale = Some(Scale::new(2.0, 2.0));
+        full.rotation = Some(Rotation { degrees: 10.0 });
+        full.tint = Some(Tint::default());
+        full.shadow = Some(Shadow::default_color(1.0, 1.0));
+        full.global_transform = Some(GlobalTransform2D {
+            position: Vec2::new(5.0, 5.0),
+            rotation_degrees: 0.0,
+            scale: Vec2::ONE,
+        });
+        reconcile_map_shapes(&mut world, &[full]);
+        let mirror = map_shape_mirror(&world, sim_entity);
+        assert!(world.get::<GlobalTransform2D>(mirror).is_some());
+
+        reconcile_map_shapes(&mut world, &[make_map_shape_entry(sim_entity, 1.0)]);
+
+        let e = world.entity(mirror);
+        assert!(!e.contains::<Scale>() && !e.contains::<Rotation>());
+        assert!(!e.contains::<Tint>() && !e.contains::<Shadow>());
+        assert!(!e.contains::<GlobalTransform2D>());
+    }
+
+    #[test]
+    fn map_shape_mirror_is_despawned_on_vanish_and_not_reused_across_generations() {
+        let mut world = new_test_world();
+        let (e1, e2) = generation_reuse_pair();
+        reconcile_map_shapes(&mut world, &[make_map_shape_entry(e1, 1.0)]);
+        let mirror_1 = map_shape_mirror(&world, e1);
+
+        reconcile_map_shapes(&mut world, &[make_map_shape_entry(e2, 1.0)]);
+
+        assert!(world.get_entity(mirror_1).is_err());
+        assert_ne!(map_shape_mirror(&world, e2), mirror_1);
+        assert_eq!(world.resource::<SimIdMap>().map_shapes.len(), 1);
+
+        reconcile_map_shapes(&mut world, &[]);
+        assert!(world.resource::<SimIdMap>().map_shapes.is_empty());
+    }
+
+    #[test]
+    fn screen_shape_lifecycle_spawn_update_optional_and_despawn() {
+        let mut world = new_test_world();
+        let sim_entity = world.spawn_empty().id();
+        let mut entry = make_screen_shape_entry(sim_entity, 1.0);
+        entry.tint = Some(Tint::default());
+        entry.shadow = Some(Shadow::default_color(1.0, 1.0));
+        reconcile_screen_shapes(&mut world, &[entry.clone()]);
+        let mirror = screen_shape_mirror(&world, sim_entity);
+        assert!(world.get::<MirrorScreenShape>(mirror).is_some());
+        assert_eq!(world.get::<Shape>(mirror), Some(&entry.shape));
+        assert_eq!(world.get::<ScreenPosition>(mirror), Some(&entry.position));
+        assert!(world.get::<Tint>(mirror).is_some() && world.get::<Shadow>(mirror).is_some());
+
+        reconcile_screen_shapes(&mut world, &[make_screen_shape_entry(sim_entity, 4.0)]);
+        assert_eq!(world.get::<ZIndex>(mirror).unwrap().0, 4.0);
+        assert!(world.get::<Tint>(mirror).is_none() && world.get::<Shadow>(mirror).is_none());
+
+        reconcile_screen_shapes(&mut world, &[]);
+        assert!(world.get_entity(mirror).is_err());
+        assert!(world.resource::<SimIdMap>().screen_shapes.is_empty());
+    }
+
+    #[test]
+    fn shape_categories_do_not_prune_each_other() {
+        let mut world = new_test_world();
+        let sim_entity = world.spawn_empty().id();
+        reconcile_map_shapes(&mut world, &[make_map_shape_entry(sim_entity, 1.0)]);
+        reconcile_screen_shapes(&mut world, &[make_screen_shape_entry(sim_entity, 1.0)]);
+        reconcile_map_sprites(&mut world, &[make_map_sprite_entry(sim_entity, 1.0)]);
+
+        reconcile_screen_shapes(&mut world, &[]);
+
+        let id_map = world.resource::<SimIdMap>();
+        assert_eq!(id_map.map_shapes.len(), 1);
+        assert_eq!(id_map.map_sprites.len(), 1);
+        assert!(id_map.screen_shapes.is_empty());
     }
 }

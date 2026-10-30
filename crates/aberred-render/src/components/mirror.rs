@@ -30,6 +30,10 @@ pub struct MirrorScreenSprite;
 #[derive(Component, Debug, Default)]
 pub struct MirrorScreenText;
 #[derive(Component, Debug, Default)]
+pub struct MirrorMapShape;
+#[derive(Component, Debug, Default)]
+pub struct MirrorScreenShape;
+#[derive(Component, Debug, Default)]
 pub struct MirrorGuiWindow;
 #[derive(Component, Debug, Default)]
 pub struct MirrorGuiButton;

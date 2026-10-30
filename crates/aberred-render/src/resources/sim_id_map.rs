@@ -18,6 +18,8 @@ pub struct SimIdMap {
     pub map_texts: FxHashMap<u64, Entity>,
     pub screen_sprites: FxHashMap<u64, Entity>,
     pub screen_texts: FxHashMap<u64, Entity>,
+    pub map_shapes: FxHashMap<u64, Entity>,
+    pub screen_shapes: FxHashMap<u64, Entity>,
     pub gui_windows: FxHashMap<u64, Entity>,
     pub gui_buttons: FxHashMap<u64, Entity>,
     pub gui_labels: FxHashMap<u64, Entity>,
