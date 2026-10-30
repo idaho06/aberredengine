@@ -4,7 +4,7 @@
 
 A compact 2D game engine built in Rust with optional Lua scripting.
 
-Aberred Engine currently ships as a multi-scene showcase containing a menu plus several example games and demos, including Asteroids, Arkanoid, a sidescroller, a birthday card, Kraken, a GUI widget demo, and multiple Bunnymark variants.
+Aberred Engine currently ships as a multi-scene showcase containing a menu plus several example games and demos, including Asteroids, Arkanoid, a sidescroller, a birthday card, Kraken, a GUI widget demo, a shapes showcase, and multiple Bunnymark variants.
 
 Built with:
 

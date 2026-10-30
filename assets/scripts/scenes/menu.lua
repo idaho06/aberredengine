@@ -25,8 +25,8 @@ local function on_showcase_menu_select(ctx)
         engine.request_scene("bunnymark_menu")
     elseif ctx.item_id == "gui_demo" then
         engine.request_scene("gui_demo")
-    elseif ctx.item_id == "world_bench" then
-        engine.request_scene("world_bench")
+    elseif ctx.item_id == "shapes_showcase" then
+        engine.request_scene("shapes_showcase")
     elseif ctx.item_id == "exit" then
         engine.request_quit()
     end
@@ -117,7 +117,7 @@ function M.spawn()
                 { id = "sidescroller", label = "Ember Paths" },
                 { id = "bunnymark",    label = "Bunnymark" },
                 { id = "gui_demo",     label = "GUI Demo" },
-                { id = "world_bench",  label = "Draw Order Bench" },
+                { id = "shapes_showcase", label = "Shapes Showcase" },
                 { id = "exit",         label = "Exit" },
             },
             16 + 8,
