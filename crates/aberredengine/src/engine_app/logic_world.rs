@@ -12,6 +12,7 @@ use aberred_core::components::rotation::Rotation;
 use aberred_core::components::scale::Scale;
 #[cfg(feature = "lua")]
 use aberred_core::components::screen_position::ScreenPosition;
+use aberred_core::components::tint::Tint;
 #[cfg(feature = "lua")]
 use aberred_core::components::world_position::WorldPosition;
 use aberred_core::error::EngineError;
@@ -380,6 +381,7 @@ impl EngineBuilder {
             spawn_tween_finished_observer::<Rotation>(world);
             spawn_tween_finished_observer::<Scale>(world);
             spawn_tween_finished_observer::<ScreenPosition>(world);
+            spawn_tween_finished_observer::<Tint>(world);
         }
         #[cfg(not(feature = "lua"))]
         let _ = has_lua;

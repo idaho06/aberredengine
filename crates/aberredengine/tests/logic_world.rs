@@ -2187,6 +2187,31 @@ fn lua_collision_rules_join_the_core_rule_index() {
     assert_eq!(index.bucket("b", "a"), Some(&[rule][..]));
 }
 
+/// A Lua tint tween runs on the real schedule, recolours the entity and calls
+/// its finished callback once.
+#[cfg(feature = "lua")]
+#[test]
+fn a_lua_tint_tween_recolours_and_calls_its_finished_callback() {
+    let mut tw = lua_script_world(
+        r#"
+function on_tint_done(ctx, input) table.insert(LOG, "done") end
+"#,
+    );
+    tw.tick_to_play(DT, 8);
+    exec_lua(
+        &mut tw,
+        "engine.spawn():with_tween_tint(0, 0, 0, 255, 255, 255, 255, 255, 0.05)\
+         :with_lua_tween_tint_finished('on_tint_done'):build()",
+    );
+
+    tw.tick(240, DT);
+
+    assert_eq!(take_lua_log(&mut tw), ["done"]);
+    let mut tints = tw.world.query::<&Tint>();
+    let colors: Vec<_> = tints.iter(&tw.world).map(|t| t.color).collect();
+    assert_eq!(colors, [Color::new(255, 255, 255, 255)]);
+}
+
 /// A Lua script spawns a core-`Phase` entity with the builders: the spawn
 /// drains at the end of its tick, the initial enter fires at the start of the
 /// next, and an update return applies on the tick after (exit, then enter).

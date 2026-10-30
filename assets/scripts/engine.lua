@@ -617,6 +617,23 @@ function engine.collision_entity_insert_tween_scale(entity_id, from_x, from_y, t
 ---@param callback string
 function engine.collision_entity_insert_tween_screen_position(entity_id, from_x, from_y, to_x, to_y, duration, easing, loop_mode, backwards, callback) end
 
+---Insert a tint tween on an entity (seeds a Tint at the start color if the entity has none)
+---@param entity_id integer
+---@param from_r integer
+---@param from_g integer
+---@param from_b integer
+---@param from_a integer
+---@param to_r integer
+---@param to_g integer
+---@param to_b integer
+---@param to_a integer
+---@param duration number
+---@param easing string
+---@param loop_mode string
+---@param backwards boolean
+---@param callback string
+function engine.collision_entity_insert_tween_tint(entity_id, from_r, from_g, from_b, from_a, to_r, to_g, to_b, to_a, duration, easing, loop_mode, backwards, callback) end
+
 ---Despawn a menu entity and its children
 ---@param entity_id integer
 function engine.collision_entity_menu_despawn(entity_id) end
@@ -665,6 +682,10 @@ function engine.collision_entity_remove_tween_rotation(entity_id) end
 ---Remove scale tween from an entity
 ---@param entity_id integer
 function engine.collision_entity_remove_tween_scale(entity_id) end
+
+---Remove tint tween from an entity
+---@param entity_id integer
+function engine.collision_entity_remove_tween_tint(entity_id) end
 
 ---Restart entity animation from frame 0
 ---@param entity_id integer
@@ -994,6 +1015,23 @@ function engine.entity_insert_tween_scale(entity_id, from_x, from_y, to_x, to_y,
 ---@param callback string
 function engine.entity_insert_tween_screen_position(entity_id, from_x, from_y, to_x, to_y, duration, easing, loop_mode, backwards, callback) end
 
+---Insert a tint tween on an entity (seeds a Tint at the start color if the entity has none)
+---@param entity_id integer
+---@param from_r integer
+---@param from_g integer
+---@param from_b integer
+---@param from_a integer
+---@param to_r integer
+---@param to_g integer
+---@param to_b integer
+---@param to_a integer
+---@param duration number
+---@param easing string
+---@param loop_mode string
+---@param backwards boolean
+---@param callback string
+function engine.entity_insert_tween_tint(entity_id, from_r, from_g, from_b, from_a, to_r, to_g, to_b, to_a, duration, easing, loop_mode, backwards, callback) end
+
 ---Despawn a menu entity and its children
 ---@param entity_id integer
 function engine.entity_menu_despawn(entity_id) end
@@ -1042,6 +1080,10 @@ function engine.entity_remove_tween_rotation(entity_id) end
 ---Remove scale tween from an entity
 ---@param entity_id integer
 function engine.entity_remove_tween_scale(entity_id) end
+
+---Remove tint tween from an entity
+---@param entity_id integer
+function engine.entity_remove_tween_tint(entity_id) end
 
 ---Restart entity animation from frame 0
 ---@param entity_id integer
@@ -1896,6 +1938,11 @@ function EntityBuilder:with_lua_tween_scale_finished(callback) end
 ---@return EntityBuilder
 function EntityBuilder:with_lua_tween_screen_position_finished(callback) end
 
+---Set a Lua callback to call when the tint tween finishes
+---@param callback string
+---@return EntityBuilder
+function EntityBuilder:with_lua_tween_tint_finished(callback) end
+
 ---Set max speed clamp (creates RigidBody if needed)
 ---@param speed number
 ---@return EntityBuilder
@@ -2224,6 +2271,33 @@ function EntityBuilder:with_tween_screen_position_easing(easing) end
 ---@return EntityBuilder
 function EntityBuilder:with_tween_screen_position_loop(loop_mode) end
 
+---Add tint (color) tween animation; seeds a Tint at `from` when the entity has none
+---@param from_r integer
+---@param from_g integer
+---@param from_b integer
+---@param from_a integer
+---@param to_r integer
+---@param to_g integer
+---@param to_b integer
+---@param to_a integer
+---@param duration number
+---@return EntityBuilder
+function EntityBuilder:with_tween_tint(from_r, from_g, from_b, from_a, to_r, to_g, to_b, to_a, duration) end
+
+---Start tint tween in reverse
+---@return EntityBuilder
+function EntityBuilder:with_tween_tint_backwards() end
+
+---Set easing for tint tween
+---@param easing string
+---@return EntityBuilder
+function EntityBuilder:with_tween_tint_easing(easing) end
+
+---Set loop mode for tint tween
+---@param loop_mode string
+---@return EntityBuilder
+function EntityBuilder:with_tween_tint_loop(loop_mode) end
+
 ---Set velocity (creates RigidBody if needed)
 ---@param vx number
 ---@param vy number
@@ -2490,6 +2564,11 @@ function CollisionEntityBuilder:with_lua_tween_scale_finished(callback) end
 ---@param callback string
 ---@return CollisionEntityBuilder
 function CollisionEntityBuilder:with_lua_tween_screen_position_finished(callback) end
+
+---Set a Lua callback to call when the tint tween finishes
+---@param callback string
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_lua_tween_tint_finished(callback) end
 
 ---Set max speed clamp (creates RigidBody if needed)
 ---@param speed number
@@ -2818,6 +2897,33 @@ function CollisionEntityBuilder:with_tween_screen_position_easing(easing) end
 ---@param loop_mode string
 ---@return CollisionEntityBuilder
 function CollisionEntityBuilder:with_tween_screen_position_loop(loop_mode) end
+
+---Add tint (color) tween animation; seeds a Tint at `from` when the entity has none
+---@param from_r integer
+---@param from_g integer
+---@param from_b integer
+---@param from_a integer
+---@param to_r integer
+---@param to_g integer
+---@param to_b integer
+---@param to_a integer
+---@param duration number
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_tween_tint(from_r, from_g, from_b, from_a, to_r, to_g, to_b, to_a, duration) end
+
+---Start tint tween in reverse
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_tween_tint_backwards() end
+
+---Set easing for tint tween
+---@param easing string
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_tween_tint_easing(easing) end
+
+---Set loop mode for tint tween
+---@param loop_mode string
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_tween_tint_loop(loop_mode) end
 
 ---Set velocity (creates RigidBody if needed)
 ---@param vx number

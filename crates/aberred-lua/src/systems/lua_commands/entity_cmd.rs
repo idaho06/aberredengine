@@ -147,9 +147,11 @@ pub fn process_entity_commands(
             cmd @ (EntityCmd::InsertTweenPosition { .. }
             | EntityCmd::InsertTweenRotation { .. }
             | EntityCmd::InsertTweenScale { .. }
+            | EntityCmd::InsertTweenTint { .. }
             | EntityCmd::InsertTweenScreenPosition { .. }
             | EntityCmd::RemoveTweenPosition { .. }
             | EntityCmd::RemoveTweenRotation { .. }
+            | EntityCmd::RemoveTweenTint { .. }
             | EntityCmd::RemoveTweenScale { .. }) => process_tween_cmd(cmd, commands),
 
             cmd @ (EntityCmd::SetShader { .. }
@@ -441,6 +443,24 @@ fn process_tween_cmd(cmd: EntityCmd, commands: &mut Commands) {
             Scale::new(to_x, to_y),
             &config,
         ),
+        EntityCmd::InsertTweenTint {
+            entity_id,
+            from,
+            to,
+            config,
+        } => {
+            // Like ScreenPosition, a Tint is optional: seed one at `from` unless the
+            // entity already has one, so the tween has a component to overwrite.
+            let from = Tint::new(from.0, from.1, from.2, from.3);
+            let to = Tint::new(to.0, to.1, to.2, to.3);
+            let tween = super::build_tween(from, to, &config);
+            let set_callback = super::tween_finished_callback::<Tint>(&config);
+            queue_on_entity(commands, entity_id, move |mut e| {
+                e.insert_if_new(from);
+                e.insert(tween);
+                set_callback(e);
+            });
+        }
         EntityCmd::InsertTweenScreenPosition {
             entity_id,
             from_x,
@@ -478,6 +498,11 @@ fn process_tween_cmd(cmd: EntityCmd, commands: &mut Commands) {
         EntityCmd::RemoveTweenScale { entity_id } => {
             queue_on_entity(commands, entity_id, |mut e| {
                 e.remove::<Tween<Scale>>();
+            });
+        }
+        EntityCmd::RemoveTweenTint { entity_id } => {
+            queue_on_entity(commands, entity_id, |mut e| {
+                e.remove::<Tween<Tint>>();
             });
         }
         _ => unreachable!(),
@@ -934,9 +959,16 @@ mod tests {
                 to_y: 1.0,
                 config: TweenConfig::new(1.0),
             },
+            EntityCmd::InsertTweenTint {
+                entity_id: id,
+                from: (0, 0, 0, 255),
+                to: (255, 255, 255, 255),
+                config: TweenConfig::new(1.0),
+            },
             EntityCmd::RemoveTweenPosition { entity_id: id },
             EntityCmd::RemoveTweenRotation { entity_id: id },
             EntityCmd::RemoveTweenScale { entity_id: id },
+            EntityCmd::RemoveTweenTint { entity_id: id },
             EntityCmd::SetShader {
                 entity_id: id,
                 key: "wave".into(),
@@ -2241,6 +2273,53 @@ mod tests {
         );
 
         assert!(world.get::<GuiInteractable>(entity).is_none());
+    }
+
+    #[test]
+    fn insert_tween_tint_seeds_a_tint_only_when_the_entity_has_none() {
+        let mut world = World::new();
+        let bare = world.spawn_empty().id();
+        let tinted = world.spawn(Tint::new(9, 9, 9, 9)).id();
+        for e in [bare, tinted] {
+            run_entity_cmd(
+                &mut world,
+                EntityCmd::InsertTweenTint {
+                    entity_id: e.to_bits(),
+                    from: (1, 2, 3, 4),
+                    to: (5, 6, 7, 8),
+                    config: TweenConfig::new(2.0),
+                },
+            );
+        }
+
+        assert_eq!(*world.get::<Tint>(bare).unwrap(), Tint::new(1, 2, 3, 4));
+        assert_eq!(*world.get::<Tint>(tinted).unwrap(), Tint::new(9, 9, 9, 9));
+        let tween = world.get::<Tween<Tint>>(bare).unwrap();
+        assert_eq!(
+            (tween.from, tween.to, tween.duration),
+            (Tint::new(1, 2, 3, 4), Tint::new(5, 6, 7, 8), 2.0)
+        );
+    }
+
+    #[test]
+    fn remove_tween_tint_keeps_the_tint() {
+        let mut world = World::new();
+        let e = world
+            .spawn((
+                Tint::new(1, 2, 3, 4),
+                Tween::new(Tint::new(1, 2, 3, 4), Tint::new(5, 6, 7, 8), 1.0),
+            ))
+            .id();
+
+        run_entity_cmd(
+            &mut world,
+            EntityCmd::RemoveTweenTint {
+                entity_id: e.to_bits(),
+            },
+        );
+
+        assert!(world.get::<Tween<Tint>>(e).is_none());
+        assert_eq!(*world.get::<Tint>(e).unwrap(), Tint::new(1, 2, 3, 4));
     }
 
     #[test]

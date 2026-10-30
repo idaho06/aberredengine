@@ -519,6 +519,7 @@ fn meta_functions_complete() {
             "entity_insert_tween_position", "entity_insert_tween_rotation",
             "entity_insert_tween_scale", "entity_remove_tween_position",
             "entity_remove_tween_rotation", "entity_remove_tween_scale",
+            "entity_insert_tween_tint", "entity_remove_tween_tint",
             "entity_signal_set_scalar", "entity_signal_remove_scalar",
             "entity_signal_set_string", "entity_signal_remove_string",
             "entity_signal_set_integer", "entity_signal_remove_integer",

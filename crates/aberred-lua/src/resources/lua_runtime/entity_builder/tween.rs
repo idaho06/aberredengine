@@ -369,6 +369,102 @@ pub(super) fn register<M: LuaUserDataMethods<LuaEntityBuilder>>(
             Ok(())
         }
     );
+
+    builder_method!(
+        methods,
+        meta,
+        "with_tween_tint",
+        "Add tint (color) tween animation; seeds a Tint at `from` when the entity has none",
+        [
+            ("from_r", "integer"),
+            ("from_g", "integer"),
+            ("from_b", "integer"),
+            ("from_a", "integer"),
+            ("to_r", "integer"),
+            ("to_g", "integer"),
+            ("to_b", "integer"),
+            ("to_a", "integer"),
+            ("duration", "number")
+        ],
+        |_,
+         this: &mut LuaEntityBuilder,
+         (fr, fg, fb, fa, tr, tg, tb, ta, duration): (u8, u8, u8, u8, u8, u8, u8, u8, f32)| {
+            this.cmd.tween_tint = Some(TweenTintData {
+                from: (fr, fg, fb, fa),
+                to: (tr, tg, tb, ta),
+                config: TweenConfig::new(duration),
+            });
+            Ok(())
+        }
+    );
+
+    builder_method!(
+        methods,
+        meta,
+        "with_tween_tint_easing",
+        "Set easing for tint tween",
+        [("easing", "string")],
+        |_, this: &mut LuaEntityBuilder, easing: String| {
+            let Some(ref mut tween) = this.cmd.tween_tint else {
+                return Err(LuaError::runtime(
+                    "with_tween_tint_easing() requires with_tween_tint() first",
+                ));
+            };
+            tween.config.easing = checked_easing(easing)?;
+            Ok(())
+        }
+    );
+
+    builder_method!(
+        methods,
+        meta,
+        "with_tween_tint_loop",
+        "Set loop mode for tint tween",
+        [("loop_mode", "string")],
+        |_, this: &mut LuaEntityBuilder, loop_mode: String| {
+            let Some(ref mut tween) = this.cmd.tween_tint else {
+                return Err(LuaError::runtime(
+                    "with_tween_tint_loop() requires with_tween_tint() first",
+                ));
+            };
+            tween.config.loop_mode = checked_loop_mode(loop_mode)?;
+            Ok(())
+        }
+    );
+
+    builder_method!(
+        methods,
+        meta,
+        "with_tween_tint_backwards",
+        "Start tint tween in reverse",
+        [],
+        |_, this: &mut LuaEntityBuilder, (): ()| {
+            let Some(ref mut tween) = this.cmd.tween_tint else {
+                return Err(LuaError::runtime(
+                    "with_tween_tint_backwards() requires with_tween_tint() first",
+                ));
+            };
+            tween.config.backwards = true;
+            Ok(())
+        }
+    );
+
+    builder_method!(
+        methods,
+        meta,
+        "with_lua_tween_tint_finished",
+        "Set a Lua callback to call when the tint tween finishes",
+        [("callback", "string")],
+        |_, this: &mut LuaEntityBuilder, callback: String| {
+            let Some(ref mut tween) = this.cmd.tween_tint else {
+                return Err(LuaError::runtime(
+                    "with_lua_tween_tint_finished() requires with_tween_tint() first",
+                ));
+            };
+            tween.config.callback = callback;
+            Ok(())
+        }
+    );
 }
 
 #[cfg(test)]
@@ -378,7 +474,7 @@ mod tests {
     use aberred_core::components::tween::{Easing, LoopMode};
     use std::mem::discriminant;
 
-    const KINDS: [&str; 4] = ["position", "screen_position", "rotation", "scale"];
+    const KINDS: [&str; 5] = ["position", "screen_position", "rotation", "scale", "tint"];
 
     fn base_call(kind: &str) -> &'static str {
         match kind {
@@ -386,6 +482,7 @@ mod tests {
             "screen_position" => "with_tween_screen_position(5, 6, 7, 8, 1.5)",
             "rotation" => "with_tween_rotation(0, 90, 2.5)",
             "scale" => "with_tween_scale(1, 1, 2, 3, 3.5)",
+            "tint" => "with_tween_tint(10, 20, 30, 40, 50, 60, 70, 80, 4.5)",
             _ => unreachable!(),
         }
     }
@@ -415,11 +512,12 @@ mod tests {
     #[test]
     fn tween_bases_store_endpoints_and_default_config() {
         let cmd = built_spawn_cmd(&format!(
-            "engine.spawn():{}:{}:{}:{}:build()",
+            "engine.spawn():{}:{}:{}:{}:{}:build()",
             base_call("position"),
             base_call("screen_position"),
             base_call("rotation"),
-            base_call("scale")
+            base_call("scale"),
+            base_call("tint")
         ));
         let p = cmd.tween_position.unwrap();
         assert_eq!((p.from_x, p.from_y, p.to_x, p.to_y), (1.0, 2.0, 3.0, 4.0));
@@ -432,12 +530,15 @@ mod tests {
         assert_eq!((r.from, r.to), (0.0, 90.0));
         let s = cmd.tween_scale.unwrap();
         assert_eq!((s.from_x, s.from_y, s.to_x, s.to_y), (1.0, 1.0, 2.0, 3.0));
+        let t = cmd.tween_tint.unwrap();
+        assert_eq!((t.from, t.to), ((10, 20, 30, 40), (50, 60, 70, 80)));
 
         for (config, duration) in [
             (&p.config, 0.5),
             (&sp.config, 1.5),
             (&r.config, 2.5),
             (&s.config, 3.5),
+            (&t.config, 4.5),
         ] {
             assert_eq!(config.duration, duration);
             assert!(matches!(config.easing, Easing::Linear));
@@ -456,6 +557,7 @@ mod tests {
             "screen_position" => ("quad_out", "ping_pong"),
             "rotation" => ("cubic_in", "once"),
             "scale" => ("cubic_out", "loop"),
+            "tint" => ("cubic_in_out", "ping_pong"),
             _ => unreachable!(),
         };
         let mut chain = String::from("engine.spawn()");
@@ -470,7 +572,7 @@ mod tests {
         chain.push_str(":with_tween_rotation_backwards():build()");
         let cmd = built_spawn_cmd(&chain);
 
-        let configs: [(&str, &TweenConfig); 4] = [
+        let configs: [(&str, &TweenConfig); 5] = [
             ("position", &cmd.tween_position.as_ref().unwrap().config),
             (
                 "screen_position",
@@ -478,6 +580,7 @@ mod tests {
             ),
             ("rotation", &cmd.tween_rotation.as_ref().unwrap().config),
             ("scale", &cmd.tween_scale.as_ref().unwrap().config),
+            ("tint", &cmd.tween_tint.as_ref().unwrap().config),
         ];
         for (kind, config) in configs {
             let (easing, loop_mode) = values(kind);

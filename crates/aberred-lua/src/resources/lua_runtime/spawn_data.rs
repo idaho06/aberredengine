@@ -185,6 +185,14 @@ pub struct TweenScaleData {
     pub config: TweenConfig,
 }
 
+/// TweenTint component data for spawning (RGBA endpoints, 0-255 per channel).
+#[derive(Debug, Clone)]
+pub struct TweenTintData {
+    pub from: (u8, u8, u8, u8),
+    pub to: (u8, u8, u8, u8),
+    pub config: TweenConfig,
+}
+
 /// Lua collision rule data for spawning: a `CollisionRule` plus a
 /// `LuaOnCollision` naming its callbacks.
 #[derive(Debug, Clone)]
@@ -427,6 +435,8 @@ pub struct SpawnCmd {
     pub tween_rotation: Option<TweenRotationData>,
     /// TweenScale component data
     pub tween_scale: Option<TweenScaleData>,
+    /// TweenTint component data
+    pub tween_tint: Option<TweenTintData>,
     /// Menu component data (Menu + MenuActions)
     pub menu: Option<MenuData>,
     /// Register spawned entity in WorldSignals with this key

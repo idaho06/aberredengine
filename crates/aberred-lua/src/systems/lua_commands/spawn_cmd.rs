@@ -41,7 +41,7 @@ use crate::resources::lua_runtime::{
     AnimationControllerData, AnimationData, CloneCmd, ColliderData, EntityShaderData,
     LuaCollisionRuleData, LuaPhaseCallbacksSpawn, LuaTimerSpawn, MenuData, ParticleEmitterData,
     RigidBodyData, SpawnCmd, SpriteData, StuckToData, TextData, TweenPositionData,
-    TweenRotationData, TweenScaleData, TweenScreenPositionData,
+    TweenRotationData, TweenScaleData, TweenScreenPositionData, TweenTintData,
 };
 use aberred_core::resources::world_signals::WorldSignals;
 use aberred_core::systems::propagate_transforms::ComputeInitialGlobalTransform;
@@ -141,6 +141,7 @@ pub(super) fn apply_components(
         cmd.tween_screen_position,
         cmd.tween_rotation,
         cmd.tween_scale,
+        cmd.tween_tint,
     );
     apply_signal_components(
         entity_commands,
@@ -325,6 +326,7 @@ fn apply_animation_components(
     tween_screen_position: Option<TweenScreenPositionData>,
     tween_rotation: Option<TweenRotationData>,
     tween_scale: Option<TweenScaleData>,
+    tween_tint: Option<TweenTintData>,
 ) {
     if let Some(anim_data) = animation {
         entity_commands.insert(Animation::new(anim_data.animation_key));
@@ -381,6 +383,19 @@ fn apply_animation_components(
             &td.config,
         ));
         entity_commands.queue_silenced(super::tween_finished_callback::<Scale>(&td.config));
+    }
+    if let Some(td) = tween_tint {
+        let (fr, fg, fb, fa) = td.from;
+        let (tr, tg, tb, ta) = td.to;
+        let from = Tint::new(fr, fg, fb, fa);
+        // `apply_render_components` has already inserted an explicit `Tint`, which wins.
+        entity_commands.insert_if_new(from);
+        entity_commands.insert(super::build_tween(
+            from,
+            Tint::new(tr, tg, tb, ta),
+            &td.config,
+        ));
+        entity_commands.queue_silenced(super::tween_finished_callback::<Tint>(&td.config));
     }
 }
 
@@ -1261,6 +1276,40 @@ mod tests {
         );
         assert!(world.get::<LuaOnTweenFinished<ScreenPosition>>(e).is_none());
         assert!(world.get::<LuaOnTweenFinished<Rotation>>(e).is_none());
+    }
+
+    #[test]
+    fn lua_spawn_tint_tween_seeds_a_tint_only_when_the_entity_has_none() {
+        use crate::components::lua_on_tween_finished::LuaOnTweenFinished;
+        let mut world = World::new();
+        let mut signals = WorldSignals::default();
+        let bare = spawn_from_lua(
+            &mut world,
+            &mut signals,
+            "engine.spawn():with_tween_tint(1, 2, 3, 4, 5, 6, 7, 8, 2)\
+             :with_lua_tween_tint_finished('tint_done'):build()",
+        );
+        let tinted = spawn_from_lua(
+            &mut world,
+            &mut signals,
+            "engine.spawn():with_tint(9, 9, 9, 9):with_tween_tint(1, 2, 3, 4, 5, 6, 7, 8, 2):build()",
+        );
+
+        let tween = world.get::<Tween<Tint>>(bare).unwrap();
+        assert_eq!(
+            (tween.from, tween.to, tween.duration),
+            (Tint::new(1, 2, 3, 4), Tint::new(5, 6, 7, 8), 2.0)
+        );
+        assert_eq!(*world.get::<Tint>(bare).unwrap(), Tint::new(1, 2, 3, 4));
+        assert_eq!(
+            &*world
+                .get::<LuaOnTweenFinished<Tint>>(bare)
+                .unwrap()
+                .callback,
+            "tint_done"
+        );
+        assert_eq!(*world.get::<Tint>(tinted).unwrap(), Tint::new(9, 9, 9, 9));
+        assert!(world.get::<LuaOnTweenFinished<Tint>>(tinted).is_none());
     }
 
     #[test]

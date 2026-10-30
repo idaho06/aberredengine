@@ -306,6 +306,14 @@ pub enum EntityCmd {
         to_y: f32,
         config: TweenConfig,
     },
+    /// Insert TweenTint component (also inserts a `Tint` seeded at `from` if
+    /// the entity has none; an existing `Tint` is kept)
+    InsertTweenTint {
+        entity_id: u64,
+        from: (u8, u8, u8, u8),
+        to: (u8, u8, u8, u8),
+        config: TweenConfig,
+    },
     /// Insert TweenScreenPosition component (also inserts ScreenPosition
     /// itself if the entity doesn't have one yet — unlike WorldPosition/
     /// Rotation/Scale, ScreenPosition is not guaranteed to exist, since its
@@ -324,6 +332,8 @@ pub enum EntityCmd {
     RemoveTweenRotation { entity_id: u64 },
     /// Remove TweenScale component
     RemoveTweenScale { entity_id: u64 },
+    /// Remove TweenTint component (the `Tint` stays)
+    RemoveTweenTint { entity_id: u64 },
     /// Set entity rotation
     SetRotation { entity_id: u64, degrees: f32 },
     /// Set entity scale
