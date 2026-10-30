@@ -72,6 +72,7 @@ pub mod phase;
 pub mod propagate_transforms;
 pub mod render_assets;
 pub mod scene_dispatch;
+pub mod shape_geometry;
 pub mod signal_binding;
 pub mod signal_intents;
 pub mod sprite_geometry;

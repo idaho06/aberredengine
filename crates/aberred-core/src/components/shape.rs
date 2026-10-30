@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 use bevy_ecs::prelude::Component;
 
-use crate::math::{Color, Vec2};
+use crate::math::{Color, Vec2, cross};
 
 /// A drawable primitive: a point, line, rectangle, circle, ellipse or polygon.
 ///
@@ -108,10 +108,6 @@ impl PartialEq for Polygon {
     fn eq(&self, other: &Self) -> bool {
         Arc::ptr_eq(&self.vertices, &other.vertices) || self.vertices == other.vertices
     }
-}
-
-fn cross(o: Vec2, a: Vec2, b: Vec2) -> f32 {
-    (a - o).perp_dot(b - o)
 }
 
 /// Whether `p` lies inside or on the boundary of triangle `abc`.

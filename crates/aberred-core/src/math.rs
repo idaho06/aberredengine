@@ -33,6 +33,14 @@ pub fn rotate(v: Vec2, radians: f32) -> Vec2 {
     Vec2::from_angle(radians).rotate(v)
 }
 
+/// Twice the signed area of triangle `o`, `a`, `b`: `(a - o) x (b - o)`.
+///
+/// Negative when the triangle runs counter-clockwise on the y-down screen,
+/// zero when the three points are collinear.
+pub(crate) fn cross(o: Vec2, a: Vec2, b: Vec2) -> f32 {
+    (a - o).perp_dot(b - o)
+}
+
 /// RGBA color, `u8` channels. Layout-identical to raylib's `Color` (see the
 /// `color_layout_matches_raylib` test) so the render tree's `From`/`Into`
 /// shims are a bit-for-bit reinterpretation, not a conversion.
