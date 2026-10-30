@@ -85,11 +85,14 @@ pub(super) fn resolve_sprite_tint(maybe_tint: Option<Tint>) -> raylib::prelude::
     color_to_raylib(maybe_tint.map(|t| t.color).unwrap_or(Color::WHITE))
 }
 
-/// Resolves a text item's color for a draw call: an optional [`Tint`]
-/// *multiplies* with the base color (see [`Tint`]'s own doc comment),
+/// Resolves a color for a draw call where an optional [`Tint`] *multiplies*
+/// the base color (text and shapes; see [`Tint`]'s own doc comment),
 /// converted to raylib's `Color` at this one call site instead of at every
-/// text draw path.
-pub(super) fn resolve_text_tint(maybe_tint: Option<Tint>, base: Color) -> raylib::prelude::Color {
+/// draw path.
+pub(super) fn resolve_multiply_tint(
+    maybe_tint: Option<Tint>,
+    base: Color,
+) -> raylib::prelude::Color {
     color_to_raylib(maybe_tint.map(|t| t.multiply(base)).unwrap_or(base))
 }
 
@@ -236,9 +239,12 @@ mod tests {
         assert_eq!(rgba(resolve_sprite_tint(Some(tint))), (255, 128, 0, 255));
 
         let base = Color::new(200, 200, 200, 100);
-        assert_eq!(rgba(resolve_text_tint(None, base)), (200, 200, 200, 100));
         assert_eq!(
-            rgba(resolve_text_tint(Some(tint), base)),
+            rgba(resolve_multiply_tint(None, base)),
+            (200, 200, 200, 100)
+        );
+        assert_eq!(
+            rgba(resolve_multiply_tint(Some(tint), base)),
             (200, 100, 0, 100)
         );
     }

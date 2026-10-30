@@ -1,6 +1,6 @@
 use raylib::prelude::*;
 
-use super::math::{resolve_text_tint, shadow_color, vec2_to_raylib};
+use super::math::{resolve_multiply_tint, shadow_color, vec2_to_raylib};
 use super::postprocess::{
     active_entity_shader, set_entity_uniforms, set_standard_uniforms, set_uniform_value,
 };
@@ -18,7 +18,7 @@ pub(super) fn draw_world_text_item(
     env: &DrawEnv,
 ) {
     if let Some((font, spacing)) = env.fonts.get_or_default(&item.text.font) {
-        let final_color = resolve_text_tint(item.maybe_tint, item.text.color);
+        let final_color = resolve_multiply_tint(item.maybe_tint, item.text.color);
         let draw_pos = vec2_to_raylib(item.resolved_pos.pos);
 
         if let Some(shadow) = item.maybe_shadow {
@@ -107,7 +107,7 @@ pub(super) fn draw_screen_text_item(
 ) {
     let pos = item.pos;
     if let Some((font, spacing)) = fonts.get_or_default(&item.font) {
-        let final_color = resolve_text_tint(item.maybe_tint, item.color);
+        let final_color = resolve_multiply_tint(item.maybe_tint, item.color);
         if let Some(shadow) = item.maybe_shadow {
             let shadow_pos = Vector2 {
                 x: pos.pos.x + shadow.offset.x,

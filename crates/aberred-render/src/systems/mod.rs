@@ -29,6 +29,7 @@ mod postprocess;
 pub mod raylib_access;
 #[allow(clippy::module_inception)]
 mod render;
+mod shape;
 pub mod snapshot;
 mod sprite;
 mod text;

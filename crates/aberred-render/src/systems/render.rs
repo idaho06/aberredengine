@@ -36,6 +36,7 @@ use aberred_core::components::rotation::Rotation;
 use aberred_core::components::scale::Scale;
 use aberred_core::components::screen_position::ScreenPosition;
 use aberred_core::components::shadow::Shadow;
+use aberred_core::components::shape::Shape;
 use aberred_core::components::sprite::Sprite;
 use aberred_core::components::tint::Tint;
 use aberred_core::components::world_position::WorldPosition;
@@ -68,8 +69,10 @@ use super::debug_overlay::{PerfPanelStats, draw_imgui_debug};
 use super::geometry::{compute_sprite_cull_bounds, compute_view_bounds};
 use super::gui_panel::{self, draw_screen_panel_item};
 use super::postprocess::apply_postprocess_passes;
+use super::shape::{ShapePlacement, draw_shape_item};
 use super::sprite::{draw_screen_sprite_item, draw_world_sprite_item};
 use super::text::{draw_screen_text_item, draw_world_text_item};
+use aberred_core::systems::shape_geometry::DrawOp;
 use aberred_core::systems::sprite_geometry::resolve_world_transform;
 
 pub(super) struct SpriteBufferItem {
@@ -125,6 +128,19 @@ pub(super) struct ScreenSpriteBufferItem {
     pub(super) maybe_shadow: Option<Shadow>,
 }
 
+/// Screen-space shape draw item. Screen shapes honor the shape's `origin` (a
+/// plain translation) but not `Scale`, `Rotation` or `GlobalTransform2D`, and
+/// never use an entity shader.
+pub(super) struct ScreenShapeBufferItem {
+    /// See [`ScreenSpriteBufferItem::entity`].
+    pub(super) entity: Entity,
+    pub(super) shape: Shape,
+    pub(super) z_index: ZIndex,
+    pub(super) pos: ScreenPosition,
+    pub(super) maybe_tint: Option<Tint>,
+    pub(super) maybe_shadow: Option<Shadow>,
+}
+
 /// Screen-space text draw item. Mirrors [`ScreenSpriteBufferItem`]'s simplicity.
 ///
 /// Stores only the fields [`draw_screen_text_item`](text::draw_screen_text_item)
@@ -148,7 +164,7 @@ pub(super) struct ScreenTextBufferItem {
 }
 
 /// Screen-space GUI window panel draw item. Window backgrounds sit below
-/// sprites/text drawn on top of them (see `ScreenDrawKind::rank`).
+/// sprites, shapes and text drawn on top of them (see `ScreenDrawKind::rank`).
 pub(super) struct ScreenPanelBufferItem {
     /// Sim entity, used only as `cmp_screen_draw_order`'s
     /// tie-break -- see [`ScreenSpriteBufferItem::entity`].
@@ -181,19 +197,20 @@ enum ScreenDrawKind {
     Panel,
     ProgressBar,
     Sprite,
+    Shape,
     Text,
 }
 
 impl ScreenDrawKind {
     /// Secondary sort key, used only to break ties at equal `z`: panel
-    /// backgrounds and progress bars (0) sort below sprites (1), which sort
-    /// below text (2), so a caption draws on top of its own widget's
+    /// backgrounds and progress bars (0) sort below sprites and shapes (1),
+    /// which sort below text (2), so a caption draws on top of its own widget's
     /// background. A progress bar is an opaque background element and appears
-    /// beneath any screen-space sprite or text at the same `z`.
+    /// beneath any screen-space sprite, shape or text at the same `z`.
     fn rank(self) -> u8 {
         match self {
             ScreenDrawKind::Panel | ScreenDrawKind::ProgressBar => 0,
-            ScreenDrawKind::Sprite => 1,
+            ScreenDrawKind::Sprite | ScreenDrawKind::Shape => 1,
             ScreenDrawKind::Text => 2,
         }
     }
@@ -248,7 +265,7 @@ fn build_world_order(
     order.sort_unstable_by(cmp_world_draw_order);
 }
 
-/// Rebuilds `order` as the sorted draw order of the four typed screen
+/// Rebuilds `order` as the sorted draw order of the five typed screen
 /// buffers: one [`ScreenDrawKey`] per item, `index` addressing the item in its
 /// own buffer. Reuses `order`'s capacity.
 fn build_screen_order(
@@ -256,6 +273,7 @@ fn build_screen_order(
     panels: &[ScreenPanelBufferItem],
     bars: &[ScreenProgressBarBufferItem],
     sprites: &[ScreenSpriteBufferItem],
+    shapes: &[ScreenShapeBufferItem],
     texts: &[ScreenTextBufferItem],
 ) {
     order.clear();
@@ -274,6 +292,12 @@ fn build_screen_order(
     order.extend(sprites.iter().enumerate().map(|(i, item)| ScreenDrawKey {
         z: item.z_index.0,
         kind: ScreenDrawKind::Sprite,
+        entity: item.entity,
+        index: i as u32,
+    }));
+    order.extend(shapes.iter().enumerate().map(|(i, item)| ScreenDrawKey {
+        z: item.z_index.0,
+        kind: ScreenDrawKind::Shape,
         entity: item.entity,
         index: i as u32,
     }));
@@ -336,12 +360,15 @@ pub struct RenderLocals {
     text_buffer: Vec<TextBufferItem>,
     // Sorted draw order of the two world buffers above: one key per item.
     world_order: Vec<WorldDrawKey>,
-    // Scratch buffers for the screen-space items: sprites and texts built from
-    // their mirror queries by render_system, panels and progress bars built
+    // Scratch buffers for the screen-space items: sprites, shapes and texts built
+    // from their mirror queries by render_system, panels and progress bars built
     // from the GUI mirror queries by draw_screen_space. Each frame refills
     // them (keeping their capacity, like the world buffers above) and
     // screen_order holds their sorted draw order, one key per item.
     screen_sprite_buffer: Vec<ScreenSpriteBufferItem>,
+    screen_shape_buffer: Vec<ScreenShapeBufferItem>,
+    // Scratch op list `draw_shape_item` refills for every shape pass.
+    shape_ops: Vec<DrawOp>,
     screen_text_buffer: Vec<ScreenTextBufferItem>,
     screen_panel_buffer: Vec<ScreenPanelBufferItem>,
     screen_progress_bar_buffer: Vec<ScreenProgressBarBufferItem>,
@@ -449,6 +476,8 @@ pub fn render_system(
         text_buffer,
         world_order,
         screen_sprite_buffer,
+        screen_shape_buffer,
+        shape_ops,
         screen_text_buffer,
         screen_panel_buffer,
         screen_progress_bar_buffer,
@@ -720,7 +749,7 @@ pub fn render_system(
         {
             aberred_core::tracy::tracy_span!("render/screen_space");
             // All 8 screen-space categories source from
-            // retained mirror entities. Sprites and texts are built into
+            // retained mirror entities. Sprites, shapes and texts are built into
             // their own scratch buffers here so draw_screen_space can stay
             // agnostic to where those items came from -- it just orders and
             // draws whatever's here.
@@ -729,6 +758,17 @@ pub fn render_system(
                 |(mirror, sprite, pos, z_index, tint, shadow)| ScreenSpriteBufferItem {
                     entity: mirror.0,
                     sprite: sprite.clone(),
+                    z_index: *z_index,
+                    pos: *pos,
+                    maybe_tint: tint.copied(),
+                    maybe_shadow: shadow.copied(),
+                },
+            ));
+            screen_shape_buffer.clear();
+            screen_shape_buffer.extend(mirrors.screen_shapes.iter().map(
+                |(mirror, shape, pos, z_index, tint, shadow)| ScreenShapeBufferItem {
+                    entity: mirror.0,
+                    shape: shape.clone(),
                     z_index: *z_index,
                     pos: *pos,
                     maybe_tint: tint.copied(),
@@ -758,6 +798,7 @@ pub fn render_system(
             draw_screen_space(
                 &mut d,
                 screen_sprite_buffer,
+                screen_shape_buffer,
                 screen_text_buffer,
                 mirrors.gui_windows.iter(),
                 mirrors.gui_buttons.iter(),
@@ -769,6 +810,7 @@ pub fn render_system(
                 screen_panel_buffer,
                 screen_progress_bar_buffer,
                 screen_order,
+                shape_ops,
             );
         }
     }
@@ -1063,7 +1105,7 @@ fn warn_missing_theme(
 }
 
 /// Collects the GUI items (panels, progress bars) into their typed buffers,
-/// orders those and the screen-space sprites and texts together by [`ZIndex`]
+/// orders those and the screen-space sprites, shapes and texts together by [`ZIndex`]
 /// (see `build_screen_order`), and dispatches draw calls in that order.
 ///
 /// Sorts small [`ScreenDrawKey`]s rather than the buffer items. The equal-z
@@ -1075,6 +1117,7 @@ fn draw_screen_space<'m>(
     d: &mut impl RaylibDraw,
     // Already-resolved mirror-query-sourced items, read in place by index.
     screen_sprites: &[ScreenSpriteBufferItem],
+    screen_shapes: &[ScreenShapeBufferItem],
     screen_texts: &[ScreenTextBufferItem],
     // Read straight off the mirror query iterators (borrowed, no per-frame
     // Vec<Entry> materialization); only the fields the draw reads are copied
@@ -1104,6 +1147,7 @@ fn draw_screen_space<'m>(
     panels: &mut Vec<ScreenPanelBufferItem>,
     bars: &mut Vec<ScreenProgressBarBufferItem>,
     order: &mut Vec<ScreenDrawKey>,
+    shape_ops: &mut Vec<DrawOp>,
 ) {
     panels.clear();
     bars.clear();
@@ -1227,7 +1271,14 @@ fn draw_screen_space<'m>(
 
     {
         aberred_core::tracy::tracy_span!("render/sort_screen");
-        build_screen_order(order, panels, bars, screen_sprites, screen_texts);
+        build_screen_order(
+            order,
+            panels,
+            bars,
+            screen_sprites,
+            screen_shapes,
+            screen_texts,
+        );
     }
 
     aberred_core::tracy::tracy_span!("render/draw_screen");
@@ -1244,6 +1295,17 @@ fn draw_screen_space<'m>(
                 env.textures,
                 env.show_sprite_bounds,
             ),
+            ScreenDrawKind::Shape => {
+                let item = &screen_shapes[index];
+                draw_shape_item(
+                    d,
+                    &item.shape,
+                    ShapePlacement::at(item.pos.pos),
+                    item.maybe_tint,
+                    item.maybe_shadow,
+                    shape_ops,
+                );
+            }
             ScreenDrawKind::Text => {
                 draw_screen_text_item(d, &screen_texts[index], env.fonts, env.show_text_bounds)
             }
@@ -1788,6 +1850,55 @@ mod screen_draw_order_tests {
     }
 
     #[test]
+    fn a_shape_shares_the_sprites_rank() {
+        assert_eq!(ScreenDrawKind::Shape.rank(), ScreenDrawKind::Sprite.rank());
+        assert!(ScreenDrawKind::Panel.rank() < ScreenDrawKind::Shape.rank());
+        assert!(ScreenDrawKind::Shape.rank() < ScreenDrawKind::Text.rank());
+    }
+
+    #[test]
+    fn a_shape_and_a_sprite_at_equal_z_tie_break_by_entity() {
+        let mut es = [entity(3), entity(9)];
+        es.sort();
+        for (shape_e, sprite_e) in [(es[0], es[1]), (es[1], es[0])] {
+            let sorted = sort(vec![
+                key(1.0, ScreenDrawKind::Sprite, sprite_e),
+                key(1.0, ScreenDrawKind::Shape, shape_e),
+            ]);
+            let ids: Vec<Entity> = sorted.iter().map(|k| k.entity).collect();
+            assert_eq!(ids, es);
+        }
+    }
+
+    #[test]
+    fn a_shape_at_equal_z_draws_before_a_text_and_after_a_panel() {
+        let sorted = sort(vec![
+            key(1.0, ScreenDrawKind::Text, entity(1)),
+            key(1.0, ScreenDrawKind::Shape, entity(2)),
+            key(1.0, ScreenDrawKind::Panel, entity(3)),
+        ]);
+        assert_eq!(
+            kinds(&sorted),
+            vec![
+                ScreenDrawKind::Panel,
+                ScreenDrawKind::Shape,
+                ScreenDrawKind::Text
+            ]
+        );
+    }
+
+    #[test]
+    fn a_shape_sorts_by_ascending_z_among_other_kinds() {
+        let sorted = sort(vec![
+            key(5.0, ScreenDrawKind::Sprite, entity(0)),
+            key(2.0, ScreenDrawKind::Shape, entity(1)),
+            key(-1.0, ScreenDrawKind::Text, entity(2)),
+        ]);
+        let zs: Vec<f32> = sorted.iter().map(|k| k.z).collect();
+        assert_eq!(zs, vec![-1.0, 2.0, 5.0]);
+    }
+
+    #[test]
     fn ranks_put_backgrounds_below_sprites_below_texts() {
         assert_eq!(
             ScreenDrawKind::Panel.rank(),
@@ -1830,6 +1941,17 @@ mod screen_draw_order_tests {
         }
     }
 
+    fn shape(z: f32, entity: Entity) -> ScreenShapeBufferItem {
+        ScreenShapeBufferItem {
+            entity,
+            shape: aberred_core::components::shape::Shape::point(aberred_core::math::Color::RED),
+            z_index: ZIndex(z),
+            pos: aberred_core::components::screen_position::ScreenPosition::new(0.0, 0.0),
+            maybe_tint: None,
+            maybe_shadow: None,
+        }
+    }
+
     fn text(z: f32, entity: Entity) -> ScreenTextBufferItem {
         ScreenTextBufferItem {
             entity,
@@ -1851,6 +1973,7 @@ mod screen_draw_order_tests {
         panels: &[ScreenPanelBufferItem],
         bars: &[ScreenProgressBarBufferItem],
         sprites: &[ScreenSpriteBufferItem],
+        shapes: &[ScreenShapeBufferItem],
         texts: &[ScreenTextBufferItem],
     ) -> Vec<Entity> {
         order
@@ -1861,6 +1984,7 @@ mod screen_draw_order_tests {
                     ScreenDrawKind::Panel => panels[i].entity,
                     ScreenDrawKind::ProgressBar => bars[i].entity,
                     ScreenDrawKind::Sprite => sprites[i].entity,
+                    ScreenDrawKind::Shape => shapes[i].entity,
                     ScreenDrawKind::Text => texts[i].entity,
                 }
             })
@@ -1869,23 +1993,27 @@ mod screen_draw_order_tests {
 
     #[test]
     fn built_keys_address_their_own_buffer_item_in_draw_order() {
-        let [e1, e2, e3, e4, e5, e6] = [1, 2, 3, 4, 5, 6].map(entity);
+        let [e1, e2, e3, e4, e5, e6, e7] = [1, 2, 3, 4, 5, 6, 7].map(entity);
         let panels = [panel(2.0, e1), panel(1.0, e2)];
         let bars = [bar(1.0, e3)];
         let sprites = [sprite(1.0, e4), sprite(0.0, e5)];
         let texts = [text(1.0, e6)];
+        let shapes = [shape(1.0, e7)];
 
         let mut order = Vec::new();
-        build_screen_order(&mut order, &panels, &bars, &sprites, &texts);
+        build_screen_order(&mut order, &panels, &bars, &sprites, &shapes, &texts);
 
-        // z 0 sprite; z 1: the panel and the bar (rank 0, by entity), the
-        // sprite, the text; z 2 panel.
+        // z 0 sprite; z 1: the panel and the bar (rank 0, by entity), then the
+        // sprite and the shape (rank 1, by entity), the text; z 2 panel.
         let mut backgrounds = vec![e2, e3];
         backgrounds.sort();
+        let mut middle = vec![e4, e7];
+        middle.sort();
         let mut expected = vec![e5];
         expected.extend(backgrounds);
-        expected.extend([e4, e6, e1]);
-        let addressed = addressed_entities(&order, &panels, &bars, &sprites, &texts);
+        expected.extend(middle);
+        expected.extend([e6, e1]);
+        let addressed = addressed_entities(&order, &panels, &bars, &sprites, &shapes, &texts);
         assert_eq!(addressed, expected);
         let keyed: Vec<Entity> = order.iter().map(|k| k.entity).collect();
         assert_eq!(keyed, expected, "a key carries its item's entity");
@@ -1895,7 +2023,7 @@ mod screen_draw_order_tests {
     fn a_key_carries_the_z_and_kind_of_its_item() {
         let (panels, sprites) = ([panel(7.0, entity(1))], [sprite(-3.0, entity(2))]);
         let mut order = Vec::new();
-        build_screen_order(&mut order, &panels, &[], &sprites, &[]);
+        build_screen_order(&mut order, &panels, &[], &sprites, &[], &[]);
         let zk: Vec<(f32, ScreenDrawKind)> = order.iter().map(|k| (k.z, k.kind)).collect();
         assert_eq!(
             zk,
@@ -1906,7 +2034,7 @@ mod screen_draw_order_tests {
     #[test]
     fn empty_buffers_give_an_empty_order() {
         let mut order = vec![key(1.0, ScreenDrawKind::Text, entity(1))];
-        build_screen_order(&mut order, &[], &[], &[], &[]);
+        build_screen_order(&mut order, &[], &[], &[], &[], &[]);
         assert!(order.is_empty());
     }
 
@@ -1915,11 +2043,11 @@ mod screen_draw_order_tests {
         let many: Vec<ScreenSpriteBufferItem> =
             (0..64).map(|i| sprite(i as f32, entity(i))).collect();
         let mut order = Vec::new();
-        build_screen_order(&mut order, &[], &[], &many, &[]);
+        build_screen_order(&mut order, &[], &[], &many, &[], &[]);
         assert_eq!(order.len(), 64);
         let capacity = order.capacity();
 
-        build_screen_order(&mut order, &[], &[], &many[..3], &[]);
+        build_screen_order(&mut order, &[], &[], &many[..3], &[], &[]);
         assert_eq!(order.len(), 3);
         assert!(order.capacity() >= capacity);
     }
