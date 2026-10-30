@@ -51,6 +51,60 @@ mod example_3_ui_text_with_signal_binding {
     } // GLUE
 }
 
+// Shapes: world shapes
+mod shapes_world {
+    use aberredengine::prelude::*; // GLUE
+
+    fn enter(mut commands: Commands) { // GLUE
+    use aberredengine::prelude::*;
+    use aberredengine::core::components::shadow::Shadow;
+
+    // A filled rectangle with a white outline, rotated 30 degrees about its centre.
+    commands.spawn((
+        WorldPosition::new(200.0, 120.0),
+        Shape::rect(Vec2::new(40.0, 24.0), Color::RED)
+            .filled()
+            .with_outline_color(Color::WHITE)
+            .with_origin(Vec2::new(20.0, 12.0)),
+        Rotation::new(30.0),
+        ZIndex(5.0),
+    ));
+
+    // A 1 px circle outline with a drop shadow.
+    commands.spawn((
+        WorldPosition::new(260.0, 120.0),
+        Shape::circle(12.0, Color::BLUE),
+        Shadow::default_color(2.0, 2.0),
+        ZIndex(5.0),
+    ));
+    } // GLUE
+}
+
+// Shapes: polygon on the screen
+mod shapes_polygon {
+    use aberredengine::prelude::*; // GLUE
+
+    fn enter(mut commands: Commands) { // GLUE
+    use aberredengine::prelude::*;
+
+    // A concave arrow on the screen.
+    let arrow = [
+        Vec2::new(0.0, 8.0),
+        Vec2::new(12.0, 8.0),
+        Vec2::new(12.0, 0.0),
+        Vec2::new(24.0, 12.0),
+        Vec2::new(12.0, 24.0),
+        Vec2::new(12.0, 16.0),
+        Vec2::new(0.0, 16.0),
+    ];
+    commands.spawn((
+        ScreenPosition::new(16.0, 16.0),
+        Shape::polygon(&arrow, Color::WHITE).filled(),
+        ZIndex(100.0),
+    ));
+    } // GLUE
+}
+
 // Component constructor quick reference: animation controller rules
 mod animation_controller_rules {
     use aberredengine::prelude::*; // GLUE

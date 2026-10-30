@@ -1452,6 +1452,62 @@ commands.spawn((
 
 When `WorldSignals` has a value for key `"score"`, the text automatically updates to `"Score: 42"` (or whatever the value is).
 
+### Shapes
+
+A `Shape` draws a point, line, rectangle, circle, ellipse or polygon. Like a sprite, the position component picks the space (`WorldPosition` draws on the map under the camera, `ScreenPosition` on the screen) and the entity needs a `ZIndex` or it never draws. Shapes sort with sprites and texts by `ZIndex`.
+
+Build a shape with a constructor (`Shape::point`, `line`, `rect`, `circle`, `ellipse`, `polygon`), then chain `.filled()`, `.with_outline_color(color)` and `.with_origin(v)`. Lines and outlines are 1 px wide. `color` is the line colour, or the fill colour once the shape is `.filled()`; `.with_outline_color` adds an outline drawn over the fill. A `Point` and a `Line` ignore both builders.
+
+`origin` is the local point that sits on the entity position and pivots `Scale` and `Rotation`, like `Sprite`'s origin. World shapes honor `Scale`, `Rotation` and the parent's transform; screen shapes treat `origin` as a plain offset and ignore `Scale` and `Rotation`. An `Ellipse` is axis-aligned and ignores `Rotation`. A `Circle` keeps its radius, but `Rotation` still swings its centre around `origin`; under a non-uniform `Scale` it draws as an ellipse.
+
+`Tint` multiplies both colours. A `Shadow` draws the shape's silhouette (the fill of a filled shape, the outline otherwise) at `position + offset` in the shadow colour, ignoring `Tint`.
+
+```rust
+use aberredengine::prelude::*;
+use aberredengine::core::components::shadow::Shadow;
+
+// A filled rectangle with a white outline, rotated 30 degrees about its centre.
+commands.spawn((
+    WorldPosition::new(200.0, 120.0),
+    Shape::rect(Vec2::new(40.0, 24.0), Color::RED)
+        .filled()
+        .with_outline_color(Color::WHITE)
+        .with_origin(Vec2::new(20.0, 12.0)),
+    Rotation::new(30.0),
+    ZIndex(5.0),
+));
+
+// A 1 px circle outline with a drop shadow.
+commands.spawn((
+    WorldPosition::new(260.0, 120.0),
+    Shape::circle(12.0, Color::BLUE),
+    Shadow::default_color(2.0, 2.0),
+    ZIndex(5.0),
+));
+```
+
+A polygon takes local-space vertices (any winding, convex or concave, no holes) and is triangulated once, when you build the `Shape`.
+
+```rust
+use aberredengine::prelude::*;
+
+// A concave arrow on the screen.
+let arrow = [
+    Vec2::new(0.0, 8.0),
+    Vec2::new(12.0, 8.0),
+    Vec2::new(12.0, 0.0),
+    Vec2::new(24.0, 12.0),
+    Vec2::new(12.0, 24.0),
+    Vec2::new(12.0, 16.0),
+    Vec2::new(0.0, 16.0),
+];
+commands.spawn((
+    ScreenPosition::new(16.0, 16.0),
+    Shape::polygon(&arrow, Color::WHITE).filled(),
+    ZIndex(100.0),
+));
+```
+
 ### Component constructor quick reference
 
 `Sprite`, `Camera2D`, `AnimationClip` and the GUI theme types (`GuiTheme`, `GuiNinePatch`, `GuiButtonSkin`, `GuiProgressBarSkin`) are `#[non_exhaustive]`: build them with their constructors (or `Default` plus field assignment for `GuiTheme`), not struct literals, so the engine can add fields without breaking your game. Their fields stay public to read and write.
@@ -1466,10 +1522,11 @@ When `WorldSignals` has a value for key `"score"`, the text automatically update
 | `Animation` | `Animation::new("anim_key")` |
 | `AnimationController` | `AnimationController::new("fallback_key").with_rule(condition, "key")`, `condition` a `Condition` (see below) |
 | `Group` | `Group::new("name")` |
-| `ZIndex` | `ZIndex(f32)` — higher draws later (on top), sprites and texts sorted together; at equal z a text draws over a sprite |
+| `ZIndex` | `ZIndex(f32)` — higher draws later (on top), sprites, shapes and texts sorted together; at equal z a text draws over a sprite or shape |
 | `Rotation` | `Rotation::new(degrees)` |
 | `Scale` | `Scale::new(sx, sy)` |
-| `Tint` | `Tint::new(r, g, b, a)` — values are `u8` (0–255) |
+| `Shape` | `Shape::point(color)`, `line(to, color)`, `rect(size, color)`, `circle(radius, color)`, `ellipse(radii, color)`, `polygon(&points, color)`, then `.filled()`, `.with_outline_color(c)`, `.with_origin(v)`; needs a position and a `ZIndex`; see [Shapes](#shapes) |
+| `Tint` | `Tint::new(r, g, b, a)` — values are `u8` (0–255); multiplies a text's or shape's colour, replaces a sprite's white |
 | `Persistent` | `Persistent` — tag, survives scene transitions |
 | `Ttl` | `Ttl::new(seconds)` — auto-despawn after duration |
 | `DynamicText` | `DynamicText::new(text, font_key, size, color)` |
@@ -1490,7 +1547,7 @@ When `WorldSignals` has a value for key `"score"`, the text automatically update
 | `GuiLabel` | `GuiLabel::new(width, height, "Text")` — add `.with_signal_binding(key)` / `.with_signal_binding_format("fmt {}") ` to bind text to `WorldSignals` |
 | `GuiImage` | `GuiImage::new(width, height, "tex_key", offset_x, offset_y)` — add `.with_offset_hover(x, y)` / `.with_offset_pressed(x, y)` / `.with_offset_disabled(x, y)` for per-state atlas offsets |
 | `GuiProgressBar` | `GuiProgressBar::new(w, h, value, max)` — add `.with_direction(ProgressBarDirection)`, `.with_signal_binding(key)`, `.with_theme_key(key)`; requires `ScreenPosition` + `ZIndex` |
-| `Shadow` | `Shadow::new(dx, dy, r, g, b, a)` or `Shadow::default_color(dx, dy)` — pre-pass shadow for `Sprite` and `DynamicText` entities; see [GUI widgets](#gui-widgets) |
+| `Shadow` | `Shadow::new(dx, dy, r, g, b, a)` or `Shadow::default_color(dx, dy)` — pre-pass shadow for `Sprite`, `DynamicText` and `Shape` entities; see [GUI widgets](#gui-widgets) |
 | `GuiInteractable` | `GuiInteractable::new(width, height)` — hit-test/click state; observe `GuiClicked` for clicks; see [GUI widgets](#gui-widgets) |
 | `GuiOffset` | `GuiOffset(Vec2::new(x, y))` — position relative to a `ChildOf` parent |
 
@@ -2063,7 +2120,7 @@ parented with `ChildOf`, hidden by removing `ScreenPosition`, etc.).
 | `GuiLabel` | `GuiLabel::new(w, h, "Text")` — `theme_key: Arc<str>` defaults to `"default"`, override with `.with_theme_key(key)`; add `.with_signal_binding(key)` / `.with_signal_binding_format("fmt {}")` to drive text from `WorldSignals` | Same caption-child pattern as `GuiButton`, minus any interaction — never hit-tested. |
 | `GuiImage` | `GuiImage::new(w, h, "tex_key", offset_x, offset_y)` — add `.with_offset_hover(x, y)` / `.with_offset_pressed(x, y)` / `.with_offset_disabled(x, y)` for per-state atlas offsets | `gui_image_spawn_system` inserts a co-located `GuiInteractable` + `Sprite` (same entity, no child). `gui_image_state_sync_system` re-resolves `Sprite.offset` from `GuiInteractable.state` every sim tick automatically — no game code needed. |
 | `GuiProgressBar` | `GuiProgressBar::new(w, h, value, max)` — `theme_key: Arc<str>` defaults to `"default"`, override with `.with_theme_key(key)`; `.with_direction(ProgressBarDirection)`, `.with_signal_binding(key)` for `WorldSignals` auto-update | No spawn system — rendered directly. Requires `ScreenPosition` + `ZIndex`. `value` clamped to `[0, max]`. `direction` variants: `Horizontal` (default, left→right), `HorizontalReversed`, `Vertical` (bottom→top), `VerticalReversed`. |
-| `Shadow` | `Shadow::new(dx, dy, r, g, b, a)` or `Shadow::default_color(dx, dy)` (50% transparent black) | Pre-pass shadow drawn at entity position + offset before the main sprite/text draw. Bypasses entity shaders. Works for both world-space and screen-space entities (`Sprite` and `DynamicText`). |
+| `Shadow` | `Shadow::new(dx, dy, r, g, b, a)` or `Shadow::default_color(dx, dy)` (50% transparent black) | Pre-pass shadow drawn at entity position + offset before the main sprite/text draw. Bypasses entity shaders. Works for both world-space and screen-space entities (`Sprite`, `DynamicText` and `Shape`). |
 | `GuiInteractable` | `GuiInteractable::new(w, h)` | Shared hit-test/click runtime state (`Normal`/`Hovered`/`Pressed`/`Disabled`). A click on it triggers `GuiClicked` on the entity. |
 | `GuiOffset` | `GuiOffset(Vec2::new(x, y))` | A child widget's position relative to its `ChildOf` parent. `gui_layout_system` resolves it into the child's `ScreenPosition` every sim tick; `ChildOf` is used for lifecycle (cascade despawn) only, not positioning. |
 
