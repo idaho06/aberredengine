@@ -2,16 +2,18 @@
 -- Shapes showcase: every Shape kind, transforms, hierarchy, tint tweens, runtime edits,
 -- z-order and screen space.
 --
--- Seven pages sit side by side in the world, PAGE_W apart; left/right snaps the camera to the
--- next page and back returns to the menu. The screen-space page spawns its entities when it is
--- entered and despawns them when it is left, because screen shapes ignore the camera and would
+-- Seven pages sit side by side in the world, PAGE_W apart. An anchor entity carries the camera
+-- target; left/right moves the anchor to the next page and the engine's camera follow glides
+-- there. Back returns to the menu. The screen-space page spawns its entities once the camera
+-- arrives and despawns them when it is left, because screen shapes ignore the camera and would
 -- otherwise draw on every page.
 
 local M = {}
 
 local SCREEN_W, SCREEN_H = 640, 360
 local PAGE_W = 800     -- world distance between page centres (wider than the screen, so a neighbour never peeks in)
-local TRANSITION_SECONDS = 0.25 -- camera travel time between neighbouring pages
+local FOLLOW_SPEED = 14    -- camera follow rate: about 95% of the way in 0.2 s
+local ARRIVED_PX = 4       -- the camera counts as arrived within this many pixels of a page
 
 local TITLES = {
     "Kinds: outline, filled, both",
@@ -32,10 +34,7 @@ local last_blink
 local last_sides
 local last_bar_width
 local last_fill_width
-local camera_x     -- where the camera is now
-local camera_from  -- where the current transition started
-local camera_to    -- where it is heading (the active page's centre)
-local camera_t     -- transition progress in [0, 1]; 1 = at rest
+local screen_spawned -- whether the screen-space page's entities exist
 
 -- ─── Small helpers ──────────────────────────────────────────────────────────
 
@@ -382,51 +381,41 @@ end
 
 -- ─── Paging and per-tick updates ────────────────────────────────────────────
 
-local function set_camera_x(x)
-    camera_x = x
+--- Moves the camera and its follow state to `x` at once.
+local function snap_camera(x)
     engine.set_camera(x, 0, SCREEN_W / 2, SCREEN_H / 2, 0.0, 1.0)
+    engine.camera_follow_reset_velocity()
 end
 
---- Cubic ease-in-out on [0, 1].
-local function ease(t)
-    if t < 0.5 then
-        return 4 * t * t * t
-    end
-    local u = 2 - 2 * t
-    return 1 - u * u * u / 2
-end
-
---- Starts the camera travelling to `new_page`. A press mid-flight retargets from where the
---- camera is, so quick presses stay smooth. Wrapping between the first and last page jumps,
---- because a sweep would drag every page across the screen in a fraction of a second.
+--- Sends the camera anchor to `new_page`; the camera follow glides after it, and a press
+--- mid-flight just retargets. Wrapping between the first and last page jumps, because a glide
+--- would drag every page across the screen in a fraction of a second.
 local function go_to(new_page)
+    local anchor = engine.get_entity("showcase_camera")
+    if not anchor then
+        return -- the anchor spawns on the first tick
+    end
     if page == SCREEN_PAGE then
         despawn_screen_page()
+        screen_spawned = false
     end
+    local from = page_x(page)
     page = new_page
     engine.set_integer("showcase_page", page)
-    camera_to = page_x(page)
-    if math.abs(camera_to - camera_x) > PAGE_W * 1.5 then
-        set_camera_x(camera_to)
-        camera_t = 1
-        if page == SCREEN_PAGE then
-            spawn_screen_page()
-        end
-    else
-        camera_from = camera_x
-        camera_t = 0
+    engine.entity_set_position(anchor, page_x(page), 0)
+    if math.abs(page_x(page) - from) > PAGE_W * 1.5 then
+        snap_camera(page_x(page))
     end
 end
 
---- Advances the camera transition; the screen-space page spawns once the camera arrives, so
---- its entities never overlay the page being left.
-local function update_camera(dt)
-    if camera_t >= 1 then
+--- Spawns the screen-space page once the camera has arrived, so its entities never overlay
+--- the page being left.
+local function update_screen_page_arrival()
+    if page ~= SCREEN_PAGE or screen_spawned then
         return
     end
-    camera_t = math.min(1, camera_t + dt / TRANSITION_SECONDS)
-    set_camera_x(camera_from + (camera_to - camera_from) * ease(camera_t))
-    if camera_t >= 1 and page == SCREEN_PAGE then
+    if math.abs(engine.get_camera().target_x - page_x(page)) <= ARRIVED_PX then
+        screen_spawned = true
         spawn_screen_page()
     end
 end
@@ -494,7 +483,7 @@ local function on_update_shapes_showcase(input, dt)
     elseif input.digital.left.just_pressed then
         go_to((page - 2) % PAGE_COUNT + 1)
     end
-    update_camera(dt)
+    update_screen_page_arrival()
     if page == 5 then
         update_runtime()
     elseif page == SCREEN_PAGE then
@@ -521,9 +510,7 @@ function M.spawn()
     last_sides = nil
     last_bar_width = nil
     last_fill_width = nil
-    camera_from = 0
-    camera_to = 0
-    camera_t = 1
+    screen_spawned = false
 
     local builders = {
         build_gallery, build_transforms, build_hierarchy, build_tint,
@@ -543,7 +530,21 @@ function M.spawn()
         :with_signal_binding_format("< {} / " .. PAGE_COUNT .. " >")
         :build()
 
-    set_camera_x(0)
+    -- The camera follows an anchor entity. The follow config is global and other scenes leave
+    -- their own offset and bounds behind, so set everything this scene relies on.
+    snap_camera(0)
+    engine.camera_follow_enable(true)
+    engine.camera_follow_set_mode("lerp")
+    engine.camera_follow_set_easing("ease_out")
+    engine.camera_follow_set_speed(FOLLOW_SPEED)
+    engine.camera_follow_set_offset(0, 0)
+    engine.camera_follow_clear_bounds()
+    engine.spawn()
+        :with_position(0, 0)
+        :with_camera_target()
+        :register_as("showcase_camera")
+        :build()
+
     engine.set_integer("showcase_page", page)
 end
 
