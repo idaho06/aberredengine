@@ -48,7 +48,9 @@ pub enum ShapeKind {
         /// End of the segment.
         to: Vec2,
     },
-    /// An axis-aligned rectangle with its top-left corner at `(0, 0)`.
+    /// A rectangle with its top-left corner at `(0, 0)`. Its 1 px outline lies
+    /// half a world unit inside its bounds: on the same pixels the fill covers
+    /// for an unrotated rect at an integral position, size and scale, at zoom 1.
     Rect {
         /// Width and height.
         size: Vec2,

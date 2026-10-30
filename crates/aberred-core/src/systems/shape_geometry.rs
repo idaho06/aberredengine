@@ -121,6 +121,27 @@ impl Transform {
         .map(|p| self.point(p))
     }
 
+    /// The four edges (top, right, bottom, left) of a rectangle's 1 px
+    /// outline, transformed. Each lies half a world unit inside its side and
+    /// spans the whole side. At zoom 1, for an integral position, size and
+    /// scale and no rotation, every edge then runs along pixel centers with
+    /// its ends between pixels and the corner pixels are covered by two
+    /// edges. A GPU can break the tie for a pixel centre exactly on a line's
+    /// end or edge either way, which an edge on the lattice or a ring joined
+    /// at pixel centers can leave as a gap. The inset shrinks to half the size
+    /// for a rectangle thinner than that.
+    fn rect_outline_edges(&self, size: Vec2) -> [(Vec2, Vec2); 4] {
+        let inset = (Vec2::splat(0.5) / self.scale.abs()).min(size.abs() / 2.0) * size.signum();
+        let far = size - inset;
+        [
+            (Vec2::new(0.0, inset.y), Vec2::new(size.x, inset.y)),
+            (Vec2::new(far.x, 0.0), Vec2::new(far.x, size.y)),
+            (Vec2::new(size.x, far.y), Vec2::new(0.0, far.y)),
+            (Vec2::new(inset.x, size.y), Vec2::new(inset.x, 0.0)),
+        ]
+        .map(|(a, b)| (self.point(a), self.point(b)))
+    }
+
     /// Centre, radii and whether it is still a circle (`|sx| == |sy|`) for a `Circle` of `radius`.
     fn circle(&self, radius: f32) -> (Vec2, Vec2, bool) {
         let radii = Vec2::splat(radius) * self.scale.abs();
@@ -143,7 +164,10 @@ impl Transform {
 /// state allocates nothing. Local point `v` lands at
 /// `pos + rotate((v - origin) * scale, rotation_degrees)`.
 ///
-/// An `Ellipse` ignores the rotation. A `Circle` rotates only its centre and
+/// An outlined `Rect` is four full-length edges half a world unit inside its
+/// sides (see `Transform::rect_outline_edges`). `Line` and `Polygon` outlines
+/// are drawn at their exact transformed coordinates, on the lattice between
+/// pixels. An `Ellipse` ignores the rotation. A `Circle` rotates only its centre and
 /// becomes an ellipse when `scale` is non-uniform. Every `Triangle` is emitted
 /// counter-clockwise for raylib whatever the input winding or mirroring, and
 /// zero-area triangles are skipped.
@@ -174,12 +198,15 @@ pub fn shape_ops(
             }
         }
         ShapeKind::Rect { size } => {
-            let c = xf.rect_corners(*size);
             if fill {
+                let c = xf.rect_corners(*size);
                 push_triangle(out, c[0], c[1], c[2]);
                 push_triangle(out, c[0], c[2], c[3]);
             } else {
-                push_ring(out, c.len(), |i| c[i]);
+                out.extend(
+                    xf.rect_outline_edges(*size)
+                        .map(|(a, b)| DrawOp::Line { a, b }),
+                );
             }
         }
         ShapeKind::Circle { radius } => {
@@ -378,17 +405,110 @@ mod tests {
     }
 
     #[test]
-    fn a_rect_outline_is_a_closed_ring_over_its_corners() {
+    fn a_rect_outline_is_four_full_edges_half_a_pixel_inside() {
         let l = lines(&outline(&Shape::rect(v(4.0, 2.0), C)));
         assert_eq!(
             l,
             vec![
-                (v(0.0, 0.0), v(4.0, 0.0)),
-                (v(4.0, 0.0), v(4.0, 2.0)),
-                (v(4.0, 2.0), v(0.0, 2.0)),
-                (v(0.0, 2.0), v(0.0, 0.0)),
+                (v(0.0, 0.5), v(4.0, 0.5)),
+                (v(3.5, 0.0), v(3.5, 2.0)),
+                (v(4.0, 1.5), v(0.0, 1.5)),
+                (v(0.5, 2.0), v(0.5, 0.0)),
             ]
         );
+    }
+
+    /// The inset is half a pixel on the screen, whatever the scale, so a
+    /// scaled rect's outline still covers exactly the pixels of the rect.
+    #[test]
+    fn the_rect_outline_inset_is_half_a_screen_pixel_under_scale() {
+        let l = lines(&ops(
+            &Shape::rect(v(4.0, 2.0), C),
+            ShapeLayer::Outline,
+            v(10.0, 20.0),
+            v(4.0, 2.0),
+            0.0,
+        ));
+        assert_eq!(l[0], (v(10.0, 20.5), v(26.0, 20.5)));
+        assert_eq!(l[1], (v(25.5, 20.0), v(25.5, 24.0)));
+        assert_eq!(l[2], (v(26.0, 23.5), v(10.0, 23.5)));
+        assert_eq!(l[3], (v(10.5, 24.0), v(10.5, 20.0)));
+    }
+
+    /// A 1 px line is a thin quad: a pixel whose centre sits exactly on the
+    /// line's end or edge is covered or not depending on the GPU. The outline
+    /// must cover the rect's perimeter pixels with no such tie (the pixels
+    /// whose centre lies strictly inside every edge's span).
+    #[test]
+    fn a_rect_outline_covers_exactly_its_perimeter_pixels_without_ties() {
+        let (x, y, w, h) = (192, 214, 256, 16);
+        let shape = Shape::rect(v(w as f32, h as f32), C);
+        let l = lines(&ops(
+            &shape,
+            ShapeLayer::Outline,
+            v(x as f32, y as f32),
+            Vec2::ONE,
+            0.0,
+        ));
+
+        let mut covered = std::collections::BTreeSet::new();
+        for &(a, b) in &l {
+            // Across the line, a pixel centre is on the line itself.
+            let horizontal = a.y == b.y;
+            let (across, from, to) = if horizontal {
+                (a.y, a.x.min(b.x), a.x.max(b.x))
+            } else {
+                (a.x, a.y.min(b.y), a.y.max(b.y))
+            };
+            assert_eq!(across.fract(), 0.5, "{a:?} -> {b:?}");
+            for along in from.floor() as i32..to.ceil() as i32 {
+                let centre = along as f32 + 0.5;
+                if from < centre && centre < to {
+                    let across = across.floor() as i32;
+                    covered.insert(if horizontal {
+                        (along, across)
+                    } else {
+                        (across, along)
+                    });
+                }
+            }
+        }
+
+        let perimeter: std::collections::BTreeSet<(i32, i32)> = (x..x + w)
+            .flat_map(|px| (y..y + h).map(move |py| (px, py)))
+            .filter(|&(px, py)| px == x || px == x + w - 1 || py == y || py == y + h - 1)
+            .collect();
+        assert_eq!(covered, perimeter);
+    }
+
+    /// A rect thinner than the inset has no room for it: the edges collapse
+    /// on the rect's centre line instead of swapping sides.
+    #[test]
+    fn a_rect_thinner_than_a_pixel_keeps_its_edges_on_their_own_sides() {
+        let l = lines(&outline(&Shape::rect(v(0.5, 0.5), C)));
+        assert!(
+            l[0].0.y <= l[2].0.y,
+            "the top edge stays above the bottom edge"
+        );
+        assert!(
+            l[3].0.x <= l[1].0.x,
+            "the left edge stays left of the right edge"
+        );
+        let inside = |p: Vec2| (0.0..=0.5).contains(&p.x) && (0.0..=0.5).contains(&p.y);
+        assert!(l.iter().all(|&(a, b)| inside(a) && inside(b)));
+    }
+
+    #[test]
+    fn a_zero_scale_rect_outline_stays_finite() {
+        let l = lines(&ops(
+            &Shape::rect(v(4.0, 2.0), C),
+            ShapeLayer::Outline,
+            v(5.0, 5.0),
+            v(0.0, 1.0),
+            0.0,
+        ));
+        assert_eq!(l.len(), 4);
+        assert!(l.iter().all(|(a, b)| a.is_finite() && b.is_finite()));
     }
 
     #[test]
@@ -403,8 +523,8 @@ mod tests {
     fn origin_at_the_centre_centres_the_rect_on_the_position() {
         let s = Shape::rect(v(4.0, 2.0), C).with_origin(v(2.0, 1.0));
         let l = lines(&ops(&s, ShapeLayer::Outline, v(10.0, 10.0), Vec2::ONE, 0.0));
-        assert_eq!(l[0].0, v(8.0, 9.0));
-        assert_eq!(l[2].0, v(12.0, 11.0));
+        assert_eq!(l[0].0, v(8.0, 9.5));
+        assert_eq!(l[2].0, v(12.0, 10.5));
     }
 
     #[test]
@@ -429,7 +549,7 @@ mod tests {
             Vec2::ONE,
             90.0,
         ));
-        assert!(vec2_approx_eq(l[0].1, v(10.0, 14.0)));
+        assert!(vec2_approx_eq(l[0].1, v(9.5, 14.0)));
     }
 
     #[test]
