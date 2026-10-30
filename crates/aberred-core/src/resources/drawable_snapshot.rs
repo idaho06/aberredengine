@@ -1249,9 +1249,11 @@ mod tests {
         let src = world.resource::<DrawableSnapshot>().clone();
 
         // A stale buffer holding different shapes must be fully overwritten.
-        let mut dst = DrawableSnapshot::default();
-        dst.map_shapes = vec![src.map_shapes[0].clone(), src.map_shapes[0].clone()];
-        dst.screen_shapes = vec![src.screen_shapes[0].clone(); 3];
+        let mut dst = DrawableSnapshot {
+            map_shapes: vec![src.map_shapes[0].clone(), src.map_shapes[0].clone()],
+            screen_shapes: vec![src.screen_shapes[0].clone(); 3],
+            ..DrawableSnapshot::default()
+        };
         dst.map_shapes[1].position = WorldPosition::new(99.0, 99.0);
         src.clone_into_buffer(&mut dst);
 

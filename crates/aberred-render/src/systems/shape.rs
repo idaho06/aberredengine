@@ -164,17 +164,21 @@ mod tests {
     const RED: CoreColor = CoreColor::RED;
     const BLUE: CoreColor = CoreColor::BLUE;
 
-    fn rgba(c: Color) -> (u8, u8, u8, u8) {
+    type Rgba = (u8, u8, u8, u8);
+    /// One pass `shape_passes` emits: (ops, colour).
+    type Pass = (Vec<DrawOp>, Rgba);
+
+    fn rgba(c: Color) -> Rgba {
         (c.r, c.g, c.b, c.a)
     }
 
-    /// Every pass `shape_passes` emits: (ops, colour).
+    /// Every pass `shape_passes` emits.
     fn passes(
         shape: &Shape,
         place: ShapePlacement,
         tint: Option<Tint>,
         shadow: Option<Shadow>,
-    ) -> Vec<(Vec<DrawOp>, (u8, u8, u8, u8))> {
+    ) -> Vec<Pass> {
         let mut out = Vec::new();
         let mut scratch = Vec::new();
         shape_passes(shape, place, tint, shadow, &mut scratch, |ops, c| {
