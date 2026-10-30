@@ -10,7 +10,7 @@ use aberred_core::components::gui_label::GuiLabel;
 use aberred_core::components::gui_progress_bar::GuiProgressBar;
 use aberred_core::components::gui_window::GuiWindow;
 use aberred_core::components::menu::MenuAction;
-use aberred_core::components::shape::Shape;
+use aberred_core::components::shape::{Polygon, Shape, ShapeKind};
 use aberred_core::components::timer::TimerMode;
 use aberred_core::components::tween::{Easing, LoopMode};
 use aberred_core::math::Vec2;
@@ -168,6 +168,12 @@ pub(crate) fn parse_points(points: &mlua::Table) -> mlua::Result<Vec<Vec2>> {
         out.push(Vec2::new(x, y));
     }
     Ok(out)
+}
+
+/// Parses `points` and triangulates them into a polygon kind, so the sim never
+/// triangulates and a bad point raises at the Lua call.
+pub(crate) fn polygon_kind(points: &mlua::Table) -> mlua::Result<ShapeKind> {
+    Ok(ShapeKind::Polygon(Polygon::new(&parse_points(points)?)))
 }
 
 /// TweenPosition component data for spawning.

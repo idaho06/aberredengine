@@ -190,6 +190,101 @@ mod tests {
     }
 
     #[test]
+    fn shape_geometry_functions_queue_a_ready_kind_and_have_collision_twins() {
+        use crate::resources::lua_runtime::EntityCmd;
+        use aberred_core::components::shape::ShapeKind;
+        use aberred_core::math::Vec2;
+
+        let runtime = LuaRuntime::new().unwrap();
+        runtime
+            .lua()
+            .load(
+                "engine.entity_set_shape_point(1)\n\
+                 engine.entity_set_shape_line(1, 3, 4)\n\
+                 engine.entity_set_shape_rect(1, 5, 6)\n\
+                 engine.entity_set_shape_circle(1, 2)\n\
+                 engine.entity_set_shape_ellipse(1, 7, 8)\n\
+                 engine.entity_set_shape_polygon(1, { {x=0,y=0}, {x=4,y=0}, {x=2,y=3} })\n\
+                 engine.collision_entity_set_shape_circle(1, 9)\n\
+                 engine.collision_entity_set_shape_polygon(1, { {x=0,y=0}, {x=1,y=0}, {x=0,y=1} })",
+            )
+            .exec()
+            .unwrap();
+
+        let mut regular = Vec::new();
+        runtime.drain_entity_commands_into(&mut regular);
+        let kinds: Vec<&ShapeKind> = regular
+            .iter()
+            .map(|c| match &c.cmd {
+                EntityCmd::SetShapeKind { kind, .. } => kind,
+                other => panic!("unexpected command {other:?}"),
+            })
+            .collect();
+        assert!(matches!(kinds[0], ShapeKind::Point));
+        assert_eq!(
+            *kinds[1],
+            ShapeKind::Line {
+                to: Vec2::new(3.0, 4.0)
+            }
+        );
+        assert_eq!(
+            *kinds[2],
+            ShapeKind::Rect {
+                size: Vec2::new(5.0, 6.0)
+            }
+        );
+        assert_eq!(*kinds[3], ShapeKind::Circle { radius: 2.0 });
+        assert_eq!(
+            *kinds[4],
+            ShapeKind::Ellipse {
+                radius: Vec2::new(7.0, 8.0)
+            }
+        );
+        let ShapeKind::Polygon(polygon) = kinds[5] else {
+            panic!("a polygon kind");
+        };
+        assert_eq!(polygon.triangles().len(), 1, "triangulated at call time");
+        assert_eq!(kinds.len(), 6);
+
+        let mut collision = Vec::new();
+        runtime.drain_collision_entity_commands_into(&mut collision);
+        assert!(matches!(
+            collision
+                .iter()
+                .map(|c| &c.cmd)
+                .collect::<Vec<_>>()
+                .as_slice(),
+            [
+                EntityCmd::SetShapeKind {
+                    kind: ShapeKind::Circle { radius: 9.0 },
+                    ..
+                },
+                EntityCmd::SetShapeKind {
+                    kind: ShapeKind::Polygon(_),
+                    ..
+                },
+            ]
+        ));
+    }
+
+    #[test]
+    fn bad_polygon_points_raise_at_the_call_and_queue_nothing() {
+        let runtime = LuaRuntime::new().unwrap();
+        for points in ["{ {x=0,y=0}, 5 }", "{ {x=0,y=0}, {x=1} }"] {
+            let err = runtime
+                .lua()
+                .load(format!("engine.entity_set_shape_polygon(1, {points})"))
+                .exec()
+                .unwrap_err()
+                .to_string();
+            assert!(err.contains("point 2"), "{points}: {err}");
+        }
+        let mut queued = Vec::new();
+        runtime.drain_entity_commands_into(&mut queued);
+        assert!(queued.is_empty());
+    }
+
+    #[test]
     fn runtime_tween_inserts_accept_documented_names() {
         let runtime = LuaRuntime::new().unwrap();
         runtime

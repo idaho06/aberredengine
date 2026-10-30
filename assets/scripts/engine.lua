@@ -791,6 +791,11 @@ function engine.collision_entity_set_shader(entity_id, key) end
 ---@param a integer
 function engine.collision_entity_set_shadow(entity_id, dx, dy, r, g, b, a) end
 
+---Replace an entity Shape's geometry with a circle; no-op without a Shape
+---@param entity_id integer
+---@param radius number
+function engine.collision_entity_set_shape_circle(entity_id, radius) end
+
 ---Set the color (RGBA 0-255) of an entity's Shape; no-op without one
 ---@param entity_id integer
 ---@param r integer
@@ -799,10 +804,22 @@ function engine.collision_entity_set_shadow(entity_id, dx, dy, r, g, b, a) end
 ---@param a integer
 function engine.collision_entity_set_shape_color(entity_id, r, g, b, a) end
 
+---Replace an entity Shape's geometry with an axis-aligned ellipse; no-op without a Shape
+---@param entity_id integer
+---@param radius_x number
+---@param radius_y number
+function engine.collision_entity_set_shape_ellipse(entity_id, radius_x, radius_y) end
+
 ---Fill (true) or outline (false) an entity's Shape; no-op without one
 ---@param entity_id integer
 ---@param filled boolean
 function engine.collision_entity_set_shape_filled(entity_id, filled) end
+
+---Replace an entity Shape's geometry with a line from the local origin to (to_x, to_y); no-op without a Shape
+---@param entity_id integer
+---@param to_x number
+---@param to_y number
+function engine.collision_entity_set_shape_line(entity_id, to_x, to_y) end
 
 ---Set the pivot of an entity's Shape (the point that scale and rotation turn around); no-op without one
 ---@param entity_id integer
@@ -817,6 +834,21 @@ function engine.collision_entity_set_shape_origin(entity_id, x, y) end
 ---@param b integer
 ---@param a integer
 function engine.collision_entity_set_shape_outline_color(entity_id, r, g, b, a) end
+
+---Replace an entity Shape's geometry with a single pixel; no-op without a Shape
+---@param entity_id integer
+function engine.collision_entity_set_shape_point(entity_id) end
+
+---Replace an entity Shape's geometry with a polygon through local-space points ({x=, y=} tables); no-op without a Shape
+---@param entity_id integer
+---@param points Vec2[]
+function engine.collision_entity_set_shape_polygon(entity_id, points) end
+
+---Replace an entity Shape's geometry with a rectangle; no-op without a Shape
+---@param entity_id integer
+---@param width number
+---@param height number
+function engine.collision_entity_set_shape_rect(entity_id, width, height) end
 
 ---Set entity speed (scales velocity to this magnitude)
 ---@param entity_id integer
@@ -1224,6 +1256,11 @@ function engine.entity_set_shader(entity_id, key) end
 ---@param a integer
 function engine.entity_set_shadow(entity_id, dx, dy, r, g, b, a) end
 
+---Replace an entity Shape's geometry with a circle; no-op without a Shape
+---@param entity_id integer
+---@param radius number
+function engine.entity_set_shape_circle(entity_id, radius) end
+
 ---Set the color (RGBA 0-255) of an entity's Shape; no-op without one
 ---@param entity_id integer
 ---@param r integer
@@ -1232,10 +1269,22 @@ function engine.entity_set_shadow(entity_id, dx, dy, r, g, b, a) end
 ---@param a integer
 function engine.entity_set_shape_color(entity_id, r, g, b, a) end
 
+---Replace an entity Shape's geometry with an axis-aligned ellipse; no-op without a Shape
+---@param entity_id integer
+---@param radius_x number
+---@param radius_y number
+function engine.entity_set_shape_ellipse(entity_id, radius_x, radius_y) end
+
 ---Fill (true) or outline (false) an entity's Shape; no-op without one
 ---@param entity_id integer
 ---@param filled boolean
 function engine.entity_set_shape_filled(entity_id, filled) end
+
+---Replace an entity Shape's geometry with a line from the local origin to (to_x, to_y); no-op without a Shape
+---@param entity_id integer
+---@param to_x number
+---@param to_y number
+function engine.entity_set_shape_line(entity_id, to_x, to_y) end
 
 ---Set the pivot of an entity's Shape (the point that scale and rotation turn around); no-op without one
 ---@param entity_id integer
@@ -1250,6 +1299,21 @@ function engine.entity_set_shape_origin(entity_id, x, y) end
 ---@param b integer
 ---@param a integer
 function engine.entity_set_shape_outline_color(entity_id, r, g, b, a) end
+
+---Replace an entity Shape's geometry with a single pixel; no-op without a Shape
+---@param entity_id integer
+function engine.entity_set_shape_point(entity_id) end
+
+---Replace an entity Shape's geometry with a polygon through local-space points ({x=, y=} tables); no-op without a Shape
+---@param entity_id integer
+---@param points Vec2[]
+function engine.entity_set_shape_polygon(entity_id, points) end
+
+---Replace an entity Shape's geometry with a rectangle; no-op without a Shape
+---@param entity_id integer
+---@param width number
+---@param height number
+function engine.entity_set_shape_rect(entity_id, width, height) end
 
 ---Set entity speed (scales velocity to this magnitude)
 ---@param entity_id integer

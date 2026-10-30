@@ -523,6 +523,8 @@ fn meta_functions_complete() {
             "entity_set_shape_color", "entity_set_shape_outline_color",
             "entity_remove_shape_outline_color", "entity_set_shape_filled",
             "entity_set_shape_origin", "entity_remove_shape",
+            "entity_set_shape_point", "entity_set_shape_line", "entity_set_shape_rect",
+            "entity_set_shape_circle", "entity_set_shape_ellipse", "entity_set_shape_polygon",
             "entity_signal_set_scalar", "entity_signal_remove_scalar",
             "entity_signal_set_string", "entity_signal_remove_string",
             "entity_signal_set_integer", "entity_signal_remove_integer",

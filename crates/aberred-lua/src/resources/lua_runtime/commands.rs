@@ -5,6 +5,7 @@
 
 // Re-export UniformValue from its canonical location for internal convenience.
 pub use super::spawn_data::TweenConfig;
+use aberred_core::components::shape::ShapeKind;
 use aberred_core::components::timer::TimerMode;
 pub use aberred_core::resources::uniform_value::UniformValue;
 
@@ -488,6 +489,8 @@ pub enum EntityCmd {
     SetShapeFilled { entity_id: u64, filled: bool },
     /// Set the pivot of an existing `Shape`
     SetShapeOrigin { entity_id: u64, x: f32, y: f32 },
+    /// Replace the geometry of an existing `Shape`, keeping its colours, fill and origin
+    SetShapeKind { entity_id: u64, kind: ShapeKind },
     /// Remove the `Shape` component
     RemoveShape { entity_id: u64 },
     /// Set CameraTarget component on an entity. `priority`/`zoom` of `None`

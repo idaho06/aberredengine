@@ -172,6 +172,7 @@ pub fn process_entity_commands(
             | EntityCmd::SetShapeOutlineColor { .. }
             | EntityCmd::SetShapeFilled { .. }
             | EntityCmd::SetShapeOrigin { .. }
+            | EntityCmd::SetShapeKind { .. }
             | EntityCmd::RemoveShape { .. }) => process_shape_cmd(cmd, commands),
 
             cmd @ (EntityCmd::SetPosition { .. }
@@ -552,6 +553,11 @@ fn process_shape_cmd(cmd: EntityCmd, commands: &mut Commands) {
                 shape.origin = Vec2::new(x, y);
             });
         }
+        EntityCmd::SetShapeKind { entity_id, kind } => {
+            queue_on_component::<Shape>(commands, entity_id, move |shape| {
+                shape.kind = kind;
+            });
+        }
         EntityCmd::RemoveShape { entity_id } => {
             queue_on_entity(commands, entity_id, |mut e| {
                 e.remove::<Shape>();
@@ -858,6 +864,7 @@ fn process_lifecycle_cmd(
 mod tests {
     use super::*;
     use crate::components::lua_on_tween_finished::LuaOnTweenFinished;
+    use aberred_core::components::shape::ShapeKind;
     use aberred_core::components::timer::TimerMode;
     use aberred_core::testing::approx_eq;
 
@@ -1579,6 +1586,10 @@ mod tests {
                     x: 1.0,
                     y: 1.0,
                 },
+                EntityCmd::SetShapeKind {
+                    entity_id: id,
+                    kind: ShapeKind::Circle { radius: 3.0 },
+                },
             ],
         );
         assert!(world.get::<Shape>(e).is_none());
@@ -1648,6 +1659,50 @@ mod tests {
             let e = world.spawn(start).id();
             run_entity_cmd(&mut world, cmd(e.to_bits()));
             assert_eq!(*world.get::<Shape>(e).unwrap(), expected, "{name}");
+        }
+    }
+
+    #[test]
+    fn set_shape_kind_replaces_only_the_geometry() {
+        let styled = Shape::rect(Vec2::new(4.0, 2.0), Color::RED)
+            .filled()
+            .with_outline_color(Color::WHITE)
+            .with_origin(Vec2::new(1.0, 1.0));
+        let kinds = [
+            ShapeKind::Point,
+            ShapeKind::Line {
+                to: Vec2::new(3.0, 4.0),
+            },
+            ShapeKind::Rect {
+                size: Vec2::new(8.0, 9.0),
+            },
+            ShapeKind::Circle { radius: 5.0 },
+            ShapeKind::Ellipse {
+                radius: Vec2::new(2.0, 3.0),
+            },
+            Shape::polygon(
+                &[Vec2::ZERO, Vec2::new(4.0, 0.0), Vec2::new(2.0, 3.0)],
+                Color::RED,
+            )
+            .kind,
+        ];
+        for kind in kinds {
+            let mut world = World::new();
+            let e = world.spawn(styled.clone()).id();
+            run_entity_cmd(
+                &mut world,
+                EntityCmd::SetShapeKind {
+                    entity_id: e.to_bits(),
+                    kind: kind.clone(),
+                },
+            );
+            assert_eq!(
+                *world.get::<Shape>(e).unwrap(),
+                Shape {
+                    kind,
+                    ..styled.clone()
+                }
+            );
         }
     }
 
