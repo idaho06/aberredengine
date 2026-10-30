@@ -96,9 +96,44 @@ struct Transform {
 }
 
 impl Transform {
+    fn new(shape: &Shape, pos: Vec2, scale: Vec2, rotation_degrees: f32) -> Self {
+        Self {
+            pos,
+            origin: shape.origin,
+            scale,
+            rotor: Vec2::from_angle(rotation_degrees.to_radians()),
+        }
+    }
+
     /// `pos + rotate((v - origin) * scale, rotation)`; positive rotation is clockwise on the y-down screen.
     fn point(&self, v: Vec2) -> Vec2 {
         self.pos + self.rotor.rotate((v - self.origin) * self.scale)
+    }
+
+    /// The corners `(0,0), (w,0), (w,h), (0,h)` of a rectangle of `size`, transformed.
+    fn rect_corners(&self, size: Vec2) -> [Vec2; 4] {
+        [
+            Vec2::ZERO,
+            Vec2::new(size.x, 0.0),
+            size,
+            Vec2::new(0.0, size.y),
+        ]
+        .map(|p| self.point(p))
+    }
+
+    /// Centre, radii and whether it is still a circle (`|sx| == |sy|`) for a `Circle` of `radius`.
+    fn circle(&self, radius: f32) -> (Vec2, Vec2, bool) {
+        let radii = Vec2::splat(radius) * self.scale.abs();
+        let round = (radii.x - radii.y).abs() <= 4.0 * f32::EPSILON * radii.x.max(radii.y);
+        (self.point(Vec2::ZERO), radii, round)
+    }
+
+    /// Centre and radii of an `Ellipse`; the centre ignores the rotation.
+    fn ellipse(&self, radius: Vec2) -> (Vec2, Vec2) {
+        (
+            self.pos - self.origin * self.scale,
+            radius * self.scale.abs(),
+        )
     }
 }
 
@@ -120,12 +155,7 @@ pub fn shape_ops(
     rotation_degrees: f32,
     out: &mut Vec<DrawOp>,
 ) {
-    let xf = Transform {
-        pos,
-        origin: shape.origin,
-        scale,
-        rotor: Vec2::from_angle(rotation_degrees.to_radians()),
-    };
+    let xf = Transform::new(shape, pos, scale, rotation_degrees);
     let fill = layer == ShapeLayer::Fill;
     match &shape.kind {
         ShapeKind::Point => {
@@ -144,13 +174,7 @@ pub fn shape_ops(
             }
         }
         ShapeKind::Rect { size } => {
-            let c = [
-                Vec2::ZERO,
-                Vec2::new(size.x, 0.0),
-                *size,
-                Vec2::new(0.0, size.y),
-            ]
-            .map(|p| xf.point(p));
+            let c = xf.rect_corners(*size);
             if fill {
                 push_triangle(out, c[0], c[1], c[2]);
                 push_triangle(out, c[0], c[2], c[3]);
@@ -159,13 +183,12 @@ pub fn shape_ops(
             }
         }
         ShapeKind::Circle { radius } => {
-            let radii = Vec2::splat(*radius) * scale.abs();
-            let round = (radii.x - radii.y).abs() <= 4.0 * f32::EPSILON * radii.x.max(radii.y);
-            push_round(out, fill, xf.point(Vec2::ZERO), radii, round);
+            let (center, radii, round) = xf.circle(*radius);
+            push_round(out, fill, center, radii, round);
         }
         ShapeKind::Ellipse { radius } => {
-            let center = pos - shape.origin * scale;
-            push_round(out, fill, center, *radius * scale.abs(), false);
+            let (center, radii) = xf.ellipse(*radius);
+            push_round(out, fill, center, radii, false);
         }
         ShapeKind::Polygon(poly) => {
             let verts = poly.vertices();
@@ -179,6 +202,44 @@ pub fn shape_ops(
             }
         }
     }
+}
+
+/// The axis-aligned box `(min, max)` of the geometry [`shape_ops`] emits for the same arguments.
+///
+/// The arguments follow [`shape_ops`]: `scale` may be negative and the rotation
+/// is in degrees, clockwise on the y-down screen. A point has `min == max`, and
+/// a polygon without vertices gets the degenerate box at `pos`. The box excludes
+/// any shadow offset and the 1 px line width; a culling caller adds both.
+pub fn shape_cull_bounds(
+    shape: &Shape,
+    pos: Vec2,
+    scale: Vec2,
+    rotation_degrees: f32,
+) -> (Vec2, Vec2) {
+    let xf = Transform::new(shape, pos, scale, rotation_degrees);
+    let around = |center: Vec2, radii: Vec2| (center - radii, center + radii);
+    let found = match &shape.kind {
+        ShapeKind::Point => bounding_box([xf.point(Vec2::ZERO)]),
+        ShapeKind::Line { to } => bounding_box([Vec2::ZERO, *to].map(|p| xf.point(p))),
+        ShapeKind::Rect { size } => bounding_box(xf.rect_corners(*size)),
+        ShapeKind::Circle { radius } => {
+            let (center, radii, _) = xf.circle(*radius);
+            Some(around(center, radii))
+        }
+        ShapeKind::Ellipse { radius } => {
+            let (center, radii) = xf.ellipse(*radius);
+            Some(around(center, radii))
+        }
+        ShapeKind::Polygon(poly) => bounding_box(poly.vertices().iter().map(|&p| xf.point(p))),
+    };
+    found.unwrap_or((pos, pos))
+}
+
+/// The `(min, max)` corners of `points`, or `None` when there are none.
+fn bounding_box(points: impl IntoIterator<Item = Vec2>) -> Option<(Vec2, Vec2)> {
+    points.into_iter().fold(None, |acc, p| {
+        Some(acc.map_or((p, p), |(lo, hi)| (lo.min(p), hi.max(p))))
+    })
 }
 
 /// Appends a triangle in raylib's counter-clockwise order, or nothing if it is flat.
@@ -613,5 +674,101 @@ mod tests {
             shape_ops(&s, ShapeLayer::Fill, Vec2::ZERO, Vec2::ONE, 0.0, &mut out);
         }
         assert_eq!(out.capacity(), cap);
+    }
+
+    #[test]
+    fn a_point_has_degenerate_bounds() {
+        let (min, max) = shape_cull_bounds(&Shape::point(C), v(3.0, 4.0), Vec2::ONE, 0.0);
+        assert_eq!((min, max), (v(3.0, 4.0), v(3.0, 4.0)));
+    }
+
+    #[test]
+    fn a_polygon_without_vertices_has_a_degenerate_box_at_the_position() {
+        let s = Shape::polygon(&[], C);
+        assert_eq!(
+            shape_cull_bounds(&s, v(2.0, 3.0), Vec2::ONE, 0.0),
+            (v(2.0, 3.0), v(2.0, 3.0))
+        );
+    }
+
+    #[test]
+    fn unrotated_line_rect_and_polygon_get_their_tight_box() {
+        let one = Vec2::ONE;
+        assert_eq!(
+            shape_cull_bounds(&Shape::line(v(-2.0, 5.0), C), v(1.0, 1.0), one, 0.0),
+            (v(-1.0, 1.0), v(1.0, 6.0))
+        );
+        assert_eq!(
+            shape_cull_bounds(&Shape::rect(v(4.0, 2.0), C), v(10.0, 10.0), one, 0.0),
+            (v(10.0, 10.0), v(14.0, 12.0))
+        );
+        assert_eq!(
+            shape_cull_bounds(&Shape::polygon(&l_shape(), C), Vec2::ZERO, one, 0.0),
+            (v(0.0, 0.0), v(4.0, 4.0))
+        );
+    }
+
+    #[test]
+    fn a_circle_is_its_centre_plus_or_minus_the_scaled_radius() {
+        let (min, max) = shape_cull_bounds(&Shape::circle(5.0, C), v(10.0, 10.0), v(2.0, 3.0), 0.0);
+        assert_eq!((min, max), (v(0.0, -5.0), v(20.0, 25.0)));
+    }
+
+    #[test]
+    fn an_ellipse_box_ignores_rotation() {
+        let s = Shape::ellipse(v(4.0, 2.0), C).with_origin(v(1.0, 1.0));
+        let at0 = shape_cull_bounds(&s, v(10.0, 10.0), v(2.0, 3.0), 0.0);
+        assert_eq!(at0, (v(0.0, 1.0), v(16.0, 13.0)));
+        assert_eq!(shape_cull_bounds(&s, v(10.0, 10.0), v(2.0, 3.0), 77.0), at0);
+    }
+
+    #[test]
+    fn a_rotated_rect_gets_the_exact_box_of_its_rotated_corners() {
+        let (min, max) =
+            shape_cull_bounds(&Shape::rect(v(4.0, 2.0), C), v(10.0, 10.0), Vec2::ONE, 90.0);
+        assert!(vec2_approx_eq(min, v(8.0, 10.0)));
+        assert!(vec2_approx_eq(max, v(10.0, 14.0)));
+    }
+
+    #[test]
+    fn origin_shifts_the_box_and_moves_a_circle_under_rotation() {
+        let r = Shape::rect(v(4.0, 2.0), C).with_origin(v(2.0, 1.0));
+        assert_eq!(
+            shape_cull_bounds(&r, v(10.0, 10.0), Vec2::ONE, 0.0),
+            (v(8.0, 9.0), v(12.0, 11.0))
+        );
+        let c = Shape::circle(1.0, C).with_origin(v(1.0, 0.0));
+        let (min, max) = shape_cull_bounds(&c, Vec2::ZERO, Vec2::ONE, 90.0);
+        assert!(vec2_approx_eq(min, v(-1.0, -2.0)));
+        assert!(vec2_approx_eq(max, v(1.0, 0.0)));
+    }
+
+    #[test]
+    fn negative_scale_keeps_min_below_max() {
+        for s in [
+            Shape::rect(v(4.0, 2.0), C),
+            Shape::circle(2.0, C),
+            Shape::polygon(&l_shape(), C),
+        ] {
+            let (min, max) = shape_cull_bounds(&s, v(5.0, 5.0), v(-2.0, -1.0), 20.0);
+            assert!(min.x <= max.x && min.y <= max.y, "{s:?}");
+        }
+    }
+
+    #[test]
+    fn the_box_encloses_every_emitted_vertex() {
+        let s = Shape::polygon(&l_shape(), C).with_origin(v(1.0, 2.0));
+        let (min, max) = shape_cull_bounds(&s, v(5.0, 5.0), v(1.5, -2.0), 33.0);
+        for (a, b) in lines(&ops(
+            &s,
+            ShapeLayer::Outline,
+            v(5.0, 5.0),
+            v(1.5, -2.0),
+            33.0,
+        )) {
+            for p in [a, b] {
+                assert!(p.cmpge(min).all() && p.cmple(max).all());
+            }
+        }
     }
 }
