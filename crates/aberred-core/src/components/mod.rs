@@ -32,6 +32,7 @@
 //! - [`scale`] – 2D scale factor for sprites
 //! - [`scene`] – the name carried by each registered scene's persistent entity
 //! - [`screen_position`] – screen-space position for UI elements
+//! - [`shape`] – point, line, rectangle, circle, ellipse and polygon primitives drawn in world or screen space
 //! - [`signal_binding`] – binds UI text to signal values for reactive updates
 //! - [`signals`] – per-entity signal storage for cross-system communication
 //! - [`sprite`] – 2D sprite rendering component
@@ -75,6 +76,7 @@ pub mod scale;
 pub mod scene;
 pub mod screen_position;
 pub mod shadow;
+pub mod shape;
 pub mod signal_binding;
 pub mod signals;
 pub mod sprite;
