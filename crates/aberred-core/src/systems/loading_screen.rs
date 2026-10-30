@@ -1,29 +1,27 @@
 //! The engine's own loading screen: a dark-grey overlay with the engine name
-//! and a progress bar drawn with default-font glyphs.
+//! and a progress bar made of two shapes, a frame and a fill.
 //!
 //! It is shown while the game is in `Setup` and is not a scene: it fires no
 //! scene events and has no `SceneManager` entry. [`show_loading_screen`] and
 //! [`hide_loading_screen`] run as the `SHOW_LOADING_SCREEN` and
 //! `HIDE_LOADING_SCREEN` hooks on entering and leaving `Setup`.
 //!
-//! The layout functions are pure so the screen's text can be pinned without
-//! a window or font metrics.
+//! The bar needs no text measurement, so it is centered the moment it is
+//! shown.
 
 use bevy_ecs::prelude::*;
 
 use crate::components::dynamic_text::DynamicText;
 use crate::components::screen_position::ScreenPosition;
 use crate::components::shadow::Shadow;
+use crate::components::shape::Shape;
 use crate::components::z_index::ZIndex;
-use crate::math::Color;
+use crate::math::{Color, Vec2};
 use crate::resources::font_key::DEFAULT_FONT_KEY;
 use crate::resources::game_config::GameConfig;
 use crate::resources::loading_hold::LoadingHold;
 use crate::resources::pending_assets::PendingAssets;
 use crate::resources::render_size::RenderSize;
-
-/// Cells between the bar's two side borders.
-pub const BAR_INNER_WIDTH: usize = 30;
 
 /// Outer width of the progress bar's frame, in pixels.
 pub const BAR_WIDTH: f32 = 256.0;
@@ -60,15 +58,15 @@ const SUBTITLE_OFFSET_ROWS: f32 = TITLE_ROWS + 1.0;
 /// Rows from the title's top to the bar's top: title, gap, subtitle, gap.
 const BAR_OFFSET_ROWS: f32 = SUBTITLE_OFFSET_ROWS + 2.0;
 
-/// Rows the whole screen occupies: the title block plus the three bar rows.
-const TOTAL_ROWS: f32 = BAR_OFFSET_ROWS + 3.0;
+/// Pixels from the title's top to the bar's bottom.
+const TOTAL_HEIGHT: f32 = BAR_OFFSET_ROWS * ROW_HEIGHT + BAR_HEIGHT;
 
 /// Marks every entity of the loading screen, so hiding it despawns exactly
 /// these.
 #[derive(Component)]
 pub struct EngineLoadingScreen;
 
-/// Marks the bar's middle row, the only text that changes while loading.
+/// Marks the bar's fill, the only entity that changes while loading.
 #[derive(Component)]
 pub struct LoadingBar;
 
@@ -77,12 +75,12 @@ pub struct LoadingBar;
 pub struct SavedBackground(pub Color);
 
 /// Shows the loading screen: saves the game's background color and paints
-/// [`BACKGROUND`], then spawns the texts stacked on the render size's
-/// vertical center, with the bar at the current load progress.
+/// [`BACKGROUND`], then spawns the texts and the bar stacked on the render
+/// size's vertical center, with the bar at the current load progress.
 ///
-/// The texts start at x 0: they are measured once the default font's metrics
-/// arrive, which is after this runs, and [`center_loading_screen`] centers
-/// them then.
+/// The bar is centered at once. The texts start at x 0: they are measured
+/// once the default font's metrics arrive, which is after this runs, and
+/// [`center_loading_screen`] centers them then.
 pub fn show_loading_screen(
     mut commands: Commands,
     mut config: ResMut<GameConfig>,
@@ -93,7 +91,7 @@ pub fn show_loading_screen(
     commands.insert_resource(LoadingHold::for_seconds(MIN_DISPLAY_SECONDS, config.sim_hz));
     config.background_color = BACKGROUND;
 
-    let top = ((render_size.h as f32 - TOTAL_ROWS * ROW_HEIGHT) / 2.0).floor();
+    let top = ((render_size.h as f32 - TOTAL_HEIGHT) / 2.0).floor();
     let text =
         |content: &str, size: f32| DynamicText::new(content, DEFAULT_FONT_KEY, size, Color::WHITE);
 
@@ -111,24 +109,21 @@ pub fn show_loading_screen(
         ));
     }
 
-    let rows = [
-        bar_top(BAR_INNER_WIDTH),
-        bar_middle(pending.progress(), BAR_INNER_WIDTH),
-        bar_bottom(BAR_INNER_WIDTH),
-    ];
-    for (index, content) in rows.iter().enumerate() {
-        let position =
-            ScreenPosition::new(0.0, top + (BAR_OFFSET_ROWS + index as f32) * ROW_HEIGHT);
-        let mut row = commands.spawn((
-            EngineLoadingScreen,
-            text(content, ROW_HEIGHT),
-            position,
-            ZIndex(0.0),
-        ));
-        if index == 1 {
-            row.insert(LoadingBar);
-        }
-    }
+    let x = centered_x(render_size.w as f32, BAR_WIDTH);
+    let bar_top = top + BAR_OFFSET_ROWS * ROW_HEIGHT;
+    commands.spawn((
+        EngineLoadingScreen,
+        Shape::rect(Vec2::new(BAR_WIDTH, BAR_HEIGHT), Color::WHITE),
+        ScreenPosition::new(x, bar_top),
+        ZIndex(0.0),
+    ));
+    commands.spawn((
+        EngineLoadingScreen,
+        LoadingBar,
+        bar_fill(bar_fill_width(pending.progress(), BAR_FILL_WIDTH)),
+        ScreenPosition::new(x + BAR_PADDING, bar_top + BAR_PADDING),
+        ZIndex(0.0),
+    ));
 }
 
 /// Centers each loading-screen text horizontally on its measured width.
@@ -177,37 +172,23 @@ pub fn hide_loading_screen(
     }
 }
 
-/// Redraws the bar's middle row when the pending loads change.
+/// Resizes the bar's fill when the pending loads change.
 pub fn update_loading_bar(
     pending: Res<PendingAssets>,
-    mut bars: Query<&mut DynamicText, With<LoadingBar>>,
+    mut bars: Query<&mut Shape, With<LoadingBar>>,
 ) {
     if !pending.is_changed() {
         return;
     }
-    let row = bar_middle(pending.progress(), BAR_INNER_WIDTH);
+    let fill = bar_fill(bar_fill_width(pending.progress(), BAR_FILL_WIDTH));
     for mut bar in &mut bars {
-        bar.set_text(&row);
+        *bar = fill.clone();
     }
 }
 
-/// The bar's top border for `inner` cells between the corners.
-pub fn bar_top(inner: usize) -> String {
-    format!("┌{}┐", "─".repeat(inner))
-}
-
-/// The bar's bottom border for `inner` cells between the corners.
-pub fn bar_bottom(inner: usize) -> String {
-    format!("└{}┘", "─".repeat(inner))
-}
-
-/// The bar's middle row: `inner` cells filled left to right in proportion to
-/// `progress` (clamped to `0..=1`, NaN counts as 0). The fill rounds down, so
-/// the bar is full only when `progress` is complete.
-pub fn bar_middle(progress: f32, inner: usize) -> String {
-    // A float-to-integer `as` cast saturates: NaN and negatives become 0.
-    let filled = ((progress * inner as f32) as usize).min(inner);
-    format!("│{}{}│", "█".repeat(filled), " ".repeat(inner - filled))
+/// The bar's fill: a filled rect `width` wide.
+fn bar_fill(width: f32) -> Shape {
+    Shape::rect(Vec2::new(width, BAR_FILL_HEIGHT), Color::WHITE).filled()
 }
 
 /// The fill's width for `progress` of a bar `full` pixels wide: `progress`
@@ -219,7 +200,7 @@ pub fn bar_fill_width(progress: f32, full: f32) -> f32 {
 }
 
 /// The x that centers content of `content_width` in `screen_width`, floored
-/// so glyphs stay on the pixel grid.
+/// so content stays on the pixel grid.
 pub fn centered_x(screen_width: f32, content_width: f32) -> f32 {
     ((screen_width - content_width) / 2.0).floor()
 }
@@ -228,7 +209,8 @@ pub fn centered_x(screen_width: f32, content_width: f32) -> f32 {
 mod tests {
     use super::*;
 
-    use crate::math::Vec2;
+    use crate::components::shape::ShapeKind;
+    use crate::protocol::asset_kind::AssetKind;
     use crate::resources::font_metrics::test_support::default_font_metrics;
     use crate::resources::font_metrics::{FontMetricsStore, FontMetricsWarnCache};
     use crate::resources::loading_hold::LoadingHold;
@@ -259,6 +241,47 @@ mod tests {
         rows
     }
 
+    /// Every loading-screen entity, texts and shapes alike.
+    fn screen_entities(world: &mut World) -> usize {
+        world
+            .query_filtered::<Entity, With<EngineLoadingScreen>>()
+            .iter(world)
+            .count()
+    }
+
+    /// The bar's shapes as `(position, size, filled)`, top to bottom: the
+    /// frame, then the fill.
+    fn bar_shapes(world: &mut World) -> Vec<(Vec2, Vec2, bool)> {
+        let mut shapes: Vec<_> = world
+            .query_filtered::<(&Shape, &ScreenPosition), With<EngineLoadingScreen>>()
+            .iter(world)
+            .map(|(shape, position)| {
+                let ShapeKind::Rect { size } = &shape.kind else {
+                    panic!("the bar is made of rects");
+                };
+                (position.pos, *size, shape.filled)
+            })
+            .collect();
+        shapes.sort_by(|a, b| a.0.y.total_cmp(&b.0.y));
+        shapes
+    }
+
+    /// A world as [`world_before_font_metrics`], with `queued` loads pending
+    /// of which `settled` are answered.
+    fn world_with_progress(settled: usize, queued: usize) -> World {
+        let mut world = world_before_font_metrics();
+        let keys: Vec<String> = (0..queued).map(|i| format!("t{i}")).collect();
+        let mut pending = PendingAssets::default();
+        for key in &keys {
+            pending.queue(AssetKind::Texture, key);
+        }
+        for key in &keys[..settled] {
+            pending.settle(AssetKind::Texture, key);
+        }
+        world.insert_resource(pending);
+        world
+    }
+
     /// The screen is shown before the default font's metrics are in the
     /// store, so it centers once they arrive and the texts are measured.
     #[test]
@@ -282,7 +305,7 @@ mod tests {
             assert_eq!(position.pos.x, centered_x(640.0, text.size().x));
             checked += 1;
         }
-        assert_eq!(checked, 5);
+        assert_eq!(checked, 2);
     }
 
     /// The name is three cells tall; the subtitle and the bar stack below it
@@ -293,16 +316,31 @@ mod tests {
         world.run_system_once(show_loading_screen).unwrap();
 
         let rows = rows(&mut world);
+        assert_eq!(rows.len(), 2);
         assert_eq!(rows[0].0, "AberredEngine");
         assert_eq!(rows[0].1, 42.0);
-        for row in &rows[1..] {
-            assert_eq!(row.1, 14.0);
-        }
+        assert_eq!(rows[1].1, 14.0);
         assert!(rows[0].2.y + 42.0 <= rows[1].2.y, "subtitle below the name");
-        assert!(rows[1].2.y + 14.0 <= rows[2].2.y, "bar below the subtitle");
         for row in &rows {
             assert_eq!((row.2.y - rows[0].2.y) % 14.0, 0.0, "on the cell grid");
         }
+        let frame_top = bar_shapes(&mut world)[0].0.y;
+        assert!(rows[1].2.y + 14.0 <= frame_top, "bar below the subtitle");
+    }
+
+    /// The name, the subtitle and the bar stack leave the same margin above
+    /// and below, to within a pixel.
+    #[test]
+    fn the_whole_stack_is_centered_vertically() {
+        let mut world = world_before_font_metrics();
+        world.run_system_once(show_loading_screen).unwrap();
+
+        let top = rows(&mut world)[0].2.y;
+        let bottom = bar_shapes(&mut world)[0].0.y + BAR_HEIGHT;
+        assert!(
+            (top - (360.0 - bottom)).abs() <= 1.0,
+            "{top} above, {bottom} below"
+        );
     }
 
     /// The hold counts from showing the screen to hiding it.
@@ -311,10 +349,73 @@ mod tests {
         let mut world = world_before_font_metrics();
         world.run_system_once(show_loading_screen).unwrap();
         assert!(world.contains_resource::<LoadingHold>());
+        assert_eq!(screen_entities(&mut world), 4);
 
         world.run_system_once(hide_loading_screen).unwrap();
         assert!(!world.contains_resource::<LoadingHold>());
-        assert!(rows(&mut world).is_empty());
+        assert_eq!(screen_entities(&mut world), 0, "texts and shapes go");
+    }
+
+    #[test]
+    fn the_bar_is_an_outlined_frame_and_an_empty_filled_rect() {
+        let mut world = world_with_progress(0, 4);
+        world.run_system_once(show_loading_screen).unwrap();
+
+        let bar = bar_shapes(&mut world);
+        assert_eq!(bar.len(), 2);
+        let frame = (bar[0].1, bar[0].2);
+        assert_eq!(frame, (Vec2::new(BAR_WIDTH, BAR_HEIGHT), false));
+        let fill = (bar[1].1, bar[1].2);
+        assert_eq!(fill, (Vec2::new(0.0, BAR_FILL_HEIGHT), true));
+    }
+
+    /// The bar needs no text measurement, so it is centered the moment it is
+    /// shown, before any font metrics exist.
+    #[test]
+    fn the_bar_is_centered_before_any_font_metrics_exist() {
+        let mut world = world_with_progress(0, 4);
+        world.run_system_once(show_loading_screen).unwrap();
+
+        let bar = bar_shapes(&mut world);
+        let x = centered_x(640.0, BAR_WIDTH);
+        assert_eq!(bar[0].0.x, x);
+        assert_eq!(
+            bar[1].0,
+            Vec2::new(x + BAR_PADDING, bar[0].0.y + BAR_PADDING)
+        );
+    }
+
+    /// The fill follows the answered loads, and is left alone while the
+    /// pending loads do not change.
+    #[test]
+    fn update_loading_bar_resizes_the_fill_when_loads_are_answered() {
+        let mut world = world_with_progress(0, 4);
+        world.run_system_once(show_loading_screen).unwrap();
+        let mut schedule = Schedule::default();
+        schedule.add_systems(update_loading_bar);
+
+        world
+            .resource_mut::<PendingAssets>()
+            .settle(AssetKind::Texture, "t0");
+        schedule.run(&mut world);
+        let expected = Vec2::new(bar_fill_width(0.25, BAR_FILL_WIDTH), BAR_FILL_HEIGHT);
+        assert_eq!(bar_shapes(&mut world)[1].1, expected);
+
+        let mut fills = world.query_filtered::<&mut Shape, With<LoadingBar>>();
+        for mut shape in fills.iter_mut(&mut world) {
+            shape.kind = ShapeKind::Rect {
+                size: Vec2::new(7.0, 7.0),
+            };
+        }
+        schedule.run(&mut world);
+        assert_eq!(bar_shapes(&mut world)[1].1, Vec2::new(7.0, 7.0));
+
+        world
+            .resource_mut::<PendingAssets>()
+            .settle(AssetKind::Texture, "t1");
+        schedule.run(&mut world);
+        let expected = Vec2::new(bar_fill_width(0.5, BAR_FILL_WIDTH), BAR_FILL_HEIGHT);
+        assert_eq!(bar_shapes(&mut world)[1].1, expected);
     }
 
     #[test]
@@ -335,42 +436,6 @@ mod tests {
         assert_eq!(bar_fill_width(-1.0, 10.0), 0.0);
         assert_eq!(bar_fill_width(2.0, 10.0), 10.0);
         assert_eq!(bar_fill_width(f32::NAN, 10.0), 0.0);
-    }
-
-    #[test]
-    fn the_top_and_bottom_rows_close_the_box() {
-        assert_eq!(bar_top(3), "┌───┐");
-        assert_eq!(bar_bottom(3), "└───┘");
-        assert_eq!(bar_top(0), "┌┐");
-    }
-
-    #[test]
-    fn the_middle_row_fills_from_the_left() {
-        assert_eq!(bar_middle(0.0, 4), "│    │");
-        assert_eq!(bar_middle(0.5, 4), "│██  │");
-        assert_eq!(bar_middle(1.0, 4), "│████│");
-    }
-
-    #[test]
-    fn every_row_is_inner_plus_two_cells_wide() {
-        for progress in [0.0, 0.1, 0.5, 0.99, 1.0] {
-            assert_eq!(bar_middle(progress, 7).chars().count(), 9);
-        }
-        assert_eq!(bar_top(7).chars().count(), 9);
-        assert_eq!(bar_bottom(7).chars().count(), 9);
-    }
-
-    #[test]
-    fn a_bar_is_full_only_when_progress_is_complete() {
-        assert_eq!(bar_middle(0.99, 10), "│█████████ │");
-        assert_eq!(bar_middle(0.01, 10), "│          │");
-    }
-
-    #[test]
-    fn progress_outside_the_unit_interval_is_clamped() {
-        assert_eq!(bar_middle(-1.0, 2), "│  │");
-        assert_eq!(bar_middle(2.0, 2), "│██│");
-        assert_eq!(bar_middle(f32::NAN, 2), "│  │");
     }
 
     #[test]

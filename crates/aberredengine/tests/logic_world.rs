@@ -22,7 +22,7 @@ use aberredengine::core::components::rigid_body::RigidBody;
 use aberredengine::core::components::scene::SceneName;
 use aberredengine::core::components::screen_position::ScreenPosition;
 use aberredengine::core::components::shadow::Shadow;
-use aberredengine::core::components::shape::Shape;
+use aberredengine::core::components::shape::{Shape, ShapeKind};
 use aberredengine::core::components::signals::Signals;
 use aberredengine::core::components::sprite::Sprite;
 use aberredengine::core::components::timer::Timer;
@@ -60,7 +60,8 @@ use aberredengine::core::resources::signal_keys as sk;
 use aberredengine::core::resources::world_signals::WorldSignals;
 use aberredengine::core::systems::asset_loader::{AssetError, AssetLoader};
 use aberredengine::core::systems::loading_screen::{
-    BACKGROUND, BAR_INNER_WIDTH, SavedBackground, bar_bottom, bar_middle, bar_top, centered_x,
+    BACKGROUND, BAR_FILL_HEIGHT, BAR_FILL_WIDTH, BAR_HEIGHT, BAR_WIDTH, EngineLoadingScreen,
+    SavedBackground, bar_fill_width, centered_x,
 };
 use aberredengine::core::systems::scene_dispatch::in_scene;
 use aberredengine::engine_app::SimSet;
@@ -1415,38 +1416,64 @@ fn loading_screen_rows(tw: &mut TestWorld) -> Vec<(String, Vec2, bool)> {
     rows
 }
 
-/// The engine's loading screen shows the name, a subtitle and a three-row bar,
-/// all in the default font, the two titles shadowed, on whole pixels.
+/// The loading bar's shapes as `(screen position, size, filled)`, top to
+/// bottom: the frame, then the fill.
+fn loading_screen_shapes(tw: &mut TestWorld) -> Vec<(Vec2, Vec2, bool)> {
+    let mut shapes: Vec<_> = tw
+        .world
+        .query_filtered::<(&Shape, &ScreenPosition), With<EngineLoadingScreen>>()
+        .iter(&tw.world)
+        .map(|(shape, position)| {
+            let ShapeKind::Rect { size } = &shape.kind else {
+                panic!("the bar is made of rects");
+            };
+            (position.pos, *size, shape.filled)
+        })
+        .collect();
+    shapes.sort_by(|a, b| a.0.y.total_cmp(&b.0.y));
+    shapes
+}
+
+/// Every entity of the loading screen, texts and shapes alike.
+fn loading_screen_entity_count(tw: &mut TestWorld) -> usize {
+    tw.world
+        .query_filtered::<Entity, With<EngineLoadingScreen>>()
+        .iter(&tw.world)
+        .count()
+}
+
+/// The engine's loading screen shows the name and a subtitle in the default
+/// font, both shadowed, above a progress bar of two shapes, all on whole
+/// pixels.
 #[test]
-fn the_loading_screen_spawns_its_texts() {
+fn the_loading_screen_spawns_its_texts_and_its_bar() {
     let mut tw = engine_loading_screen_world();
     tw.tick(2, DT);
 
     let rows = loading_screen_rows(&mut tw);
     let texts: Vec<&str> = rows.iter().map(|row| row.0.as_str()).collect();
-    assert_eq!(
-        texts,
-        [
-            "AberredEngine",
-            "Loading...",
-            bar_top(BAR_INNER_WIDTH).as_str(),
-            bar_middle(0.0, BAR_INNER_WIDTH).as_str(),
-            bar_bottom(BAR_INNER_WIDTH).as_str(),
-        ]
-    );
+    assert_eq!(texts, ["AberredEngine", "Loading..."]);
     assert_eq!(
         rows.iter().map(|row| row.2).collect::<Vec<_>>(),
-        [true, true, false, false, false]
+        [true, true]
     );
-    for (_, position, _) in &rows {
+
+    let bar = loading_screen_shapes(&mut tw);
+    assert_eq!(bar.len(), 2);
+    assert_eq!(
+        (bar[0].1, bar[0].2),
+        (Vec2::new(BAR_WIDTH, BAR_HEIGHT), false)
+    );
+    assert_eq!(
+        (bar[1].1, bar[1].2),
+        (Vec2::new(0.0, BAR_FILL_HEIGHT), true)
+    );
+
+    let positions = rows.iter().map(|row| row.1).chain(bar.iter().map(|b| b.0));
+    for position in positions {
         assert_eq!(position.x, position.x.floor());
         assert_eq!(position.y, position.y.floor());
     }
-    let bar = &rows[2..];
-    assert_eq!(bar[0].1.x, bar[1].1.x);
-    assert_eq!(bar[1].1.x, bar[2].1.x);
-    assert_eq!(bar[1].1.y - bar[0].1.y, 14.0);
-    assert_eq!(bar[2].1.y - bar[1].1.y, 14.0);
 
     let fonts: Vec<String> = tw
         .world
@@ -1454,13 +1481,14 @@ fn the_loading_screen_spawns_its_texts() {
         .iter(&tw.world)
         .map(|text| text.font.to_string())
         .collect();
-    assert_eq!(fonts, ["default"; 5]);
+    assert_eq!(fonts, ["default"; 2]);
 }
 
-/// The texts are published to the render thread: the snapshot carries all
-/// five (a screen text without a `ZIndex` never reaches it).
+/// The texts and the bar are published to the render thread: the snapshot
+/// carries both texts and both shapes (a screen item without a `ZIndex`
+/// never reaches it).
 #[test]
-fn the_loading_screen_texts_reach_the_snapshot() {
+fn the_loading_screen_texts_and_bar_reach_the_snapshot() {
     let mut tw = engine_loading_screen_world();
     tw.tick(2, DT);
 
@@ -1480,39 +1508,39 @@ fn the_loading_screen_texts_reach_the_snapshot() {
         .map(|entry| entry.text.text.to_string())
         .collect();
     texts.sort();
-    let mut expected = vec![
-        "AberredEngine".to_owned(),
-        "Loading...".to_owned(),
-        bar_top(BAR_INNER_WIDTH),
-        bar_middle(0.0, BAR_INNER_WIDTH),
-        bar_bottom(BAR_INNER_WIDTH),
-    ];
-    expected.sort();
-    assert_eq!(texts, expected);
+    assert_eq!(texts, ["AberredEngine", "Loading..."]);
+
+    let filled: Vec<bool> = snapshot
+        .screen_shapes
+        .iter()
+        .map(|entry| entry.shape.filled)
+        .collect();
+    assert_eq!(filled.len(), 2, "the frame and the fill");
+    assert!(filled.contains(&true) && filled.contains(&false));
 }
 
-/// The bar's middle row follows the share of answered loads; the other texts
+/// The fill follows the share of answered loads; the frame and the texts
 /// don't change.
 #[test]
 fn the_loading_bar_fills_as_loads_are_answered() {
     let mut tw = engine_loading_screen_world();
     tw.tick(2, DT);
-    let before = loading_screen_rows(&mut tw);
+    let rows_before = loading_screen_rows(&mut tw);
+    let frame_before = loading_screen_shapes(&mut tw)[0];
 
     tw.deliver_texture_dims("t0", 8, 8);
     tw.tick(2, DT);
     assert_eq!(
-        loading_screen_rows(&mut tw)[3].0,
-        bar_middle(0.25, BAR_INNER_WIDTH)
+        loading_screen_shapes(&mut tw)[1].1.x,
+        bar_fill_width(0.25, BAR_FILL_WIDTH)
     );
 
     tw.deliver_texture_dims("t1", 8, 8);
     tw.tick(2, DT);
-    let rows = loading_screen_rows(&mut tw);
-    assert_eq!(rows[3].0, bar_middle(0.5, BAR_INNER_WIDTH));
-    for index in [0, 1, 2, 4] {
-        assert_eq!(rows[index], before[index]);
-    }
+    let bar = loading_screen_shapes(&mut tw);
+    assert_eq!(bar[1].1.x, bar_fill_width(0.5, BAR_FILL_WIDTH));
+    assert_eq!(bar[0], frame_before);
+    assert_eq!(loading_screen_rows(&mut tw), rows_before);
 }
 
 /// The loading screen's entities go with the loading scene.
@@ -1520,7 +1548,7 @@ fn the_loading_bar_fills_as_loads_are_answered() {
 fn the_loading_screen_is_torn_down_when_loading_ends() {
     let mut tw = engine_loading_screen_world();
     tw.tick(2, DT);
-    assert_eq!(loading_screen_rows(&mut tw).len(), 5);
+    assert_eq!(loading_screen_entity_count(&mut tw), 4);
 
     for key in ["t0", "t1", "t2", "t3"] {
         tw.deliver_texture_dims(key, 8, 8);
@@ -1532,7 +1560,7 @@ fn the_loading_screen_is_torn_down_when_loading_ends() {
         *tw.world.resource::<CurrentGameState>().get(),
         GameState::Playing
     );
-    assert!(loading_screen_rows(&mut tw).is_empty());
+    assert_eq!(loading_screen_entity_count(&mut tw), 0);
 }
 
 /// The loading scene paints the dark-grey background, in the config and in
@@ -1572,7 +1600,7 @@ fn the_loading_screen_paints_its_background_and_restores_the_old_one() {
     assert!(tw.world.get_resource::<SavedBackground>().is_none());
 }
 
-/// A second call changes nothing: still one set of texts, and no scene.
+/// A second call changes nothing: still one screen, and no scene.
 #[test]
 fn engine_loading_screen_twice_shows_one_screen_and_no_scene() {
     let mut tw = engine_loading_screen_builder()
@@ -1581,7 +1609,7 @@ fn engine_loading_screen_twice_shows_one_screen_and_no_scene() {
         .expect("build should succeed");
     tw.tick(2, DT);
 
-    assert_eq!(loading_screen_rows(&mut tw).len(), 5);
+    assert_eq!(loading_screen_entity_count(&mut tw), 4);
     assert_eq!(tw.world.resource::<SceneManager>().loading_scene, None);
 }
 
@@ -1628,10 +1656,10 @@ fn the_engine_loading_screen_stays_for_its_minimum_time() {
         GameState::Setup,
         "held although every load is answered"
     );
-    assert_eq!(loading_screen_rows(&mut tw).len(), 5);
+    assert_eq!(loading_screen_entity_count(&mut tw), 4);
 
     tw.tick_to_play(DT, 10);
-    assert!(loading_screen_rows(&mut tw).is_empty());
+    assert_eq!(loading_screen_entity_count(&mut tw), 0);
     assert!(tw.world.get_resource::<LoadingHold>().is_none());
 }
 
