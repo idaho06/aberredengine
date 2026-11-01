@@ -38,6 +38,35 @@ fn hybrid_game() -> EngineBuilder {
         .add_scene_system("asteroids_level01", swarm_steering)
 }
 
+// Hybrid games: Lua tags
+mod lua_tags {
+use aberredengine::prelude::*;
+
+// Rust components Lua attaches by name.
+#[derive(Component, Default, Clone)]
+struct Boid;
+
+#[derive(Component, Default, Clone)]
+struct Leader;
+
+// The boids Lua also tagged "leader" fly faster.
+fn steer_leaders(mut leaders: Query<&mut RigidBody, (With<Boid>, With<Leader>)>) {
+    for mut body in &mut leaders {
+        if body.max_speed != Some(240.0) {
+            body.max_speed = Some(240.0);
+        }
+    }
+}
+
+fn tagged_game() -> EngineBuilder {
+    EngineBuilder::new()
+        .with_lua("assets/scripts/main.lua")
+        .lua_tag::<Boid>("boid")
+        .lua_tag::<Leader>("leader")
+        .add_system(steer_leaders)
+}
+}
+
 #[cfg(test)]
 mod tests {
     use super::{Boid, adopt_swarm};

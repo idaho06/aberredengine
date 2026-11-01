@@ -219,6 +219,7 @@ The engine owns the main loop. You configure it through `EngineBuilder`: registe
 | `.add_observer(observer_fn)` | Register a persistent observer for a custom or engine event. See [Custom systems and observers](#custom-systems-and-observers). |
 | `.on_scene_enter(scene, observer_fn)` / `.on_scene_exit(scene, observer_fn)` | Observe `SceneEntered`/`SceneExited` for one scene only. See [Scene-scoped systems and observers](#scene-scoped-systems-and-observers). |
 | `.with_lua(path)` | **Lua builds only** (`lua` feature). Run the `main.lua` at `path`; combines with the other builder methods. See [Hybrid games](#hybrid-games-rust--lua). |
+| `.lua_tag::<T>(name)` | **Lua builds only.** Let Lua attach component `T` by `name` (`:with_tag(name)`, `engine.entity_insert_tag`/`entity_remove_tag`). Can be called multiple times. See [Hybrid games](#hybrid-games-rust--lua). |
 | `.deterministic(seed)` | Seed `SimRng` from `seed` instead of entropy, pinning simulation randomness to a known value. Mutually exclusive with `.with_lua()`. See [Determinism and replay](#10-determinism-and-replay) below. |
 | `.record_replay(path, game_version)` | Record this session's input stream to `path`. Requires `.deterministic(seed)` first; mutually exclusive with `.play_replay()`. |
 | `.play_replay(path)` | Replay a previously recorded file from `path` instead of live input. The seed comes from the file's header — do not also call `.deterministic()`. Mutually exclusive with `.record_replay()`. |
@@ -412,6 +413,45 @@ fn hybrid_game() -> EngineBuilder {
 - **Scene entry:** `main.lua`'s `on_scene_enter` runs on `SceneReady`, so `engine.get_entity` finds what the Rust `SceneEntered` observers spawned and registered.
 - **Loading scene:** `on_scene_enter` runs once for the `.loading_scene()`; its `on_update_<scene>` doesn't run during Setup.
 - **Each tick:** your `.add_system()` systems, then Lua's callbacks, then your `.add_late_system()` systems; see [the `SimSet` order](#configure_scheduleclosure--full-ordering-control).
+
+**Lua tags.** `.lua_tag::<T>(name)` lets Lua attach a Rust component by name, with no adoption observer. `T` needs `Component + Default + Clone` (`Clone` keeps the tag on `engine.clone()` copies), and an entity takes any number of tags:
+
+```rust
+use aberredengine::prelude::*;
+
+// Rust components Lua attaches by name.
+#[derive(Component, Default, Clone)]
+struct Boid;
+
+#[derive(Component, Default, Clone)]
+struct Leader;
+
+// The boids Lua also tagged "leader" fly faster.
+fn steer_leaders(mut leaders: Query<&mut RigidBody, (With<Boid>, With<Leader>)>) {
+    for mut body in &mut leaders {
+        if body.max_speed != Some(240.0) {
+            body.max_speed = Some(240.0);
+        }
+    }
+}
+
+fn tagged_game() -> EngineBuilder {
+    EngineBuilder::new()
+        .with_lua("assets/scripts/main.lua")
+        .lua_tag::<Boid>("boid")
+        .lua_tag::<Leader>("leader")
+        .add_system(steer_leaders)
+}
+```
+
+```lua
+engine.spawn():with_group("swarm"):with_tag("boid"):with_tag("leader"):register_as("lead"):build()
+-- later, from on_update_<scene>:
+engine.entity_remove_tag(engine.get_entity("lead"), "leader") -- entity_insert_tag adds it back
+```
+
+- The entity gets `T::default()`; one that already has a `T` keeps its value.
+- A name Lua uses that Rust never registered is a Lua error at the call, listing the registered names. Registering one name twice is a startup error (`EngineError::DuplicateLuaTag`; see [Startup error handling](#startup-error-handling)).
 
 ### Observers that live for one scene
 

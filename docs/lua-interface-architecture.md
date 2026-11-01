@@ -71,7 +71,7 @@ crates/aberred-lua/src/resources/lua_runtime/
 ├── runtime.rs          # LuaRuntime struct, LuaAppData (queue fields generated via lua_queues!), pool types, GameConfigSnapshot, CameraSnapshot
 ├── entity_builder/      # LuaEntityBuilder fluent API, split by category; builder_method! macro (single source for runtime + stubs)
 │   ├── mod.rs           # LuaEntityBuilder struct, builder_method!/DummyMethods, register_methods() dispatch, register_as/build
-│   ├── transform.rs     # with_position, with_screen_position, with_rotation, with_scale, with_parent, with_stuck_to*, with_camera_target, ...
+│   ├── transform.rs     # with_position, with_screen_position, with_rotation, with_scale, with_parent, with_stuck_to*, with_camera_target, with_tag, ...
 │   ├── physics.rs       # with_velocity, with_acceleration, with_friction, with_max_speed, with_frozen, with_box_collider*
 │   ├── sprite.rs        # with_sprite*, with_tint, with_shadow, with_animation*, with_lua_animation_finished, with_z_index
 │   ├── shape.rs          # with_shape_point/line/rect/circle/ellipse/polygon, with_shape_filled, with_shape_outline_color, with_shape_origin
@@ -93,13 +93,15 @@ crates/aberred-lua/src/resources/lua_runtime/
 │   ├── phase_group.rs  # register_phase_api(), register_group_api()
 │   ├── render.rs       # register_render_api() (post-process shaders + GUI theme configuration)
 │   ├── signal.rs       # register_signal_api() (also request_scene/request_quit — see Signal Keys Vocabulary)
-│   └── spawn.rs        # register_spawn_api()
+│   ├── spawn.rs        # register_spawn_api()
+│   └── tag.rs          # register_tag_cmds(): entity_insert_tag/entity_remove_tag + collision_ twins (hand-written; the name lookup needs the Lua state)
 ├── queue_registry.rs   # lua_queues! macro: authoritative list of all 23 command queues
 ├── command_queues.rs   # drain_*_commands() methods (generated), clear_all_commands (generated), cache updates
 ├── stub_meta.rs        # Type/enum/callback metadata; builder meta delegated to entity_builder/mod.rs
 ├── commands.rs         # Command enums (EntityCmd, SignalCmd, CameraFollowCmd, InputCmd, etc.)
 ├── context.rs          # Entity context builder for Lua callbacks (pooled), snapshot types
 ├── input_snapshot.rs   # InputSnapshot, DigitalInputs, AnalogInputs for Lua callbacks
+├── lua_tag.rs          # LuaTag, LuaRuntime::register_lua_tag, resolve_lua_tag: Rust components Lua attaches by name
 └── spawn_data.rs       # Data structures for spawn configuration (SpawnCmd, component data structs)
 ```
 
@@ -499,6 +501,7 @@ All are registered in `engine_api/render.rs` and queue into `gui_theme_commands`
 - `entity_insert_lua_timer`, `entity_insert_lua_timer_once`, `entity_remove_lua_timer`
 - `entity_insert_phase`, `entity_insert_lua_phase_entered`, `entity_insert_lua_phase_exited`, `entity_insert_lua_phase_update`
 - `entity_insert_ttl`
+- `entity_insert_tag`, `entity_remove_tag`
 - `entity_insert_tween_position`, `entity_remove_tween_position`
 - `entity_insert_tween_rotation`, `entity_remove_tween_rotation`
 - `entity_insert_tween_scale`, `entity_remove_tween_scale`
@@ -536,7 +539,7 @@ The five `entity_insert_tween_*` commands (`position`/`rotation`/`scale`/`screen
 
 #### Collision Entity Commands
 
-All `entity_*` commands have a `collision_entity_*` counterpart (auto-generated via `define_entity_cmds!`). These queue into collision-scoped buffers for immediate processing.
+All `entity_*` commands have a `collision_entity_*` counterpart (auto-generated via `define_entity_cmds!`; `entity_insert_tag`/`entity_remove_tag` are registered by hand in `engine_api/tag.rs`, since their tag-name lookup needs the Lua state). These queue into collision-scoped buffers for immediate processing.
 
 ### `LuaEntityBuilder` Methods
 
@@ -561,6 +564,7 @@ with_stuck_to
 with_stuck_to_offset
 with_stuck_to_stored_velocity
 with_camera_target
+with_tag
 ```
 
 **Physics** (`physics.rs`)
@@ -808,7 +812,7 @@ When adding a new builder method that accepts a table, add a `schema_refs` entry
 
 ### Spawn Processing
 
-Spawn and clone commands are processed via `process_spawn_command()` and `process_clone_command()` in `lua_commands/spawn_cmd.rs`. Both delegate to the shared `apply_components()` helper, which applies all component data from `SpawnCmd` to the entity. This ensures spawn and clone have identical component support.
+Spawn and clone commands are processed via `process_spawn_command()` and `process_clone_command()` in `lua_commands/spawn_cmd.rs`. Both delegate to the shared `apply_components()` helper, which applies all component data from `SpawnCmd` to the entity. This ensures spawn and clone have identical component support. `:with_tag()` tags resolve when Lua calls them and apply after every other component.
 
 `apply_components()` is split into focused sub-functions:
 - `apply_transform_components()` — position, screen position, rotation, scale, parent, stuck_to, camera target

@@ -351,6 +351,7 @@ Collision callbacks process commands from their own dedicated queues, which are 
 - `engine.collision_entity_remove_lua_timer()` instead of `engine.entity_remove_lua_timer()`
 - `engine.collision_entity_insert_phase()` / `engine.collision_entity_insert_lua_phase_*()` instead of `engine.entity_insert_phase()` / `engine.entity_insert_lua_phase_*()`
 - `engine.collision_entity_insert_ttl()` instead of `engine.entity_insert_ttl()`
+- `engine.collision_entity_insert_tag()` / `engine.collision_entity_remove_tag()` instead of `engine.entity_insert_tag()` / `engine.entity_remove_tag()`
 - `engine.collision_entity_insert_stuck_to()` instead of `engine.entity_insert_stuck_to()`
 - `engine.collision_release_stuck_to()` instead of `engine.release_stuck_to()`
 - `engine.collision_entity_set_animation()` instead of `engine.entity_set_animation()`
@@ -1147,6 +1148,18 @@ Set entity's collision/query group.
 :with_group("player")
 :with_group("enemy")
 :with_group("bullet")
+```
+
+#### `:with_tag(name)`
+
+Attach the Rust component a hybrid game registered under `name` with `EngineBuilder::lua_tag::<T>(name)` (see
+[Hybrid games](../../RUST-GAME-GUIDE.md#hybrid-games-rust--lua)). Repeatable: an entity takes any number of tags.
+The entity gets the component's default value; one that already has it (e.g. a clone of a tagged template) keeps
+its value. A name Rust never registered raises a Lua error at the call, listing the registered names.
+
+```lua
+:with_tag("boid")
+:with_tag("leader")
 ```
 
 #### `:with_position(x, y)`
@@ -3332,6 +3345,24 @@ Insert TTL component on entity at runtime.
 ```lua
 -- Give an enemy 30 seconds to live
 engine.entity_insert_ttl(enemy_id, 30.0)
+```
+
+### `engine.entity_insert_tag(entity_id, tag)` / `engine.entity_remove_tag(entity_id, tag)`
+
+Attach or detach the Rust component registered under Lua tag `tag` (see [`:with_tag(name)`](#with_tagname)).
+Insert keeps a component the entity already has; remove is a no-op without one. An unregistered name raises a
+Lua error at the call.
+
+**Parameters:**
+
+- `entity_id` (integer): Target entity ID
+- `tag` (string): Lua tag name registered by `EngineBuilder::lua_tag`
+
+**Example:**
+
+```lua
+-- The leader steps down; entity_insert_tag promotes it again
+engine.entity_remove_tag(engine.get_entity("lead"), "leader")
 ```
 
 ### `engine.entity_insert_tween_position(entity_id, from_x, from_y, to_x, to_y, duration, easing, loop_mode, backwards, callback?)`
