@@ -421,35 +421,42 @@ use aberredengine::prelude::*;
 
 // Rust components Lua attaches by name.
 #[derive(Component, Default, Clone)]
-struct Boid;
+struct Drone;
 
 #[derive(Component, Default, Clone)]
 struct Leader;
 
-// The boids Lua also tagged "leader" fly faster.
-fn steer_leaders(mut leaders: Query<&mut RigidBody, (With<Boid>, With<Leader>)>) {
-    for mut body in &mut leaders {
-        if body.max_speed != Some(240.0) {
-            body.max_speed = Some(240.0);
-        }
+// Lua tags a drone "leader" at spawn or later; its RigidBody is already there.
+fn promote(ev: On<Add, Leader>, mut drones: Query<&mut RigidBody, With<Drone>>) {
+    if let Ok(mut body) = drones.get_mut(ev.event_target()) {
+        body.max_speed = Some(240.0);
+    }
+}
+
+// `engine.entity_remove_tag` (or a despawn) takes the tag off.
+fn demote(ev: On<Remove, Leader>, mut drones: Query<&mut RigidBody, With<Drone>>) {
+    if let Ok(mut body) = drones.get_mut(ev.event_target()) {
+        body.max_speed = Some(120.0);
     }
 }
 
 fn tagged_game() -> EngineBuilder {
     EngineBuilder::new()
         .with_lua("assets/scripts/main.lua")
-        .lua_tag::<Boid>("boid")
+        .lua_tag::<Drone>("drone")
         .lua_tag::<Leader>("leader")
-        .add_system(steer_leaders)
+        .add_observer(promote)
+        .add_observer(demote)
 }
 ```
 
 ```lua
-engine.spawn():with_group("swarm"):with_tag("boid"):with_tag("leader"):register_as("lead"):build()
+engine.spawn():with_max_speed(120):with_tag("drone"):with_tag("leader"):register_as("lead"):build()
 -- later, from on_update_<scene>:
-engine.entity_remove_tag(engine.get_entity("lead"), "leader") -- entity_insert_tag adds it back
+engine.entity_remove_tag(engine.get_entity("lead"), "leader") -- demote runs; entity_insert_tag promotes again
 ```
 
+- Tags apply after the spawn's other components, in call order, so an `On<Add, T>` observer of a tag finds the entity's `RigidBody`, group and earlier tags.
 - The entity gets `T::default()`; one that already has a `T` keeps its value.
 - A name Lua uses that Rust never registered is a Lua error at the call, listing the registered names. Registering one name twice is a startup error (`EngineError::DuplicateLuaTag`; see [Startup error handling](#startup-error-handling)).
 
