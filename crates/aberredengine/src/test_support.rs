@@ -313,23 +313,23 @@ impl TestWorldBuilder {
         self
     }
 
-    #[cfg(feature = "lua")]
     /// Configure the harness for a Lua game, mirroring `EngineBuilder::with_lua`.
+    #[cfg(feature = "lua")]
     pub fn with_lua(mut self, script_path: impl Into<PathBuf>) -> Self {
         self.lua = Some(LuaScript::Path(script_path.into()));
         self
     }
 
-    #[cfg(feature = "lua")]
     /// Like [`with_lua`](Self::with_lua), with the script inline (`build()`
     /// writes it to a temp file for the build). The later call wins.
+    #[cfg(feature = "lua")]
     pub fn with_lua_source(mut self, source: impl Into<String>) -> Self {
         self.lua = Some(LuaScript::Inline(source.into()));
         self
     }
 
-    #[cfg(feature = "lua")]
     /// Register a Lua tag, mirroring [`EngineBuilder::lua_tag`].
+    #[cfg(feature = "lua")]
     pub fn lua_tag<T: Component + Default + Clone>(mut self, name: impl Into<String>) -> Self {
         self.lua_tags.push((name.into(), LuaTag::of::<T>()));
         self
