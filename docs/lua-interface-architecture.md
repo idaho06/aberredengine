@@ -71,14 +71,14 @@ crates/aberred-lua/src/resources/lua_runtime/
 ├── runtime.rs          # LuaRuntime struct, LuaAppData (queue fields generated via lua_queues!), pool types, GameConfigSnapshot, CameraSnapshot
 ├── entity_builder/      # LuaEntityBuilder fluent API, split by category; builder_method! macro (single source for runtime + stubs)
 │   ├── mod.rs           # LuaEntityBuilder struct, builder_method!/DummyMethods, register_methods() dispatch, register_as/build
-│   ├── transform.rs     # with_position, with_screen_position, with_rotation, with_scale, with_parent, with_stuck_to*, with_camera_target, with_tag, ...
-│   ├── physics.rs       # with_velocity, with_acceleration, with_friction, with_max_speed, with_frozen, with_box_collider*
-│   ├── sprite.rs        # with_sprite*, with_tint, with_shadow, with_animation*, with_lua_animation_finished, with_z_index
+│   ├── transform.rs     # with_group, with_tag, with_position, with_z_index, with_rotation, with_scale, with_persistent, with_screen_position, with_parent
+│   ├── physics.rs       # with_velocity, with_friction, with_max_speed, with_acceleration, with_frozen, with_box_collider*, with_mouse_controlled, with_stuck_to*
+│   ├── sprite.rs        # with_sprite*, with_text, with_tint, with_shadow, with_shader, with_animation*, with_lua_animation_finished
 │   ├── shape.rs          # with_shape_point/line/rect/circle/ellipse/polygon, with_shape_filled, with_shape_outline_color, with_shape_origin
 │   ├── gui.rs            # with_gui_window/button/label/image/progress_bar/offset/theme_key, their per-state offset variants, with_lua_gui_clicked
 │   ├── menu.rs           # with_menu and its with_menu_* configuration methods
 │   ├── tween.rs          # with_tween_position/rotation/scale/screen_position/tint and their *_easing/*_loop/*_backwards variants, with_lua_tween_*_finished
-│   └── behavior.rs       # with_phase, with_lua_phase_entered, with_lua_phase_exited, with_lua_phase_update, with_lua_timer, with_lua_timer_once, with_lua_collision_rule, with_lua_collision_started, with_lua_collision_ended, with_lua_setup, with_signal*, with_group, with_persistent, with_grid_layout, with_tilemap, with_particle_emitter, with_mouse_controlled, with_text
+│   └── behavior.rs       # with_signal*, with_phase, with_lua_phase_entered, with_lua_phase_exited, with_lua_phase_update, with_lua_timer, with_lua_timer_once, with_ttl, with_grid_layout, with_lua_collision_rule, with_lua_collision_started, with_lua_collision_ended, with_particle_emitter, with_tilemap, with_lua_setup, with_camera_target
 ├── engine_api/          # engine.* API registration, split by category
 │   ├── mod.rs          # Re-exports, module declarations
 │   ├── macros.rs       # register_cmd!, register_getter!, define_cmd_twins! (+ its define_*_cmd_twins!/define_entity_cmds! specializations), push_fn_meta()
@@ -555,42 +555,47 @@ register_as
 **Transform** (`transform.rs`)
 
 ```text
+with_group
+with_tag
 with_position
-with_screen_position
+with_z_index
 with_rotation
 with_scale
+with_persistent
+with_screen_position
 with_parent
-with_stuck_to
-with_stuck_to_offset
-with_stuck_to_stored_velocity
-with_camera_target
-with_tag
 ```
 
 **Physics** (`physics.rs`)
 
 ```text
 with_velocity
-with_acceleration
 with_friction
 with_max_speed
+with_acceleration
 with_frozen
 with_box_collider
 with_box_collider_offset
+with_mouse_controlled
+with_stuck_to
+with_stuck_to_offset
+with_stuck_to_stored_velocity
 ```
 
 **Sprite / visuals** (`sprite.rs`)
 
 ```text
 with_sprite
-with_sprite_flip
 with_sprite_offset
+with_sprite_flip
+with_text
 with_tint
 with_shadow
-with_z_index
+with_shader
 with_animation
 with_animation_controller
 with_animation_rule
+with_lua_animation_finished
 ```
 
 **Shapes** (`shape.rs`)
@@ -635,7 +640,6 @@ with_gui_progress_bar_signal_binding
 with_menu
 with_menu_action_request_quit
 with_menu_action_request_scene
-with_menu_action_show_submenu
 with_lua_menu_selected
 with_menu_colors
 with_menu_cursor
@@ -677,30 +681,28 @@ with_lua_tween_tint_finished
 **Behavior / misc** (`behavior.rs`)
 
 ```text
+with_signals
+with_signal_scalar
+with_signal_integer
+with_signal_flag
+with_signal_string
+with_signal_binding
+with_signal_binding_format
 with_phase
 with_lua_phase_entered
 with_lua_phase_exited
 with_lua_phase_update
 with_lua_timer
+with_lua_timer_once
+with_ttl
+with_grid_layout
 with_lua_collision_rule
 with_lua_collision_started
 with_lua_collision_ended
-with_lua_setup
-with_lua_animation_finished
-with_signal_binding
-with_signal_binding_format
-with_signal_flag
-with_signal_integer
-with_signal_scalar
-with_signal_string
-with_signals
-with_group
-with_persistent
-with_grid_layout
-with_tilemap
 with_particle_emitter
-with_mouse_controlled
-with_text
+with_tilemap
+with_lua_setup
+with_camera_target
 ```
 
 Several methods validate a prerequisite call and raise a Lua runtime error if it's missing — e.g. `with_sprite_offset()` requires `with_sprite()` first, `with_gui_offset()` requires `with_parent()` first, `with_gui_theme_key()` requires one of the four `with_gui_*` widget methods first, `with_tween_position_easing()` requires `with_tween_position()` first. See `entity_builder/*.rs`'s inline `LuaError::runtime(...)` messages for the exact requirement text; `entity_builder/mod.rs`'s `#[cfg(test)] mod tests` block has one regression test per such guard.
