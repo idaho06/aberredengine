@@ -10,6 +10,7 @@ impl LuaRuntime {
         let meta: LuaTable = engine.get("__meta")?;
         let meta_fns: LuaTable = meta.get("functions")?;
         define_entity_cmds!(engine, self.lua, meta_fns, "", entity_commands);
+        self.register_tag_cmds(&engine, &meta_fns, false)?;
         Ok(())
     }
 
@@ -25,6 +26,7 @@ impl LuaRuntime {
             "collision_",
             collision_entity_commands
         );
+        self.register_tag_cmds(&engine, &meta_fns, true)?;
 
         define_audio_cmd_twins!(
             engine,

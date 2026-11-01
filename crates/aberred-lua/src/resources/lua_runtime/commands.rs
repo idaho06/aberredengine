@@ -3,6 +3,7 @@
 //! These enums represent commands that Lua scripts can queue for execution
 //! by Rust systems. Commands are processed after Lua callbacks return.
 
+use super::lua_tag::LuaTag;
 // Re-export UniformValue from its canonical location for internal convenience.
 pub use super::spawn_data::TweenConfig;
 use aberred_core::components::shape::ShapeKind;
@@ -503,6 +504,10 @@ pub enum EntityCmd {
     },
     /// Remove CameraTarget component from an entity
     RemoveCameraTarget { entity_id: u64 },
+    /// Attach the Rust component registered as a Lua tag; keeps an existing one
+    InsertTag { entity_id: u64, tag: LuaTag },
+    /// Remove the Rust component registered as a Lua tag
+    RemoveTag { entity_id: u64, tag: LuaTag },
 }
 
 /// Commands for tracked groups from Lua.

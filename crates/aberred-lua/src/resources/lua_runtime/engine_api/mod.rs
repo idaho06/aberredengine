@@ -16,6 +16,7 @@ mod phase_group;
 mod render;
 mod signal;
 mod spawn;
+mod tag;
 
 use super::commands::*;
 use super::runtime::{LuaAppData, LuaRuntime};

@@ -1,25 +1,29 @@
 //! Rust components a Lua script attaches by name.
 //!
 //! A hybrid game registers a component type under a name (`EngineBuilder::lua_tag`); Lua then
-//! attaches it with `:with_tag(name)` on a spawn or clone builder. Names resolve to a
-//! [`LuaTag`] when Lua calls, so queued commands carry no names.
+//! attaches it with `:with_tag(name)` on a spawn or clone builder, or with
+//! `engine.entity_insert_tag(id, name)` / `engine.entity_remove_tag(id, name)` at runtime.
+//! Names resolve to a [`LuaTag`] when Lua calls, so queued commands carry no names.
 
 use super::runtime::{LuaAppData, LuaRuntime};
 use bevy_ecs::prelude::Component;
 use bevy_ecs::world::EntityWorldMut;
 use mlua::prelude::*;
 
-/// How to attach one Rust component registered as a Lua tag.
+/// How to attach and detach one Rust component registered as a Lua tag.
 #[derive(Debug, Clone, Copy)]
 pub struct LuaTag {
     insert: fn(&mut EntityWorldMut<'_>),
+    remove: fn(&mut EntityWorldMut<'_>),
 }
 
 impl LuaTag {
-    /// The tag for component `T`: inserts `T::default()` unless the entity already has a `T`.
+    /// The tag for component `T`: inserts `T::default()` unless the entity already has a `T`,
+    /// and removes `T`.
     pub fn of<T: Component + Default + Clone>() -> LuaTag {
         LuaTag {
             insert: insert_tag::<T>,
+            remove: remove_tag::<T>,
         }
     }
 
@@ -27,10 +31,19 @@ impl LuaTag {
     pub(crate) fn insert(self, entity: &mut EntityWorldMut<'_>) {
         (self.insert)(entity);
     }
+
+    /// Removes the tag's component; a no-op without one.
+    pub(crate) fn remove(self, entity: &mut EntityWorldMut<'_>) {
+        (self.remove)(entity);
+    }
 }
 
 fn insert_tag<T: Component + Default>(entity: &mut EntityWorldMut<'_>) {
     entity.insert_if_new(T::default());
+}
+
+fn remove_tag<T: Component>(entity: &mut EntityWorldMut<'_>) {
+    entity.remove::<T>();
 }
 
 impl LuaRuntime {

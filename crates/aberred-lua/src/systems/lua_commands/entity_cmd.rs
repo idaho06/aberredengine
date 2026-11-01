@@ -225,6 +225,14 @@ pub fn process_entity_commands(
                     bar.value = bar.value.min(bar.max);
                 });
             }
+
+            EntityCmd::InsertTag { entity_id, tag } => {
+                queue_on_entity(commands, entity_id, move |mut e| tag.insert(&mut e));
+            }
+
+            EntityCmd::RemoveTag { entity_id, tag } => {
+                queue_on_entity(commands, entity_id, move |mut e| tag.remove(&mut e));
+            }
         }
     }
 }
@@ -862,6 +870,8 @@ fn process_lifecycle_cmd(
 mod tests {
     use super::*;
     use crate::components::lua_on_tween_finished::LuaOnTweenFinished;
+    use crate::resources::lua_runtime::LuaTag;
+    use crate::resources::lua_runtime::test_tags::{Boid, Fuel};
     use aberred_core::components::shape::ShapeKind;
     use aberred_core::components::timer::TimerMode;
     use aberred_core::testing::approx_eq;
@@ -1090,8 +1100,54 @@ mod tests {
                 entity_id: id,
                 seconds: 1.0,
             },
+            EntityCmd::InsertTag {
+                entity_id: id,
+                tag: LuaTag::of::<Boid>(),
+            },
+            EntityCmd::RemoveTag {
+                entity_id: id,
+                tag: LuaTag::of::<Boid>(),
+            },
             EntityCmd::Despawn { entity_id: id },
         ]
+    }
+
+    #[test]
+    fn tag_cmds_insert_without_replacing_and_remove() {
+        let mut world = World::new();
+        let e = world.spawn(Fuel(7)).id();
+        let id = e.to_bits();
+        let (boid, fuel) = (LuaTag::of::<Boid>(), LuaTag::of::<Fuel>());
+
+        run_entity_cmds(
+            &mut world,
+            [
+                EntityCmd::InsertTag {
+                    entity_id: id,
+                    tag: fuel,
+                },
+                EntityCmd::InsertTag {
+                    entity_id: id,
+                    tag: boid,
+                },
+            ],
+        );
+        assert_eq!(
+            world.get::<Fuel>(e),
+            Some(&Fuel(7)),
+            "an existing tag is kept"
+        );
+        assert!(world.get::<Boid>(e).is_some());
+
+        run_entity_cmd(
+            &mut world,
+            EntityCmd::RemoveTag {
+                entity_id: id,
+                tag: boid,
+            },
+        );
+        assert!(world.get::<Boid>(e).is_none());
+        assert_eq!(world.get::<Fuel>(e), Some(&Fuel(7)));
     }
 
     #[test]

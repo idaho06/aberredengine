@@ -537,6 +537,7 @@ fn meta_functions_complete() {
             "entity_shader_set_float", "entity_shader_set_int",
             "entity_shader_set_vec2", "entity_shader_set_vec4",
             "entity_shader_remove_uniform", "entity_shader_clear_uniforms",
+            "entity_insert_tag", "entity_remove_tag",
         }
 
         -- Check regular entity commands exist

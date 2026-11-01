@@ -562,6 +562,11 @@ function engine.collision_entity_insert_phase(entity_id, initial) end
 ---@param stored_vy number
 function engine.collision_entity_insert_stuck_to(entity_id, target_id, follow_x, follow_y, offset_x, offset_y, stored_vx, stored_vy) end
 
+---Attach the Rust component registered under Lua tag `tag`; an existing one is kept
+---@param entity_id integer
+---@param tag string
+function engine.collision_entity_insert_tag(entity_id, tag) end
+
 ---Insert a time-to-live component on an entity
 ---@param entity_id integer
 ---@param seconds number
@@ -674,6 +679,11 @@ function engine.collision_entity_remove_shape(entity_id) end
 ---Remove the outline color of an entity's Shape
 ---@param entity_id integer
 function engine.collision_entity_remove_shape_outline_color(entity_id) end
+
+---Remove the Rust component registered under Lua tag `tag`; no-op without one
+---@param entity_id integer
+---@param tag string
+function engine.collision_entity_remove_tag(entity_id, tag) end
 
 ---Remove entity tint
 ---@param entity_id integer
@@ -1027,6 +1037,11 @@ function engine.entity_insert_phase(entity_id, initial) end
 ---@param stored_vy number
 function engine.entity_insert_stuck_to(entity_id, target_id, follow_x, follow_y, offset_x, offset_y, stored_vx, stored_vy) end
 
+---Attach the Rust component registered under Lua tag `tag`; an existing one is kept
+---@param entity_id integer
+---@param tag string
+function engine.entity_insert_tag(entity_id, tag) end
+
 ---Insert a time-to-live component on an entity
 ---@param entity_id integer
 ---@param seconds number
@@ -1139,6 +1154,11 @@ function engine.entity_remove_shape(entity_id) end
 ---Remove the outline color of an entity's Shape
 ---@param entity_id integer
 function engine.entity_remove_shape_outline_color(entity_id) end
+
+---Remove the Rust component registered under Lua tag `tag`; no-op without one
+---@param entity_id integer
+---@param tag string
+function engine.entity_remove_tag(entity_id, tag) end
 
 ---Remove entity tint
 ---@param entity_id integer
