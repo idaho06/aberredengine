@@ -4007,3 +4007,60 @@ fn lua_tags_attach_and_detach_registered_rust_components() {
         "the other tag is kept"
     );
 }
+
+/// Tags apply after a spawn's other components and in call order, so a Rust `On<Add, T>`
+/// observer of a tag finds the entity's `RigidBody` and earlier tags (the guide's recipe).
+#[cfg(feature = "lua")]
+#[test]
+fn lua_tag_observers_see_the_spawns_other_components() {
+    #[derive(Component, Default, Clone)]
+    struct Drone;
+    #[derive(Component, Default, Clone)]
+    struct Leader;
+
+    fn promote(ev: On<Add, Leader>, mut drones: Query<&mut RigidBody, With<Drone>>) {
+        if let Ok(mut body) = drones.get_mut(ev.event_target()) {
+            body.max_speed = Some(240.0);
+        }
+    }
+    fn demote(ev: On<Remove, Leader>, mut drones: Query<&mut RigidBody, With<Drone>>) {
+        if let Ok(mut body) = drones.get_mut(ev.event_target()) {
+            body.max_speed = Some(120.0);
+        }
+    }
+    fn max_speed(tw: &TestWorld, entity: Entity) -> Option<f32> {
+        tw.world.get::<RigidBody>(entity).unwrap().max_speed
+    }
+
+    let mut tw = lua_script_world_with("", |b| {
+        b.lua_tag::<Drone>("drone")
+            .lua_tag::<Leader>("leader")
+            .add_observer(promote)
+            .add_observer(demote)
+    });
+    exec_lua(
+        &mut tw,
+        "engine.spawn():with_max_speed(120):with_tag('drone'):with_tag('leader'):build()",
+    );
+    tw.tick(1, DT);
+    let lead = tw
+        .world
+        .query_filtered::<Entity, With<Leader>>()
+        .single(&tw.world)
+        .unwrap();
+    assert_eq!(max_speed(&tw, lead), Some(240.0), "promoted on spawn");
+
+    exec_lua(
+        &mut tw,
+        &format!("engine.entity_remove_tag({}, 'leader')", lead.to_bits()),
+    );
+    tw.tick(1, DT);
+    assert_eq!(max_speed(&tw, lead), Some(120.0), "demoted");
+
+    exec_lua(
+        &mut tw,
+        &format!("engine.entity_insert_tag({}, 'leader')", lead.to_bits()),
+    );
+    tw.tick(1, DT);
+    assert_eq!(max_speed(&tw, lead), Some(240.0), "promoted again");
+}
