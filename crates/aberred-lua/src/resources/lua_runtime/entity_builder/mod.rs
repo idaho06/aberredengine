@@ -318,7 +318,8 @@ impl LuaUserData for LuaEntityBuilder {
     }
 }
 
-/// Helpers shared by the `with_*` tests in this module, its per-category files and `lua_tag`.
+/// Helpers shared by the `with_*` tests in this module, its per-category files, `lua_tag` and
+/// `engine_api::tag`.
 #[cfg(test)]
 pub(super) mod test_helpers {
     use super::super::runtime::LuaAppData;
