@@ -161,6 +161,8 @@ impl EngineBuilder {
             tracked_groups: std::mem::take(&mut self.tracked_groups),
             #[cfg(feature = "lua")]
             lua_script: self.lua_script.take(),
+            #[cfg(feature = "lua")]
+            lua_tags: std::mem::take(&mut self.lua_tags),
             deterministic_seed: self.deterministic_seed,
             window_w: rl.get_screen_width(),
             window_h: rl.get_screen_height(),

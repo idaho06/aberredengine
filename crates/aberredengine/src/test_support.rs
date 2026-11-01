@@ -35,12 +35,16 @@
 //!   harness holds the paired `Output<DrawableSnapshot>` itself
 //!   (`snapshot_out`) to read back what `present` just published.
 
+#[cfg(feature = "lua")]
+use aberred_lua::resources::lua_runtime::LuaTag;
 use bevy_ecs::prelude::*;
 use bevy_ecs::system::IntoObserverSystem;
 use crossbeam_channel::{Receiver, Sender, bounded, unbounded};
 #[cfg(feature = "lua")]
 use std::path::PathBuf;
 
+#[cfg(feature = "lua")]
+use crate::engine_app::validate_lua_tags;
 use crate::engine_app::{
     EngineBuilder, HookRegistrar, LogicInit, ObserverRegistrar, UpdateRegistrar, apply_tick_input,
     drain_logic_messages, engine_loading_screen_systems, ensure_main_scene,
@@ -103,6 +107,8 @@ pub struct TestWorldBuilder {
     tracked_groups: Vec<String>,
     #[cfg(feature = "lua")]
     lua: Option<LuaScript>,
+    #[cfg(feature = "lua")]
+    lua_tags: Vec<(String, LuaTag)>,
     deterministic_seed: Option<u64>,
     window_w: i32,
     window_h: i32,
@@ -133,6 +139,8 @@ impl TestWorldBuilder {
             tracked_groups: Vec::new(),
             #[cfg(feature = "lua")]
             lua: None,
+            #[cfg(feature = "lua")]
+            lua_tags: Vec::new(),
             deterministic_seed: None,
             window_w: 800,
             window_h: 600,
@@ -320,9 +328,16 @@ impl TestWorldBuilder {
         self
     }
 
+    #[cfg(feature = "lua")]
+    /// Register a Lua tag, mirroring [`EngineBuilder::lua_tag`].
+    pub fn lua_tag<T: Component + Default + Clone>(mut self, name: impl Into<String>) -> Self {
+        self.lua_tags.push((name.into(), LuaTag::of::<T>()));
+        self
+    }
+
     /// Build the [`TestWorld`], calling the same production `EngineBuilder`
     /// functions `logic_thread_main` calls (`setup_logic_world`, then
-    /// `init_logic_world`). Validates scenes and tracked groups like
+    /// `init_logic_world`). Validates scenes, tracked groups and Lua tags like
     /// `EngineBuilder::try_run`; the replay checks and Lua with
     /// `.deterministic()` are skipped (no replay methods here, and the Lua
     /// determinism audits build that combination on purpose).
@@ -331,6 +346,8 @@ impl TestWorldBuilder {
         validate_scene_manager(&self.scenes, &self.initial_scene, &self.loading_scene)?;
         validate_scene_refs(&self.scenes, &self.scene_refs)?;
         validate_tracked_groups(&self.tracked_groups)?;
+        #[cfg(feature = "lua")]
+        validate_lua_tags(&self.lua_tags)?;
 
         // Outlives `setup_logic_world`, which reads the script; removes the file on drop.
         #[cfg(feature = "lua")]
@@ -362,6 +379,8 @@ impl TestWorldBuilder {
             tracked_groups: std::mem::take(&mut self.tracked_groups),
             #[cfg(feature = "lua")]
             lua_script,
+            #[cfg(feature = "lua")]
+            lua_tags: std::mem::take(&mut self.lua_tags),
             deterministic_seed: self.deterministic_seed,
             window_w: self.window_w,
             window_h: self.window_h,

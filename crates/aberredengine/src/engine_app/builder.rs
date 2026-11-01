@@ -15,6 +15,8 @@ use super::validate::record_scene_ref;
 use aberred_core::events::scene::{SceneEntered, SceneExited};
 use aberred_core::resources::systems_store as hook_keys;
 use aberred_core::systems::scene_dispatch::WorldDrawCallback;
+#[cfg(feature = "lua")]
+use aberred_lua::resources::lua_runtime::LuaTag;
 use aberred_render::resources::scene_table::{GuiCallback, RenderSceneTable, SceneRender};
 use rustc_hash::FxHashMap;
 
@@ -53,6 +55,9 @@ pub struct EngineBuilder {
     pub(super) scene_refs: Vec<(&'static str, String)>,
     #[cfg(feature = "lua")]
     pub(super) lua_script: Option<PathBuf>,
+    /// `.lua_tag()` registrations, in call order.
+    #[cfg(feature = "lua")]
+    pub(super) lua_tags: Vec<(String, LuaTag)>,
     /// `Some(seed)` when `.deterministic(seed)` was called -- see that
     /// method's doc comment. Mutually exclusive with `.with_lua()`.
     pub(super) deterministic_seed: Option<u64>,
@@ -86,6 +91,8 @@ impl EngineBuilder {
             scene_refs: Vec::new(),
             #[cfg(feature = "lua")]
             lua_script: None,
+            #[cfg(feature = "lua")]
+            lua_tags: Vec::new(),
             deterministic_seed: None,
             record_replay_path: None,
             replay_game_version: String::new(),
@@ -549,6 +556,21 @@ impl EngineBuilder {
     #[cfg(feature = "lua")]
     pub fn with_lua(mut self, script_path: impl Into<PathBuf>) -> Self {
         self.lua_script = Some(script_path.into());
+        self
+    }
+
+    /// Let Lua attach component `T` by `name`: `:with_tag(name)` on a spawn or clone builder,
+    /// and `engine.entity_insert_tag(id, name)` / `engine.entity_remove_tag(id, name)` at runtime.
+    ///
+    /// The entity gets `T::default()`; one that already has a `T` keeps it, and `Clone` lets
+    /// `engine.clone()` copy the tag. An entity takes any number of tags, so Rust systems
+    /// filter with `With<T>`. A name no `.lua_tag()` registered is a Lua error at the call.
+    /// Registering a name twice is a startup error
+    /// ([`EngineError::DuplicateLuaTag`](aberred_core::error::EngineError::DuplicateLuaTag)).
+    /// Unused without `.with_lua()`. Can be called multiple times.
+    #[cfg(feature = "lua")]
+    pub fn lua_tag<T: Component + Default + Clone>(mut self, name: impl Into<String>) -> Self {
+        self.lua_tags.push((name.into(), LuaTag::of::<T>()));
         self
     }
 

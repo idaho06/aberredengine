@@ -2,6 +2,8 @@ use super::builder::EngineBuilder;
 use aberred_core::error::EngineError;
 use aberred_core::resources::signal_keys as sk;
 use aberred_core::resources::world_signals::MAX_GROUP_NAME_LEN;
+#[cfg(feature = "lua")]
+use aberred_lua::resources::lua_runtime::LuaTag;
 
 /// Registers [`sk::MAIN_SCENE`] as the initial scene when the game registers
 /// no scene of its own (no `.add_scene()`, no `.initial_scene()`), Lua games
@@ -92,6 +94,20 @@ pub(crate) fn validate_tracked_groups(tracked_groups: &[String]) -> Result<(), E
     Ok(())
 }
 
+/// Rejects a `.lua_tag()` name registered twice. Shared by `EngineBuilder::try_run` and
+/// `TestWorldBuilder::build`.
+#[cfg(feature = "lua")]
+pub(crate) fn validate_lua_tags(lua_tags: &[(String, LuaTag)]) -> Result<(), EngineError> {
+    let mut seen = rustc_hash::FxHashSet::default();
+    if let Some((name, _)) = lua_tags
+        .iter()
+        .find(|(name, _)| !seen.insert(name.as_str()))
+    {
+        return Err(EngineError::DuplicateLuaTag { name: name.clone() });
+    }
+    Ok(())
+}
+
 impl EngineBuilder {
     /// See [`ensure_main_scene`]. Runs before validation, so
     /// `.add_scene_system("main", ..)` and friends validate against it.
@@ -105,6 +121,8 @@ impl EngineBuilder {
         self.validate_deterministic()?;
         self.validate_replay()?;
         validate_tracked_groups(&self.tracked_groups)?;
+        #[cfg(feature = "lua")]
+        validate_lua_tags(&self.lua_tags)?;
         Ok(())
     }
 

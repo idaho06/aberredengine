@@ -208,6 +208,9 @@ impl EngineBuilder {
         #[cfg(feature = "lua")]
         if let Some(ref script_path) = init.lua_script {
             let lua_runtime = LuaRuntime::new().map_err(|e| EngineError::Lua(e.to_string()))?;
+            for (name, tag) in init.lua_tags.drain(..) {
+                lua_runtime.register_lua_tag(name, tag);
+            }
             let path_display = script_path.to_string_lossy();
             if let Err(e) = lua_runtime.run_script(&path_display) {
                 log::error!("Failed to load Lua script '{path_display}': {e}");

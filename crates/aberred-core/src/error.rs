@@ -54,6 +54,12 @@ pub enum EngineError {
     )]
     GroupNameTooLong { name: String, len: usize },
 
+    #[error(
+        "EngineBuilder: .lua_tag(\"{name}\") is registered twice; each Lua tag name maps to one \
+         component."
+    )]
+    DuplicateLuaTag { name: String },
+
     #[error("Failed to parse embedded config: {message}")]
     ConfigEmbedded { message: String },
 

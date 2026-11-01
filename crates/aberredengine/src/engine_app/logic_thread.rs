@@ -38,6 +38,8 @@ use aberred_core::systems::input::resolve_input_backlog;
 use aberred_core::systems::signal_intents::apply_signal_intents;
 use aberred_core::systems::state_hash::hash_world_state;
 use aberred_core::systems::time::update_world_time;
+#[cfg(feature = "lua")]
+use aberred_lua::resources::lua_runtime::LuaTag;
 
 /// Runtime state a running replay-playback session's
 /// `LogicMsg::ReplayControl` messages mutate. A `World` resource (inserted
@@ -79,6 +81,9 @@ pub(crate) struct LogicInit {
     pub(crate) tracked_groups: Vec<String>,
     #[cfg(feature = "lua")]
     pub(crate) lua_script: Option<PathBuf>,
+    /// `EngineBuilder::lua_tag` registrations.
+    #[cfg(feature = "lua")]
+    pub(crate) lua_tags: Vec<(String, LuaTag)>,
     /// `Some(seed)` in deterministic mode (`EngineBuilder::deterministic`),
     /// `None` otherwise -- `setup_logic_world` seeds `SimRng` accordingly
     /// (see that resource's doc comment for the single construction path

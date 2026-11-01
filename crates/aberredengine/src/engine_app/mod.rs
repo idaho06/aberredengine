@@ -133,6 +133,8 @@ pub(crate) use registrar::{
 };
 #[cfg(any(test, feature = "test-support"))]
 pub(crate) use replay::{ReplayPlayer, ReplayRecorder, validate_replay_header};
+#[cfg(all(feature = "lua", any(test, feature = "test-support")))]
+pub(crate) use validate::validate_lua_tags;
 #[cfg(any(test, feature = "test-support"))]
 pub(crate) use validate::{
     ensure_main_scene, record_scene_ref, validate_scene_manager, validate_scene_refs,

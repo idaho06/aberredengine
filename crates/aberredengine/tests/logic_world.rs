@@ -3960,3 +3960,50 @@ fn with_lua_source_worlds_built_in_parallel_do_not_share_a_script() {
         assert_eq!(log, &[format!("world{i}")]);
     }
 }
+
+// ── Lua tags ─────────────────────────────────────────────────────────────
+
+#[cfg(feature = "lua")]
+#[test]
+fn lua_tags_attach_and_detach_registered_rust_components() {
+    use aberredengine::bevy_ecs::query::QueryFilter;
+
+    #[derive(Component, Default, Clone)]
+    struct Boid;
+    #[derive(Component, Default, Clone)]
+    struct Leader;
+
+    fn count<F: QueryFilter>(world: &mut World) -> usize {
+        world.query_filtered::<(), F>().iter(world).count()
+    }
+
+    let mut tw = lua_script_world_with("", |b| {
+        b.lua_tag::<Boid>("boid").lua_tag::<Leader>("leader")
+    });
+    exec_lua(
+        &mut tw,
+        "engine.spawn():with_group('swarm'):with_tag('boid'):build()\n\
+         engine.spawn():with_tag('boid'):with_tag('leader'):build()",
+    );
+    tw.tick(1, DT);
+
+    assert_eq!(count::<With<Boid>>(&mut tw.world), 2);
+    assert_eq!(count::<(With<Boid>, With<Leader>)>(&mut tw.world), 1);
+
+    let leader = tw
+        .world
+        .query_filtered::<Entity, With<Leader>>()
+        .single(&tw.world)
+        .unwrap();
+    exec_lua(
+        &mut tw,
+        &format!("engine.entity_remove_tag({}, 'leader')", leader.to_bits()),
+    );
+    tw.tick(1, DT);
+
+    assert_eq!(count::<With<Leader>>(&mut tw.world), 0);
+    assert!(
+        tw.world.get::<Boid>(leader).is_some(),
+        "the other tag is kept"
+    );
+}
