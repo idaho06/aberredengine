@@ -1,4 +1,5 @@
 use super::*;
+use crate::resources::lua_runtime::lua_tag::resolve_lua_tag;
 
 pub(super) fn register<M: LuaUserDataMethods<LuaEntityBuilder>>(
     methods: &mut M,
@@ -12,6 +13,18 @@ pub(super) fn register<M: LuaUserDataMethods<LuaEntityBuilder>>(
         [("name", "string")],
         |_, this: &mut LuaEntityBuilder, name: String| {
             this.cmd.group = Some(name);
+            Ok(())
+        }
+    );
+
+    builder_method!(
+        methods,
+        meta,
+        "with_tag",
+        "Attach the Rust component registered under this Lua tag; repeatable, an unregistered name raises an error",
+        [("tag", "string")],
+        |lua, this: &mut LuaEntityBuilder, tag: LuaString| {
+            this.cmd.tags.push(resolve_lua_tag(lua, &tag.to_str()?)?);
             Ok(())
         }
     );

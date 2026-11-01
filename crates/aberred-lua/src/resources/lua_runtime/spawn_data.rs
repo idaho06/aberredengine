@@ -3,6 +3,7 @@
 //! These structs hold component data that Lua scripts specify when spawning entities.
 //! They are collected in the `SpawnCmd` struct and processed by Rust systems.
 
+use super::lua_tag::LuaTag;
 use crate::components::lua_on_collision::LuaOnCollision;
 use aberred_core::components::gui_button::GuiButton;
 use aberred_core::components::gui_image::GuiImage;
@@ -413,6 +414,8 @@ pub struct EntityShaderData {
 pub struct SpawnCmd {
     /// Group name for the entity
     pub group: Option<String>,
+    /// Rust components to attach (`:with_tag()`), in call order.
+    pub tags: Vec<LuaTag>,
     /// World position (x, y)
     pub position: Option<(f32, f32)>,
     /// Screen position (x, y) - for UI elements

@@ -176,6 +176,11 @@ pub(super) fn apply_components(
     );
     apply_particle_emitter(entity_commands, world_signals, cmd.particle_emitter);
 
+    // Last, so a Rust `On<Add, T>` observer of a tag sees the entity's other components.
+    for tag in cmd.tags {
+        entity_commands.queue(move |mut entity: EntityWorldMut| tag.insert(&mut entity));
+    }
+
     // Register entity in WorldSignals if requested
     if let Some(key) = cmd.register_as {
         world_signals.register_entity(key, entity);
@@ -720,7 +725,10 @@ mod tests {
     use bevy_ecs::system::SystemState;
 
     use super::*;
-    use crate::resources::lua_runtime::{AnimationConditionData, AnimationRuleData};
+    use crate::resources::lua_runtime::test_tags::{Boid, Fuel, Leader, runtime_with_test_tags};
+    use crate::resources::lua_runtime::{
+        AnimationConditionData, AnimationRuleData, LuaRuntime, LuaTag,
+    };
     use aberred_core::components::animation::{CmpOp, Condition};
     use aberred_core::components::timer::Timer;
     use aberred_core::components::tween::{Easing, LoopMode, Tween};
@@ -1077,8 +1085,16 @@ mod tests {
     /// Runs `script` (one `engine.spawn()...:build()`) through the real Lua builder, feeds the
     /// queued `SpawnCmd` through `process_spawn_command`, and returns the spawned entity.
     fn spawn_from_lua(world: &mut World, world_signals: &mut WorldSignals, script: &str) -> Entity {
-        use crate::resources::lua_runtime::LuaRuntime;
-        let runtime = LuaRuntime::new().unwrap();
+        spawn_from_lua_in(world, world_signals, &LuaRuntime::new().unwrap(), script)
+    }
+
+    /// [`spawn_from_lua`] on a caller-built `runtime` (e.g. one with Lua tags registered).
+    fn spawn_from_lua_in(
+        world: &mut World,
+        world_signals: &mut WorldSignals,
+        runtime: &LuaRuntime,
+        script: &str,
+    ) -> Entity {
         runtime.lua().load(script).exec().unwrap();
         let mut queued = Vec::new();
         runtime.drain_spawn_commands_into(&mut queued);
@@ -1098,6 +1114,52 @@ mod tests {
             .collect();
         assert_eq!(spawned.len(), 1, "exactly one entity spawned");
         spawned[0]
+    }
+
+    #[test]
+    fn lua_spawn_with_tags_inserts_each_registered_component() {
+        let mut world = World::new();
+        let mut signals = WorldSignals::default();
+        let e = spawn_from_lua_in(
+            &mut world,
+            &mut signals,
+            &runtime_with_test_tags(),
+            "engine.spawn():with_group('swarm'):with_tag('boid'):with_tag('leader')\
+             :with_tag('boid'):build()",
+        );
+
+        assert!(world.get::<Boid>(e).is_some());
+        assert!(world.get::<Leader>(e).is_some());
+        assert_eq!(world.get::<Group>(e).unwrap().name(), "swarm");
+        assert!(
+            world.get::<Fuel>(e).is_none(),
+            "an unused tag is not inserted"
+        );
+    }
+
+    #[test]
+    fn clone_keeps_template_tags_and_a_tag_override_keeps_existing_data() {
+        let mut world = World::new();
+        let source = world.spawn((Boid, Fuel(7))).id();
+        let mut world_signals = WorldSignals::default();
+        world_signals.register_entity("tpl", source);
+
+        let clone = clone_tpl(
+            &mut world,
+            &mut world_signals,
+            SpawnCmd {
+                tags: vec![LuaTag::of::<Fuel>(), LuaTag::of::<Leader>()],
+                ..SpawnCmd::default()
+            },
+        );
+
+        assert!(world.get::<Boid>(clone).is_some(), "template tag copied");
+        assert!(world.get::<Leader>(clone).is_some(), "override tag added");
+        assert_eq!(
+            world.get::<Fuel>(clone),
+            Some(&Fuel(7)),
+            "a tag the clone already has keeps its value"
+        );
     }
 
     #[test]

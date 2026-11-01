@@ -2360,6 +2360,11 @@ function EntityBuilder:with_stuck_to_offset(offset_x, offset_y) end
 ---@return EntityBuilder
 function EntityBuilder:with_stuck_to_stored_velocity(vx, vy) end
 
+---Attach the Rust component registered under this Lua tag; repeatable, an unregistered name raises an error
+---@param tag string
+---@return EntityBuilder
+function EntityBuilder:with_tag(tag) end
+
 ---Set DynamicText component. `font` is a loaded font key; 'default' (or '') is the embedded default font, available without loading anything, and an unknown key falls back to it with a warning
 ---@param content string
 ---@param font string
@@ -3060,6 +3065,11 @@ function CollisionEntityBuilder:with_stuck_to_offset(offset_x, offset_y) end
 ---@param vy number
 ---@return CollisionEntityBuilder
 function CollisionEntityBuilder:with_stuck_to_stored_velocity(vx, vy) end
+
+---Attach the Rust component registered under this Lua tag; repeatable, an unregistered name raises an error
+---@param tag string
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_tag(tag) end
 
 ---Set DynamicText component. `font` is a loaded font key; 'default' (or '') is the embedded default font, available without loading anything, and an unknown key falls back to it with a warning
 ---@param content string

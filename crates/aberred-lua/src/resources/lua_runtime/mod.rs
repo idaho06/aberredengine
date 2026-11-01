@@ -14,6 +14,7 @@
 //! - `engine_api` - `engine` table API registration (all `register_*_api` methods)
 //! - `command_queues` - Command queue draining and cache update methods
 //! - `stub_meta` - `engine.__meta` stub metadata for IDE/tooling support
+//! - `lua_tag` - Rust components Lua attaches by name
 //!
 //! # Example
 //!
@@ -40,6 +41,7 @@ mod context;
 mod engine_api;
 mod entity_builder;
 mod input_snapshot;
+mod lua_tag;
 mod queue_registry;
 mod runtime;
 mod spawn_data;
@@ -54,5 +56,8 @@ pub use context::{
 pub(crate) use context::{OccMask, clear_table, populate_entity_signals, set_opt};
 // pub use entity_builder::{LuaCollisionEntityBuilder, LuaEntityBuilder};
 pub use input_snapshot::InputSnapshot;
+pub use lua_tag::LuaTag;
+#[cfg(test)]
+pub(crate) use lua_tag::test_tags;
 pub use runtime::{CtxOccupancy, LuaRuntime, Ordered, SignalsCtxTables, action_from_str};
 pub use spawn_data::*;

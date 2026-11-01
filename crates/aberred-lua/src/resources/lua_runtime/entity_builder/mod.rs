@@ -318,16 +318,27 @@ impl LuaUserData for LuaEntityBuilder {
     }
 }
 
-/// Helpers shared by the `with_*` tests in this module and its per-category files.
+/// Helpers shared by the `with_*` tests in this module, its per-category files and `lua_tag`.
 #[cfg(test)]
-mod test_helpers {
+pub(super) mod test_helpers {
     use super::super::runtime::LuaAppData;
     use super::SpawnCmd;
     use crate::resources::lua_runtime::LuaRuntime;
 
     /// Runs `script` and asserts it raises a Lua error containing `expected_msg`.
-    pub(super) fn assert_runtime_error(script: &str, expected_msg: &str) {
-        let runtime = LuaRuntime::new().unwrap();
+    pub(in crate::resources::lua_runtime) fn assert_runtime_error(
+        script: &str,
+        expected_msg: &str,
+    ) {
+        assert_runtime_error_in(&LuaRuntime::new().unwrap(), script, expected_msg);
+    }
+
+    /// [`assert_runtime_error`] on a caller-built `runtime` (e.g. one with Lua tags registered).
+    pub(in crate::resources::lua_runtime) fn assert_runtime_error_in(
+        runtime: &LuaRuntime,
+        script: &str,
+        expected_msg: &str,
+    ) {
         let err = runtime
             .lua()
             .load(script)

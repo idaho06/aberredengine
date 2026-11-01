@@ -6,6 +6,7 @@
 use super::commands::*;
 use super::input_snapshot::InputSnapshot;
 use super::input_snapshot::for_each_digital_button;
+use super::lua_tag::LuaTag;
 use super::spawn_data::*;
 use aberred_core::resources::input::InputState;
 use aberred_core::resources::world_signals::SignalSnapshot;
@@ -96,6 +97,8 @@ crate::lua_queues! {app_data_struct {
     pub(super) next_seq: Cell<u64>,
     /// The scene `on_setup` requested; see `LuaRuntime::stash_setup_scene_request`.
     pub(super) setup_scene_request: RefCell<Option<String>>,
+    /// Rust components registered as Lua tags, by name (`LuaRuntime::register_lua_tag`).
+    pub(super) lua_tags: RefCell<FxHashMap<String, LuaTag>>,
 }}
 
 /// A queued command stamped with its place in the script's call order.
