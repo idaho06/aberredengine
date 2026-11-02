@@ -1,6 +1,9 @@
-//! Dialogue definition types: the serializable predicate tree evaluated
-//! against world signals, and the effects that mutate those signals.
+//! Dialogue definition types: the authoring definition of a conversation,
+//! the serializable predicate tree evaluated against world signals, and the
+//! effects that mutate those signals.
 //!
+//! [`DialogueDef`] is the authored conversation: a `start` node id plus
+//! [`NodeDef`]s linked through `goto` and [`ChoiceDef`]s.
 //! [`DialogueCondition`] describes a check over
 //! [`WorldSignals`] — flags,
 //! integers, strings — combined with `Not`/`All`/`Any`. [`DialogueCmp`] is the
@@ -297,6 +300,68 @@ impl DialogueEffect {
     }
 }
 
+/// The authoring definition of a conversation: the `start` node id and every
+/// node of the graph.
+///
+/// Serializes as a plain JSON object, e.g.
+/// `{"start":"greet","nodes":[...]}`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct DialogueDef {
+    /// Id of the [`NodeDef`] the conversation enters first.
+    pub start: String,
+    /// All nodes of the conversation, in authoring order.
+    pub nodes: Vec<NodeDef>,
+}
+
+/// One node of a [`DialogueDef`]: the spoken `text` and where the
+/// conversation goes next.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct NodeDef {
+    /// Node id; referenced by [`DialogueDef::start`], [`NodeDef::goto`] and
+    /// [`ChoiceDef::next`].
+    pub id: String,
+    /// Speaker shown for this line; absent for narration.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub speaker: Option<String>,
+    /// The line spoken at this node.
+    pub text: String,
+    /// Opaque labels attached to the node.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub labels: Vec<String>,
+    /// Effects applied when the node is entered.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub on_enter: Vec<DialogueEffect>,
+    /// Unconditional jump to another node id; `None` together with
+    /// `choices == None` makes the node terminal.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub goto: Option<String>,
+    /// Choices offered at this node. `Some(vec![])` is an explicit empty list,
+    /// kept distinguishable from an absent key (which stays `None`); validation
+    /// rejects the empty list.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub choices: Option<Vec<ChoiceDef>>,
+}
+
+/// One choice of a [`NodeDef`]: the `text` shown to the player and where
+/// picking it leads.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ChoiceDef {
+    /// Label shown for this choice.
+    pub text: String,
+    /// Node id the choice leads to; `None` ends the conversation.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub next: Option<String>,
+    /// Condition that must hold for the choice to be offered.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub when: Option<DialogueCondition>,
+    /// Effects applied when the choice is picked.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub effects: Vec<DialogueEffect>,
+    /// Opaque labels attached to the choice.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub labels: Vec<String>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -534,5 +599,129 @@ mod tests {
         let json = serde_json::to_string(&effects).unwrap();
         let back: Vec<DialogueEffect> = serde_json::from_str(&json).unwrap();
         assert_eq!(back, effects);
+    }
+
+    fn s(v: &str) -> String {
+        v.to_owned()
+    }
+
+    /// A node with every optional field at its default.
+    fn node(id: &str, text: &str) -> NodeDef {
+        NodeDef {
+            id: s(id),
+            speaker: None,
+            text: s(text),
+            labels: vec![],
+            on_enter: vec![],
+            goto: None,
+            choices: None,
+        }
+    }
+
+    /// A choice with every optional field at its default.
+    fn choice(text: &str) -> ChoiceDef {
+        ChoiceDef {
+            text: s(text),
+            next: None,
+            when: None,
+            effects: vec![],
+            labels: vec![],
+        }
+    }
+
+    /// The JSON example shared by the authoring-definition tests.
+    fn example_json() -> &'static str {
+        r#"{"start":"greet","nodes":[
+ {"id":"greet","speaker":"Guard","text":"Halt! Who goes there?","choices":[
+   {"text":"A friend.","next":"friend"},
+   {"text":"Here is my pass.","next":"pass","when":{"type":"flag","key":"has_pass"},"effects":[{"type":"set_flag","key":"pass_shown"}],"labels":["bribe"]},
+   {"text":"Never mind."}]},
+ {"id":"friend","speaker":"Guard","text":"Hm. Move along."},
+ {"id":"pass","speaker":"Guard","text":"Carry on.","goto":"friend","on_enter":[{"type":"add_integer","key":"gold","delta":-1}],"labels":["gate"]}]}"#
+    }
+
+    /// The [`DialogueDef`] the example JSON parses to.
+    fn example_def() -> DialogueDef {
+        DialogueDef {
+            start: s("greet"),
+            nodes: vec![
+                NodeDef {
+                    speaker: Some(s("Guard")),
+                    choices: Some(vec![
+                        ChoiceDef {
+                            next: Some(s("friend")),
+                            ..choice("A friend.")
+                        },
+                        ChoiceDef {
+                            next: Some(s("pass")),
+                            when: Some(DialogueCondition::flag("has_pass")),
+                            effects: vec![DialogueEffect::set_flag("pass_shown")],
+                            labels: vec![s("bribe")],
+                            ..choice("Here is my pass.")
+                        },
+                        choice("Never mind."),
+                    ]),
+                    ..node("greet", "Halt! Who goes there?")
+                },
+                NodeDef {
+                    speaker: Some(s("Guard")),
+                    ..node("friend", "Hm. Move along.")
+                },
+                NodeDef {
+                    speaker: Some(s("Guard")),
+                    labels: vec![s("gate")],
+                    on_enter: vec![DialogueEffect::add_integer("gold", -1)],
+                    goto: Some(s("friend")),
+                    ..node("pass", "Carry on.")
+                },
+            ],
+        }
+    }
+
+    #[test]
+    fn the_authoring_json_example_parses() {
+        let def: DialogueDef = serde_json::from_str(example_json()).unwrap();
+        assert_eq!(def, example_def());
+    }
+
+    #[test]
+    fn a_definition_round_trips_through_json() {
+        let def = example_def();
+        let json = serde_json::to_string_pretty(&def).unwrap();
+        let back: DialogueDef = serde_json::from_str(&json).unwrap();
+        assert_eq!(back, def);
+    }
+
+    #[test]
+    fn defaults_are_skipped_on_save() {
+        assert_eq!(
+            serde_json::to_value(node("a", "t")).unwrap(),
+            serde_json::json!({"id": "a", "text": "t"})
+        );
+        assert_eq!(
+            serde_json::to_value(choice("c")).unwrap(),
+            serde_json::json!({"text": "c"})
+        );
+        let def = DialogueDef {
+            start: s("a"),
+            nodes: vec![],
+        };
+        assert_eq!(
+            serde_json::to_value(&def).unwrap(),
+            serde_json::json!({"start": "a", "nodes": []})
+        );
+    }
+
+    #[test]
+    fn an_explicit_empty_choices_list_is_preserved() {
+        let node: NodeDef = serde_json::from_str(r#"{"id":"a","text":"t","choices":[]}"#).unwrap();
+        assert_eq!(node.choices, Some(vec![]));
+        let value = serde_json::to_value(&node).unwrap();
+        assert_eq!(value["choices"], serde_json::json!([]));
+
+        let absent: NodeDef = serde_json::from_str(r#"{"id":"a","text":"t"}"#).unwrap();
+        assert_eq!(absent.choices, None);
+        let value = serde_json::to_value(&absent).unwrap();
+        assert!(value.get("choices").is_none());
     }
 }
