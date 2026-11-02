@@ -15,7 +15,7 @@
 //! - [`debug_mode`] – presence toggles optional debug overlays and logs
 //! - [`debug_overlay_config`] – per-overlay toggles for the imgui debug HUD
 //! - [`deterministic_mode`] – marker resource of a `.deterministic()` game
-//! - [`dialogue_def`] – dialogue condition tree over world signals (`DialogueCondition`, `DialogueCmp`)
+//! - [`dialogue_def`] – dialogue condition tree and effects over world signals (`DialogueCondition`, `DialogueCmp`, `DialogueEffect`)
 //! - [`font_key`] – reserved default font key and key resolution
 //! - [`font_metrics`] – CPU-side glyph metrics for text measurement without a GL context
 //! - [`game_state`] – authoritative and pending high-level game state
