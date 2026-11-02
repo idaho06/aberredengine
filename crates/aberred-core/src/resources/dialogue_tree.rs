@@ -195,6 +195,13 @@ pub enum DialogueError {
         /// Id of the node with `choices: Some(vec![])`.
         node: String,
     },
+    /// A [`DialogueBuilder`](crate::resources::dialogue_builder::DialogueBuilder)
+    /// method was called out of order.
+    #[error("dialogue builder misuse: {message}")]
+    Builder {
+        /// What the out-of-order call was, e.g. "`.text()` called before any `.node()`".
+        message: String,
+    },
     /// The dialogue file could not be read.
     #[error("failed to read dialogue file: {0}")]
     Io(#[from] std::io::Error),
