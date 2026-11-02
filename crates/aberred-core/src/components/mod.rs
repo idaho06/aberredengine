@@ -9,6 +9,7 @@
 //! - [`box_collider`] – axis-aligned rectangular collider for collision detection
 //! - [`camera_target`] – marks an entity as a candidate for camera following
 //! - [`collision`] – group-pair collision rules and contact sides
+//! - [`dialogue`] – per-entity dialogue graph runner over a shared [`crate::resources::dialogue_tree::DialogueTree`]: pending requests, status, and UI reads
 //! - [`dynamic_text`] – text component for rendering variable strings
 //! - [`emitted_particle`] – marker for entities spawned by a particle emitter
 //! - [`entity_shader`] – per-entity shader for custom rendering effects
@@ -49,6 +50,7 @@ pub mod animation;
 pub mod box_collider;
 pub mod camera_target;
 pub mod collision;
+pub mod dialogue;
 pub mod dynamic_text;
 pub mod emitted_particle;
 pub mod entity_shader;
