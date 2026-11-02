@@ -362,8 +362,94 @@ pub struct ChoiceDef {
     pub labels: Vec<String>,
 }
 
+/// Builders and fixtures shared by the dialogue tests in this module and in
+/// [`crate::resources::dialogue_tree`]'s tests.
+#[cfg(test)]
+pub(crate) mod test_helpers {
+    use super::*;
+
+    /// Returns `v` as an owned `String`.
+    pub(crate) fn s(v: &str) -> String {
+        v.to_owned()
+    }
+
+    /// A node with every optional field at its default.
+    pub(crate) fn node(id: &str, text: &str) -> NodeDef {
+        NodeDef {
+            id: s(id),
+            speaker: None,
+            text: s(text),
+            labels: vec![],
+            on_enter: vec![],
+            goto: None,
+            choices: None,
+        }
+    }
+
+    /// A choice with every optional field at its default.
+    pub(crate) fn choice(text: &str) -> ChoiceDef {
+        ChoiceDef {
+            text: s(text),
+            next: None,
+            when: None,
+            effects: vec![],
+            labels: vec![],
+        }
+    }
+
+    /// The JSON example shared by the dialogue tests.
+    pub(crate) fn example_json() -> &'static str {
+        r#"{"start":"greet","nodes":[
+ {"id":"greet","speaker":"Guard","text":"Halt! Who goes there?","choices":[
+   {"text":"A friend.","next":"friend"},
+   {"text":"Here is my pass.","next":"pass","when":{"type":"flag","key":"has_pass"},"effects":[{"type":"set_flag","key":"pass_shown"}],"labels":["bribe"]},
+   {"text":"Never mind."}]},
+ {"id":"friend","speaker":"Guard","text":"Hm. Move along."},
+ {"id":"pass","speaker":"Guard","text":"Carry on.","goto":"friend","on_enter":[{"type":"add_integer","key":"gold","delta":-1}],"labels":["gate"]}]}"#
+    }
+
+    /// The [`DialogueDef`] the example JSON parses to.
+    pub(crate) fn example_def() -> DialogueDef {
+        DialogueDef {
+            start: s("greet"),
+            nodes: vec![
+                NodeDef {
+                    speaker: Some(s("Guard")),
+                    choices: Some(vec![
+                        ChoiceDef {
+                            next: Some(s("friend")),
+                            ..choice("A friend.")
+                        },
+                        ChoiceDef {
+                            next: Some(s("pass")),
+                            when: Some(DialogueCondition::flag("has_pass")),
+                            effects: vec![DialogueEffect::set_flag("pass_shown")],
+                            labels: vec![s("bribe")],
+                            ..choice("Here is my pass.")
+                        },
+                        choice("Never mind."),
+                    ]),
+                    ..node("greet", "Halt! Who goes there?")
+                },
+                NodeDef {
+                    speaker: Some(s("Guard")),
+                    ..node("friend", "Hm. Move along.")
+                },
+                NodeDef {
+                    speaker: Some(s("Guard")),
+                    labels: vec![s("gate")],
+                    on_enter: vec![DialogueEffect::add_integer("gold", -1)],
+                    goto: Some(s("friend")),
+                    ..node("pass", "Carry on.")
+                },
+            ],
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    use super::test_helpers::{choice, example_def, example_json, node, s};
     use super::*;
 
     /// Builds All[Flag a, Not(Any[Integer gold Lt 5, StringEquals name "x"])].
@@ -599,83 +685,6 @@ mod tests {
         let json = serde_json::to_string(&effects).unwrap();
         let back: Vec<DialogueEffect> = serde_json::from_str(&json).unwrap();
         assert_eq!(back, effects);
-    }
-
-    fn s(v: &str) -> String {
-        v.to_owned()
-    }
-
-    /// A node with every optional field at its default.
-    fn node(id: &str, text: &str) -> NodeDef {
-        NodeDef {
-            id: s(id),
-            speaker: None,
-            text: s(text),
-            labels: vec![],
-            on_enter: vec![],
-            goto: None,
-            choices: None,
-        }
-    }
-
-    /// A choice with every optional field at its default.
-    fn choice(text: &str) -> ChoiceDef {
-        ChoiceDef {
-            text: s(text),
-            next: None,
-            when: None,
-            effects: vec![],
-            labels: vec![],
-        }
-    }
-
-    /// The JSON example shared by the authoring-definition tests.
-    fn example_json() -> &'static str {
-        r#"{"start":"greet","nodes":[
- {"id":"greet","speaker":"Guard","text":"Halt! Who goes there?","choices":[
-   {"text":"A friend.","next":"friend"},
-   {"text":"Here is my pass.","next":"pass","when":{"type":"flag","key":"has_pass"},"effects":[{"type":"set_flag","key":"pass_shown"}],"labels":["bribe"]},
-   {"text":"Never mind."}]},
- {"id":"friend","speaker":"Guard","text":"Hm. Move along."},
- {"id":"pass","speaker":"Guard","text":"Carry on.","goto":"friend","on_enter":[{"type":"add_integer","key":"gold","delta":-1}],"labels":["gate"]}]}"#
-    }
-
-    /// The [`DialogueDef`] the example JSON parses to.
-    fn example_def() -> DialogueDef {
-        DialogueDef {
-            start: s("greet"),
-            nodes: vec![
-                NodeDef {
-                    speaker: Some(s("Guard")),
-                    choices: Some(vec![
-                        ChoiceDef {
-                            next: Some(s("friend")),
-                            ..choice("A friend.")
-                        },
-                        ChoiceDef {
-                            next: Some(s("pass")),
-                            when: Some(DialogueCondition::flag("has_pass")),
-                            effects: vec![DialogueEffect::set_flag("pass_shown")],
-                            labels: vec![s("bribe")],
-                            ..choice("Here is my pass.")
-                        },
-                        choice("Never mind."),
-                    ]),
-                    ..node("greet", "Halt! Who goes there?")
-                },
-                NodeDef {
-                    speaker: Some(s("Guard")),
-                    ..node("friend", "Hm. Move along.")
-                },
-                NodeDef {
-                    speaker: Some(s("Guard")),
-                    labels: vec![s("gate")],
-                    on_enter: vec![DialogueEffect::add_integer("gold", -1)],
-                    goto: Some(s("friend")),
-                    ..node("pass", "Carry on.")
-                },
-            ],
-        }
     }
 
     #[test]
