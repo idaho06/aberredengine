@@ -481,6 +481,107 @@ fn phase_transition_requested_by_observer_applies_next_tick() {
     assert_eq!(take_phase_log(&mut tw), ["exited:idle", "entered:run"]);
 }
 
+/// Dialogue wiring seen as a downstream game sees it: every name comes from
+/// `aberredengine::prelude`, the store is the real logic world's resource, and
+/// the runner moves in the real sim schedule.
+mod dialogue {
+    use std::sync::Arc;
+
+    use aberredengine::prelude::*;
+    use aberredengine::test_support::TestWorld;
+
+    use super::DT;
+
+    #[derive(Resource, Default)]
+    struct RequestChoice(bool);
+
+    /// Picks the first choice of every runner once `RequestChoice` is set.
+    fn request_choice(mut request: ResMut<RequestChoice>, mut runners: Query<&mut DialogueRunner>) {
+        if std::mem::take(&mut request.0) {
+            for mut runner in &mut runners {
+                runner.choose(0);
+            }
+        }
+    }
+
+    #[derive(Resource, Default)]
+    struct DialogueLog(Vec<String>);
+
+    fn log_entered(ev: On<DialogueNodeEntered>, mut log: ResMut<DialogueLog>) {
+        log.0.push(format!("entered:{}", ev.node));
+    }
+
+    fn log_selected(ev: On<DialogueChoiceSelected>, mut log: ResMut<DialogueLog>) {
+        log.0.push(format!("selected:{}:{}", ev.index, ev.text));
+    }
+
+    fn take_log(tw: &mut TestWorld) -> Vec<String> {
+        std::mem::take(&mut tw.world.resource_mut::<DialogueLog>().0)
+    }
+
+    /// A choice requested by a system in `SimSet::Update` at tick N moves its
+    /// runner, applies the choice and `on_enter` effects to `WorldSignals`
+    /// and fires the events at tick N+1, never at N.
+    #[test]
+    fn a_choice_requested_in_update_moves_the_runner_next_tick() {
+        let mut tw = TestWorld::builder()
+            .add_system(request_choice)
+            .add_observer(log_entered)
+            .add_observer(log_selected)
+            .build()
+            .expect("build should succeed");
+        tw.world.init_resource::<RequestChoice>();
+        tw.world.init_resource::<DialogueLog>();
+        tw.tick_to_play(DT, 8);
+
+        let tree = DialogueBuilder::new("hello")
+            .node("hello")
+            .text("Hi")
+            .choice("Ask", "info")
+            .effect(DialogueEffect::set_integer("asked", 1))
+            .node("info")
+            .text("Here.")
+            .on_enter(DialogueEffect::set_flag("informed"))
+            .build()
+            .expect("the tree is valid");
+        let mut store = tw.world.resource_mut::<DialogueStore>();
+        store.insert("intro", Arc::new(tree));
+        let tree = Arc::clone(store.get("intro").expect("intro is stored"));
+        let entity = tw.world.spawn(DialogueRunner::new(tree)).id();
+
+        tw.tick(1, DT);
+        assert_eq!(take_log(&mut tw), ["entered:hello"]);
+        assert_eq!(
+            tw.world.get::<DialogueRunner>(entity).unwrap().node_id(),
+            Some("hello")
+        );
+
+        tw.world.resource_mut::<RequestChoice>().0 = true;
+        tw.tick(1, DT);
+        assert!(
+            take_log(&mut tw).is_empty(),
+            "tick N: the request must not apply in the tick that made it"
+        );
+        let runner = tw.world.get::<DialogueRunner>(entity).unwrap();
+        assert_eq!(runner.pending(), Some(DialogueRequest::Choose(0)));
+        assert_eq!(runner.node_id(), Some("hello"));
+        assert_eq!(
+            tw.world.resource::<WorldSignals>().get_integer("asked"),
+            None
+        );
+
+        tw.tick(1, DT);
+        assert_eq!(take_log(&mut tw), ["selected:0:Ask", "entered:info"]);
+        assert_eq!(
+            tw.world.get::<DialogueRunner>(entity).unwrap().node_id(),
+            Some("info")
+        );
+        let signals = tw.world.resource::<WorldSignals>();
+        assert_eq!(signals.get_integer("asked"), Some(1));
+        assert!(signals.has_flag("informed"));
+    }
+}
+
 /// A particle cloned from a template that has a `Phase` fires its own initial
 /// enter, in the template's current phase, even though the template entered
 /// long ago.

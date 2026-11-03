@@ -22,6 +22,9 @@ pub use aberred_core::components::animation::{Animation, AnimationController};
 pub use aberred_core::components::box_collider::BoxCollider;
 pub use aberred_core::components::camera_target::CameraTarget;
 pub use aberred_core::components::collision::{BoxSide, BoxSides, CollisionRule};
+pub use aberred_core::components::dialogue::{
+    ChoiceView, DialogueEndReason, DialogueRequest, DialogueRunner, DialogueStatus,
+};
 pub use aberred_core::components::dynamic_text::DynamicText;
 pub use aberred_core::components::entity_shader::EntityShader;
 pub use aberred_core::components::group::Group;
@@ -53,6 +56,9 @@ pub use aberred_core::components::z_index::ZIndex;
 pub use aberred_core::events::animation::AnimationFinished;
 pub use aberred_core::events::asset::{AssetLoadFailed, AssetLoaded};
 pub use aberred_core::events::collision::{CollisionEnded, CollisionOngoing, CollisionStarted};
+pub use aberred_core::events::dialogue::{
+    DialogueChoiceSelected, DialogueEnded, DialogueNodeEntered,
+};
 pub use aberred_core::events::gui_interactable::GuiClicked;
 pub use aberred_core::events::menu::MenuSelected;
 pub use aberred_core::events::phase::{PhaseEntered, PhaseExited};
@@ -69,6 +75,12 @@ pub use aberred_core::resources::animation_store::{AnimationClip, AnimationStore
 pub use aberred_core::resources::app_state::AppState;
 pub use aberred_core::resources::camera_follow_config::{CameraFollowConfig, FollowMode};
 pub use aberred_core::resources::camera2d::{Camera2D, MainCamera};
+pub use aberred_core::resources::dialogue_builder::DialogueBuilder;
+pub use aberred_core::resources::dialogue_def::{
+    ChoiceDef, DialogueCmp, DialogueCondition, DialogueDef, DialogueEffect, NodeDef,
+};
+pub use aberred_core::resources::dialogue_store::DialogueStore;
+pub use aberred_core::resources::dialogue_tree::{DialogueError, DialogueTree, load_dialogue};
 pub use aberred_core::resources::game_config::GameConfig;
 pub use aberred_core::resources::game_state::{GameState, NextGameState};
 pub use aberred_core::resources::gui_theme::{GuiButtonSkin, GuiNinePatch, GuiThemeStore};
