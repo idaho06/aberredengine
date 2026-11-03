@@ -1903,7 +1903,7 @@ fn setup(mut dialogues: ResMut<DialogueStore>) -> Result {
 }
 ```
 
-`.node(id)` starts a node, and `.speaker(...)`, `.text(...)`, `.on_enter(...)` and `.goto(...)` set the current node. `.label(...)` labels the current node only before its first choice. `.choice(text, next_id)` adds a choice leading to `next_id`; a `.when(...)`, `.effect(...)` or `.label(...)` called after it applies to that choice. `.choice_end(text)` adds a choice that ends the conversation. A node with neither `goto` nor choices is terminal. `.build()` validates the graph and returns `Result<DialogueTree, DialogueError>`. Trees are stored in the `DialogueStore` resource, filled in the setup hook like `AnimationStore`.
+`.node(id)` starts a node, and `.speaker(...)`, `.text(...)`, `.on_enter(...)` and `.goto(...)` set the current node. `.label(...)` labels the current node only before its first choice. `.choice(text, next_id)` adds a choice leading to `next_id`; a `.when(...)`, `.effect(...)` or `.label(...)` called after it applies to that choice. `.choice_end(text)` adds a choice that ends the conversation. A node with neither `.goto(...)` nor choices is terminal. `.build()` validates the graph and returns `Result<DialogueTree, DialogueError>`. Trees are stored in the `DialogueStore` resource, filled in the setup hook like `AnimationStore`.
 
 **The same conversation as JSON.** `load_dialogue(path)` reads a dialogue definition from a file and returns `Result<DialogueTree, DialogueError>`; I/O and JSON failures are `DialogueError::Io` / `DialogueError::Json`:
 
@@ -1927,14 +1927,14 @@ fn setup(mut dialogues: ResMut<DialogueStore>) -> Result {
       ]
     },
     { "id": "friend", "speaker": "Guard", "text": "Hm. Move along." },
-    { "id": "pass", "speaker": "Guard", "text": "Carry on.", "goto": "friend" }
+    { "id": "pass", "speaker": "Guard", "text": "Carry on.", "next": "friend" }
   ]
 }
 ```
 
-A choice whose `next` is absent ends the conversation. The optional fields (`speaker`, `labels`, `on_enter`, `when`, `effects`, `goto`, `choices`) may be omitted.
+A choice whose `next` is absent ends the conversation. The optional fields (`speaker`, `labels`, `on_enter`, `when`, `effects`, `next`, `choices`) may be omitted.
 
-**Validation.** `build()` and `load_dialogue` report the first error they find: a missing start node, a duplicate node id, an unknown `goto`/`next` target, a node with both `goto` and `choices`, or an empty `choices` list. A node no path reaches logs a warning and still builds.
+**Validation.** `build()` and `load_dialogue` report the first error they find: a missing start node, a duplicate node id, an unknown `next` target, a node with both `next` and `choices`, or an empty `choices` list. A node no path reaches logs a warning and still builds.
 
 **Conditions and effects.** A choice can carry a `when` condition that locks it and `effects` that run when it is picked; a node can carry `on_enter` effects. Conditions evaluate read-only against `WorldSignals`; effects write to it, so `SignalBinding` text updates as for any other writer.
 

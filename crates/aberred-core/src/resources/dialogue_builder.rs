@@ -82,7 +82,7 @@ impl DialogueBuilder {
             text: String::new(),
             labels: vec![],
             on_enter: vec![],
-            goto: None,
+            next: None,
             choices: None,
         });
         self.choice_cursor = false;
@@ -119,13 +119,13 @@ impl DialogueBuilder {
         })
     }
 
-    /// Sets the `goto` target of the current node to the node id `id`.
+    /// Sets the `next` target of the current node to the node id `id`.
     ///
     /// When no node has been started, records the misuse "`.goto()` called
     /// before any `.node()`" and leaves the builder otherwise unchanged.
     pub fn goto(self, id: impl Into<String>) -> Self {
         self.on_current_node("`.goto()` called before any `.node()`", |node| {
-            node.goto = Some(id.into());
+            node.next = Some(id.into());
         })
     }
 
@@ -206,7 +206,7 @@ impl DialogueBuilder {
     /// `DialogueTree::try_from`: a recorded misuse comes back as
     /// [`DialogueError::Builder`], and validation failures
     /// ([`DialogueError::DuplicateNode`], [`DialogueError::StartMissing`],
-    /// [`DialogueError::UnknownTarget`], [`DialogueError::GotoAndChoices`],
+    /// [`DialogueError::UnknownTarget`], [`DialogueError::NextAndChoices`],
     /// [`DialogueError::EmptyChoices`]) pass through unchanged.
     pub fn build(self) -> Result<DialogueTree, DialogueError> {
         DialogueTree::try_from(self.into_def()?)
@@ -476,7 +476,7 @@ mod tests {
     }
 
     #[test]
-    fn goto_and_choices_on_one_node_passes_through_build() {
+    fn next_and_choices_on_one_node_passes_through_build() {
         let err = node_a()
             .choice_end("x")
             .goto("b")
@@ -484,7 +484,7 @@ mod tests {
             .build()
             .unwrap_err();
         assert!(
-            matches!(&err, DialogueError::GotoAndChoices { node } if node == "a"),
+            matches!(&err, DialogueError::NextAndChoices { node } if node == "a"),
             "got {err:?}"
         );
     }

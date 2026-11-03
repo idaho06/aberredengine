@@ -38,7 +38,7 @@ impl NodeIdx {
 /// Where the conversation goes after a [`DialogueNode`].
 #[derive(Debug, Clone, PartialEq)]
 pub enum Next {
-    /// The node is terminal: the definition set neither `goto` nor `choices`.
+    /// The node is terminal: the definition set neither `next` nor `choices`.
     End,
     /// Unconditional jump to another node.
     Goto(NodeIdx),
@@ -175,7 +175,7 @@ pub enum DialogueError {
         /// The duplicated node id.
         id: String,
     },
-    /// A `goto` or a choice `next` names an id no node has.
+    /// A node or choice `next` names an id no node has.
     #[error("dialogue node \"{node}\" links to unknown node \"{target}\"")]
     UnknownTarget {
         /// Id of the node holding the dangling link.
@@ -183,9 +183,9 @@ pub enum DialogueError {
         /// The unknown target id.
         target: String,
     },
-    /// A node sets both `goto` and `choices`.
-    #[error("dialogue node \"{node}\" sets both goto and choices; pick one")]
-    GotoAndChoices {
+    /// A node sets both `next` and `choices`.
+    #[error("dialogue node \"{node}\" sets both next and choices; pick one")]
+    NextAndChoices {
         /// Id of the node with both link kinds.
         node: String,
     },
@@ -221,13 +221,13 @@ fn intern_labels(labels: Vec<String>) -> Arc<[Arc<str>]> {
 ///
 /// 1. duplicate node id, in node order ([`DialogueError::DuplicateNode`]);
 /// 2. `start` id not among the nodes ([`DialogueError::StartMissing`]);
-/// 3. per node in node order: both `goto` and `choices` set
-///    ([`DialogueError::GotoAndChoices`]); `choices == Some(vec![])`
-///    ([`DialogueError::EmptyChoices`]); `goto` target unknown
+/// 3. per node in node order: both `next` and `choices` set
+///    ([`DialogueError::NextAndChoices`]); `choices == Some(vec![])`
+///    ([`DialogueError::EmptyChoices`]); `next` target unknown
 ///    ([`DialogueError::UnknownTarget`]); then each choice `next`, in choice
 ///    order ([`DialogueError::UnknownTarget`]).
 ///
-/// A node with neither `goto` nor `choices` is terminal ([`Next::End`]);
+/// A node with neither `next` nor `choices` is terminal ([`Next::End`]);
 /// `choices: None` and an absent `choices` key are the same. Unreachable
 /// nodes are NOT an error: they produce one `log::warn!` listing the
 /// unreachable node ids. Loops and joins (several nodes targeting one node,
@@ -263,7 +263,7 @@ impl TryFrom<DialogueDef> for DialogueTree {
                 text,
                 labels,
                 on_enter,
-                goto,
+                next: next_id,
                 choices,
             } = node_def;
             let node_id = names
@@ -272,14 +272,14 @@ impl TryFrom<DialogueDef> for DialogueTree {
                 .0
                 .clone();
 
-            if goto.is_some() && choices.is_some() {
-                return Err(DialogueError::GotoAndChoices { node: id.clone() });
+            if next_id.is_some() && choices.is_some() {
+                return Err(DialogueError::NextAndChoices { node: id.clone() });
             }
             if matches!(&choices, Some(list) if list.is_empty()) {
                 return Err(DialogueError::EmptyChoices { node: id.clone() });
             }
 
-            let next = if let Some(target) = &goto {
+            let next = if let Some(target) = &next_id {
                 let idx = names.get(target.as_str()).copied().ok_or_else(|| {
                     DialogueError::UnknownTarget {
                         node: id.clone(),
@@ -474,9 +474,9 @@ mod tests {
     }
 
     #[test]
-    fn an_unknown_goto_target_is_reported() {
+    fn an_unknown_next_target_is_reported() {
         let mut a = node("a", "t");
-        a.goto = Some(s("ghost"));
+        a.next = Some(s("ghost"));
         let def = DialogueDef {
             start: s("a"),
             nodes: vec![a],
@@ -507,9 +507,9 @@ mod tests {
     }
 
     #[test]
-    fn goto_and_choices_together_is_reported() {
+    fn next_and_choices_together_is_reported() {
         let mut a = node("a", "t");
-        a.goto = Some(s("b"));
+        a.next = Some(s("b"));
         a.choices = Some(vec![choice("stay")]);
         let def = DialogueDef {
             start: s("a"),
@@ -517,7 +517,7 @@ mod tests {
         };
         let err = expect_err(def);
         assert!(
-            matches!(&err, DialogueError::GotoAndChoices { node } if node == "a"),
+            matches!(&err, DialogueError::NextAndChoices { node } if node == "a"),
             "got {err:?}"
         );
     }
@@ -550,10 +550,10 @@ mod tests {
             "got {err:?}"
         );
 
-        // A missing start wins over an unknown goto target: the start is
+        // A missing start wins over an unknown next target: the start is
         // checked before any node link.
         let mut a = node("a", "t");
-        a.goto = Some(s("ghost"));
+        a.next = Some(s("ghost"));
         let def = DialogueDef {
             start: s("ghost"),
             nodes: vec![a],
@@ -568,7 +568,7 @@ mod tests {
     #[test]
     fn unreachable_nodes_are_reported_in_index_order_but_still_build() {
         let mut b = node("b", "t");
-        b.goto = Some(s("c"));
+        b.next = Some(s("c"));
         let def = DialogueDef {
             start: s("a"),
             nodes: vec![node("a", "t"), b, node("c", "t")],
@@ -597,7 +597,7 @@ mod tests {
             },
         ]);
         let mut b = node("b", "t");
-        b.goto = Some(s("a"));
+        b.next = Some(s("a"));
         let def = DialogueDef {
             start: s("a"),
             nodes: vec![a, b],
@@ -654,7 +654,7 @@ mod tests {
     fn load_dialogue_reports_validation_errors() {
         let (_dir, path) = write_temp_file(
             "bad_target.json",
-            r#"{"start":"a","nodes":[{"id":"a","text":"t","goto":"ghost"}]}"#,
+            r#"{"start":"a","nodes":[{"id":"a","text":"t","next":"ghost"}]}"#,
         );
         let err = load_dialogue(&path).unwrap_err();
         assert!(

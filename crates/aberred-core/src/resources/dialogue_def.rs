@@ -3,7 +3,7 @@
 //! effects that mutate those signals.
 //!
 //! [`DialogueDef`] is the authored conversation: a `start` node id plus
-//! [`NodeDef`]s linked through `goto` and [`ChoiceDef`]s.
+//! [`NodeDef`]s linked through `next` and [`ChoiceDef`]s.
 //! [`DialogueCondition`] describes a check over
 //! [`WorldSignals`] — flags,
 //! integers, strings — combined with `Not`/`All`/`Any`. [`DialogueCmp`] is the
@@ -318,7 +318,7 @@ pub struct DialogueDef {
 /// conversation goes next.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct NodeDef {
-    /// Node id; referenced by [`DialogueDef::start`], [`NodeDef::goto`] and
+    /// Node id; referenced by [`DialogueDef::start`], [`NodeDef::next`] and
     /// [`ChoiceDef::next`].
     pub id: String,
     /// Speaker shown for this line; absent for narration.
@@ -335,7 +335,7 @@ pub struct NodeDef {
     /// Unconditional jump to another node id; `None` together with
     /// `choices == None` makes the node terminal.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub goto: Option<String>,
+    pub next: Option<String>,
     /// Choices offered at this node. `Some(vec![])` is an explicit empty list,
     /// kept distinguishable from an absent key (which stays `None`); validation
     /// rejects the empty list.
@@ -383,7 +383,7 @@ pub(crate) mod test_helpers {
             text: s(text),
             labels: vec![],
             on_enter: vec![],
-            goto: None,
+            next: None,
             choices: None,
         }
     }
@@ -407,7 +407,7 @@ pub(crate) mod test_helpers {
    {"text":"Here is my pass.","next":"pass","when":{"type":"flag","key":"has_pass"},"effects":[{"type":"set_flag","key":"pass_shown"}],"labels":["bribe"]},
    {"text":"Never mind."}]},
  {"id":"friend","speaker":"Guard","text":"Hm. Move along."},
- {"id":"pass","speaker":"Guard","text":"Carry on.","goto":"friend","on_enter":[{"type":"add_integer","key":"gold","delta":-1}],"labels":["gate"]}]}"#
+ {"id":"pass","speaker":"Guard","text":"Carry on.","next":"friend","on_enter":[{"type":"add_integer","key":"gold","delta":-1}],"labels":["gate"]}]}"#
     }
 
     /// The [`DialogueDef`] the example JSON parses to.
@@ -441,7 +441,7 @@ pub(crate) mod test_helpers {
                     speaker: Some(s("Guard")),
                     labels: vec![s("gate")],
                     on_enter: vec![DialogueEffect::add_integer("gold", -1)],
-                    goto: Some(s("friend")),
+                    next: Some(s("friend")),
                     ..node("pass", "Carry on.")
                 },
             ],
