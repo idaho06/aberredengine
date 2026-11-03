@@ -4,16 +4,19 @@
 //! player-driven transition per call: it takes the runner's pending
 //! [`DialogueRequest`], mutates
 //! [`WorldSignals`] with the effects of the entered node and of the picked
-//! choice, and reports each transition as a [`DialogueStep`] so a later
-//! layer can turn it into an event.
+//! choice, and reports each transition as a [`DialogueStep`].
+//! [`dialogue_system`] runs it once per runner entity per tick and triggers
+//! the matching event of [`crate::events::dialogue`] for every returned step.
 
 use std::sync::Arc;
 
+use bevy_ecs::prelude::{Commands, Entity, Query, ResMut};
 use smallvec::SmallVec;
 
 use crate::components::dialogue::{
     DialogueEndReason, DialogueRequest, DialogueRunner, DialogueStatus,
 };
+use crate::events::dialogue::{DialogueChoiceSelected, DialogueEnded, DialogueNodeEntered};
 use crate::resources::dialogue_tree::{DialogueTree, Next, NodeIdx};
 use crate::resources::world_signals::WorldSignals;
 
@@ -212,11 +215,77 @@ fn finish(
     steps.push(DialogueStep::Ended { node: last, reason });
 }
 
+/// Steps every [`DialogueRunner`] once and triggers one event per
+/// [`DialogueStep`]; see the [module docs](self).
+///
+/// For each runner entity, calls [`step_runner`] once with the shared
+/// [`WorldSignals`], then queues one event per returned step, in order,
+/// targeted at that entity: [`DialogueStep::Entered`] becomes
+/// [`DialogueNodeEntered`], [`DialogueStep::ChoiceSelected`] becomes
+/// [`DialogueChoiceSelected`], and [`DialogueStep::Ended`] becomes
+/// [`DialogueEnded`]. Node ids, node labels and choice text/labels come from
+/// the runner's tree ([`DialogueRunner::tree`]). [`step_runner`] applies at
+/// most one player-driven transition per runner per call, so each runner
+/// moves at most once per run. The events are queued with
+/// [`Commands::trigger`], so observers run after the system and read the
+/// final state from the runner.
+pub fn dialogue_system(
+    mut runners: Query<(Entity, &mut DialogueRunner)>,
+    mut signals: ResMut<WorldSignals>,
+    mut commands: Commands,
+) {
+    for (entity, mut runner) in &mut runners {
+        let steps = step_runner(&mut runner, &mut signals);
+        for step in steps {
+            trigger_step(&mut commands, entity, &runner.tree, step);
+        }
+    }
+}
+
+/// Triggers on `entity` the event matching `step`, with ids, labels and
+/// choice text/labels read from `tree`.
+fn trigger_step(commands: &mut Commands, entity: Entity, tree: &DialogueTree, step: DialogueStep) {
+    match step {
+        DialogueStep::Entered { node, previous } => {
+            let entered = tree.node(node);
+            commands.trigger(DialogueNodeEntered {
+                entity,
+                node: Arc::clone(&entered.id),
+                previous: previous.map(|idx| Arc::clone(&tree.node(idx).id)),
+                labels: Arc::clone(&entered.labels),
+            });
+        }
+        DialogueStep::ChoiceSelected { node, index } => {
+            let picked = tree.node(node);
+            let Next::Choices(choices) = &picked.next else {
+                unreachable!("step_runner only pushes ChoiceSelected on a choices node")
+            };
+            let choice = &choices[index];
+            commands.trigger(DialogueChoiceSelected {
+                entity,
+                node: Arc::clone(&picked.id),
+                index,
+                text: Arc::clone(&choice.text),
+                labels: Arc::clone(&choice.labels),
+            });
+        }
+        DialogueStep::Ended { node, reason } => {
+            commands.trigger(DialogueEnded {
+                entity,
+                node: node.map(|idx| Arc::clone(&tree.node(idx).id)),
+                reason,
+            });
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::resources::dialogue_builder::DialogueBuilder;
     use crate::resources::dialogue_def::{DialogueCmp, DialogueCondition, DialogueEffect};
+    use bevy_ecs::prelude::{On, Resource, World};
+    use bevy_ecs::system::RunSystemOnce;
 
     /// Builds and validates a tree from a builder configured by `build`.
     fn build_tree(
@@ -742,5 +811,358 @@ mod tests {
             }
         );
         assert_eq!(runner.pending(), None);
+    }
+
+    // --- dialogue_system: events, targeting, and observer timing ---
+
+    /// Dialogue events in trigger order: `entered:<node>:<previous or ->:<labels
+    /// joined by ,>`, `selected:<node>:<index>:<text>:<labels joined by ,>`,
+    /// `ended:<node or ->:<reason as {:?}>`.
+    #[derive(Resource, Default)]
+    struct Log(Vec<String>);
+
+    /// Entities that fired a [`DialogueNodeEntered`], in observer order.
+    #[derive(Resource, Default)]
+    struct EnteredEntities(Vec<Entity>);
+
+    /// Labels of an event's node or choice, joined by `,`.
+    fn join_labels(labels: &[Arc<str>]) -> String {
+        labels
+            .iter()
+            .map(|label| &**label)
+            .collect::<Vec<_>>()
+            .join(",")
+    }
+
+    fn record_entered(
+        ev: On<DialogueNodeEntered>,
+        mut log: ResMut<Log>,
+        mut entered: ResMut<EnteredEntities>,
+    ) {
+        let previous = ev.previous.as_deref().unwrap_or("-");
+        log.0.push(format!(
+            "entered:{}:{previous}:{}",
+            ev.node,
+            join_labels(&ev.labels)
+        ));
+        entered.0.push(ev.entity);
+    }
+
+    fn record_selected(ev: On<DialogueChoiceSelected>, mut log: ResMut<Log>) {
+        log.0.push(format!(
+            "selected:{}:{}:{}:{}",
+            ev.node,
+            ev.index,
+            ev.text,
+            join_labels(&ev.labels)
+        ));
+    }
+
+    fn record_ended(ev: On<DialogueEnded>, mut log: ResMut<Log>) {
+        let node = ev.node.as_deref().unwrap_or("-");
+        log.0.push(format!("ended:{node}:{:?}", ev.reason));
+    }
+
+    /// World with a fresh [`WorldSignals`], the recording [`Log`], and global
+    /// observers for the three dialogue events.
+    fn make_dialogue_world() -> World {
+        let mut world = World::new();
+        world.insert_resource(WorldSignals::default());
+        world.init_resource::<Log>();
+        world.init_resource::<EnteredEntities>();
+        world.add_observer(record_entered);
+        world.add_observer(record_selected);
+        world.add_observer(record_ended);
+        world
+    }
+
+    /// [`make_dialogue_world`] plus one runner entity over `tree`.
+    fn world_with_runner(tree: &Arc<DialogueTree>) -> (World, Entity) {
+        let mut world = make_dialogue_world();
+        let entity = world.spawn(DialogueRunner::new(Arc::clone(tree))).id();
+        (world, entity)
+    }
+
+    /// Runs [`dialogue_system`] once.
+    fn tick(world: &mut World) {
+        world.run_system_once(dialogue_system).unwrap();
+    }
+
+    fn take_log(world: &mut World) -> Vec<String> {
+        std::mem::take(&mut world.resource_mut::<Log>().0)
+    }
+
+    #[test]
+    fn first_run_fires_entered_for_the_start_node_and_nothing_else() {
+        let tree = build_tree("a", |b| {
+            b.node("a")
+                .text("A")
+                .label("l1")
+                .label("l2")
+                .goto("b")
+                .node("b")
+                .text("B")
+        });
+        let (mut world, entity) = world_with_runner(&tree);
+
+        tick(&mut world);
+
+        assert_eq!(take_log(&mut world), ["entered:a:-:l1,l2"]);
+        assert_eq!(
+            world.get::<DialogueRunner>(entity).unwrap().status(),
+            DialogueStatus::Active(tree.start()),
+            "the runner is active on the start node afterwards"
+        );
+    }
+
+    #[test]
+    fn the_last_request_set_before_a_tick_wins() {
+        let tree = a_to_b_tree();
+        let (mut world, entity) = world_with_runner(&tree);
+        tick(&mut world);
+        take_log(&mut world);
+
+        {
+            let mut runner = world.get_mut::<DialogueRunner>(entity).unwrap();
+            runner.advance();
+            runner.cancel();
+        }
+        tick(&mut world);
+
+        assert_eq!(take_log(&mut world), ["ended:a:Cancelled"]);
+        let runner = world.get::<DialogueRunner>(entity).unwrap();
+        assert!(runner.is_finished());
+        assert_eq!(runner.end_reason(), Some(DialogueEndReason::Cancelled));
+    }
+
+    #[test]
+    fn two_runners_on_one_tree_stay_independent_and_events_target_their_entity() {
+        let tree = a_to_b_tree();
+        let (mut world, first) = world_with_runner(&tree);
+        let second = world.spawn(DialogueRunner::new(Arc::clone(&tree))).id();
+
+        tick(&mut world);
+        let log = take_log(&mut world);
+        assert_eq!(log.len(), 2, "both runners enter the start node");
+        assert!(log.iter().all(|line| line == "entered:a:-:"));
+        let seen = &world.resource::<EnteredEntities>().0;
+        assert_eq!(seen.len(), 2);
+        assert!(
+            seen.contains(&first) && seen.contains(&second),
+            "each entered event is targeted at its own runner entity"
+        );
+
+        world.resource_mut::<EnteredEntities>().0.clear();
+        world.get_mut::<DialogueRunner>(first).unwrap().advance();
+        tick(&mut world);
+
+        assert_eq!(take_log(&mut world), ["entered:b:a:"]);
+        assert_eq!(
+            world.resource::<EnteredEntities>().0,
+            [first],
+            "only the advanced runner fired an event"
+        );
+        assert_eq!(
+            world.get::<DialogueRunner>(first).unwrap().node_id(),
+            Some("b")
+        );
+        assert_eq!(
+            world.get::<DialogueRunner>(second).unwrap().node_id(),
+            Some("a"),
+            "the other runner stays on its node"
+        );
+    }
+
+    #[test]
+    fn observers_read_the_new_state_from_the_runner() {
+        let tree = a_to_b_tree();
+        let (mut world, entity) = world_with_runner(&tree);
+        world.add_observer(
+            |ev: On<DialogueNodeEntered>, runners: Query<&DialogueRunner>, mut log: ResMut<Log>| {
+                let runner = runners.get(ev.entity).unwrap();
+                log.0
+                    .push(format!("state:{}", runner.node_id().unwrap_or("-")));
+            },
+        );
+        world.add_observer(
+            |ev: On<DialogueEnded>, runners: Query<&DialogueRunner>, mut log: ResMut<Log>| {
+                let runner = runners.get(ev.entity).unwrap();
+                log.0
+                    .push(format!("reason:{:?}", runner.end_reason().unwrap()));
+            },
+        );
+
+        tick(&mut world);
+        let log = take_log(&mut world);
+        assert!(log.iter().any(|line| line == "entered:a:-:"));
+        assert!(
+            log.iter().any(|line| line == "state:a"),
+            "the entered observer already reads the start node"
+        );
+
+        world.get_mut::<DialogueRunner>(entity).unwrap().advance();
+        tick(&mut world);
+        let log = take_log(&mut world);
+        assert!(log.iter().any(|line| line == "entered:b:a:"));
+        assert!(
+            log.iter().any(|line| line == "state:b"),
+            "after a->b the observer reads b, not a"
+        );
+
+        world.get_mut::<DialogueRunner>(entity).unwrap().advance();
+        tick(&mut world);
+        let log = take_log(&mut world);
+        assert!(log.iter().any(|line| line == "ended:b:Completed"));
+        assert!(
+            log.iter().any(|line| line == "reason:Completed"),
+            "the ended observer reads the end reason"
+        );
+    }
+
+    #[test]
+    fn one_transition_per_tick_walks_a_goto_chain() {
+        let tree = build_tree("a", |b| {
+            b.node("a")
+                .text("A")
+                .goto("b")
+                .node("b")
+                .text("B")
+                .goto("c")
+                .node("c")
+                .text("C")
+        });
+        let (mut world, entity) = world_with_runner(&tree);
+
+        tick(&mut world);
+        assert_eq!(take_log(&mut world), ["entered:a:-:"]);
+        assert_eq!(
+            world.get::<DialogueRunner>(entity).unwrap().node_id(),
+            Some("a")
+        );
+
+        world.get_mut::<DialogueRunner>(entity).unwrap().advance();
+        tick(&mut world);
+        assert_eq!(take_log(&mut world), ["entered:b:a:"]);
+        assert_eq!(
+            world.get::<DialogueRunner>(entity).unwrap().node_id(),
+            Some("b"),
+            "after tick 2 the runner is on b, not c"
+        );
+
+        world.get_mut::<DialogueRunner>(entity).unwrap().advance();
+        tick(&mut world);
+        assert_eq!(take_log(&mut world), ["entered:c:b:"]);
+        assert_eq!(
+            world.get::<DialogueRunner>(entity).unwrap().node_id(),
+            Some("c")
+        );
+    }
+
+    #[test]
+    fn a_choice_pick_fires_selected_before_the_target_entered() {
+        let tree = build_tree("n", |b| {
+            b.node("n")
+                .text("pick")
+                .choice("locked", "x")
+                .when(DialogueCondition::flag("open"))
+                .label("locked")
+                .choice("go", "x")
+                .label("go")
+                .node("x")
+                .text("X")
+        });
+        let (mut world, entity) = world_with_runner(&tree);
+        tick(&mut world);
+        assert_eq!(take_log(&mut world), ["entered:n:-:"]);
+
+        // Declared index 1, past the locked choice 0.
+        world.get_mut::<DialogueRunner>(entity).unwrap().choose(1);
+        tick(&mut world);
+
+        assert_eq!(
+            take_log(&mut world),
+            ["selected:n:1:go:go", "entered:x:n:"],
+            "selected fires before the target's entered, with the declared index"
+        );
+    }
+
+    #[test]
+    fn a_choice_end_pick_fires_selected_then_ended_completed() {
+        let tree = build_tree("n", |b| {
+            b.node("n")
+                .text("pick")
+                .choice_end("bye")
+                .label("end")
+                .choice("stay", "x")
+                .node("x")
+                .text("X")
+        });
+        let (mut world, entity) = world_with_runner(&tree);
+        tick(&mut world);
+        assert_eq!(take_log(&mut world), ["entered:n:-:"]);
+
+        world.get_mut::<DialogueRunner>(entity).unwrap().choose(0);
+        tick(&mut world);
+
+        assert_eq!(
+            take_log(&mut world),
+            ["selected:n:0:bye:end", "ended:n:Completed"]
+        );
+    }
+
+    #[test]
+    fn an_active_runner_with_no_pending_request_fires_nothing() {
+        let tree = a_to_b_tree();
+        let (mut world, entity) = world_with_runner(&tree);
+        tick(&mut world);
+        take_log(&mut world);
+
+        tick(&mut world);
+
+        assert!(take_log(&mut world).is_empty());
+        assert_eq!(
+            world.get::<DialogueRunner>(entity).unwrap().node_id(),
+            Some("a")
+        );
+    }
+
+    #[test]
+    fn cancelling_before_start_fires_only_ended_cancelled() {
+        let tree = a_to_b_tree();
+        let (mut world, entity) = world_with_runner(&tree);
+        world.get_mut::<DialogueRunner>(entity).unwrap().cancel();
+
+        tick(&mut world);
+
+        assert_eq!(take_log(&mut world), ["ended:-:Cancelled"]);
+        assert_eq!(
+            world.get::<DialogueRunner>(entity).unwrap().end_reason(),
+            Some(DialogueEndReason::Cancelled)
+        );
+    }
+
+    #[test]
+    fn an_all_locked_choices_node_fires_entered_then_ended_no_choices() {
+        let tree = build_tree("s", |b| {
+            b.node("s")
+                .text("S")
+                .goto("n")
+                .node("n")
+                .text("N")
+                .choice("x", "e")
+                .when(DialogueCondition::flag("nope"))
+                .choice_end("y")
+                .when(DialogueCondition::flag("nope2"))
+                .node("e")
+                .text("E")
+        });
+        let (mut world, entity) = world_with_runner(&tree);
+        tick(&mut world);
+        assert_eq!(take_log(&mut world), ["entered:s:-:"]);
+
+        world.get_mut::<DialogueRunner>(entity).unwrap().advance();
+        tick(&mut world);
+
+        assert_eq!(take_log(&mut world), ["entered:n:s:", "ended:n:NoChoices"]);
     }
 }

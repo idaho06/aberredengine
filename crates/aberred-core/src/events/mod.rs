@@ -9,6 +9,7 @@
 //! - [`asset`] – asset load completion (`AssetLoaded`/`AssetLoadFailed`)
 //! - [`collision`] – collision notifications emitted by the physics/collision system
 //! - [`debug_toggled`] – toggle debug rendering and diagnostics on/off (F11, stays logic-side)
+//! - [`dialogue`] – dialogue node/choice/end events (`DialogueNodeEntered`/`DialogueChoiceSelected`/`DialogueEnded`)
 //! - [`game_state`] – state transition notifications for the high-level game flow
 //! - [`gui_interactable`] – GUI interactable (button/image) click events
 //! - [`input`] – input action events (key press/release)
@@ -25,6 +26,7 @@ pub mod animation;
 pub mod asset;
 pub mod collision;
 pub mod debug_toggled;
+pub mod dialogue;
 pub mod game_state;
 pub mod gui_interactable;
 pub mod input;
