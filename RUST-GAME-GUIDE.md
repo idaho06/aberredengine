@@ -36,6 +36,7 @@ Built-in systems:
 - **Tweens** — position, rotation, scale, and tint interpolation with easing and loop modes
 - **Timers** — repeating or one-shot countdown timers that trigger a `TimerFired` event
 - **Phase state machines** — per-entity state machines over named phases, with `PhaseEntered`/`PhaseExited` events
+- **Dialogues** — data-only branching conversations (speaker lines, player choices, conditions that lock choices, effects that write `WorldSignals`) run by a `DialogueRunner`, with `DialogueNodeEntered`/`DialogueChoiceSelected`/`DialogueEnded` events
 - **Parent-child hierarchy** — recursive transform propagation (position, rotation, scale)
 - **GUI widgets** — themed windows, buttons, images, labels and progress bars that trigger a `GuiClicked` event
 - **Tilemaps** — tile layers loaded from a PNG atlas and JSON
@@ -962,6 +963,7 @@ The subsections below show the underlying `RenderAssetCmd`/`AudioCmd` variants; 
 | `FontStore` / `ShaderStore` / `TextureStore` / `RenderTarget` | Render world only | **No** — queue loads with `AssetLoader` instead |
 | `FontMetricsStore` / `TextureDimsStore` | Logic world, pre-inserted | Yes — `Res<FontMetricsStore>` / `Res<TextureDimsStore>`; populated asynchronously after a load completes (see below) |
 | `AnimationStore` | Logic world, pre-inserted | Yes — `ResMut<AnimationStore>` |
+| `DialogueStore` | Logic world, pre-inserted | Yes — `ResMut<DialogueStore>`; trees are added in your setup hook (see [Dialogues](#dialogues)) |
 | `MainCamera` | Logic world, pre-inserted (pre-set to center offset) | Yes — `ResMut<MainCamera>` |
 
 ### Textures
@@ -1584,6 +1586,7 @@ commands.spawn((
 | `MouseControlled` | `MouseControlled { follow_x: true, follow_y: true }` |
 | `Timer` | `Timer::new(duration_secs)` (repeating) or `Timer::once(duration_secs)` — triggers `TimerFired` on its entity; see [Timers](#timers) |
 | `Phase` | `Phase::new("initial_phase")` — set `next` to transition; triggers `PhaseEntered`/`PhaseExited`; see [Phase state machines](#phase-state-machines) |
+| `DialogueRunner` | `DialogueRunner::new(tree)` — `advance()` / `choose(index)` / `cancel()` request the next step; triggers `DialogueNodeEntered`/`DialogueChoiceSelected`/`DialogueEnded`; see [Dialogues](#dialogues) |
 | `CollisionRule` | `CollisionRule::new("group_a", "group_b")` — observe `CollisionOngoing` (every tick) or `CollisionStarted`/`CollisionEnded` on it; see [Collision rules](#collision-rules) |
 | `Tween<WorldPosition>` | `Tween::position(from: Vec2, to: Vec2, duration)` |
 | `Tween<Rotation>` | `Tween::rotation(from_degrees, to_degrees, duration)` |
@@ -1862,6 +1865,188 @@ Lua phase callbacks (`:with_lua_phase_entered/exited/update`) run on this same `
 | `previous` | `Option<String>` | Phase before the last transition |
 | `next` | `Option<String>` | Set to request a transition; cleared when applied |
 | `time_in_phase` | `f32` | Seconds since entering the current phase: 0 in the sim tick the phase starts (its `PhaseEntered` observers see 0), then grows by `dt` every sim tick |
+
+### Dialogues
+
+**Source:** `aberred-core/src/components/dialogue.rs`, `aberred-core/src/systems/dialogue.rs`, `aberred-core/src/events/dialogue.rs`, `aberred-core/src/resources/dialogue_builder.rs`, `aberred-core/src/resources/dialogue_def.rs`, `aberred-core/src/resources/dialogue_tree.rs`, `aberred-core/src/resources/dialogue_store.rs`
+
+A dialogue is a graph of named nodes — loops and joins are legal. Each node shows a line (an optional speaker, a `text`, and opaque `labels`) and waits for the player. The engine renders nothing: your game reads the `DialogueRunner` and draws the conversation itself. Dialogue is Rust-only; there is no Lua API for it.
+
+**Authoring a tree.** `DialogueBuilder` builds a conversation in code:
+
+```rust
+use aberredengine::prelude::*;
+use std::sync::Arc;
+
+// Registered with `EngineBuilder::on_setup`
+fn setup(mut dialogues: ResMut<DialogueStore>) -> Result {
+    let tree = DialogueBuilder::new("greet")
+        .node("greet")
+        .speaker("Guard")
+        .text("Halt! Who goes there?")
+        .choice("A friend.", "friend")
+        .choice("Here is my pass.", "pass")
+        .when(DialogueCondition::flag("has_pass"))
+        .effect(DialogueEffect::set_flag("pass_shown"))
+        .choice_end("Never mind.")
+        .label("rude")
+        .node("friend")
+        .speaker("Guard")
+        .text("Hm. Move along.")
+        .node("pass")
+        .speaker("Guard")
+        .text("Carry on.")
+        .goto("friend")
+        .build()?;
+    dialogues.insert("guard", Arc::new(tree));
+    Ok(())
+}
+```
+
+`.node(id)` starts a node, and `.speaker(...)`, `.text(...)`, `.label(...)`, `.on_enter(...)` and `.goto(...)` set the current node. `.choice(text, next_id)` adds a choice leading to `next_id`; a `.when(...)`, `.effect(...)` or `.label(...)` called after it applies to that choice. `.choice_end(text)` adds a choice that ends the conversation. A node with neither `goto` nor choices is terminal. `.build()` validates the graph and returns `Result<DialogueTree, DialogueError>`. Trees are stored in the `DialogueStore` resource, filled in the setup hook like `AnimationStore`.
+
+**The same conversation as JSON.** `load_dialogue(path)` reads a dialogue definition from a file and returns `Result<DialogueTree, DialogueError>`; I/O and JSON failures are `DialogueError::Io` / `DialogueError::Json`:
+
+```json
+{
+  "start": "greet",
+  "nodes": [
+    {
+      "id": "greet",
+      "speaker": "Guard",
+      "text": "Halt! Who goes there?",
+      "choices": [
+        { "text": "A friend.", "next": "friend" },
+        {
+          "text": "Here is my pass.",
+          "next": "pass",
+          "when": { "type": "flag", "key": "has_pass" },
+          "effects": [{ "type": "set_flag", "key": "pass_shown" }]
+        },
+        { "text": "Never mind.", "labels": ["rude"] }
+      ]
+    },
+    { "id": "friend", "speaker": "Guard", "text": "Hm. Move along." },
+    { "id": "pass", "speaker": "Guard", "text": "Carry on.", "goto": "friend" }
+  ]
+}
+```
+
+A choice whose `next` is absent ends the conversation. The optional fields (`speaker`, `labels`, `on_enter`, `when`, `effects`, `goto`, `choices`) may be omitted.
+
+**Validation.** `build()` and `load_dialogue` report the first error they find: a missing start node, a duplicate node id, an unknown `goto`/`next` target, a node with both `goto` and `choices`, or an empty `choices` list. A node no path reaches logs a warning and still builds.
+
+**Conditions and effects.** A choice can carry a `when` condition that locks it and `effects` that run when it is picked; a node can carry `on_enter` effects. Conditions evaluate read-only against `WorldSignals`; effects write to it, so `SignalBinding` text updates as for any other writer.
+
+| Condition (Rust) | JSON `"type"` | Fields and meaning |
+|---|---|---|
+| `DialogueCondition::flag(key)` | `flag` | `key` — true while the flag is set |
+| `DialogueCondition::integer(key, op, value)` | `integer` | `key`, `"op"` (`eq`/`ne`/`lt`/`le`/`gt`/`ge`), `value` — a missing integer reads as 0, so `gold >= 1` on an unset key is false |
+| `DialogueCondition::string_equals(key, value)` | `string_equals` | `key`, `value` — a missing string never equals |
+| `DialogueCondition::not(c)` | `not` | `cond` — negates the inner condition |
+| `DialogueCondition::all(vec)` / `DialogueCondition::any(vec)` | `all` / `any` | list field `all` / `any` — conjunction / disjunction |
+
+| Effect (Rust) | JSON `"type"` | Fields and meaning |
+|---|---|---|
+| `DialogueEffect::set_flag(key)` | `set_flag` | `key` |
+| `DialogueEffect::remove_flag(key)` | `remove_flag` | `key` |
+| `DialogueEffect::set_integer(key, value)` | `set_integer` | `key`, `value` |
+| `DialogueEffect::add_integer(key, delta)` | `add_integer` | `key`, `delta` — a missing key counts as 0; an overflow logs an error and leaves the value unchanged |
+| `DialogueEffect::set_scalar(key, value)` | `set_scalar` | `key`, `value` |
+| `DialogueEffect::set_string(key, value)` | `set_string` | `key`, `value` |
+
+Both enums serialize internally tagged: a `"type"` discriminator, with field names following the Rust constructor parameters.
+
+**Spawning a runner.** A `DialogueRunner` component runs one conversation on one entity:
+
+```rust
+use aberredengine::prelude::*;
+use std::sync::Arc;
+
+fn start_guard_talk(dialogues: Res<DialogueStore>, mut commands: Commands) {
+    let Some(tree) = dialogues.get("guard") else {
+        return;
+    };
+    commands.spawn(DialogueRunner::new(Arc::clone(tree)));
+}
+```
+
+The runner shares the `Arc<DialogueTree>`, so several entities can run the same conversation independently. Add `Persistent` to keep a runner across a scene switch; otherwise it despawns with its scene.
+
+**Driving and reading a runner.** Game systems request the next step and read the current node for the UI:
+
+```rust
+use aberredengine::prelude::*;
+
+// Registered with `EngineBuilder::add_system`; runs once per sim tick
+fn drive_dialogue(mut runners: Query<&mut DialogueRunner>, input: Res<InputState>) {
+    for mut runner in &mut runners {
+        if !runner.is_active() || !input.action(InputAction::Action1).just_pressed {
+            continue;
+        }
+        if runner.has_choices() {
+            let first_open = runner
+                .choices()
+                .find(|choice| choice.available)
+                .map(|choice| choice.index);
+            if let Some(index) = first_open {
+                runner.choose(index);
+            }
+        } else {
+            runner.advance();
+        }
+    }
+}
+
+fn dialogue_lines(runner: &DialogueRunner) -> Vec<String> {
+    let mut lines = Vec::new();
+    if let (Some(speaker), Some(text)) = (runner.speaker(), runner.text()) {
+        lines.push(format!("{speaker}: {text}"));
+    }
+    for choice in runner.choices() {
+        let lock = if choice.available { "" } else { " (locked)" };
+        lines.push(format!("{}. {}{lock}", choice.index + 1, choice.text));
+    }
+    lines
+}
+```
+
+The requests are `advance()` (on a goto or end node), `choose(declared_index)` (on a choices node) and `cancel()`; each only sets a pending request, and the last one set before the engine runs wins. For the UI, read `is_active()`, `is_finished()`, `node_id()`, `speaker()`, `text()`, `labels()`, `has_choices()` and `choices()`. `choices()` lists every declared choice in order as `ChoiceView { index, text, labels, available }`: a choice whose condition failed is still listed, with `available == false`, so the UI greys it out or skips it. `choose` takes the declared index — the same `index` the view and `DialogueChoiceSelected` report — so a locked choice before the target never shifts it.
+
+**Events.** The engine triggers three events on the runner's entity:
+
+```rust
+use aberredengine::prelude::*;
+
+// Registered once with `EngineBuilder::add_observer`
+fn on_dialogue_choice(ev: On<DialogueChoiceSelected>, mut signals: ResMut<WorldSignals>) {
+    if ev.labels.iter().any(|label| &**label == "rude") {
+        signals.set_flag("guard_offended");
+    }
+}
+
+fn on_dialogue_ended(ev: On<DialogueEnded>, mut commands: Commands) {
+    if ev.reason != DialogueEndReason::Cancelled {
+        commands.entity(ev.entity).despawn();
+    }
+}
+```
+
+`DialogueNodeEntered { entity, node, previous, labels }`, `DialogueChoiceSelected { entity, node, index, text, labels }` and `DialogueEnded { entity, node, reason }` are `EntityEvent`s targeted at the runner entity, so handle them with `.observe(handler)` on the runner or one global `add_observer`. `previous` is `None` for the start node, so `DialogueNodeEntered` doubles as "dialogue started"; `DialogueChoiceSelected` fires before the target's `DialogueNodeEntered`; `DialogueEnded` carries `DialogueEndReason::{Completed, Cancelled, NoChoices}`, with `node` the last node shown (`None` when cancelled before the start). The observers run after the engine's update, so the runner already shows the new state and the event carries what would otherwise be lost.
+
+**Timing and rules:**
+
+- The engine's dialogue update runs at the start of every sim tick in `SimSet::Phases`, in every game state, before `.add_system()` systems (the same slot as `phase_system`).
+- A request set anywhere in tick N applies in tick N+1, and each runner makes at most one transition per tick.
+- The first run of a runner that has not started enters its start node; a request set before that run (`advance` or `choose`) is dropped, while `cancel` ends the conversation without entering the start node — no `on_enter`, no `DialogueNodeEntered`, and `DialogueEnded { node: None }`.
+- `advance` on a choices node and `choose` on a goto or end node are ignored.
+- An out-of-range or locked `choose` logs a warning and leaves the node and signals untouched (no effect applies).
+- Entering a choices node where no choice is available ends the conversation with `DialogueEndReason::NoChoices`, so give every choices node an unconditional fallback.
+- Choice availability is computed once when a node is entered and cached, so signals changing while the node is on screen do not flip a choice.
+- Effects within one transition apply in this order: the picked choice's `effects`, then the target's `on_enter`, then the target's choice conditions are evaluated on the resulting signals.
+- A finished runner stays on its entity and keeps showing its last line (`text()`, `speaker()`, `node_id()`); requests on it are ignored, and the game despawns or removes it.
+- The tree is immutable and shared, and a conversation loop (A -> B -> A) re-evaluates conditions on every pass.
+- In a replay, the runner's status, cached availability and pending request are part of the determinism hash while the shared tree is not, so a conversation replays identically and a different tree surfaces through the node index or `WorldSignals`.
 
 ### Collision rules
 
@@ -2584,6 +2769,7 @@ All resources are accessed as Bevy ECS system parameters. Use `Res<T>` / `ResMut
 | `SceneManager` | `Res` | Scene registry: the `.add_scene()` scenes or the implicit `"main"` (a `.with_lua()` game also registers any other scene on its first request) |
 | `MainCamera` | `ResMut` | 2D camera (target, offset, zoom, rotation) |
 | `AnimationStore` | `Res` / `ResMut` | Animation definitions |
+| `DialogueStore` | `Res` / `ResMut` | Loaded dialogue trees by name; `.insert(key, Arc<DialogueTree>)` returns the replaced tree, `.get(key)` returns `Option<&Arc<DialogueTree>>`; see [Dialogues](#dialogues) |
 | `GuiThemeStore` | `ResMut` | Named GUI theme registry (`FxHashMap<Arc<str>, GuiTheme>`); each theme holds panel/button/label/progress_bar nine-patches, font settings, and optional shadows; see [GUI widgets](#gui-widgets) |
 | `GuiInputState` | `Res` | `click_consumed_this_frame: bool` — set by `gui_hit_test_system` when any `GuiInteractable` absorbs a click; reset each frame |
 | `FontMetricsStore` | `Res` | CPU-side glyph measurement, keyed like `FontStore`. Populated asynchronously after a `RenderAssetCmd::Font` load completes — see [Section 6](#6-loading-assets). |
