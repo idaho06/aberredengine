@@ -10,6 +10,7 @@
 
 use std::sync::Arc;
 
+use bevy_ecs::change_detection::DetectChangesMut;
 use bevy_ecs::prelude::{Commands, Entity, Query, ResMut};
 use smallvec::SmallVec;
 
@@ -224,7 +225,9 @@ fn finish(
 /// [`DialogueNodeEntered`], [`DialogueStep::ChoiceSelected`] becomes
 /// [`DialogueChoiceSelected`], and [`DialogueStep::Ended`] becomes
 /// [`DialogueEnded`]. Node ids, node labels and choice text/labels come from
-/// the runner's tree ([`DialogueRunner::tree`]). [`step_runner`] applies at
+/// the runner's tree ([`DialogueRunner::tree`]). A started runner with no
+/// pending request is not marked changed, and [`WorldSignals`] is marked
+/// changed only when a transition ran. [`step_runner`] applies at
 /// most one player-driven transition per runner per call, so each runner
 /// moves at most once per run. The events are queued with
 /// [`Commands::trigger`], so observers run after the system and read the
@@ -235,7 +238,17 @@ pub fn dialogue_system(
     mut commands: Commands,
 ) {
     for (entity, mut runner) in &mut runners {
-        let steps = step_runner(&mut runner, &mut signals);
+        // An idle runner (started, nothing requested) is untouched by
+        // `step_runner`; skip it before any `DerefMut` marks it changed.
+        if runner.pending().is_none() && runner.status() != DialogueStatus::NotStarted {
+            continue;
+        }
+        // `step_runner` only writes signals inside a transition, and every
+        // transition pushes a step.
+        let steps = step_runner(&mut runner, signals.bypass_change_detection());
+        if !steps.is_empty() {
+            signals.set_changed();
+        }
         for step in steps {
             trigger_step(&mut commands, entity, &runner.tree, step);
         }
@@ -284,6 +297,7 @@ mod tests {
     use super::*;
     use crate::resources::dialogue_builder::DialogueBuilder;
     use crate::resources::dialogue_def::{DialogueCmp, DialogueCondition, DialogueEffect};
+    use bevy_ecs::change_detection::{DetectChanges, Tick};
     use bevy_ecs::prelude::{On, Resource, World};
     use bevy_ecs::system::RunSystemOnce;
 
@@ -1164,5 +1178,62 @@ mod tests {
         tick(&mut world);
 
         assert_eq!(take_log(&mut world), ["entered:n:s:", "ended:n:NoChoices"]);
+    }
+
+    /// Whether the runner on `entity` changed after `since`.
+    fn runner_changed_since(world: &mut World, entity: Entity, since: Tick) -> bool {
+        world
+            .entity(entity)
+            .get_ref::<DialogueRunner>()
+            .unwrap()
+            .last_changed()
+            .is_newer_than(since, world.change_tick())
+    }
+
+    /// Whether [`WorldSignals`] changed after `since`.
+    fn signals_changed_since(world: &mut World, since: Tick) -> bool {
+        world
+            .resource_ref::<WorldSignals>()
+            .last_changed()
+            .is_newer_than(since, world.change_tick())
+    }
+
+    #[test]
+    fn an_idle_or_finished_runner_marks_neither_the_runner_nor_signals_changed() {
+        let tree = build_tree("a", |b| b.node("a").text("A"));
+        let (mut world, entity) = world_with_runner(&tree);
+        tick(&mut world); // enters the start node
+
+        // Active, no pending request.
+        let since = world.change_tick();
+        world.increment_change_tick();
+        tick(&mut world);
+        assert!(
+            !runner_changed_since(&mut world, entity, since),
+            "an idle active runner must not be marked changed"
+        );
+        assert!(
+            !signals_changed_since(&mut world, since),
+            "an idle tick must not mark WorldSignals changed"
+        );
+
+        // A transition marks both (positive control).
+        let since = world.change_tick();
+        world.increment_change_tick();
+        world.get_mut::<DialogueRunner>(entity).unwrap().advance();
+        tick(&mut world);
+        assert!(world.get::<DialogueRunner>(entity).unwrap().is_finished());
+        assert!(runner_changed_since(&mut world, entity, since));
+        assert!(signals_changed_since(&mut world, since));
+
+        // Finished, no pending request.
+        let since = world.change_tick();
+        world.increment_change_tick();
+        tick(&mut world);
+        assert!(
+            !runner_changed_since(&mut world, entity, since),
+            "an idle finished runner must not be marked changed"
+        );
+        assert!(!signals_changed_since(&mut world, since));
     }
 }
