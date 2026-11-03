@@ -2726,7 +2726,7 @@ This is useful for automated testing (replay a fixed input script, assert on the
 - `WorldTime` doesn't advance during Setup (in every mode): `elapsed` and `frame_count` are `0` on the first `Playing` tick, and `delta` stays `0` until then.
 - A replay records and plays back from the first `Playing` tick; Setup runs live, loads included, in both.
 - In deterministic mode, input that arrives during Setup is held back. Key and mouse samples are dropped, so F10/F11 do nothing while loading. GUI intents and the latest screen size are applied on the first `Playing` tick.
-- Engine systems that don't use `delta` still run during Setup: collision rules, `phase_system` (phase events), group counts. Spawn gameplay entities in the initial scene's `SceneEntered` observer, not in the setup hook, so a longer Setup can't change them.
+- Engine systems that don't use `delta` still run during Setup: collision rules, `phase_system` (phase events), `dialogue_system` (dialogue events), group counts. Spawn gameplay entities in the initial scene's `SceneEntered` observer, not in the setup hook, so a longer Setup can't change them.
 
 ### Assets load during Setup
 

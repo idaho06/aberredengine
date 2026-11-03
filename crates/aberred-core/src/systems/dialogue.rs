@@ -28,7 +28,7 @@ pub enum DialogueStep {
         node: NodeIdx,
         previous: Option<NodeIdx>,
     },
-    /// A choice was picked on `node`; `index` is its DECLARED index.
+    /// A choice was picked on `node`; `index` is its declared index.
     ChoiceSelected { node: NodeIdx, index: usize },
     /// The conversation ended. `node` is the last node shown, `None` when cancelled before start.
     Ended {

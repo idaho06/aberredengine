@@ -47,7 +47,7 @@ pub struct DialogueChoiceSelected {
     pub entity: Entity,
     /// Node the choice was picked on.
     pub node: Arc<str>,
-    /// DECLARED index of the picked choice in the node's choice list.
+    /// Declared index of the picked choice in the node's choice list.
     pub index: usize,
     /// Text of the picked choice.
     pub text: Arc<str>,
