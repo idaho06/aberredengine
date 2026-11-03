@@ -1903,7 +1903,7 @@ fn setup(mut dialogues: ResMut<DialogueStore>) -> Result {
 }
 ```
 
-`.node(id)` starts a node, and `.speaker(...)`, `.text(...)`, `.label(...)`, `.on_enter(...)` and `.goto(...)` set the current node. `.choice(text, next_id)` adds a choice leading to `next_id`; a `.when(...)`, `.effect(...)` or `.label(...)` called after it applies to that choice. `.choice_end(text)` adds a choice that ends the conversation. A node with neither `goto` nor choices is terminal. `.build()` validates the graph and returns `Result<DialogueTree, DialogueError>`. Trees are stored in the `DialogueStore` resource, filled in the setup hook like `AnimationStore`.
+`.node(id)` starts a node, and `.speaker(...)`, `.text(...)`, `.on_enter(...)` and `.goto(...)` set the current node. `.label(...)` labels the current node only before its first choice. `.choice(text, next_id)` adds a choice leading to `next_id`; a `.when(...)`, `.effect(...)` or `.label(...)` called after it applies to that choice. `.choice_end(text)` adds a choice that ends the conversation. A node with neither `goto` nor choices is terminal. `.build()` validates the graph and returns `Result<DialogueTree, DialogueError>`. Trees are stored in the `DialogueStore` resource, filled in the setup hook like `AnimationStore`.
 
 **The same conversation as JSON.** `load_dialogue(path)` reads a dialogue definition from a file and returns `Result<DialogueTree, DialogueError>`; I/O and JSON failures are `DialogueError::Io` / `DialogueError::Json`:
 
