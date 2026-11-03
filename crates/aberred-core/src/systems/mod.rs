@@ -13,6 +13,7 @@
 //! - [`collision_detector`] – broad/simple overlap checks and event emission
 //! - [`collision_rule`] – matches overlaps against `CollisionRule`s and triggers `CollisionOngoing`
 //! - [`collision_rule_index`] – rebuilds `CollisionRuleIndex` from rule entities on change
+//! - [`dialogue`] – [`step_runner`](dialogue::step_runner): step a [`DialogueRunner`](crate::components::dialogue::DialogueRunner) by one pending request, returning [`DialogueStep`](dialogue::DialogueStep)s
 //! - [`game_state`] – check for pending state transitions and trigger events
 //! - [`grid_layout`] – spawn entities from JSON-defined grid layouts
 //! - [`group`] – count entities per tracked group and publish to [`WorldSignals`](crate::resources::world_signals::WorldSignals)
@@ -48,6 +49,7 @@ pub mod collision;
 pub mod collision_detector;
 pub mod collision_rule;
 pub mod collision_rule_index;
+pub mod dialogue;
 pub mod dynamic_text_size;
 pub mod entity_registrations;
 pub mod game_state;
