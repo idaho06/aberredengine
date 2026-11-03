@@ -436,6 +436,83 @@ impl LuaRuntime {
                 ],
             ),
             (
+                "DialogueChoiceInfo",
+                "One declared choice of the node a dialogue just entered",
+                &[
+                    (
+                        "index",
+                        "integer",
+                        false,
+                        Some("0-based declared index; pass it to engine.entity_dialogue_choose"),
+                    ),
+                    ("text", "string", false, None),
+                    ("labels", "string[]", false, None),
+                    (
+                        "available",
+                        "boolean",
+                        false,
+                        Some("false when the choice's condition failed on node entry"),
+                    ),
+                ],
+            ),
+            (
+                "DialogueLine",
+                "Table passed to a dialogue node-entered callback",
+                &[
+                    ("node", "string", false, Some("Id of the node entered")),
+                    (
+                        "previous",
+                        "string",
+                        true,
+                        Some("Id of the node left; nil on the first node"),
+                    ),
+                    ("labels", "string[]", false, None),
+                    ("speaker", "string", true, None),
+                    ("text", "string", true, None),
+                    (
+                        "choices",
+                        "DialogueChoiceInfo[]",
+                        false,
+                        Some(
+                            "Declared choices in order; empty on a node without choices or once the dialogue has ended (e.g. no available choice)",
+                        ),
+                    ),
+                ],
+            ),
+            (
+                "DialogueChoiceSelected",
+                "Table passed to a dialogue choice-selected callback",
+                &[
+                    (
+                        "node",
+                        "string",
+                        false,
+                        Some("Id of the node the choice was made on"),
+                    ),
+                    ("index", "integer", false, Some("0-based declared index")),
+                    ("text", "string", false, None),
+                    ("labels", "string[]", false, None),
+                ],
+            ),
+            (
+                "DialogueEnded",
+                "Table passed to a dialogue ended callback",
+                &[
+                    (
+                        "node",
+                        "string",
+                        true,
+                        Some("Id of the last node; nil when cancelled before start"),
+                    ),
+                    (
+                        "reason",
+                        "string",
+                        false,
+                        Some("'completed', 'cancelled' or 'no_choices'"),
+                    ),
+                ],
+            ),
+            (
                 "ParticleEmitterConfig",
                 "Particle emitter configuration table",
                 &[
@@ -727,6 +804,33 @@ impl LuaRuntime {
                 name: "phase_exited",
                 description: "Phase exit callback (:with_lua_phase_exited): called on every phase left; ctx.previous_phase is the phase left",
                 params: &[("ctx", "EntityContext")],
+                returns: None,
+                context: Some("play"),
+                note: None,
+            },
+            CbDef {
+                name: "dialogue_node_entered",
+                description: "Dialogue node callback (:with_lua_dialogue_node_entered): called each time the entity's dialogue enters a node",
+                params: &[("ctx", "EntityContext"), ("dialogue", "DialogueLine")],
+                returns: None,
+                context: Some("play"),
+                note: None,
+            },
+            CbDef {
+                name: "dialogue_choice_selected",
+                description: "Dialogue choice callback (:with_lua_dialogue_choice_selected): called when a choice is picked, before the target node is entered",
+                params: &[
+                    ("ctx", "EntityContext"),
+                    ("dialogue", "DialogueChoiceSelected"),
+                ],
+                returns: None,
+                context: Some("play"),
+                note: None,
+            },
+            CbDef {
+                name: "dialogue_ended",
+                description: "Dialogue end callback (:with_lua_dialogue_ended): called when the entity's dialogue ends",
+                params: &[("ctx", "EntityContext"), ("dialogue", "DialogueEnded")],
                 returns: None,
                 context: Some("play"),
                 note: None,

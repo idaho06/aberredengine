@@ -183,6 +183,34 @@ engine = {}
 ---@field w number Width in world units
 ---@field h number Height in world units
 
+---One declared choice of the node a dialogue just entered
+---@class DialogueChoiceInfo
+---@field index integer 0-based declared index; pass it to engine.entity_dialogue_choose
+---@field text string
+---@field labels string[]
+---@field available boolean false when the choice's condition failed on node entry
+
+---Table passed to a dialogue choice-selected callback
+---@class DialogueChoiceSelected
+---@field node string Id of the node the choice was made on
+---@field index integer 0-based declared index
+---@field text string
+---@field labels string[]
+
+---Table passed to a dialogue ended callback
+---@class DialogueEnded
+---@field node string|nil Id of the last node; nil when cancelled before start
+---@field reason string 'completed', 'cancelled' or 'no_choices'
+
+---Table passed to a dialogue node-entered callback
+---@class DialogueLine
+---@field node string Id of the node entered
+---@field previous string|nil Id of the node left; nil on the first node
+---@field labels string[]
+---@field speaker string|nil
+---@field text string|nil
+---@field choices DialogueChoiceInfo[] Declared choices in order; empty on a node without choices or once the dialogue has ended (e.g. no available choice)
+
 -- ==================== Enums ====================
 
 ---Collision side
@@ -257,6 +285,24 @@ function phase_update(ctx, input, dt) end
 ---Context: play
 ---@param ctx EntityContext
 function phase_exited(ctx) end
+
+---Dialogue node callback (:with_lua_dialogue_node_entered): called each time the entity's dialogue enters a node
+---Context: play
+---@param ctx EntityContext
+---@param dialogue DialogueLine
+function dialogue_node_entered(ctx, dialogue) end
+
+---Dialogue choice callback (:with_lua_dialogue_choice_selected): called when a choice is picked, before the target node is entered
+---Context: play
+---@param ctx EntityContext
+---@param dialogue DialogueChoiceSelected
+function dialogue_choice_selected(ctx, dialogue) end
+
+---Dialogue end callback (:with_lua_dialogue_ended): called when the entity's dialogue ends
+---Context: play
+---@param ctx EntityContext
+---@param dialogue DialogueEnded
+function dialogue_ended(ctx, dialogue) end
 
 ---Called when a Lua timer fires
 ---Context: play
