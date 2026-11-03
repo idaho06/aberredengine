@@ -116,19 +116,24 @@ pub fn step_runner(
                 }
                 Next::End => finish(runner, Some(idx), DialogueEndReason::Completed, &mut steps),
                 Next::Choices(_) => {
-                    log::debug!("ignoring Advance on the choices node {idx:?}");
+                    log::debug!(
+                        "ignoring Advance on the choices node \"{}\"",
+                        tree.node(idx).id
+                    );
                 }
             },
             Some(DialogueRequest::Choose(index)) => match &tree.node(idx).next {
                 Next::Choices(choices) => {
                     if index >= choices.len() {
                         log::warn!(
-                            "ignoring Choose({index}): out of range, node {idx:?} declares {} choice(s)",
+                            "ignoring Choose({index}): out of range, node \"{}\" declares {} choice(s)",
+                            tree.node(idx).id,
                             choices.len()
                         );
                     } else if !runner.available.get(index).copied().unwrap_or(false) {
                         log::warn!(
-                            "ignoring Choose({index}): choice {index} of node {idx:?} is unavailable"
+                            "ignoring Choose({index}): choice {index} of node \"{}\" is unavailable",
+                            tree.node(idx).id
                         );
                     } else {
                         let choice = &choices[index];
@@ -147,7 +152,10 @@ pub fn step_runner(
                     }
                 }
                 _ => {
-                    log::warn!("ignoring Choose({index}): node {idx:?} is not a choices node");
+                    log::warn!(
+                        "ignoring Choose({index}): node \"{}\" is not a choices node",
+                        tree.node(idx).id
+                    );
                 }
             },
             Some(DialogueRequest::Cancel) => {
@@ -199,7 +207,10 @@ fn enter_node(
     runner.status = DialogueStatus::Active(node);
     steps.push(DialogueStep::Entered { node, previous });
     if no_available_choices {
-        log::warn!("node {node:?} offers no available choice; ending with NoChoices");
+        log::warn!(
+            "node \"{}\" offers no available choice; ending with NoChoices",
+            dialogue_node.id
+        );
         finish(runner, Some(node), DialogueEndReason::NoChoices, steps);
     }
 }
