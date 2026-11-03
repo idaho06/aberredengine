@@ -9,7 +9,9 @@ pub use super::spawn_data::TweenConfig;
 use aberred_core::components::shape::ShapeKind;
 use aberred_core::components::timer::TimerMode;
 use aberred_core::components::tint::Tint;
+use aberred_core::resources::dialogue_tree::DialogueTree;
 pub use aberred_core::resources::uniform_value::UniformValue;
+use std::sync::Arc;
 
 /// Commands that Lua can queue for asset loading.
 /// These are processed by Rust systems that have access to the necessary resources.
@@ -577,6 +579,18 @@ pub enum AnimationCmd {
         frame_count: usize,
         fps: f32,
         looped: bool,
+    },
+}
+
+/// Commands for registering dialogue trees from Lua.
+#[derive(Debug, Clone)]
+pub enum DialogueLuaCmd {
+    /// Register a validated [`DialogueTree`] under `key` in the dialogue store
+    Register {
+        /// Store key to register the tree under.
+        key: String,
+        /// The validated tree.
+        tree: Arc<DialogueTree>,
     },
 }
 

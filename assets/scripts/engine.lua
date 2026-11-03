@@ -1839,10 +1839,26 @@ function engine.add_binding(action, key) end
 ---@return string|nil
 function engine.get_binding(action) end
 
+-- ==================== dialogue ====================
+
+---Load a dialogue JSON file from `path` and register it under `key`
+---@param key string
+---@param path string
+function engine.load_dialogue(key, path) end
+
+-- ==================== input ====================
+
 ---Rebind a logical action to a new key (replaces existing binding)
 ---@param action string
 ---@param key string
 function engine.rebind_action(action, key) end
+
+-- ==================== dialogue ====================
+
+---Register a dialogue definition table as a validated tree under `key`
+---@param key string
+---@param def table
+function engine.register_dialogue(key, def) end
 
 -- ==================== Entity Builder ====================
 

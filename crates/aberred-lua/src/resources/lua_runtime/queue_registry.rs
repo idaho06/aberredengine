@@ -18,7 +18,7 @@
 macro_rules! lua_queues {
     // ------------------------------------------------------------------
     // Single authoritative list of (queue_field, CmdType, clear_policy) rows.
-    // Callers prepend dispatch tokens; @master appends the 23 rows and
+    // Callers prepend dispatch tokens; @master appends the 24 rows and
     // re-invokes lua_queues! so the chosen @dispatch_* arm matches.
     // ------------------------------------------------------------------
     (@master $($rest:tt)*) => {
@@ -32,6 +32,7 @@ macro_rules! lua_queues {
             (group_commands,            GroupCmd,         clear),
             (camera_commands,           CameraCmd,        clear),
             (animation_commands,        AnimationCmd,     clear),
+            (dialogue_commands,         DialogueLuaCmd,   preserve),
             (render_commands,           RenderCmd,        clear),
             (gui_theme_commands,        RenderCmd,        preserve),
             (clone_commands,            Ordered<CloneCmd>, clear),

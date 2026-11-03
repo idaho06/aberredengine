@@ -342,6 +342,7 @@ impl LuaRuntime {
         runtime.register_camera_follow_api()?;
         runtime.register_collision_api()?;
         runtime.register_animation_api()?;
+        runtime.register_dialogue_api()?;
         runtime.register_render_api()?;
         runtime.register_gameconfig_api()?;
         runtime.register_input_api()?;

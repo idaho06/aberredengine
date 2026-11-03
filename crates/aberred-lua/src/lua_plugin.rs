@@ -15,14 +15,15 @@
 //! - [`GameSceneState`] – world signals, post-process, config, camera follow, stores
 
 use crate::resources::lua_runtime::{
-    AnimationCmd, AssetCmd, CameraFollowCmd, GameConfigCmd, GroupCmd, InputCmd, LuaRuntime,
-    Ordered, RenderCmd,
+    AnimationCmd, AssetCmd, CameraFollowCmd, DialogueLuaCmd, GameConfigCmd, GroupCmd, InputCmd,
+    LuaRuntime, Ordered, RenderCmd,
 };
 use aberred_core::protocol::audio::AudioCmd;
 use aberred_core::protocol::render_assets::RenderAssetCmd;
 use aberred_core::resources::animation_store::AnimationStore;
 use aberred_core::resources::camera_follow_config::CameraFollowConfig;
 use aberred_core::resources::camera2d::MainCamera;
+use aberred_core::resources::dialogue_store::DialogueStore;
 use aberred_core::resources::game_config::GameConfig;
 use aberred_core::resources::game_state::NextGameState;
 use aberred_core::resources::group::TrackedGroups;
@@ -67,6 +68,7 @@ pub struct GameSceneState<'w> {
     pub camera_follow: ResMut<'w, CameraFollowConfig>,
     pub systems_store: Res<'w, SystemsStore>,
     pub anim_store: ResMut<'w, AnimationStore>,
+    pub dialogue_store: ResMut<'w, DialogueStore>,
 }
 
 /// Persistent per-frame buffers for the command queues drained by [`DrainCtx`].
@@ -82,6 +84,7 @@ pub struct CommonCmdBufs {
     camera_follow: Vec<CameraFollowCmd>,
     input: Vec<InputCmd>,
     animation: Vec<AnimationCmd>,
+    dialogue: Vec<DialogueLuaCmd>,
     group: Vec<GroupCmd>,
 }
 
@@ -97,6 +100,7 @@ pub fn setup(
     mut commands: Commands,
     render_size: Res<RenderSize>,
     mut render_asset_writer: MessageWriter<RenderAssetCmd>,
+    mut dialogue_store: ResMut<DialogueStore>,
     mut scripting: ScriptingContext,
 ) {
     // Default camera. Needed to start the engine before entering play state
@@ -113,6 +117,14 @@ pub fn setup(
     }
     // Set aside for `enter_play`: see `stash_setup_scene_request`.
     lua_runtime.stash_setup_scene_request();
+
+    // Dialogue registrations queued by on_setup land in the existing
+    // DialogueStore resource (setup runs once; no persistent buffer needed).
+    let mut dialogue_buf = Vec::new();
+    lua_runtime.drain_dialogue_commands_into(&mut dialogue_buf);
+    for cmd in dialogue_buf {
+        process_dialogue_command(&mut dialogue_store, cmd);
+    }
 
     // Process asset commands queued by Lua (setup runs once; no persistent
     // buffer needed): Music/Sound to the audio thread, the rest queued as
@@ -141,6 +153,19 @@ pub fn setup(
     }
     commands.insert_resource(anim_store);
     info!("Game setup() done");
+}
+
+/// Applies a single dialogue command queued by Lua to `store`, logging a
+/// `debug!` when a registration replaces an existing key.
+pub(crate) fn process_dialogue_command(store: &mut DialogueStore, cmd: DialogueLuaCmd) {
+    match cmd {
+        DialogueLuaCmd::Register { key, tree } => {
+            if store.get(&key).is_some() {
+                debug!("dialogue '{key}' replaced");
+            }
+            store.insert(key, tree);
+        }
+    }
 }
 
 pub use aberred_core::systems::game_state::quit_game;
@@ -237,6 +262,13 @@ impl DrainCtx<'_, '_> {
         lua_runtime.drain_animation_commands_into(&mut bufs.animation);
         for cmd in bufs.animation.drain(..) {
             process_animation_command(&mut scene_state.anim_store, cmd);
+        }
+
+        // Dialogue registrations write DialogueStore immediately, next to the
+        // animation drain and before the effect commands apply.
+        lua_runtime.drain_dialogue_commands_into(&mut bufs.dialogue);
+        for cmd in bufs.dialogue.drain(..) {
+            process_dialogue_command(&mut scene_state.dialogue_store, cmd);
         }
 
         drain_and_process_effect_commands(
@@ -485,6 +517,7 @@ pub(crate) fn new_drain_test_world() -> World {
     world.insert_resource(CameraFollowConfig::default());
     world.insert_resource(SystemsStore::default());
     world.insert_resource(AnimationStore::default());
+    world.insert_resource(DialogueStore::default());
     world.insert_resource(InputBindings::default());
     world.insert_resource(TrackedGroups::default());
     world.insert_resource(bevy_ecs::message::Messages::<AudioCmd>::default());
@@ -766,6 +799,63 @@ mod tests {
             .get::<Animation>(entity)
             .expect("animation still present");
         assert_eq!(animation.animation_key, "walk");
+    }
+
+    /// `engine.register_dialogue('k', ..)` with a one-node tree — the script the dialogue tests queue.
+    const REGISTER_DIALOGUE_K: &str =
+        "engine.register_dialogue('k', { start = 'a', nodes = { { id = 'a', text = 'hi' } } })";
+
+    #[test]
+    fn drain_common_commands_fills_the_dialogue_store() {
+        let mut world = new_drain_test_world();
+
+        lua_exec(&world, REGISTER_DIALOGUE_K);
+
+        run_drain_common_commands(&mut world);
+
+        assert!(
+            world.resource::<DialogueStore>().get("k").is_some(),
+            "a drained Register must land in DialogueStore under its key"
+        );
+    }
+
+    #[test]
+    fn a_queued_dialogue_registration_survives_clear_all_commands() {
+        let world = new_drain_test_world();
+        lua_exec(&world, REGISTER_DIALOGUE_K);
+
+        // Mirrors the scene-exit observer's call: clear-policy queues are
+        // wiped, preserve-policy queues (dialogue_commands) are not.
+        let lua_runtime = world.non_send::<LuaRuntime>();
+        lua_runtime.clear_all_commands();
+
+        let mut cmds = Vec::new();
+        lua_runtime.drain_dialogue_commands_into(&mut cmds);
+        assert!(
+            matches!(cmds.as_slice(), [DialogueLuaCmd::Register { key, .. }] if key == "k"),
+            "{cmds:?}"
+        );
+    }
+
+    #[test]
+    fn setup_drains_dialogue_registrations_into_the_store() {
+        let mut world = new_drain_test_world();
+        world.insert_resource(RenderSize { w: 800, h: 600 });
+        world.insert_resource(Messages::<
+            aberred_core::protocol::render_assets::RenderAssetCmd,
+        >::default());
+
+        lua_exec(
+            &world,
+            &format!("function on_setup()\n{REGISTER_DIALOGUE_K}\nend"),
+        );
+
+        world.run_system_once(setup).unwrap();
+
+        assert!(
+            world.resource::<DialogueStore>().get("k").is_some(),
+            "setup must drain dialogue registrations queued by on_setup into DialogueStore"
+        );
     }
 
     /// Builds a [`World`] with all resources [`update`] depends on

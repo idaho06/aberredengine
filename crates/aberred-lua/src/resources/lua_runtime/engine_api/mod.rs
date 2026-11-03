@@ -9,6 +9,7 @@ mod assets;
 mod audio;
 mod base;
 mod camera;
+mod dialogue;
 mod entity;
 mod gameconfig;
 mod input;
