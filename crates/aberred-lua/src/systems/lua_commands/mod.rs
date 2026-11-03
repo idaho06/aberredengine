@@ -26,13 +26,13 @@ mod processors;
 mod spawn_cmd;
 
 pub(crate) use context::build_entity_context;
-#[cfg(test)]
-pub(crate) use dispatch::init_dispatch_resources;
 pub use dispatch::{
-    CallShape, LuaDispatch, call_entity_callback, dispatch_and_drain, dispatch_custom_and_drain,
-    refresh_signal_cache,
+    CallShape, LuaDispatch, call_entity_callback, dispatch_and_drain, dispatch_ctx_call_and_drain,
+    dispatch_custom_and_drain, refresh_signal_cache,
 };
 pub(crate) use dispatch::{build_ctx_or_log, drain_dispatch_commands};
+#[cfg(test)]
+pub(crate) use dispatch::{init_dispatch_resources, init_test_world};
 pub use entity_cmd::process_entity_commands;
 pub(crate) use processors::request_phase;
 pub use processors::{

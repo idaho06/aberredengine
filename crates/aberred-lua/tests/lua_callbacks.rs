@@ -6,9 +6,11 @@
 
 use bevy_ecs::prelude::*;
 use bevy_ecs::system::RunSystemOnce;
+use std::sync::Arc;
 
 use aberred_core::components::box_collider::BoxCollider;
 use aberred_core::components::collision::CollisionRule;
+use aberred_core::components::dialogue::DialogueRunner;
 use aberred_core::components::group::Group;
 use aberred_core::components::gui_interactable::GuiInteractable;
 use aberred_core::components::phase::Phase;
@@ -26,6 +28,7 @@ use aberred_core::protocol::audio::AudioCmd;
 use aberred_core::resources::animation_store::AnimationStore;
 use aberred_core::resources::collision_contacts::CollisionContacts;
 use aberred_core::resources::collision_rule_index::CollisionRuleIndex;
+use aberred_core::resources::dialogue_builder::DialogueBuilder;
 use aberred_core::resources::game_state::NextGameState;
 use aberred_core::resources::input::InputState;
 use aberred_core::resources::next_scene::NextScene;
@@ -35,9 +38,13 @@ use aberred_core::resources::world_time::WorldTime;
 use aberred_core::systems::collision_detector::collision_detector;
 use aberred_core::systems::collision_rule::collision_rule_observer;
 use aberred_core::systems::collision_rule_index::rebuild_rule_index;
+use aberred_core::systems::dialogue::dialogue_system;
 use aberred_core::systems::timer::update_timers;
 use aberred_lua::components::lua_on_animation_finished::LuaOnAnimationFinished;
 use aberred_lua::components::lua_on_collision::LuaOnCollision;
+use aberred_lua::components::lua_on_dialogue::{
+    LuaOnDialogueChoiceSelected, LuaOnDialogueEnded, LuaOnDialogueNodeEntered,
+};
 use aberred_lua::components::lua_on_gui_clicked::LuaOnGuiClicked;
 use aberred_lua::components::lua_on_menu_selected::LuaOnMenuSelected;
 use aberred_lua::components::lua_on_timer_fired::LuaOnTimerFired;
@@ -45,6 +52,10 @@ use aberred_lua::components::lua_on_tween_finished::LuaOnTweenFinished;
 use aberred_lua::resources::lua_runtime::LuaRuntime;
 use aberred_lua::systems::lua_animation_finished::lua_animation_finished_observer;
 use aberred_lua::systems::lua_collision::lua_collision_rule_added_observer;
+use aberred_lua::systems::lua_dialogue::{
+    lua_dialogue_choice_selected_observer, lua_dialogue_ended_observer,
+    lua_dialogue_node_entered_observer,
+};
 use aberred_lua::systems::lua_gui_clicked::lua_gui_clicked_observer;
 use aberred_lua::systems::lua_menu_selected::lua_menu_selected_observer;
 use aberred_lua::systems::lua_timer_fired::{lua_timer_fired_observer, lua_timer_removed_observer};
@@ -771,4 +782,71 @@ fn tween_finished_callback_gets_ctx_and_input_and_drains_its_commands() {
     world.flush();
 
     assert_entity_callback_ran(&world, entity);
+}
+
+/// The real core `dialogue_system` drives the three Lua dialogue observers:
+/// starting the conversation logs node_entered, and picking the ending
+/// choice logs choice_selected then ended, in that order.
+#[test]
+fn dialogue_system_drives_lua_dialogue_callbacks_in_order() {
+    let mut world = make_lua_callback_world(0.0);
+    world.add_observer(lua_dialogue_node_entered_observer);
+    world.add_observer(lua_dialogue_choice_selected_observer);
+    world.add_observer(lua_dialogue_ended_observer);
+    load_lua(
+        &world,
+        r#"
+        log = {}
+        function on_node(ctx, dialogue) table.insert(log, "entered:" .. dialogue.node) end
+        function on_choice(ctx, dialogue)
+            table.insert(log, "selected:" .. dialogue.node .. ":" .. dialogue.index .. ":" .. dialogue.text)
+        end
+        function on_end(ctx, dialogue)
+            table.insert(log, "ended:" .. tostring(dialogue.node) .. ":" .. dialogue.reason)
+        end
+        "#,
+    );
+    // `intro` (Guard, "Halt!") offers "Bye" (ends the conversation) and
+    // "Again" (back to `intro`).
+    let tree = Arc::new(
+        DialogueBuilder::new("intro")
+            .node("intro")
+            .speaker("Guard")
+            .text("Halt!")
+            .choice_end("Bye")
+            .choice("Again", "intro")
+            .build()
+            .unwrap(),
+    );
+    let entity = world
+        .spawn((
+            DialogueRunner::new(Arc::clone(&tree)),
+            LuaOnDialogueNodeEntered::new("on_node"),
+            LuaOnDialogueChoiceSelected::new("on_choice"),
+            LuaOnDialogueEnded::new("on_end"),
+        ))
+        .id();
+
+    world
+        .run_system_once(dialogue_system)
+        .expect("dialogue_system");
+    world.flush();
+
+    world
+        .get_mut::<DialogueRunner>(entity)
+        .expect("runner")
+        .choose(0);
+    world
+        .run_system_once(dialogue_system)
+        .expect("dialogue_system");
+    world.flush();
+
+    assert_eq!(
+        lua_global::<Vec<String>>(&world, "log"),
+        [
+            "entered:intro",
+            "selected:intro:0:Bye",
+            "ended:intro:completed"
+        ]
+    );
 }

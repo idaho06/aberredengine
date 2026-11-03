@@ -6,11 +6,14 @@
 //! alongside core's `menu_selection_observer`.
 //! `lua_gui_clicked`'s observer calls a clicked widget's Lua
 //! callback, and `lua_timer_fired`'s observer calls the Lua function of a
-//! timer fired by core's `update_timers`.
+//! timer fired by core's `update_timers`. `lua_dialogue`'s observers call a
+//! dialogue runner entity's Lua callbacks as `fn(ctx, dialogue)` when core's
+//! `dialogue_system` triggers its events.
 
 pub mod lua_animation_finished;
 pub mod lua_collision;
 pub mod lua_commands;
+pub mod lua_dialogue;
 pub mod lua_gui_clicked;
 pub mod lua_map_spawn;
 pub mod lua_menu_selected;
