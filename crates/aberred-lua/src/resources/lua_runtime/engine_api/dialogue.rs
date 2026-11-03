@@ -116,6 +116,54 @@ impl LuaRuntime {
             cat = "dialogue",
             params = [("entity_id", "integer")]
         );
+        register_cmd!(
+            engine,
+            self.lua,
+            meta_fns,
+            "entity_insert_lua_dialogue_node_entered",
+            entity_commands,
+            |(entity_id, callback)| (u64, String),
+            EntityCmd::InsertLuaDialogueCallback {
+                entity_id,
+                kind: LuaDialogueCallbackKind::NodeEntered,
+                callback
+            },
+            desc = "Call a Lua function `fn(ctx, dialogue)` each time the entity's dialogue enters a node",
+            cat = "dialogue",
+            params = [("entity_id", "integer"), ("callback", "string")]
+        );
+        register_cmd!(
+            engine,
+            self.lua,
+            meta_fns,
+            "entity_insert_lua_dialogue_choice_selected",
+            entity_commands,
+            |(entity_id, callback)| (u64, String),
+            EntityCmd::InsertLuaDialogueCallback {
+                entity_id,
+                kind: LuaDialogueCallbackKind::ChoiceSelected,
+                callback
+            },
+            desc = "Call a Lua function `fn(ctx, dialogue)` each time the player picks a choice in the entity's dialogue",
+            cat = "dialogue",
+            params = [("entity_id", "integer"), ("callback", "string")]
+        );
+        register_cmd!(
+            engine,
+            self.lua,
+            meta_fns,
+            "entity_insert_lua_dialogue_ended",
+            entity_commands,
+            |(entity_id, callback)| (u64, String),
+            EntityCmd::InsertLuaDialogueCallback {
+                entity_id,
+                kind: LuaDialogueCallbackKind::Ended,
+                callback
+            },
+            desc = "Call a Lua function `fn(ctx, dialogue)` each time the entity's dialogue ends",
+            cat = "dialogue",
+            params = [("entity_id", "integer"), ("callback", "string")]
+        );
         Ok(())
     }
 }
@@ -139,7 +187,7 @@ fn queue_register(lua: &Lua, key: String, tree: DialogueTree) -> LuaResult<()> {
 mod tests {
     use super::super::super::entity_builder::test_helpers::assert_runtime_error_in;
     use super::*;
-    use crate::resources::lua_runtime::{DialogueLuaCmd, EntityCmd};
+    use crate::resources::lua_runtime::{DialogueLuaCmd, EntityCmd, LuaDialogueCallbackKind};
 
     /// Drains the `dialogue_commands` queue into a fresh Vec.
     fn drain_dialogue(runtime: &LuaRuntime) -> Vec<DialogueLuaCmd> {
@@ -153,6 +201,30 @@ mod tests {
         let runtime = LuaRuntime::new().unwrap();
         runtime.lua().load(script).exec().unwrap();
         drain_dialogue(&runtime)
+    }
+
+    /// Runs `script` on a fresh runtime and returns the drained `entity_commands`.
+    fn run_and_drain_entity_cmds(script: &str) -> Vec<EntityCmd> {
+        let runtime = LuaRuntime::new().unwrap();
+        runtime.lua().load(script).exec().unwrap();
+        let mut queued = Vec::new();
+        runtime.drain_entity_commands_into(&mut queued);
+        queued.into_iter().map(|c| c.cmd).collect()
+    }
+
+    /// Asserts each `name` is a registered `engine` function with no `collision_` twin.
+    fn assert_no_collision_twins(engine: &LuaTable, names: &[&str]) {
+        for &name in names {
+            assert!(
+                matches!(engine.get::<LuaValue>(name), Ok(LuaValue::Function(_))),
+                "engine.{name} is registered"
+            );
+            let twin = format!("collision_{name}");
+            assert!(
+                matches!(engine.get::<LuaValue>(twin.as_str()), Ok(LuaValue::Nil)),
+                "engine.{twin} is nil"
+            );
+        }
     }
 
     /// A per-process temp JSON path unique to `test_name`.
@@ -272,22 +344,13 @@ mod tests {
 
     #[test]
     fn entity_dialogue_functions_queue_the_matching_entity_commands() {
-        let runtime = LuaRuntime::new().unwrap();
-        runtime
-            .lua()
-            .load(
-                "engine.entity_insert_dialogue(7, 'k')\n\
-                 engine.entity_remove_dialogue(7)\n\
-                 engine.entity_dialogue_advance(7)\n\
-                 engine.entity_dialogue_choose(7, 2)\n\
-                 engine.entity_dialogue_cancel(7)",
-            )
-            .exec()
-            .unwrap();
-
-        let mut queued = Vec::new();
-        runtime.drain_entity_commands_into(&mut queued);
-        let cmds: Vec<&EntityCmd> = queued.iter().map(|c| &c.cmd).collect();
+        let cmds = run_and_drain_entity_cmds(
+            "engine.entity_insert_dialogue(7, 'k')\n\
+             engine.entity_remove_dialogue(7)\n\
+             engine.entity_dialogue_advance(7)\n\
+             engine.entity_dialogue_choose(7, 2)\n\
+             engine.entity_dialogue_cancel(7)",
+        );
         assert!(
             matches!(
                 cmds.as_slice(),
@@ -304,25 +367,52 @@ mod tests {
     }
 
     #[test]
+    fn entity_insert_lua_dialogue_functions_queue_the_matching_entity_commands() {
+        let cmds = run_and_drain_entity_cmds(
+            "engine.entity_insert_lua_dialogue_node_entered(7, 'on_node')\n\
+             engine.entity_insert_lua_dialogue_choice_selected(7, 'on_choice')\n\
+             engine.entity_insert_lua_dialogue_ended(7, 'on_end')",
+        );
+        assert!(
+            matches!(
+                cmds.as_slice(),
+                [
+                    EntityCmd::InsertLuaDialogueCallback { entity_id: 7, kind: LuaDialogueCallbackKind::NodeEntered, callback: cb0 },
+                    EntityCmd::InsertLuaDialogueCallback { entity_id: 7, kind: LuaDialogueCallbackKind::ChoiceSelected, callback: cb1 },
+                    EntityCmd::InsertLuaDialogueCallback { entity_id: 7, kind: LuaDialogueCallbackKind::Ended, callback: cb2 },
+                ] if cb0 == "on_node" && cb1 == "on_choice" && cb2 == "on_end"
+            ),
+            "{cmds:?}"
+        );
+    }
+
+    #[test]
+    fn entity_insert_lua_dialogue_functions_have_no_collision_twins() {
+        let runtime = LuaRuntime::new().unwrap();
+        let engine: LuaTable = runtime.lua().globals().get("engine").unwrap();
+        assert_no_collision_twins(
+            &engine,
+            &[
+                "entity_insert_lua_dialogue_node_entered",
+                "entity_insert_lua_dialogue_choice_selected",
+                "entity_insert_lua_dialogue_ended",
+            ],
+        );
+    }
+
+    #[test]
     fn entity_dialogue_functions_have_no_collision_twins() {
         let runtime = LuaRuntime::new().unwrap();
         let engine: LuaTable = runtime.lua().globals().get("engine").unwrap();
-        for name in [
-            "entity_insert_dialogue",
-            "entity_remove_dialogue",
-            "entity_dialogue_advance",
-            "entity_dialogue_choose",
-            "entity_dialogue_cancel",
-        ] {
-            assert!(
-                matches!(engine.get::<LuaValue>(name), Ok(LuaValue::Function(_))),
-                "engine.{name} is registered"
-            );
-            let twin = format!("collision_{name}");
-            assert!(
-                matches!(engine.get::<LuaValue>(twin.as_str()), Ok(LuaValue::Nil)),
-                "engine.{twin} is nil"
-            );
-        }
+        assert_no_collision_twins(
+            &engine,
+            &[
+                "entity_insert_dialogue",
+                "entity_remove_dialogue",
+                "entity_dialogue_advance",
+                "entity_dialogue_choose",
+                "entity_dialogue_cancel",
+            ],
+        );
     }
 }

@@ -1854,6 +1854,21 @@ function engine.entity_dialogue_choose(entity_id, index) end
 ---@param key string
 function engine.entity_insert_dialogue(entity_id, key) end
 
+---Call a Lua function `fn(ctx, dialogue)` each time the player picks a choice in the entity's dialogue
+---@param entity_id integer
+---@param callback string
+function engine.entity_insert_lua_dialogue_choice_selected(entity_id, callback) end
+
+---Call a Lua function `fn(ctx, dialogue)` each time the entity's dialogue ends
+---@param entity_id integer
+---@param callback string
+function engine.entity_insert_lua_dialogue_ended(entity_id, callback) end
+
+---Call a Lua function `fn(ctx, dialogue)` each time the entity's dialogue enters a node
+---@param entity_id integer
+---@param callback string
+function engine.entity_insert_lua_dialogue_node_entered(entity_id, callback) end
+
 ---Remove the entity's DialogueRunner; no-op without one
 ---@param entity_id integer
 function engine.entity_remove_dialogue(entity_id) end
@@ -2076,6 +2091,21 @@ function EntityBuilder:with_lua_collision_rule(group_a, group_b, ongoing) end
 ---@param callback string
 ---@return EntityBuilder
 function EntityBuilder:with_lua_collision_started(callback) end
+
+---Call a Lua function `fn(ctx, dialogue)` each time the player picks a choice in the entity's dialogue
+---@param callback string
+---@return EntityBuilder
+function EntityBuilder:with_lua_dialogue_choice_selected(callback) end
+
+---Call a Lua function `fn(ctx, dialogue)` each time the entity's dialogue ends
+---@param callback string
+---@return EntityBuilder
+function EntityBuilder:with_lua_dialogue_ended(callback) end
+
+---Call a Lua function `fn(ctx, dialogue)` each time the entity's dialogue enters a node
+---@param callback string
+---@return EntityBuilder
+function EntityBuilder:with_lua_dialogue_node_entered(callback) end
 
 ---Attach a callback fired on each GuiClicked of this entity's GuiInteractable (spawned by :with_gui_button() / :with_gui_image()). Signature: fn(ctx) with ctx.entity_id. A disabled widget does not dispatch it.
 ---@param callback string
@@ -2787,6 +2817,21 @@ function CollisionEntityBuilder:with_lua_collision_rule(group_a, group_b, ongoin
 ---@param callback string
 ---@return CollisionEntityBuilder
 function CollisionEntityBuilder:with_lua_collision_started(callback) end
+
+---Call a Lua function `fn(ctx, dialogue)` each time the player picks a choice in the entity's dialogue
+---@param callback string
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_lua_dialogue_choice_selected(callback) end
+
+---Call a Lua function `fn(ctx, dialogue)` each time the entity's dialogue ends
+---@param callback string
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_lua_dialogue_ended(callback) end
+
+---Call a Lua function `fn(ctx, dialogue)` each time the entity's dialogue enters a node
+---@param callback string
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_lua_dialogue_node_entered(callback) end
 
 ---Attach a callback fired on each GuiClicked of this entity's GuiInteractable (spawned by :with_gui_button() / :with_gui_image()). Signature: fn(ctx) with ctx.entity_id. A disabled widget does not dispatch it.
 ---@param callback string

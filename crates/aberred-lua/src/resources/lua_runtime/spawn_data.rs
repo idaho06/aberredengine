@@ -76,6 +76,15 @@ pub struct LuaPhaseCallbacksSpawn {
     pub update: Option<String>,
 }
 
+/// Lua dialogue callback names (`LuaOnDialogueNodeEntered` /
+/// `LuaOnDialogueChoiceSelected` / `LuaOnDialogueEnded`) for spawning.
+#[derive(Debug, Clone, Default)]
+pub struct LuaDialogueCallbacksSpawn {
+    pub node_entered: Option<String>,
+    pub choice_selected: Option<String>,
+    pub ended: Option<String>,
+}
+
 /// Lua timer (`Timer` + `LuaOnTimerFired`) data for spawning.
 #[derive(Debug, Clone, PartialEq)]
 pub struct LuaTimerSpawn {
@@ -454,6 +463,8 @@ pub struct SpawnCmd {
     pub dialogue: Option<String>,
     /// Lua callbacks for the core `Phase`
     pub lua_phase_callbacks: LuaPhaseCallbacksSpawn,
+    /// Lua callbacks for the entity's dialogue events
+    pub lua_dialogue_callbacks: LuaDialogueCallbacksSpawn,
     /// Has Signals component (even if empty)
     pub has_signals: bool,
     /// StuckTo component data

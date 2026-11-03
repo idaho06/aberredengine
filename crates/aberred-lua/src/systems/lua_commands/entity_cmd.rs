@@ -17,6 +17,9 @@ use bevy_ecs::component::Mutable;
 use bevy_ecs::hierarchy::ChildOf;
 use bevy_ecs::prelude::*;
 
+use crate::components::lua_on_dialogue::{
+    LuaOnDialogueChoiceSelected, LuaOnDialogueEnded, LuaOnDialogueNodeEntered,
+};
 use crate::components::lua_on_phase::{LuaOnPhaseEntered, LuaOnPhaseExited, LuaOnPhaseUpdate};
 use crate::components::lua_on_timer_fired::LuaOnTimerFired;
 use aberred_core::components::animation::Animation;
@@ -44,7 +47,9 @@ use aberred_core::components::world_position::WorldPosition;
 use aberred_core::systems::propagate_transforms::ComputeInitialGlobalTransform;
 use bevy_ecs::system::EntityCommand;
 
-use crate::resources::lua_runtime::{EntityCmd, LuaPhaseCallbackKind, TweenConfig, UniformValue};
+use crate::resources::lua_runtime::{
+    EntityCmd, LuaDialogueCallbackKind, LuaPhaseCallbackKind, TweenConfig, UniformValue,
+};
 use aberred_core::resources::animation_store::AnimationStore;
 use aberred_core::resources::dialogue_store::DialogueStore;
 use aberred_core::resources::systems_store as hook_keys;
@@ -240,7 +245,8 @@ pub fn process_entity_commands(
             | EntityCmd::RemoveDialogue { .. }
             | EntityCmd::DialogueAdvance { .. }
             | EntityCmd::DialogueChoose { .. }
-            | EntityCmd::DialogueCancel { .. }) => process_dialogue_cmd(cmd, commands),
+            | EntityCmd::DialogueCancel { .. }
+            | EntityCmd::InsertLuaDialogueCallback { .. }) => process_dialogue_cmd(cmd, commands),
         }
     }
 }
@@ -897,7 +903,9 @@ pub(super) fn insert_dialogue_runner(e: &mut EntityWorldMut, key: &str) {
 /// command applies, not while it is queued. [`EntityCmd::RemoveDialogue`]
 /// removes the runner, and the advance/choose/cancel variants set the
 /// runner's pending request. All but `InsertDialogue` no-op on an entity
-/// without a runner.
+/// without a runner. [`EntityCmd::InsertLuaDialogueCallback`] inserts the
+/// callback component matching its `kind` (`LuaOnDialogueNodeEntered`,
+/// `LuaOnDialogueChoiceSelected`, or `LuaOnDialogueEnded`).
 fn process_dialogue_cmd(cmd: EntityCmd, commands: &mut Commands) {
     match cmd {
         EntityCmd::InsertDialogue { entity_id, key } => {
@@ -919,6 +927,23 @@ fn process_dialogue_cmd(cmd: EntityCmd, commands: &mut Commands) {
         EntityCmd::DialogueCancel { entity_id } => {
             queue_on_component::<DialogueRunner>(commands, entity_id, DialogueRunner::cancel);
         }
+        EntityCmd::InsertLuaDialogueCallback {
+            entity_id,
+            kind,
+            callback,
+        } => {
+            queue_on_entity(commands, entity_id, move |mut e| match kind {
+                LuaDialogueCallbackKind::NodeEntered => {
+                    e.insert(LuaOnDialogueNodeEntered::new(callback));
+                }
+                LuaDialogueCallbackKind::ChoiceSelected => {
+                    e.insert(LuaOnDialogueChoiceSelected::new(callback));
+                }
+                LuaDialogueCallbackKind::Ended => {
+                    e.insert(LuaOnDialogueEnded::new(callback));
+                }
+            });
+        }
         _ => unreachable!(),
     }
 }
@@ -927,9 +952,12 @@ fn process_dialogue_cmd(cmd: EntityCmd, commands: &mut Commands) {
 mod tests {
     use super::super::test_helpers::world_with_dialogue_store;
     use super::*;
+    use crate::components::lua_on_dialogue::{
+        LuaOnDialogueChoiceSelected, LuaOnDialogueEnded, LuaOnDialogueNodeEntered,
+    };
     use crate::components::lua_on_tween_finished::LuaOnTweenFinished;
-    use crate::resources::lua_runtime::LuaTag;
     use crate::resources::lua_runtime::test_tags::{Boid, Fuel};
+    use crate::resources::lua_runtime::{LuaDialogueCallbackKind, LuaTag};
     use aberred_core::components::dialogue::{DialogueRequest, DialogueStatus};
     use aberred_core::components::shape::ShapeKind;
     use aberred_core::components::timer::TimerMode;
@@ -1391,6 +1419,46 @@ mod tests {
         assert_eq!(
             &*world.get::<LuaOnPhaseUpdate>(entity).unwrap().callback,
             "on_tick"
+        );
+    }
+
+    #[test]
+    fn insert_lua_dialogue_callbacks_on_a_live_entity() {
+        let mut world = World::new();
+        let entity = world.spawn_empty().id();
+        let id = entity.to_bits();
+        let callback = |kind, callback: &str| EntityCmd::InsertLuaDialogueCallback {
+            entity_id: id,
+            kind,
+            callback: callback.into(),
+        };
+
+        run_entity_cmds(
+            &mut world,
+            vec![
+                callback(LuaDialogueCallbackKind::NodeEntered, "on_node"),
+                callback(LuaDialogueCallbackKind::ChoiceSelected, "on_choice"),
+                callback(LuaDialogueCallbackKind::Ended, "on_end"),
+            ],
+        );
+
+        assert_eq!(
+            &*world
+                .get::<LuaOnDialogueNodeEntered>(entity)
+                .unwrap()
+                .callback,
+            "on_node"
+        );
+        assert_eq!(
+            &*world
+                .get::<LuaOnDialogueChoiceSelected>(entity)
+                .unwrap()
+                .callback,
+            "on_choice"
+        );
+        assert_eq!(
+            &*world.get::<LuaOnDialogueEnded>(entity).unwrap().callback,
+            "on_end"
         );
     }
 

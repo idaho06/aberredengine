@@ -224,6 +224,18 @@ pub enum LuaPhaseCallbackKind {
     Update,
 }
 
+/// Which Lua dialogue callback component an [`EntityCmd::InsertLuaDialogueCallback`]
+/// inserts.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LuaDialogueCallbackKind {
+    /// `LuaOnDialogueNodeEntered`
+    NodeEntered,
+    /// `LuaOnDialogueChoiceSelected`
+    ChoiceSelected,
+    /// `LuaOnDialogueEnded`
+    Ended,
+}
+
 /// Commands for manipulating entity components from Lua.
 #[derive(Debug, Clone)]
 pub enum EntityCmd {
@@ -523,6 +535,12 @@ pub enum EntityCmd {
     DialogueChoose { entity_id: u64, index: usize },
     /// Request cancelling the entity's dialogue
     DialogueCancel { entity_id: u64 },
+    /// Insert a Lua dialogue callback component of `kind`
+    InsertLuaDialogueCallback {
+        entity_id: u64,
+        kind: LuaDialogueCallbackKind,
+        callback: String,
+    },
 }
 
 /// Commands for tracked groups from Lua.

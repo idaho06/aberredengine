@@ -7,6 +7,9 @@
 use aberred_core::math::Vec2;
 use bevy_ecs::prelude::*;
 
+use crate::components::lua_on_dialogue::{
+    LuaOnDialogueChoiceSelected, LuaOnDialogueEnded, LuaOnDialogueNodeEntered,
+};
 use crate::components::lua_on_gui_clicked::LuaOnGuiClicked;
 use crate::components::lua_on_menu_selected::LuaOnMenuSelected;
 use crate::components::lua_on_phase::{LuaOnPhaseEntered, LuaOnPhaseExited, LuaOnPhaseUpdate};
@@ -39,9 +42,9 @@ use aberred_core::math::Color;
 
 use crate::resources::lua_runtime::{
     AnimationControllerData, AnimationData, CloneCmd, ColliderData, EntityShaderData,
-    LuaCollisionRuleData, LuaPhaseCallbacksSpawn, LuaTimerSpawn, MenuData, ParticleEmitterData,
-    RigidBodyData, SpawnCmd, SpriteData, StuckToData, TextData, TweenPositionData,
-    TweenRotationData, TweenScaleData, TweenScreenPositionData, TweenTintData,
+    LuaCollisionRuleData, LuaDialogueCallbacksSpawn, LuaPhaseCallbacksSpawn, LuaTimerSpawn,
+    MenuData, ParticleEmitterData, RigidBodyData, SpawnCmd, SpriteData, StuckToData, TextData,
+    TweenPositionData, TweenRotationData, TweenScaleData, TweenScreenPositionData, TweenTintData,
 };
 use aberred_core::resources::world_signals::WorldSignals;
 use aberred_core::systems::propagate_transforms::ComputeInitialGlobalTransform;
@@ -161,6 +164,7 @@ pub(super) fn apply_components(
             phase: cmd.phase,
             dialogue: cmd.dialogue,
             lua_phase_callbacks: cmd.lua_phase_callbacks,
+            lua_dialogue_callbacks: cmd.lua_dialogue_callbacks,
             lua_timer: cmd.lua_timer,
             lua_collision_rule: cmd.lua_collision_rule,
             lua_setup: cmd.lua_setup,
@@ -449,6 +453,7 @@ struct BehaviorComponents {
     phase: Option<String>,
     dialogue: Option<String>,
     lua_phase_callbacks: LuaPhaseCallbacksSpawn,
+    lua_dialogue_callbacks: LuaDialogueCallbacksSpawn,
     lua_timer: Option<LuaTimerSpawn>,
     lua_collision_rule: Option<LuaCollisionRuleData>,
     lua_setup: Option<String>,
@@ -460,6 +465,7 @@ fn apply_behavior_components(entity_commands: &mut EntityCommands, b: BehaviorCo
         phase,
         dialogue,
         lua_phase_callbacks,
+        lua_dialogue_callbacks,
         lua_timer,
         lua_collision_rule,
         lua_setup,
@@ -483,6 +489,15 @@ fn apply_behavior_components(entity_commands: &mut EntityCommands, b: BehaviorCo
     }
     if let Some(callback) = lua_phase_callbacks.update {
         entity_commands.insert(LuaOnPhaseUpdate::new(callback));
+    }
+    if let Some(callback) = lua_dialogue_callbacks.node_entered {
+        entity_commands.insert(LuaOnDialogueNodeEntered::new(callback));
+    }
+    if let Some(callback) = lua_dialogue_callbacks.choice_selected {
+        entity_commands.insert(LuaOnDialogueChoiceSelected::new(callback));
+    }
+    if let Some(callback) = lua_dialogue_callbacks.ended {
+        entity_commands.insert(LuaOnDialogueEnded::new(callback));
     }
     if let Some(timer) = lua_timer {
         entity_commands.insert(LuaOnTimerFired::timer(
@@ -1522,6 +1537,36 @@ mod tests {
             &*world.get::<LuaOnPhaseUpdate>(e).unwrap().callback,
             "on_tick"
         );
+    }
+
+    #[test]
+    fn lua_spawn_applies_lua_dialogue_callbacks() {
+        use crate::components::lua_on_dialogue::{
+            LuaOnDialogueChoiceSelected, LuaOnDialogueEnded, LuaOnDialogueNodeEntered,
+        };
+        let mut world = World::new();
+        let mut signals = WorldSignals::default();
+        let e = spawn_from_lua(
+            &mut world,
+            &mut signals,
+            "engine.spawn()\
+             :with_lua_dialogue_node_entered('a')\
+             :with_lua_dialogue_choice_selected('b')\
+             :with_lua_dialogue_ended('c'):build()",
+        );
+
+        assert_eq!(
+            &*world.get::<LuaOnDialogueNodeEntered>(e).unwrap().callback,
+            "a"
+        );
+        assert_eq!(
+            &*world
+                .get::<LuaOnDialogueChoiceSelected>(e)
+                .unwrap()
+                .callback,
+            "b"
+        );
+        assert_eq!(&*world.get::<LuaOnDialogueEnded>(e).unwrap().callback, "c");
     }
 
     #[test]
