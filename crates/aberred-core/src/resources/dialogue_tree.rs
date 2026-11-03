@@ -210,6 +210,11 @@ pub enum DialogueError {
     Json(#[from] serde_json::Error),
 }
 
+/// Interns owned label strings into one shared slice.
+fn intern_labels(labels: Vec<String>) -> Arc<[Arc<str>]> {
+    labels.into_iter().map(Arc::from).collect()
+}
+
 /// Validates a [`DialogueDef`] and compiles it into a [`DialogueTree`].
 ///
 /// Only the FIRST error is reported, checked in this order:
@@ -304,14 +309,11 @@ impl TryFrom<DialogueDef> for DialogueTree {
                         None => None,
                     };
                     built_choices.push(DialogueChoice {
-                        text: Arc::from(choice_text.as_str()),
+                        text: Arc::from(choice_text),
                         target,
                         condition: when,
                         effects,
-                        labels: choice_labels
-                            .into_iter()
-                            .map(|label| Arc::from(label.as_str()))
-                            .collect(),
+                        labels: intern_labels(choice_labels),
                     });
                 }
                 Next::Choices(built_choices)
@@ -321,12 +323,9 @@ impl TryFrom<DialogueDef> for DialogueTree {
 
             built.push(DialogueNode {
                 id: node_id,
-                speaker: speaker.map(|speaker| Arc::from(speaker.as_str())),
-                text: Arc::from(text.as_str()),
-                labels: labels
-                    .into_iter()
-                    .map(|label| Arc::from(label.as_str()))
-                    .collect(),
+                speaker: speaker.map(Arc::from),
+                text: Arc::from(text),
+                labels: intern_labels(labels),
                 on_enter,
                 next,
             });

@@ -8,7 +8,8 @@
 //! [`WorldSignals`] — flags,
 //! integers, strings — combined with `Not`/`All`/`Any`. [`DialogueCmp`] is the
 //! comparison operator used by integer conditions. [`DialogueEffect`]
-//! describes a signal mutation applied when a dialogue node is chosen.
+//! describes a signal mutation applied when a node is entered or a choice is
+//! picked.
 
 use serde::{Deserialize, Serialize};
 
@@ -363,7 +364,8 @@ pub struct ChoiceDef {
 }
 
 /// Builders and fixtures shared by the dialogue tests in this module and in
-/// [`crate::resources::dialogue_tree`]'s tests.
+/// the [`crate::resources::dialogue_tree`] and
+/// [`crate::resources::dialogue_builder`] tests.
 #[cfg(test)]
 pub(crate) mod test_helpers {
     use super::*;

@@ -268,9 +268,7 @@ impl DialogueBuilder {
 
     /// Records `message` as the misuse; the first recorded message wins.
     fn record_misuse(&mut self, message: &str) {
-        if self.misuse.is_none() {
-            self.misuse = Some(message.to_owned());
-        }
+        self.misuse.get_or_insert_with(|| message.to_owned());
     }
 }
 
