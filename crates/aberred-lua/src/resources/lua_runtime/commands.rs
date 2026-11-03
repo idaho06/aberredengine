@@ -510,6 +510,19 @@ pub enum EntityCmd {
     InsertTag { entity_id: u64, tag: LuaTag },
     /// Remove the Rust component registered as a Lua tag
     RemoveTag { entity_id: u64, tag: LuaTag },
+    /// Insert a `DialogueRunner` for the tree stored under `key` in the
+    /// `DialogueStore`; replaces an existing runner, inserts nothing for an
+    /// unknown key
+    InsertDialogue { entity_id: u64, key: String },
+    /// Remove the entity's `DialogueRunner`; no-op without one
+    RemoveDialogue { entity_id: u64 },
+    /// Request advancing the entity's dialogue past the current node
+    DialogueAdvance { entity_id: u64 },
+    /// Request picking the choice at 0-based declared `index` of the entity's
+    /// current dialogue node
+    DialogueChoose { entity_id: u64, index: usize },
+    /// Request cancelling the entity's dialogue
+    DialogueCancel { entity_id: u64 },
 }
 
 /// Commands for tracked groups from Lua.

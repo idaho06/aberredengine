@@ -21,6 +21,7 @@ use crate::components::lua_on_phase::{LuaOnPhaseEntered, LuaOnPhaseExited, LuaOn
 use crate::components::lua_on_timer_fired::LuaOnTimerFired;
 use aberred_core::components::animation::Animation;
 use aberred_core::components::camera_target::CameraTarget;
+use aberred_core::components::dialogue::DialogueRunner;
 use aberred_core::components::entity_shader::EntityShader;
 use aberred_core::components::global_transform2d::GlobalTransform2D;
 use aberred_core::components::gui_interactable::{GuiInteractable, GuiWidgetState};
@@ -45,6 +46,7 @@ use bevy_ecs::system::EntityCommand;
 
 use crate::resources::lua_runtime::{EntityCmd, LuaPhaseCallbackKind, TweenConfig, UniformValue};
 use aberred_core::resources::animation_store::AnimationStore;
+use aberred_core::resources::dialogue_store::DialogueStore;
 use aberred_core::resources::systems_store as hook_keys;
 use aberred_core::resources::systems_store::SystemsStore;
 use aberred_core::resources::world_signals::WorldSignals;
@@ -233,6 +235,12 @@ pub fn process_entity_commands(
             EntityCmd::RemoveTag { entity_id, tag } => {
                 queue_on_entity(commands, entity_id, move |mut e| tag.remove(&mut e));
             }
+
+            cmd @ (EntityCmd::InsertDialogue { .. }
+            | EntityCmd::RemoveDialogue { .. }
+            | EntityCmd::DialogueAdvance { .. }
+            | EntityCmd::DialogueChoose { .. }
+            | EntityCmd::DialogueCancel { .. }) => process_dialogue_cmd(cmd, commands),
         }
     }
 }
@@ -866,15 +874,67 @@ fn process_lifecycle_cmd(
     }
 }
 
+/// Inserts a fresh [`DialogueRunner`] for the tree stored under `key` in the
+/// world's [`DialogueStore`], replacing an existing runner. An unknown key
+/// warns and inserts nothing. Shared by the entity-command and spawn paths,
+/// which both reach it from inside a queued closure at apply time.
+pub(super) fn insert_dialogue_runner(e: &mut EntityWorldMut, key: &str) {
+    // `e.world()` borrows `e`, so the stored `Arc` is cloned out before the insert.
+    let tree = e
+        .world()
+        .get_resource::<DialogueStore>()
+        .and_then(|store| store.get(key))
+        .cloned();
+    if let Some(tree) = tree {
+        e.insert(DialogueRunner::new(tree));
+    } else {
+        warn!("Dialogue key '{key}' not found in the DialogueStore; no DialogueRunner inserted");
+    }
+}
+
+/// Dispatches the dialogue commands. [`EntityCmd::InsertDialogue`] queues
+/// `insert_dialogue_runner`, so the [`DialogueStore`] lookup runs when the
+/// command applies, not while it is queued. [`EntityCmd::RemoveDialogue`]
+/// removes the runner, and the advance/choose/cancel variants set the
+/// runner's pending request. All but `InsertDialogue` no-op on an entity
+/// without a runner.
+fn process_dialogue_cmd(cmd: EntityCmd, commands: &mut Commands) {
+    match cmd {
+        EntityCmd::InsertDialogue { entity_id, key } => {
+            queue_on_entity(commands, entity_id, move |mut e| {
+                insert_dialogue_runner(&mut e, &key);
+            });
+        }
+        EntityCmd::RemoveDialogue { entity_id } => {
+            queue_on_entity(commands, entity_id, |mut e| {
+                e.remove::<DialogueRunner>();
+            });
+        }
+        EntityCmd::DialogueAdvance { entity_id } => {
+            queue_on_component::<DialogueRunner>(commands, entity_id, DialogueRunner::advance);
+        }
+        EntityCmd::DialogueChoose { entity_id, index } => {
+            queue_on_component::<DialogueRunner>(commands, entity_id, move |r| r.choose(index));
+        }
+        EntityCmd::DialogueCancel { entity_id } => {
+            queue_on_component::<DialogueRunner>(commands, entity_id, DialogueRunner::cancel);
+        }
+        _ => unreachable!(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    use super::super::test_helpers::world_with_dialogue_store;
     use super::*;
     use crate::components::lua_on_tween_finished::LuaOnTweenFinished;
     use crate::resources::lua_runtime::LuaTag;
     use crate::resources::lua_runtime::test_tags::{Boid, Fuel};
+    use aberred_core::components::dialogue::{DialogueRequest, DialogueStatus};
     use aberred_core::components::shape::ShapeKind;
     use aberred_core::components::timer::TimerMode;
     use aberred_core::testing::approx_eq;
+    use std::sync::Arc;
 
     #[test]
     fn resolve_entity_rejects_invalid_bits() {
@@ -2710,5 +2770,150 @@ mod tests {
 
         assert!(world.get_entity(entity).is_ok());
         assert!(world.get::<ScreenPosition>(entity).is_none());
+    }
+
+    #[test]
+    fn insert_dialogue_with_a_known_key_inserts_a_runner_for_the_stored_tree() {
+        let (mut world, tree) = world_with_dialogue_store();
+        let entity = world.spawn_empty().id();
+
+        run_entity_cmd(
+            &mut world,
+            EntityCmd::InsertDialogue {
+                entity_id: entity.to_bits(),
+                key: "k".to_string(),
+            },
+        );
+
+        let runner = world
+            .get::<DialogueRunner>(entity)
+            .expect("a DialogueRunner is inserted");
+        assert!(
+            Arc::ptr_eq(runner.tree(), &tree),
+            "the runner shares the stored tree's Arc"
+        );
+    }
+
+    #[test]
+    fn insert_dialogue_with_an_unknown_key_inserts_nothing() {
+        let (mut world, _tree) = world_with_dialogue_store();
+        let entity = world.spawn_empty().id();
+
+        run_entity_cmd(
+            &mut world,
+            EntityCmd::InsertDialogue {
+                entity_id: entity.to_bits(),
+                key: "ghost".to_string(),
+            },
+        );
+
+        assert!(world.get::<DialogueRunner>(entity).is_none());
+    }
+
+    #[test]
+    fn insert_dialogue_on_an_entity_with_a_runner_replaces_it_with_a_fresh_one() {
+        let (mut world, tree) = world_with_dialogue_store();
+        let mut stale = DialogueRunner::new(Arc::clone(&tree));
+        stale.advance();
+        let entity = world.spawn(stale).id();
+
+        run_entity_cmd(
+            &mut world,
+            EntityCmd::InsertDialogue {
+                entity_id: entity.to_bits(),
+                key: "k".to_string(),
+            },
+        );
+
+        let runner = world.get::<DialogueRunner>(entity).unwrap();
+        assert_eq!(runner.status(), DialogueStatus::NotStarted);
+        assert_eq!(runner.pending(), None, "the replacement runner restarts");
+    }
+
+    #[test]
+    fn dialogue_requests_set_pending_and_the_last_one_wins() {
+        let (mut world, tree) = world_with_dialogue_store();
+        let entity = world.spawn(DialogueRunner::new(tree)).id();
+        let id = entity.to_bits();
+
+        run_entity_cmds(
+            &mut world,
+            vec![
+                EntityCmd::DialogueAdvance { entity_id: id },
+                EntityCmd::DialogueChoose {
+                    entity_id: id,
+                    index: 2,
+                },
+            ],
+        );
+        assert_eq!(
+            world.get::<DialogueRunner>(entity).unwrap().pending(),
+            Some(DialogueRequest::Choose(2))
+        );
+
+        run_entity_cmd(
+            &mut world,
+            EntityCmd::DialogueChoose {
+                entity_id: id,
+                index: 1,
+            },
+        );
+        assert_eq!(
+            world.get::<DialogueRunner>(entity).unwrap().pending(),
+            Some(DialogueRequest::Choose(1))
+        );
+
+        run_entity_cmd(&mut world, EntityCmd::DialogueCancel { entity_id: id });
+        assert_eq!(
+            world.get::<DialogueRunner>(entity).unwrap().pending(),
+            Some(DialogueRequest::Cancel)
+        );
+    }
+
+    #[test]
+    fn dialogue_requests_without_a_runner_are_silent_noops() {
+        let (mut world, _tree) = world_with_dialogue_store();
+        let entity = world.spawn_empty().id();
+        let id = entity.to_bits();
+
+        run_entity_cmds(
+            &mut world,
+            vec![
+                EntityCmd::DialogueAdvance { entity_id: id },
+                EntityCmd::DialogueChoose {
+                    entity_id: id,
+                    index: 1,
+                },
+                EntityCmd::DialogueCancel { entity_id: id },
+            ],
+        );
+
+        assert!(world.get_entity(entity).is_ok());
+        assert!(
+            world.get::<DialogueRunner>(entity).is_none(),
+            "no runner is inserted"
+        );
+    }
+
+    #[test]
+    fn remove_dialogue_deletes_the_runner_and_noops_without_one() {
+        let (mut world, tree) = world_with_dialogue_store();
+        let with_runner = world.spawn(DialogueRunner::new(tree)).id();
+        let without_runner = world.spawn_empty().id();
+
+        run_entity_cmds(
+            &mut world,
+            vec![
+                EntityCmd::RemoveDialogue {
+                    entity_id: with_runner.to_bits(),
+                },
+                EntityCmd::RemoveDialogue {
+                    entity_id: without_runner.to_bits(),
+                },
+            ],
+        );
+
+        assert!(world.get::<DialogueRunner>(with_runner).is_none());
+        assert!(world.get_entity(without_runner).is_ok());
     }
 }

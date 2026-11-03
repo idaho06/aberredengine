@@ -159,6 +159,7 @@ pub(super) fn apply_components(
         entity_commands,
         BehaviorComponents {
             phase: cmd.phase,
+            dialogue: cmd.dialogue,
             lua_phase_callbacks: cmd.lua_phase_callbacks,
             lua_timer: cmd.lua_timer,
             lua_collision_rule: cmd.lua_collision_rule,
@@ -446,6 +447,7 @@ fn apply_signal_components(
 
 struct BehaviorComponents {
     phase: Option<String>,
+    dialogue: Option<String>,
     lua_phase_callbacks: LuaPhaseCallbacksSpawn,
     lua_timer: Option<LuaTimerSpawn>,
     lua_collision_rule: Option<LuaCollisionRuleData>,
@@ -456,6 +458,7 @@ struct BehaviorComponents {
 fn apply_behavior_components(entity_commands: &mut EntityCommands, b: BehaviorComponents) {
     let BehaviorComponents {
         phase,
+        dialogue,
         lua_phase_callbacks,
         lua_timer,
         lua_collision_rule,
@@ -464,6 +467,13 @@ fn apply_behavior_components(entity_commands: &mut EntityCommands, b: BehaviorCo
     } = b;
     if let Some(initial) = phase {
         entity_commands.insert(Phase::new(initial));
+    }
+    if let Some(key) = dialogue {
+        // No world access in a system: the DialogueStore lookup runs when the
+        // queued closure applies; an unknown key warns and inserts no runner.
+        entity_commands.queue(move |mut e: EntityWorldMut| {
+            super::entity_cmd::insert_dialogue_runner(&mut e, &key);
+        });
     }
     if let Some(callback) = lua_phase_callbacks.entered {
         entity_commands.insert(LuaOnPhaseEntered::new(callback));
@@ -724,19 +734,23 @@ pub fn process_clone_command(
 mod tests {
     use bevy_ecs::system::SystemState;
 
+    use super::super::test_helpers::world_with_dialogue_store;
     use super::*;
     use crate::resources::lua_runtime::test_tags::{Boid, Fuel, Leader, runtime_with_test_tags};
     use crate::resources::lua_runtime::{
         AnimationConditionData, AnimationRuleData, LuaRuntime, LuaTag,
     };
     use aberred_core::components::animation::{CmpOp, Condition};
+    use aberred_core::components::dialogue::DialogueRunner;
     use aberred_core::components::timer::Timer;
     use aberred_core::components::tween::{Easing, LoopMode, Tween};
     use aberred_core::events::phase::PhaseEntered;
+    use aberred_core::resources::dialogue_store::DialogueStore;
     use aberred_core::resources::uniform_value::UniformValue;
     use aberred_core::resources::world_time::WorldTime;
     use aberred_core::systems::phase::phase_system;
     use bevy_ecs::system::RunSystemOnce;
+    use std::sync::Arc;
 
     #[test]
     fn clone_of_despawned_source_skips_and_cleans_registry() {
@@ -1778,5 +1792,41 @@ mod tests {
         );
         assert!(matches!(emitter.ttl, TtlSpec::Range { min, max } if min == 1.0 && max == 2.0));
         assert_eq!(emitter.time_since_emit, 0.0);
+    }
+
+    #[test]
+    fn lua_spawn_with_a_known_dialogue_key_inserts_a_runner_for_the_stored_tree() {
+        let (mut world, tree) = world_with_dialogue_store();
+        let mut signals = WorldSignals::default();
+
+        let e = spawn_from_lua(
+            &mut world,
+            &mut signals,
+            "engine.spawn():with_dialogue('k'):build()",
+        );
+
+        let runner = world
+            .get::<DialogueRunner>(e)
+            .expect("a DialogueRunner is inserted for the known key");
+        assert!(
+            Arc::ptr_eq(runner.tree(), &tree),
+            "the runner shares the stored tree's Arc"
+        );
+    }
+
+    #[test]
+    fn lua_spawn_with_an_unknown_dialogue_key_spawns_without_a_runner() {
+        let mut world = World::new();
+        world.insert_resource(DialogueStore::default());
+        let mut signals = WorldSignals::default();
+
+        let e = spawn_from_lua(
+            &mut world,
+            &mut signals,
+            "engine.spawn():with_dialogue('ghost'):build()",
+        );
+
+        assert!(world.get_entity(e).is_ok());
+        assert!(world.get::<DialogueRunner>(e).is_none());
     }
 }

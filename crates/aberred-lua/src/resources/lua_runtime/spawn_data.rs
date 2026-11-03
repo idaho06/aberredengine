@@ -448,6 +448,10 @@ pub struct SpawnCmd {
     pub signal_strings: Vec<(String, String)>,
     /// Initial phase of a core `Phase`
     pub phase: Option<String>,
+    /// Dialogue tree key — spawns the entity with a `DialogueRunner` for the
+    /// tree registered under this key in the `DialogueStore` (an unknown key
+    /// spawns the entity without a runner)
+    pub dialogue: Option<String>,
     /// Lua callbacks for the core `Phase`
     pub lua_phase_callbacks: LuaPhaseCallbacksSpawn,
     /// Has Signals component (even if empty)

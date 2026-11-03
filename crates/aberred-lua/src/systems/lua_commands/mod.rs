@@ -276,3 +276,39 @@ pub struct ContextQueries<'w, 's> {
     pub global_transforms: Query<'w, 's, &'static GlobalTransform2D>,
     pub child_of: Query<'w, 's, &'static ChildOf>,
 }
+
+/// Fixtures shared by the `entity_cmd` and `spawn_cmd` tests.
+#[cfg(test)]
+pub(crate) mod test_helpers {
+    use aberred_core::resources::dialogue_builder::DialogueBuilder;
+    use aberred_core::resources::dialogue_store::DialogueStore;
+    use aberred_core::resources::dialogue_tree::DialogueTree;
+    use bevy_ecs::prelude::*;
+    use std::sync::Arc;
+
+    /// A small valid conversation: `a` ("hi") goes to `b`, which offers the
+    /// declared choices "again" (-> `a`) and "end" (terminal).
+    fn test_dialogue_tree() -> DialogueTree {
+        DialogueBuilder::new("a")
+            .node("a")
+            .text("hi")
+            .goto("b")
+            .node("b")
+            .text("bye?")
+            .choice("again", "a")
+            .choice_end("end")
+            .build()
+            .unwrap()
+    }
+
+    /// A fresh world with a `DialogueStore` holding [`test_dialogue_tree`] under
+    /// `"k"`, plus the stored `Arc` for identity checks.
+    pub(crate) fn world_with_dialogue_store() -> (World, Arc<DialogueTree>) {
+        let tree = Arc::new(test_dialogue_tree());
+        let mut store = DialogueStore::default();
+        store.insert("k", Arc::clone(&tree));
+        let mut world = World::new();
+        world.insert_resource(store);
+        (world, tree)
+    }
+}

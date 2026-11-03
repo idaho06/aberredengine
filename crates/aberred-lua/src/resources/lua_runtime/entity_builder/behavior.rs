@@ -110,6 +110,18 @@ pub(super) fn register<M: LuaUserDataMethods<LuaEntityBuilder>>(
     builder_method!(
         methods,
         meta,
+        "with_dialogue",
+        "Attach a DialogueRunner for the dialogue tree registered under `key` in the DialogueStore (an unknown key spawns the entity without a runner)",
+        [("key", "string")],
+        |_, this: &mut LuaEntityBuilder, key: String| {
+            this.cmd.dialogue = Some(key);
+            Ok(())
+        }
+    );
+
+    builder_method!(
+        methods,
+        meta,
         "with_lua_phase_entered",
         "Call a Lua function `fn(ctx, input)` each time the core `Phase` enters a phase (branch on `ctx.phase`; `ctx.previous_phase` is the phase left). A returned phase name requests that phase.",
         [("callback", "string")],
@@ -508,6 +520,22 @@ mod tests {
             assert_runtime_error(
                 &format!("engine.spawn():with_phase({arg})"),
                 "in method 'with_phase'",
+            );
+        }
+    }
+
+    #[test]
+    fn with_dialogue_sets_the_spawn_dialogue_key() {
+        let cmd = built(":with_dialogue('k')");
+        assert_eq!(cmd.dialogue.as_deref(), Some("k"));
+    }
+
+    #[test]
+    fn with_dialogue_rejects_non_string() {
+        for arg in ["{ key = 'k' }", "true"] {
+            assert_runtime_error(
+                &format!("engine.spawn():with_dialogue({arg})"),
+                "in method 'with_dialogue'",
             );
         }
     }

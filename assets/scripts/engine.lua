@@ -1834,6 +1834,32 @@ function engine.set_vsync(enabled) end
 ---@param key string
 function engine.add_binding(action, key) end
 
+-- ==================== dialogue ====================
+
+---Request advancing the entity's dialogue past the current node; no-op without a runner
+---@param entity_id integer
+function engine.entity_dialogue_advance(entity_id) end
+
+---Request cancelling the entity's dialogue; no-op without a runner
+---@param entity_id integer
+function engine.entity_dialogue_cancel(entity_id) end
+
+---Request picking the choice at 0-based declared `index` of the entity's current dialogue node; no-op without a runner
+---@param entity_id integer
+---@param index integer
+function engine.entity_dialogue_choose(entity_id, index) end
+
+---Attach a DialogueRunner running the tree registered under `key`; an existing runner is replaced, an unknown key inserts nothing
+---@param entity_id integer
+---@param key string
+function engine.entity_insert_dialogue(entity_id, key) end
+
+---Remove the entity's DialogueRunner; no-op without one
+---@param entity_id integer
+function engine.entity_remove_dialogue(entity_id) end
+
+-- ==================== input ====================
+
 ---Get the first key binding for an action as a string (nil if unbound)
 ---@param action string
 ---@return string|nil
@@ -1909,6 +1935,11 @@ function EntityBuilder:with_box_collider_offset(offset_x, offset_y) end
 ---@param zoom number|nil
 ---@return EntityBuilder
 function EntityBuilder:with_camera_target(priority, zoom) end
+
+---Attach a DialogueRunner for the dialogue tree registered under `key` in the DialogueStore (an unknown key spawns the entity without a runner)
+---@param key string
+---@return EntityBuilder
+function EntityBuilder:with_dialogue(key) end
 
 ---Set friction (creates RigidBody if needed)
 ---@param friction number
@@ -2615,6 +2646,11 @@ function CollisionEntityBuilder:with_box_collider_offset(offset_x, offset_y) end
 ---@param zoom number|nil
 ---@return CollisionEntityBuilder
 function CollisionEntityBuilder:with_camera_target(priority, zoom) end
+
+---Attach a DialogueRunner for the dialogue tree registered under `key` in the DialogueStore (an unknown key spawns the entity without a runner)
+---@param key string
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_dialogue(key) end
 
 ---Set friction (creates RigidBody if needed)
 ---@param friction number

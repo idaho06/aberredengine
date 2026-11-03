@@ -1,4 +1,5 @@
-//! `engine.register_dialogue` / `engine.load_dialogue`.
+//! `engine.register_dialogue` / `engine.load_dialogue` and the
+//! `engine.entity_*dialogue*` entity commands.
 
 use super::*;
 use aberred_core::resources::dialogue_def::DialogueDef;
@@ -51,6 +52,70 @@ impl LuaRuntime {
             cat = "dialogue",
             params = [("key", "string"), ("path", "string")]
         );
+        // Entity-level dialogue commands push plain `EntityCmd`s onto the
+        // regular `entity_commands` queue; they are registered with
+        // `register_cmd!` (not `define_entity_cmds!`) so no `collision_`
+        // twins exist.
+        register_cmd!(
+            engine,
+            self.lua,
+            meta_fns,
+            "entity_insert_dialogue",
+            entity_commands,
+            |(entity_id, key)| (u64, String),
+            EntityCmd::InsertDialogue { entity_id, key },
+            desc = "Attach a DialogueRunner running the tree registered under `key`; an existing runner is replaced, an unknown key inserts nothing",
+            cat = "dialogue",
+            params = [("entity_id", "integer"), ("key", "string")]
+        );
+        register_cmd!(
+            engine,
+            self.lua,
+            meta_fns,
+            "entity_remove_dialogue",
+            entity_commands,
+            |entity_id| u64,
+            EntityCmd::RemoveDialogue { entity_id },
+            desc = "Remove the entity's DialogueRunner; no-op without one",
+            cat = "dialogue",
+            params = [("entity_id", "integer")]
+        );
+        register_cmd!(
+            engine,
+            self.lua,
+            meta_fns,
+            "entity_dialogue_advance",
+            entity_commands,
+            |entity_id| u64,
+            EntityCmd::DialogueAdvance { entity_id },
+            desc = "Request advancing the entity's dialogue past the current node; no-op without a runner",
+            cat = "dialogue",
+            params = [("entity_id", "integer")]
+        );
+        register_cmd!(
+            engine,
+            self.lua,
+            meta_fns,
+            "entity_dialogue_choose",
+            entity_commands,
+            |(entity_id, index)| (u64, usize),
+            EntityCmd::DialogueChoose { entity_id, index },
+            desc = "Request picking the choice at 0-based declared `index` of the entity's current dialogue node; no-op without a runner",
+            cat = "dialogue",
+            params = [("entity_id", "integer"), ("index", "integer")]
+        );
+        register_cmd!(
+            engine,
+            self.lua,
+            meta_fns,
+            "entity_dialogue_cancel",
+            entity_commands,
+            |entity_id| u64,
+            EntityCmd::DialogueCancel { entity_id },
+            desc = "Request cancelling the entity's dialogue; no-op without a runner",
+            cat = "dialogue",
+            params = [("entity_id", "integer")]
+        );
         Ok(())
     }
 }
@@ -74,7 +139,7 @@ fn queue_register(lua: &Lua, key: String, tree: DialogueTree) -> LuaResult<()> {
 mod tests {
     use super::super::super::entity_builder::test_helpers::assert_runtime_error_in;
     use super::*;
-    use crate::resources::lua_runtime::DialogueLuaCmd;
+    use crate::resources::lua_runtime::{DialogueLuaCmd, EntityCmd};
 
     /// Drains the `dialogue_commands` queue into a fresh Vec.
     fn drain_dialogue(runtime: &LuaRuntime) -> Vec<DialogueLuaCmd> {
@@ -203,5 +268,61 @@ mod tests {
             ),
             "{cmds:?}"
         );
+    }
+
+    #[test]
+    fn entity_dialogue_functions_queue_the_matching_entity_commands() {
+        let runtime = LuaRuntime::new().unwrap();
+        runtime
+            .lua()
+            .load(
+                "engine.entity_insert_dialogue(7, 'k')\n\
+                 engine.entity_remove_dialogue(7)\n\
+                 engine.entity_dialogue_advance(7)\n\
+                 engine.entity_dialogue_choose(7, 2)\n\
+                 engine.entity_dialogue_cancel(7)",
+            )
+            .exec()
+            .unwrap();
+
+        let mut queued = Vec::new();
+        runtime.drain_entity_commands_into(&mut queued);
+        let cmds: Vec<&EntityCmd> = queued.iter().map(|c| &c.cmd).collect();
+        assert!(
+            matches!(
+                cmds.as_slice(),
+                [
+                    EntityCmd::InsertDialogue { entity_id: 7, key },
+                    EntityCmd::RemoveDialogue { entity_id: 7 },
+                    EntityCmd::DialogueAdvance { entity_id: 7 },
+                    EntityCmd::DialogueChoose { entity_id: 7, index: 2 },
+                    EntityCmd::DialogueCancel { entity_id: 7 },
+                ] if key == "k"
+            ),
+            "{cmds:?}"
+        );
+    }
+
+    #[test]
+    fn entity_dialogue_functions_have_no_collision_twins() {
+        let runtime = LuaRuntime::new().unwrap();
+        let engine: LuaTable = runtime.lua().globals().get("engine").unwrap();
+        for name in [
+            "entity_insert_dialogue",
+            "entity_remove_dialogue",
+            "entity_dialogue_advance",
+            "entity_dialogue_choose",
+            "entity_dialogue_cancel",
+        ] {
+            assert!(
+                matches!(engine.get::<LuaValue>(name), Ok(LuaValue::Function(_))),
+                "engine.{name} is registered"
+            );
+            let twin = format!("collision_{name}");
+            assert!(
+                matches!(engine.get::<LuaValue>(twin.as_str()), Ok(LuaValue::Nil)),
+                "engine.{twin} is nil"
+            );
+        }
     }
 }
