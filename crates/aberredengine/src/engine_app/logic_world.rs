@@ -32,6 +32,7 @@ use aberred_core::resources::collision_contacts::CollisionContacts;
 use aberred_core::resources::collision_rule_index::CollisionRuleIndex;
 use aberred_core::resources::debug_overlay_config::DebugOverlayConfig;
 use aberred_core::resources::deterministic_mode::DeterministicMode;
+use aberred_core::resources::dialogue_store::DialogueStore;
 use aberred_core::resources::drawable_snapshot::DrawableSnapshot;
 use aberred_core::resources::font_metrics::{FontMetricsStore, FontMetricsWarnCache};
 use aberred_core::resources::game_config::GameConfigDefaults;
@@ -191,6 +192,7 @@ impl EngineBuilder {
         world.insert_resource(Messages::<RenderAssetCmd>::default());
         world.insert_resource(MainCamera(Camera2D::screen_centered(&render_size)));
         world.insert_resource(AnimationStore::default());
+        world.insert_resource(DialogueStore::default());
         world.insert_resource(PostProcessShader::new());
         world.insert_resource(CameraFollowConfig::default());
         world.insert_resource(DebugOverlayConfig::default());

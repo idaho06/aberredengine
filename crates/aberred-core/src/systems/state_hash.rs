@@ -19,6 +19,9 @@ use bevy_ecs::prelude::*;
 
 use crate::components::animation::Animation;
 use crate::components::box_collider::BoxCollider;
+use crate::components::dialogue::{
+    DialogueEndReason, DialogueRequest, DialogueRunner, DialogueStatus,
+};
 use crate::components::global_transform2d::GlobalTransform2D;
 use crate::components::group::Group;
 use crate::components::phase::Phase;
@@ -106,6 +109,41 @@ fn hash_optional<T>(
         }
         None => h.write_u8(0),
     }
+}
+
+/// Hash a `DialogueRunner`'s conversation state: its status (kind, node
+/// indices, end reason), the cached choice availability and the pending
+/// request. The tree is shared, immutable data the status indexes into, so it
+/// is not hashed.
+fn hash_dialogue_runner(h: &mut ReplayHasher, runner: &DialogueRunner) {
+    match runner.status {
+        DialogueStatus::NotStarted => h.write_u8(0),
+        DialogueStatus::Active(node) => {
+            h.write_u8(1);
+            h.write_u64(node.index() as u64);
+        }
+        DialogueStatus::Finished { last, reason } => {
+            h.write_u8(2);
+            hash_optional(h, last.as_ref(), |h, node| h.write_u64(node.index() as u64));
+            h.write_u8(match reason {
+                DialogueEndReason::Completed => 0,
+                DialogueEndReason::Cancelled => 1,
+                DialogueEndReason::NoChoices => 2,
+            });
+        }
+    }
+    h.write_u64(runner.available.len() as u64);
+    for &available in &runner.available {
+        h.write_bool(available);
+    }
+    hash_optional(h, runner.pending.as_ref(), |h, request| match request {
+        DialogueRequest::Advance => h.write_u8(0),
+        DialogueRequest::Choose(index) => {
+            h.write_u8(1);
+            h.write_u64(*index as u64);
+        }
+        DialogueRequest::Cancel => h.write_u8(2),
+    });
 }
 
 fn hash_tween<T: HashableTweenValue>(h: &mut ReplayHasher, e: EntityRef) {
@@ -238,6 +276,7 @@ pub fn hash_world_state(world: &World) -> u64 {
         hash_optional(&mut h, e.get::<Group>(), |h, c| {
             h.write_str(&c.0);
         });
+        hash_optional(&mut h, e.get::<DialogueRunner>(), hash_dialogue_runner);
     }
 
     // Resources, fixed order. AppState deliberately excluded -- see this
@@ -263,7 +302,29 @@ pub fn hash_world_state(world: &World) -> u64 {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+
     use super::*;
+    use crate::resources::dialogue_builder::DialogueBuilder;
+
+    /// A runner active on a choices node `a` with both choices available;
+    /// its tree has a second node `b`.
+    fn dialogue_runner() -> DialogueRunner {
+        let tree = DialogueBuilder::new("a")
+            .node("a")
+            .text("A")
+            .choice("x", "b")
+            .choice("y", "b")
+            .node("b")
+            .text("B")
+            .build()
+            .unwrap();
+        let tree = Arc::new(tree);
+        let mut runner = DialogueRunner::new(Arc::clone(&tree));
+        runner.status = DialogueStatus::Active(tree.start());
+        runner.available.extend([true, true]);
+        runner
+    }
 
     /// Minimal `World` carrying just the resources `hash_world_state` reads
     /// unconditionally (`WorldSignals`/`WorldTime`/`SimRng`) -- not the full
@@ -324,6 +385,7 @@ mod tests {
             ),
             Tween::new(Rotation { degrees: 0.0 }, Rotation { degrees: 90.0 }, 1.0),
             Tween::new(Scale::new(1.0, 1.0), Scale::new(2.0, 2.0), 1.0),
+            dialogue_runner(),
         ));
         let mut ws = world.resource_mut::<WorldSignals>();
         ws.set_scalar("ws", 1.0);
@@ -478,6 +540,17 @@ mod tests {
             ("WorldSignals.flag", |w, _| {
                 w.resource_mut::<WorldSignals>().set_flag("wg")
             }),
+            ("DialogueRunner.status", |w, e| {
+                let mut runner = w.get_mut::<DialogueRunner>(e).unwrap();
+                let b = runner.tree.idx_of("b").unwrap();
+                runner.status = DialogueStatus::Active(b);
+            }),
+            ("DialogueRunner.available", |w, e| {
+                w.get_mut::<DialogueRunner>(e).unwrap().available[1] = false;
+            }),
+            ("DialogueRunner.pending", |w, e| {
+                w.get_mut::<DialogueRunner>(e).unwrap().advance();
+            }),
             ("WorldSignals.entity", |w, _| {
                 let other = w.spawn_empty().id();
                 w.resource_mut::<WorldSignals>()
@@ -499,6 +572,54 @@ mod tests {
                 baseline,
                 "{name} must change the hash"
             );
+        }
+    }
+
+    /// Each status (kind, node, last node, end reason) and each pending
+    /// request of a `DialogueRunner` hashes to its own value, so a replay
+    /// diverges as soon as a conversation does.
+    #[test]
+    fn dialogue_runner_states_hash_differently() {
+        let (mut world, e) = full_world();
+        let tree = Arc::clone(&world.get::<DialogueRunner>(e).unwrap().tree);
+        let (a, b) = (tree.start(), tree.idx_of("b").unwrap());
+        let finished = |last, reason| DialogueStatus::Finished { last, reason };
+        let statuses = [
+            DialogueStatus::NotStarted,
+            DialogueStatus::Active(a),
+            DialogueStatus::Active(b),
+            finished(None, DialogueEndReason::Cancelled),
+            finished(Some(a), DialogueEndReason::Cancelled),
+            finished(Some(b), DialogueEndReason::Cancelled),
+            finished(Some(a), DialogueEndReason::Completed),
+            finished(Some(a), DialogueEndReason::NoChoices),
+        ];
+        let requests = [
+            None,
+            Some(DialogueRequest::Advance),
+            Some(DialogueRequest::Choose(0)),
+            Some(DialogueRequest::Choose(1)),
+            Some(DialogueRequest::Cancel),
+        ];
+
+        let mut seen = Vec::new();
+        for status in statuses {
+            for pending in requests {
+                {
+                    let mut runner = world.get_mut::<DialogueRunner>(e).unwrap();
+                    runner.status = status;
+                    runner.pending = pending;
+                }
+                seen.push(((status, pending), hash_world_state(&world)));
+            }
+        }
+        for (i, (state, hash)) in seen.iter().enumerate() {
+            for (other_state, other_hash) in &seen[i + 1..] {
+                assert_ne!(
+                    hash, other_hash,
+                    "{state:?} and {other_state:?} must hash differently"
+                );
+            }
         }
     }
 

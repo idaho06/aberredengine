@@ -25,6 +25,7 @@ use aberred_core::resources::input::InputState;
 use aberred_core::resources::signal_keys as sk;
 use aberred_core::resources::systems_store::SystemsStore;
 use aberred_core::systems::collision_detector::collision_detector;
+use aberred_core::systems::dialogue::dialogue_system;
 use aberred_core::systems::input_simple_controller::input_simple_controller;
 use aberred_core::systems::phase::phase_system;
 use aberred_core::systems::scene_dispatch::WorldDrawCtx;
@@ -502,6 +503,19 @@ fn test_build_logic_schedules_runs_phase_system_first() {
     assert!(phase < sim_index(&ids, aberred_core::systems::menu::menu_spawn_system));
     assert!(phase < sim_index(&ids, input_simple_controller));
     assert!(phase < sim_index(&ids, collision_detector));
+}
+
+/// `dialogue_system` runs in `SimSet::Phases`: after the signal intents it may
+/// read are applied, before spawns, input and collision, so a request set
+/// anywhere in a tick moves its runner on the next.
+#[test]
+fn test_build_logic_schedules_runs_dialogue_system_in_phases() {
+    let (ids, _) = logic_schedule_type_ids(false);
+    let dialogue = sim_index(&ids, dialogue_system);
+    assert!(sim_index(&ids, apply_signal_intents) < dialogue);
+    assert!(dialogue < sim_index(&ids, aberred_core::systems::menu::menu_spawn_system));
+    assert!(dialogue < sim_index(&ids, input_simple_controller));
+    assert!(dialogue < sim_index(&ids, collision_detector));
 }
 
 /// With Lua, `lua_phase_callbacks_system` runs in `SimSet::PostCollision`: after

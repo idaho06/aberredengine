@@ -21,6 +21,7 @@ use aberred_core::systems::camera_follow::camera_follow_system;
 use aberred_core::systems::collision_detector::collision_detector;
 use aberred_core::systems::collision_rule::{collision_ended_system, has_rule_contacts};
 use aberred_core::systems::collision_rule_index::rebuild_rule_index;
+use aberred_core::systems::dialogue::dialogue_system;
 use aberred_core::systems::dynamic_text_size::dynamic_text_size_system;
 use aberred_core::systems::entity_registrations::prune_dead_entity_registrations;
 #[cfg(feature = "lua")]
@@ -108,10 +109,13 @@ pub enum SimSet {
     /// `WorldSignals`, `NextScene` and `NextGameState`, before anything this
     /// tick reads them.
     ApplyIntents,
-    /// `phase_system`, in every game state: applies `Phase` transitions
-    /// requested during the previous tick and triggers `PhaseEntered`/
-    /// `PhaseExited`. It runs before every later group, so a transition
-    /// requested anywhere in a tick (system or observer) applies on the next.
+    /// `phase_system` and `dialogue_system`, in every game state:
+    /// `phase_system` applies `Phase` transitions requested during the
+    /// previous tick and triggers `PhaseEntered`/`PhaseExited`;
+    /// `dialogue_system` applies each `DialogueRunner`'s pending request and
+    /// triggers the dialogue events. Both run before every later group, so a
+    /// transition or request set anywhere in a tick (system or observer)
+    /// applies on the next.
     Phases,
     /// One-shot spawns reacting to `Added<T>` (menu/grid_layout/tilemap) and
     /// game-state transitions (`check_pending_state`; `Setup` → `Playing`
@@ -310,6 +314,7 @@ impl EngineBuilder {
         // the chain.
         sim.add_systems(apply_signal_intents.in_set(SimSet::ApplyIntents));
         sim.add_systems(phase_system.in_set(SimSet::Phases));
+        sim.add_systems(dialogue_system.in_set(SimSet::Phases));
         sim.add_systems(menu_spawn_system.in_set(SimSet::Spawn));
         sim.add_systems(grid_layout_spawn_system.in_set(SimSet::Spawn));
         // .after(menu_spawn_system): both queue into the logic world's
