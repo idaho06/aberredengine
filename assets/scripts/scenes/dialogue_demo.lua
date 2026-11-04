@@ -4,59 +4,52 @@
 -- in setup.lua's load_dialogue_demo().
 --
 -- The NPC spawns with :with_dialogue("guard") plus the three dialogue
--- callbacks. The callbacks copy the plain values they need out of the
--- dialogue tables into module state and drive screen-space text through
--- WorldSignals (dlg_speaker, dlg_text, dlg_hint), because Lua has no runtime
--- text setter. The top-right inventory (keys, swords, coins) binds to the
+-- callbacks. The callbacks read the plain values they need out of the
+-- dialogue tables and drive screen-space text through WorldSignals
+-- (dlg_speaker, dlg_text, dlg_hint), because Lua has no runtime text
+-- setter. The top-right inventory (keys, swords, coins) binds to the
 -- integers the dialogue conditions and effects read and write.
 --
--- Every confirm goes through an engine menu component (registered as
--- "dialogue_menu") that handles up/down, confirm and the normal/selected
--- colours itself: a choices node lists its choices (locked ones keep the item
--- id "locked" and a "(locked) " label prefix), a plain node lists one
--- "Continue" item, and an ended dialogue lists the two NPCs to talk to. The
--- scene's update reads no action keys: the menu confirms during input
--- resolution, ahead of the dialogue system in the same tick, so a second
--- reader of the same press would act on the node the press just entered.
--- The menu's items are fixed at spawn, so it is despawned and respawned on
--- every node. Back cancels the dialogue and returns to the menu.
+-- Every confirm goes through one engine menu component (registered as
+-- "dialogue_menu") with a text cursor, spawned once with an empty item list:
+-- the engine handles up/down, confirm and the normal/selected colours itself.
+-- Every dialogue node, and the end of the dialogue, replaces its items with
+-- engine.entity_menu_set_items: a choices node lists its choices, each locked
+-- choice a disabled item that up/down skips and the menu draws dimmed; a plain
+-- node lists one "Continue" item, and an ended dialogue lists the two NPCs
+-- to talk to. The scene's update reads no action keys: the menu confirms
+-- during input resolution, ahead of the dialogue system in the same tick,
+-- so a second reader of the same press would act on the node the press just
+-- entered.
+-- Back cancels the dialogue and returns to the menu.
 
 local M = {}
 
 local SCREEN_W, SCREEN_H = 640, 360
 
--- Module state, reset by M.spawn(). The ctx and dialogue callback tables are
--- never stored: the callbacks copy the plain values they need.
-local menu_items  -- 1-based array of { id, label } for the current menu
-
 -- ─── Choice menu ────────────────────────────────────────────────────────────
 
---- Despawns the current choice menu, when present.
-local function despawn_choice_menu()
-    local menu = engine.get_entity("dialogue_menu")
-    if menu then
-        engine.entity_menu_despawn(menu)
-    end
-end
-
---- Spawns the menu for the current node from the copied menu_items. The
---- engine handles up/down (wrapping) and confirm itself and draws the
---- normal/selected colours; the items are fixed at spawn, so the menu is
---- respawned per node.
+--- Spawns the dialogue choice menu, registered as "dialogue_menu", with an
+--- empty item list; every dialogue node replaces the items in place with
+--- engine.entity_menu_set_items. The engine handles up/down (wrapping) and
+--- confirm itself and draws the normal/selected colours.
 local function spawn_choice_menu()
     engine.spawn()
-        :with_menu(menu_items, 28, 244, "default", 14, 16, true)
+        :with_menu({}, 16, 244, "default", 14, 16, true)
         :with_menu_colors(140, 200, 255, 255, 255, 214, 110, 255)
+        :with_menu_cursor_text("→")
         :with_lua_menu_selected("dialogue_demo_menu_selected")
         :register_as("dialogue_menu")
         :build()
 end
 
---- Despawns the current choice menu when present and spawns a new one from
---- the copied menu_items.
-local function respawn_choice_menu()
-    despawn_choice_menu()
-    spawn_choice_menu()
+--- Replaces the items of the menu registered as "dialogue_menu", when it
+--- exists.
+local function set_menu_items(items)
+    local menu = engine.get_entity("dialogue_menu")
+    if menu then
+        engine.entity_menu_set_items(menu, items)
+    end
 end
 
 -- ─── Signal-driven lines ────────────────────────────────────────────────────
@@ -94,56 +87,49 @@ local function reset_story_state()
     engine.set_integer("coins", 0)
 end
 
---- Clears the speaker/text/hint signals, despawns the choice menu and attaches
---- the dialogue registered under `key` to the NPC, restarting the conversation.
+--- Clears the speaker/text/hint signals and attaches the dialogue registered
+--- under `key` to the NPC, restarting the conversation.
 local function restart_dialogue(key)
     local npc = engine.get_entity("dialogue_npc")
     if not npc then
         return
     end
     clear_dialogue_signals()
-    despawn_choice_menu()
     engine.entity_insert_dialogue(npc, key)
 end
 
 -- ─── Callbacks (local — injected into _G by main.lua) ───────────────────────
 
---- Dialogue node-entered callback: copies the line and the choices' plain
---- values into module state, writes the signal-driven lines and respawns the
---- menu: the node's choices, or one "Continue" item on a node without any.
+--- Dialogue node-entered callback: writes the speaker and the line to the
+--- signal-driven text, replaces the menu's items with the node's choices (a
+--- locked choice a disabled item) or with one "Continue" item on a node
+--- without any, and writes the hint line.
 --- @param ctx EntityContext
 --- @param dialogue DialogueLine
 local function dialogue_demo_node_entered(ctx, dialogue)
     engine.set_string("dlg_speaker", dialogue.speaker or "")
     engine.set_string("dlg_text", dialogue.text or "")
-    menu_items = {}
+    local items = {}
     for _, choice in ipairs(dialogue.choices) do
-        local id = "open"
-        local label = choice.text or ""
-        if not choice.available then
-            id = "locked"
-            label = "(locked) " .. label
-        end
-        menu_items[#menu_items + 1] = { id = id, label = label }
+        items[#items + 1] = {
+            id = "open",
+            label = choice.text or "",
+            enabled = choice.available and true or false,
+        }
     end
-    if #menu_items == 0 then
-        menu_items[1] = { id = "continue", label = "Continue" }
+    if #items == 0 then
+        items[1] = { id = "continue", label = "Continue" }
     end
-    respawn_choice_menu()
+    set_menu_items(items)
     engine.set_string("dlg_hint", "up/down: select - action_1: confirm - back: leave")
 end
 
 --- Menu-selected callback: an open pick chooses the matching dialogue choice,
---- "continue" advances, an ended-menu pick restarts a conversation, and a
---- locked pick is refused by respawning the menu.
+--- "continue" advances, and an ended-menu pick restarts a conversation.
 --- @param ctx table Context with menu_id, item_id (string) and item_index (0-based)
 local function dialogue_demo_menu_selected(ctx)
     local npc = engine.get_entity("dialogue_npc")
-    if ctx.item_id == "locked" then
-        -- A confirm deactivates a menu for good and Lua cannot reactivate it,
-        -- so the refused pick is answered by respawning the menu.
-        respawn_choice_menu()
-    elseif not npc then
+    if not npc then
         return
     elseif ctx.item_id == "continue" then
         engine.entity_dialogue_advance(npc)
@@ -164,21 +150,20 @@ local function dialogue_demo_choice_selected(ctx, dialogue)
         ") on node '" .. dialogue.node .. "'")
 end
 
---- Dialogue ended callback: respawns the menu with the two conversations to
---- start (the innkeeper is locked until the guard has opened the gate) and
---- writes the end reason as the hint.
+--- Dialogue ended callback: replaces the menu's items with the two
+--- conversations to start (the innkeeper is disabled until the guard has
+--- opened the gate) and writes the end reason as the hint.
 --- @param ctx EntityContext
 --- @param dialogue DialogueEnded
 local function dialogue_demo_ended(ctx, dialogue)
-    local innkeeper = { id = "talk_innkeeper", label = "Talk to the innkeeper" }
-    if not engine.has_flag("gate_open") then
-        innkeeper = { id = "locked", label = "(locked) Talk to the innkeeper" }
-    end
-    menu_items = {
+    set_menu_items({
         { id = "talk_guard", label = "Talk to the guard" },
-        innkeeper,
-    }
-    respawn_choice_menu()
+        {
+            id = "talk_innkeeper",
+            label = "Talk to the innkeeper",
+            enabled = engine.has_flag("gate_open"),
+        },
+    })
     engine.set_string("dlg_hint", "ended: " .. dialogue.reason .. " - up/down: select - action_1: confirm")
 end
 
@@ -213,10 +198,12 @@ function M.spawn()
     engine.set_background_color(20, 24, 30)
     engine.post_process_shader(nil)
 
-    menu_items = {}
-
     clear_dialogue_signals()
     reset_story_state()
+
+    -- The choice menu spawns before the NPC, so its registration exists when
+    -- the NPC's first dialogue node replaces its items.
+    spawn_choice_menu()
 
     -- The NPC runs the guard dialogue from the moment it spawns.
     engine.spawn()
