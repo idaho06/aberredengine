@@ -196,17 +196,21 @@ mod tests {
         cmds
     }
 
-    /// Runs `script` on a fresh runtime and returns the drained `dialogue_commands`.
-    fn run_and_drain(script: &str) -> Vec<DialogueLuaCmd> {
+    /// Runs `script` on a fresh runtime.
+    fn run_script(script: &str) -> LuaRuntime {
         let runtime = LuaRuntime::new().unwrap();
         runtime.lua().load(script).exec().unwrap();
-        drain_dialogue(&runtime)
+        runtime
+    }
+
+    /// Runs `script` on a fresh runtime and returns the drained `dialogue_commands`.
+    fn run_and_drain(script: &str) -> Vec<DialogueLuaCmd> {
+        drain_dialogue(&run_script(script))
     }
 
     /// Runs `script` on a fresh runtime and returns the drained `entity_commands`.
     fn run_and_drain_entity_cmds(script: &str) -> Vec<EntityCmd> {
-        let runtime = LuaRuntime::new().unwrap();
-        runtime.lua().load(script).exec().unwrap();
+        let runtime = run_script(script);
         let mut queued = Vec::new();
         runtime.drain_entity_commands_into(&mut queued);
         queued.into_iter().map(|c| c.cmd).collect()

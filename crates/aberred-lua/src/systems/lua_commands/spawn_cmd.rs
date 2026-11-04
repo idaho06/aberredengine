@@ -760,7 +760,6 @@ mod tests {
     use aberred_core::components::timer::Timer;
     use aberred_core::components::tween::{Easing, LoopMode, Tween};
     use aberred_core::events::phase::PhaseEntered;
-    use aberred_core::resources::dialogue_store::DialogueStore;
     use aberred_core::resources::uniform_value::UniformValue;
     use aberred_core::resources::world_time::WorldTime;
     use aberred_core::systems::phase::phase_system;
@@ -1858,8 +1857,7 @@ mod tests {
 
     #[test]
     fn lua_spawn_with_an_unknown_dialogue_key_spawns_without_a_runner() {
-        let mut world = World::new();
-        world.insert_resource(DialogueStore::default());
+        let (mut world, _tree) = world_with_dialogue_store();
         let mut signals = WorldSignals::default();
 
         let e = spawn_from_lua(
