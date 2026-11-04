@@ -7,6 +7,7 @@ Complete reference for game developers using Lua scripting in Aberred Engine.
 - [Getting Started](#getting-started)
 - [Script Execution Flow](#script-execution-flow)
   - [Rust Events and Lua Callbacks](#4-rust-events-and-lua-callbacks)
+- [Dialogues](#dialogues)
 - [Logging Functions](#logging-functions)
 - [Input System](#input-system)
   - [Input Rebinding](#input-rebinding)
@@ -428,6 +429,189 @@ the event fires.
 Details: [Collision Handling](#collision-handling), [GUI Widgets](#gui-widgets), [Menu Components](#menu-components),
 [LuaOnAnimationFinished Component](#luaonanimationfinished-component), [Tween Components](#tween-components),
 [Additional Components](#additional-components) (timers, collision rules), [Phase Component](#phase-component).
+
+---
+
+## Dialogues
+
+A dialogue is a named conversation tree kept in the engine's dialogue store. An entity runs a dialogue through a
+`DialogueRunner`, which steps the tree as the script requests transitions and fires Lua callbacks on each step.
+
+### Authoring a dialogue
+
+A dialogue definition is a `start` node id plus a `nodes` list. A node continues via `next`, or takes `choices`
+instead — never both. A node with neither is terminal. The same shape works as a JSON file and as a Lua table.
+
+```json
+{
+  "start": "greet",
+  "nodes": [
+    {
+      "id": "greet",
+      "speaker": "Guard",
+      "text": "Halt! Who goes there?",
+      "choices": [
+        { "text": "A friend.", "next": "friend" },
+        {
+          "text": "Here is my pass.",
+          "next": "pass",
+          "when": { "type": "flag", "key": "has_pass" },
+          "effects": [ { "type": "set_flag", "key": "pass_shown" } ],
+          "labels": ["bribe"]
+        },
+        { "text": "Never mind." }
+      ]
+    },
+    { "id": "friend", "speaker": "Guard", "text": "Hm. Move along." },
+    {
+      "id": "pass",
+      "speaker": "Guard",
+      "text": "Carry on.",
+      "next": "friend",
+      "on_enter": [ { "type": "add_integer", "key": "gold", "delta": -1 } ],
+      "labels": ["gate"]
+    }
+  ]
+}
+```
+
+Node fields: `id`, `speaker` (absent for narration), `text`, `labels`, `on_enter` (effects applied to world
+signals when the node is entered), `next`, `choices`. A choice has `text`, `next` (absent ends the
+conversation), `when`, `effects` (applied to world signals when picked) and `labels`.
+
+Conditions and effects are tables with a `type` field:
+
+| `type` | fields | meaning |
+|--------|--------|---------|
+| `flag` | `key` | condition: true while the flag `key` is set |
+| `integer` | `key`, `op`, `value` | condition: compares integer signal `key` with `value`; `op` is `eq`/`ne`/`lt`/`le`/`gt`/`ge`; a missing key reads as `0` |
+| `string_equals` | `key`, `value` | condition: true when string signal `key` equals `value` |
+| `not` | `cond` | condition: negates the inner condition |
+| `all` / `any` | `all` / `any` | condition: every / at least one sub-condition holds |
+| `set_flag` / `remove_flag` | `key` | effect: sets / removes the flag `key` |
+| `set_integer` / `add_integer` | `key`, `value` / `delta` | effect: writes / adds to the integer signal `key` |
+| `set_scalar` | `key`, `value` | effect: writes the scalar signal `key` |
+| `set_string` | `key`, `value` | effect: writes the string signal `key` |
+
+### `engine.register_dialogue(key, def)` / `engine.load_dialogue(key, path)`
+
+Register a dialogue under `key` from a Lua table or from a JSON file at `path`. Both validate the tree at the
+call: an invalid tree (unknown `start`, dangling `next`, empty `choices` list, bad condition, unreadable file, …)
+raises a Lua error naming the key and queues nothing.
+
+```lua
+function on_setup()
+    engine.register_dialogue("quest", {
+        start = "ask",
+        nodes = {
+            { id = "ask", speaker = "Elder", text = "Help?", choices = {
+                { text = "Yes", next = "thanks",
+                  effects = { { type = "set_flag", key = "accepted" } } },
+                { text = "No" },
+            } },
+            { id = "thanks", text = "Thanks" },
+        },
+    })
+
+    engine.load_dialogue("intro", "./assets/dialogues/intro.json")
+end
+```
+
+Registration is accepted from any callback and lands at the next regular drain — one made inside a timer or
+collision callback lands at that tick's update drain. Register in `on_setup` or `on_scene_enter` before
+spawning an entity with that key, so the key is in the store when the spawn applies.
+
+### Running a dialogue on an entity
+
+#### `:with_dialogue(key)`
+
+Attach a `DialogueRunner` for the tree registered under `key`; an unknown key spawns the entity without a
+runner.
+
+```lua
+engine.spawn()
+    :with_dialogue("quest")
+    :with_lua_dialogue_node_entered("on_node")
+    :with_lua_dialogue_choice_selected("on_choice")
+    :with_lua_dialogue_ended("on_end")
+    :register_as("elder")
+    :build()
+```
+
+#### `engine.entity_insert_dialogue(entity_id, key)` / `engine.entity_remove_dialogue(entity_id)`
+
+Attach a runner to a live entity (an existing runner is replaced; an unknown key inserts nothing) or remove it
+(a no-op without one). `entity_id` is the u64 entity id, e.g. `ctx.entity_id` or `engine.get_entity(key)`.
+
+#### `engine.entity_dialogue_advance(entity_id)` / `engine.entity_dialogue_choose(entity_id, index)` / `engine.entity_dialogue_cancel(entity_id)`
+
+Request a transition: advance past the current node, pick a choice, or cancel the dialogue. Each is a no-op
+without a runner. The `index` for `choose` is the 0-based declared index of the choice. Advance on a choices
+node is ignored; an out-of-range or unavailable choice warns and changes nothing.
+
+A runner takes at most one transition per tick, and a request made in tick n applies in tick n+1:
+
+```lua
+function on_update_main(input, dt)
+    local elder = engine.get_entity("elder")
+    if input.digital.action_1.just_pressed then
+        engine.entity_dialogue_advance(elder)
+    elseif input.digital.action_2.just_pressed then
+        engine.entity_dialogue_choose(elder, 0)  -- first declared choice
+    elseif input.digital.back.just_pressed then
+        engine.entity_dialogue_cancel(elder)
+    end
+end
+```
+
+### Dialogue callbacks
+
+#### `:with_lua_dialogue_node_entered(callback)` / `:with_lua_dialogue_choice_selected(callback)` / `:with_lua_dialogue_ended(callback)`
+
+Attach one `fn(ctx, dialogue)` per event kind;
+`engine.entity_insert_lua_dialogue_node_entered/choice_selected/ended(entity_id, callback)` attach the same
+callbacks to a live entity.
+
+- node entered: `dialogue` is a `DialogueLine` — `node` (id of the node entered), `previous` (id of the node
+  left; nil on the first node), `labels`, `speaker` (nil for narration), `text`, and `choices`: a 1-based Lua
+  sequence of `{ index, text, labels, available }` in declared order, so `choices[1].index == 0`; `available`
+  is false when the choice's `when` condition failed on node entry. `choices` is empty on a node without
+  choices and once the dialogue has ended. A node whose choices are all unavailable ends with reason
+  `no_choices`, reporting an empty `choices`.
+- choice selected: `dialogue` is a `DialogueChoiceSelected` — `node` (the node the choice was made on),
+  `index` (0-based declared index), `text`, `labels`; it fires before the target node is entered
+- ended: `dialogue` is a `DialogueEnded` — `node` (id of the last node; nil when cancelled before start) and
+  `reason`: `"completed"`, `"cancelled"` or `"no_choices"`
+
+```lua
+local function on_node(ctx, dialogue)
+    engine.log_info((dialogue.speaker or "narrator") .. ": " .. dialogue.text)
+    for _, choice in ipairs(dialogue.choices) do
+        if choice.available then
+            engine.log_info("  [" .. choice.index .. "] " .. choice.text)
+        end
+    end
+end
+
+local function on_choice(ctx, dialogue)
+    engine.log_info("picked [" .. dialogue.index .. "] " .. dialogue.text .. " on " .. dialogue.node)
+end
+
+local function on_end(ctx, dialogue)
+    engine.log_info("ended on " .. tostring(dialogue.node) .. " (" .. dialogue.reason .. ")")
+end
+```
+
+`ctx` is pooled and reused across callbacks and `dialogue` is built per event: read what you need inside
+the callback; never store `ctx`, `dialogue` or their subtables, and never write to them.
+
+### Dialogue commands in collision callbacks
+
+There are no `collision_` twins for the dialogue commands — call the regular `engine.register_dialogue` /
+`engine.load_dialogue` / `engine.entity_insert_dialogue` / `engine.entity_remove_dialogue` /
+`engine.entity_dialogue_advance` / `engine.entity_dialogue_choose` / `engine.entity_dialogue_cancel` from a
+collision callback; like every regular command there, they apply at the next regular drain (see
+[Callback Command Processing](#3-callback-command-processing)).
 
 ---
 
