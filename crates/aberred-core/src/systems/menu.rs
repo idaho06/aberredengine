@@ -13,7 +13,9 @@ use std::sync::Arc;
 
 use crate::components::dynamic_text::DynamicText;
 use crate::components::group::Group;
-use crate::components::menu::{Menu, MenuAction, MenuActions};
+use crate::components::menu::{
+    Menu, MenuAction, MenuActions, MenuStep, ensure_visible, step_selection,
+};
 use crate::components::screen_position::ScreenPosition;
 use crate::components::signals::Signals;
 use crate::components::sprite::Sprite;
@@ -92,6 +94,10 @@ pub fn menu_spawn_system(
         let origin = menu.origin;
         let item_spacing = menu.item_spacing;
         let visible_count = menu.visible_count;
+        // Put the initial selection on screen before positioning anything.
+        if let Some(vc) = visible_count {
+            menu.scroll_offset = ensure_visible(menu.selected_index, 0, vc);
+        }
         let scroll_offset = menu.scroll_offset;
 
         debug!(
@@ -375,46 +381,34 @@ pub fn menu_controller_observer(
         let old_selected_index = menu.selected_index;
 
         match event.action {
-            InputAction::SecondaryDirectionUp if !menu.items.is_empty() => {
-                if menu.visible_count.is_some() {
-                    // Bounded navigation (no wrap-around when scrolling enabled)
-                    if menu.selected_index > 0 {
-                        menu.selected_index -= 1;
-                        // Scroll up if selection above visible window
-                        if menu.selected_index < menu.scroll_offset {
-                            menu.scroll_offset = menu.selected_index;
+            InputAction::SecondaryDirectionUp | InputAction::SecondaryDirectionDown => {
+                let step = if matches!(event.action, InputAction::SecondaryDirectionUp) {
+                    MenuStep::Prev
+                } else {
+                    MenuStep::Next
+                };
+                // A scroll window bounds the move; without one, selection wraps.
+                let wrap = menu.visible_count.is_none();
+                if let Some(i) = step_selection(&menu.items, menu.selected_index, step, wrap) {
+                    menu.selected_index = i;
+                    changed_selection = true;
+                    if let Some(vc) = menu.visible_count {
+                        let new_offset = ensure_visible(i, menu.scroll_offset, vc);
+                        if new_offset != menu.scroll_offset {
+                            menu.scroll_offset = new_offset;
                             needs_reposition = true;
                         }
-                        changed_selection = true;
                     }
-                } else {
-                    // Original wrap-around behavior
-                    menu.selected_index =
-                        (menu.selected_index + menu.items.len() - 1) % menu.items.len();
-                    changed_selection = true;
-                }
-            }
-            InputAction::SecondaryDirectionDown if !menu.items.is_empty() => {
-                if let Some(visible_count) = menu.visible_count {
-                    // Bounded navigation (no wrap-around when scrolling enabled)
-                    if menu.selected_index < menu.items.len() - 1 {
-                        menu.selected_index += 1;
-                        // Scroll down if selection below visible window
-                        if menu.selected_index >= menu.scroll_offset + visible_count {
-                            menu.scroll_offset = menu.selected_index - visible_count + 1;
-                            needs_reposition = true;
-                        }
-                        changed_selection = true;
-                    }
-                } else {
-                    // Original wrap-around behavior
-                    menu.selected_index = (menu.selected_index + 1) % menu.items.len();
-                    changed_selection = true;
                 }
             }
             InputAction::Action1 | InputAction::Action2 => {
-                if let Some(item) = menu.items.get(menu.selected_index) {
-                    let item_id = item.id.clone();
+                // A disabled or missing item is not confirmable.
+                if let Some(item_id) = menu
+                    .items
+                    .get(menu.selected_index)
+                    .filter(|item| item.enabled)
+                    .map(|item| item.id.clone())
+                {
                     debug!(
                         "menu_controller_observer: Selection confirmed! item_id={}, triggering MenuSelected",
                         item_id
@@ -581,6 +575,7 @@ pub fn menu_selection_observer(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::components::menu::first_enabled;
     use crate::math::{Color, Vec2};
     use crate::resources::world_signals::WorldSignals;
     use bevy_ecs::message::Messages;
@@ -1217,5 +1212,145 @@ mod tests {
 
         let mut sprite_query = world.query::<&Sprite>();
         assert!(sprite_query.iter(&world).next().is_none());
+    }
+
+    /// Returns `five_items` with the given ids disabled; the selection starts
+    /// at the first enabled item, like [`Menu::from_items`].
+    fn five_items_with_disabled(disabled: &[&str]) -> Menu {
+        let mut menu = five_items();
+        for item in &mut menu.items {
+            item.enabled = !disabled.contains(&item.id.as_str());
+        }
+        menu.selected_index = first_enabled(&menu.items).unwrap_or(0);
+        menu
+    }
+
+    #[test]
+    fn spawn_selects_the_first_enabled_item() {
+        let (world, menu) = spawn_menu(five_items_with_disabled(&["a"]));
+        assert_eq!(world.get::<Menu>(menu).unwrap().selected_index, 1);
+    }
+
+    #[test]
+    fn wrap_navigation_skips_disabled_items() {
+        let (mut world, menu) =
+            spawn_menu(five_items_with_disabled(&["b"]).with_selection_sound("blip"));
+        press(&mut world, InputAction::SecondaryDirectionDown);
+        assert_eq!(
+            world.get::<Menu>(menu).unwrap().selected_index,
+            2,
+            "down from a skips disabled b"
+        );
+        press(&mut world, InputAction::SecondaryDirectionUp);
+        assert_eq!(
+            world.get::<Menu>(menu).unwrap().selected_index,
+            0,
+            "up from c skips disabled b"
+        );
+        press(&mut world, InputAction::SecondaryDirectionUp);
+        assert_eq!(
+            world.get::<Menu>(menu).unwrap().selected_index,
+            4,
+            "up from the first wraps to the last"
+        );
+        assert_eq!(played_sounds(&mut world), 3, "one sound per change");
+    }
+
+    #[test]
+    fn bounded_navigation_skips_disabled_items() {
+        let (mut world, menu) = spawn_menu(five_items_with_disabled(&["b"]).with_visible_count(3));
+        press(&mut world, InputAction::SecondaryDirectionDown);
+        let m = world.get::<Menu>(menu).unwrap();
+        assert_eq!(
+            (m.selected_index, m.scroll_offset),
+            (2, 0),
+            "skips disabled b and stays in the window"
+        );
+        press(&mut world, InputAction::SecondaryDirectionUp);
+        assert_eq!(
+            world.get::<Menu>(menu).unwrap().selected_index,
+            0,
+            "up from c skips disabled b"
+        );
+        press(&mut world, InputAction::SecondaryDirectionUp);
+        assert_eq!(
+            world.get::<Menu>(menu).unwrap().selected_index,
+            0,
+            "bounded at the top"
+        );
+    }
+
+    #[test]
+    fn a_skip_that_moves_more_than_one_row_scrolls_the_window() {
+        let (mut world, menu) = spawn_menu(five_items_with_disabled(&["b"]).with_visible_count(2));
+        press(&mut world, InputAction::SecondaryDirectionDown);
+        let m = world.get::<Menu>(menu).unwrap();
+        assert_eq!((m.selected_index, m.scroll_offset), (2, 1));
+        assert_eq!(
+            visible_items(&world, menu),
+            [
+                None,
+                Some(Vec2::new(100.0, 50.0)),
+                Some(Vec2::new(100.0, 60.0)),
+                None,
+                None
+            ]
+        );
+    }
+
+    #[test]
+    fn confirming_a_disabled_selected_item_fires_no_selection_and_keeps_the_menu_active() {
+        let mut menu = five_items_with_disabled(&["b"]);
+        menu.selected_index = 1; // the disabled item
+        let (mut world, menu_entity) = spawn_menu(menu);
+        press(&mut world, InputAction::Action1);
+        assert!(world.resource::<Selections>().0.is_empty());
+        assert!(world.get::<Menu>(menu_entity).unwrap().active);
+        assert!(
+            world
+                .get::<Signals>(menu_entity)
+                .unwrap()
+                .has_flag("waiting_selection")
+        );
+    }
+
+    #[test]
+    fn confirming_an_all_disabled_menu_fires_no_selection_and_keeps_the_menu_active() {
+        let (mut world, menu) = spawn_menu(five_items_with_disabled(&["a", "b", "c", "d", "e"]));
+        press(&mut world, InputAction::Action1);
+        assert!(world.resource::<Selections>().0.is_empty());
+        assert!(world.get::<Menu>(menu).unwrap().active);
+    }
+
+    #[test]
+    fn spawn_scrolls_so_the_first_enabled_item_is_on_screen() {
+        let (world, menu) =
+            spawn_menu(five_items_with_disabled(&["a", "b", "c"]).with_visible_count(2));
+        let m = world.get::<Menu>(menu).unwrap();
+        assert_eq!(m.selected_index, 3);
+        assert_eq!(m.scroll_offset, ensure_visible(3, 0, 2));
+        assert_eq!(m.scroll_offset, 2);
+        assert_eq!(
+            visible_items(&world, menu),
+            [
+                None,
+                None,
+                Some(Vec2::new(100.0, 50.0)),
+                Some(Vec2::new(100.0, 60.0)),
+                None
+            ]
+        );
+    }
+
+    #[test]
+    fn an_all_disabled_menu_keeps_index_zero_and_navigation_is_a_noop() {
+        let (mut world, menu) = spawn_menu(
+            five_items_with_disabled(&["a", "b", "c", "d", "e"]).with_selection_sound("blip"),
+        );
+        assert_eq!(world.get::<Menu>(menu).unwrap().selected_index, 0);
+        press(&mut world, InputAction::SecondaryDirectionDown);
+        press(&mut world, InputAction::SecondaryDirectionUp);
+        assert_eq!(world.get::<Menu>(menu).unwrap().selected_index, 0);
+        assert_eq!(played_sounds(&mut world), 0, "no change, no sound");
     }
 }

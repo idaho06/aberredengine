@@ -26,6 +26,28 @@ pub struct MenuItem {
     pub label: String,
     pub dynamic_text: bool,
     pub entity: Option<Entity>, // If not dynamic_text, the entity holding the text sprite
+    /// Whether the item can be selected; disabled items are skipped by
+    /// navigation and ignored by confirm.
+    pub enabled: bool,
+}
+
+impl MenuItem {
+    /// Creates an enabled dynamic-text item with no entity yet.
+    pub fn new(id: impl Into<String>, label: impl Into<String>) -> MenuItem {
+        MenuItem {
+            id: id.into(),
+            label: label.into(),
+            dynamic_text: true,
+            entity: None,
+            enabled: true,
+        }
+    }
+
+    /// Returns the item with `enabled` set to `false`.
+    pub fn disabled(mut self) -> MenuItem {
+        self.enabled = false;
+        self
+    }
 }
 
 /// Interactive menu component.
@@ -78,33 +100,18 @@ impl Menu {
         item_spacing: f32,
         use_screen_space: bool,
     ) -> Self {
-        let options = labels
+        let items = labels
             .iter()
-            .map(|(id, label)| MenuItem {
-                id: id.to_string(),
-                label: label.to_string(),
-                dynamic_text: true,
-                entity: None,
-            })
+            .map(|(id, label)| MenuItem::new(*id, *label))
             .collect();
-        Self {
-            active: true,
-            items: options,
-            selected_index: 0,
-            font: font.into(),
+        Self::from_items(
+            items,
+            origin,
+            font,
             font_size,
             item_spacing,
-            normal_color: Color::WHITE,
-            selected_color: Color::YELLOW,
-            cursor_entity: None,
-            selection_change_sound: None,
-            origin,
             use_screen_space,
-            visible_count: None,
-            scroll_offset: 0,
-            top_indicator_entity: None,
-            bottom_indicator_entity: None,
-        }
+        )
     }
     pub fn with_cursor(mut self, cursor_entity: Entity) -> Self {
         self.cursor_entity = Some(cursor_entity);
@@ -128,6 +135,93 @@ impl Menu {
     pub fn with_visible_count(mut self, count: usize) -> Self {
         self.visible_count = Some(count);
         self
+    }
+    /// Builds a menu from existing items with the same defaults as [`Menu::new`].
+    /// `selected_index` starts at the first enabled item ([`first_enabled`]), or 0
+    /// when every item is disabled.
+    pub fn from_items(
+        items: Vec<MenuItem>,
+        origin: Vec2,
+        font: impl Into<String>,
+        font_size: f32,
+        item_spacing: f32,
+        use_screen_space: bool,
+    ) -> Menu {
+        let selected_index = first_enabled(&items).unwrap_or(0);
+        Menu {
+            active: true,
+            items,
+            selected_index,
+            font: font.into(),
+            font_size,
+            item_spacing,
+            normal_color: Color::WHITE,
+            selected_color: Color::YELLOW,
+            cursor_entity: None,
+            selection_change_sound: None,
+            origin,
+            use_screen_space,
+            visible_count: None,
+            scroll_offset: 0,
+            top_indicator_entity: None,
+            bottom_indicator_entity: None,
+        }
+    }
+}
+
+/// Direction of a selection step.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MenuStep {
+    /// Toward lower indices.
+    Prev,
+    /// Toward higher indices.
+    Next,
+}
+
+/// Returns the index of the first enabled item, or `None` when the slice is
+/// empty or every item is disabled.
+pub fn first_enabled(items: &[MenuItem]) -> Option<usize> {
+    items.iter().position(|item| item.enabled)
+}
+
+/// Returns the index of the next enabled item in the `step` direction from
+/// `from` (exclusive). With `wrap`, the search cycles over all other items;
+/// without it, the search stops at the ends of the slice. Returns `None` when
+/// no other enabled item exists, meaning the selection stays put.
+pub fn step_selection(
+    items: &[MenuItem],
+    from: usize,
+    step: MenuStep,
+    wrap: bool,
+) -> Option<usize> {
+    let len = items.len();
+    if len == 0 {
+        return None;
+    }
+    let from = from.min(len - 1);
+    // Visits every other index once, nearest to `from` first; without `wrap`,
+    // indices past an end are dropped.
+    (1..len)
+        .filter_map(|d| match step {
+            MenuStep::Next => {
+                let i = from + d;
+                (i < len || wrap).then_some(i % len)
+            }
+            MenuStep::Prev => from.checked_sub(d).or_else(|| wrap.then(|| from + len - d)),
+        })
+        .find(|&i| items[i].enabled)
+}
+
+/// Returns the `scroll_offset` that puts `selected` inside
+/// `[scroll_offset, scroll_offset + visible_count)`, changed as little as
+/// possible; an already visible `selected` leaves the offset unchanged.
+pub fn ensure_visible(selected: usize, scroll_offset: usize, visible_count: usize) -> usize {
+    if selected < scroll_offset {
+        selected
+    } else if selected >= scroll_offset + visible_count {
+        selected - visible_count + 1
+    } else {
+        scroll_offset
     }
 }
 
@@ -214,5 +308,104 @@ mod tests {
         let actions = MenuActions::new().with("quit", MenuAction::RequestQuit);
         assert!(matches!(actions.get("quit"), MenuAction::RequestQuit));
         assert!(matches!(actions.get("missing"), MenuAction::Noop));
+    }
+
+    #[test]
+    fn new_marks_every_item_enabled() {
+        let menu = sample_menu();
+        assert!(menu.items.iter().all(|i| i.enabled));
+    }
+
+    fn item(id: &str, enabled: bool) -> MenuItem {
+        let item = MenuItem::new(id, id);
+        if enabled { item } else { item.disabled() }
+    }
+
+    #[test]
+    fn from_items_selects_the_first_enabled_item() {
+        let items = vec![item("a", false), item("b", true), item("c", true)];
+        let menu = Menu::from_items(items, Vec2::ZERO, "font", 12.0, 4.0, false);
+        assert_eq!(menu.selected_index, 1);
+        assert!(menu.active);
+        assert_eq!(menu.items.len(), 3);
+    }
+
+    #[test]
+    fn from_items_with_every_item_disabled_selects_index_zero() {
+        let items = vec![item("a", false), item("b", false)];
+        let menu = Menu::from_items(items, Vec2::ZERO, "font", 12.0, 4.0, false);
+        assert_eq!(menu.selected_index, 0);
+    }
+
+    #[test]
+    fn first_enabled_skips_a_leading_disabled_item() {
+        let items = vec![item("a", false), item("b", true), item("c", true)];
+        assert_eq!(first_enabled(&items), Some(1));
+    }
+
+    #[test]
+    fn first_enabled_is_none_for_empty_and_all_disabled() {
+        assert_eq!(first_enabled(&[]), None);
+        let items = vec![item("a", false), item("b", false)];
+        assert_eq!(first_enabled(&items), None);
+    }
+
+    #[test]
+    fn step_selection_skips_a_disabled_item_in_each_direction() {
+        let items = vec![
+            item("a", true),
+            item("b", false),
+            item("c", true),
+            item("d", true),
+        ];
+        assert_eq!(step_selection(&items, 0, MenuStep::Next, true), Some(2));
+        assert_eq!(step_selection(&items, 2, MenuStep::Prev, true), Some(0));
+    }
+
+    #[test]
+    fn step_selection_wraps_past_the_ends() {
+        let items = vec![item("a", true), item("b", false), item("c", true)];
+        assert_eq!(step_selection(&items, 2, MenuStep::Next, true), Some(0));
+        assert_eq!(step_selection(&items, 0, MenuStep::Prev, true), Some(2));
+    }
+
+    #[test]
+    fn step_selection_bounded_stops_at_the_ends() {
+        let items = vec![item("a", true), item("b", true), item("c", true)];
+        assert_eq!(step_selection(&items, 0, MenuStep::Next, false), Some(1));
+        assert_eq!(step_selection(&items, 2, MenuStep::Prev, false), Some(1));
+        assert_eq!(step_selection(&items, 0, MenuStep::Prev, false), None);
+        assert_eq!(step_selection(&items, 2, MenuStep::Next, false), None);
+    }
+
+    #[test]
+    fn step_selection_is_none_when_no_other_item_is_enabled() {
+        let all_disabled = vec![item("a", false), item("b", false)];
+        assert_eq!(step_selection(&all_disabled, 0, MenuStep::Next, true), None);
+        assert_eq!(step_selection(&all_disabled, 1, MenuStep::Prev, true), None);
+        let only_current = vec![item("a", true), item("b", false), item("c", false)];
+        assert_eq!(step_selection(&only_current, 0, MenuStep::Next, true), None);
+        assert_eq!(step_selection(&only_current, 0, MenuStep::Prev, true), None);
+    }
+
+    #[test]
+    fn ensure_visible_leaves_an_on_screen_selection_alone() {
+        assert_eq!(ensure_visible(0, 0, 3), 0);
+        assert_eq!(ensure_visible(2, 0, 3), 0);
+        assert_eq!(ensure_visible(3, 2, 3), 2);
+    }
+
+    #[test]
+    fn ensure_visible_scrolls_minimally_to_reveal_the_selection() {
+        assert_eq!(
+            ensure_visible(0, 2, 3),
+            0,
+            "above the window: offset = selected"
+        );
+        assert_eq!(
+            ensure_visible(5, 0, 3),
+            3,
+            "below: selected - visible_count + 1"
+        );
     }
 }

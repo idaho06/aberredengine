@@ -33,7 +33,7 @@ pub use aberred_core::components::gui_interactable::GuiInteractable;
 pub use aberred_core::components::gui_offset::GuiOffset;
 pub use aberred_core::components::gui_window::GuiWindow;
 pub use aberred_core::components::input_controlled::{AccelerationControlled, InputControlled};
-pub use aberred_core::components::menu::{Menu, MenuAction, MenuActions};
+pub use aberred_core::components::menu::{Menu, MenuAction, MenuActions, MenuItem};
 pub use aberred_core::components::particle_emitter::{EmitterShape, ParticleEmitter, TtlSpec};
 pub use aberred_core::components::persistent::Persistent;
 pub use aberred_core::components::phase::Phase;
