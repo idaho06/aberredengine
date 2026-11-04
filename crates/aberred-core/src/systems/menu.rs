@@ -174,9 +174,11 @@ pub fn menu_spawn_system(
         let origin = menu.origin;
         let item_spacing = menu.item_spacing;
         let visible_count = menu.visible_count;
-        // Put the initial selection on screen before positioning anything.
+        // Put the initial selection on screen before positioning anything; a
+        // window that already shows it stays where it is (a rebuild has reset
+        // the offset to 0 by now).
         if let Some(vc) = visible_count {
-            menu.scroll_offset = ensure_visible(menu.selected_index, 0, vc);
+            menu.scroll_offset = ensure_visible(menu.selected_index, menu.scroll_offset, vc);
         }
         let scroll_offset = menu.scroll_offset;
 
@@ -1455,6 +1457,38 @@ mod tests {
                 "a rebuild leaves none either"
             );
         }
+    }
+
+    #[test]
+    fn spawn_keeps_a_preset_scroll_offset_that_already_shows_the_selection() {
+        let items: Vec<MenuItem> = (0..6)
+            .map(|i| MenuItem::new(format!("i{i}"), format!("I{i}")))
+            .collect();
+        let mut menu =
+            Menu::from_items(items, Vec2::new(100.0, 50.0), "test_font", 12.0, 10.0, true)
+                .with_visible_count(3);
+        menu.selected_index = 3;
+        menu.scroll_offset = 3;
+
+        let (world, menu_entity) = spawn_menu(menu);
+
+        let m = world.get::<Menu>(menu_entity).unwrap();
+        assert_eq!(
+            (m.selected_index, m.scroll_offset),
+            (3, 3),
+            "the window already shows the selection and stays"
+        );
+        assert_eq!(
+            visible_items(&world, menu_entity),
+            [
+                None,
+                None,
+                None,
+                Some(Vec2::new(100.0, 50.0)),
+                Some(Vec2::new(100.0, 60.0)),
+                Some(Vec2::new(100.0, 70.0)),
+            ]
+        );
     }
 
     /// Returns `five_items` with the given ids disabled; the selection starts
