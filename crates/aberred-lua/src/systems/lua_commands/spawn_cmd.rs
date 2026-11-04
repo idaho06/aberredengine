@@ -540,14 +540,21 @@ fn apply_ui_components(
         ));
     }
     if let Some(menu_data) = menu {
-        use aberred_core::components::menu::{Menu, MenuActions};
-        let labels: Vec<(&str, &str)> = menu_data
+        use aberred_core::components::menu::{Menu, MenuActions, MenuItem};
+        let items: Vec<MenuItem> = menu_data
             .items
-            .iter()
-            .map(|(id, label)| (id.as_str(), label.as_str()))
+            .into_iter()
+            .map(|item| {
+                let menu_item = MenuItem::new(item.id, item.label);
+                if item.enabled {
+                    menu_item
+                } else {
+                    menu_item.disabled()
+                }
+            })
             .collect();
-        let mut menu_component = Menu::new(
-            &labels,
+        let mut menu_component = Menu::from_items(
+            items,
             Vec2 {
                 x: menu_data.origin_x,
                 y: menu_data.origin_y,
@@ -557,6 +564,13 @@ fn apply_ui_components(
             menu_data.item_spacing,
             menu_data.use_screen_space,
         );
+        if let Some(disabled) = menu_data.disabled_color {
+            menu_component = menu_component
+                .with_disabled_color(Color::new(disabled.r, disabled.g, disabled.b, disabled.a));
+        }
+        if let Some(text) = menu_data.cursor_text {
+            menu_component = menu_component.with_cursor_text(text);
+        }
         if let (Some(normal), Some(selected)) = (menu_data.normal_color, menu_data.selected_color) {
             menu_component = menu_component.with_colors(
                 Color::new(normal.r, normal.g, normal.b, normal.a),
@@ -1695,6 +1709,31 @@ mod tests {
         assert!(matches!(actions.get("play"), MenuAction::RequestScene(s) if s == "level01"));
         assert!(matches!(actions.get("opts"), MenuAction::RequestScene(s) if s == "options"));
         assert!(matches!(actions.get("quit"), MenuAction::RequestQuit));
+    }
+
+    #[test]
+    fn lua_spawn_builds_menu_with_disabled_item_disabled_color_and_cursor_text() {
+        use aberred_core::components::menu::Menu;
+        let mut world = World::new();
+        let mut signals = WorldSignals::default();
+        let e = spawn_from_lua(
+            &mut world,
+            &mut signals,
+            "engine.spawn():with_menu({ {id='a', label='A'}, {id='b', label='B', enabled=false} }, \
+                0, 0, 'f', 16, 24, false)\
+             :with_menu_disabled_color(10, 20, 30, 40):with_menu_cursor_text('>'):build()",
+        );
+
+        let menu = world.get::<Menu>(e).unwrap();
+        assert!(menu.items[0].enabled);
+        assert!(
+            !menu.items[1].enabled,
+            "enabled=false must reach the core Menu item"
+        );
+        assert_eq!(menu.disabled_color, Some(Color::new(10, 20, 30, 40)));
+        assert_eq!(menu.cursor_text.as_deref(), Some(">"));
+        assert_eq!(menu.cursor_entity, None);
+        assert_eq!(menu.selected_index, 0);
     }
 
     #[test]

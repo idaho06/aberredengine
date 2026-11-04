@@ -558,6 +558,12 @@ impl LuaRuntime {
                 &[
                     ("id", "string", false, None),
                     ("label", "string", false, None),
+                    (
+                        "enabled",
+                        "boolean",
+                        true,
+                        Some("false = navigation skips the item"),
+                    ),
                 ],
             ),
             (

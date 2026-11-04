@@ -141,6 +141,7 @@ engine = {}
 ---@class MenuItem
 ---@field id string
 ---@field label string
+---@field enabled boolean|nil false = navigation skips the item
 
 ---Animation rule condition (polymorphic)
 ---@class AnimationRuleCondition
@@ -2264,6 +2265,19 @@ function EntityBuilder:with_menu_colors(nr, ng, nb, na, sr, sg, sb, sa) end
 ---@return EntityBuilder
 function EntityBuilder:with_menu_cursor(key) end
 
+---Set text cursor for menu
+---@param text string
+---@return EntityBuilder
+function EntityBuilder:with_menu_cursor_text(text) end
+
+---Set color for disabled menu items (RGBA)
+---@param r integer
+---@param g integer
+---@param b integer
+---@param a integer
+---@return EntityBuilder
+function EntityBuilder:with_menu_disabled_color(r, g, b, a) end
+
 ---Enable dynamic text updates for menu items
 ---@param dynamic boolean
 ---@return EntityBuilder
@@ -2989,6 +3003,19 @@ function CollisionEntityBuilder:with_menu_colors(nr, ng, nb, na, sr, sg, sb, sa)
 ---@param key string
 ---@return CollisionEntityBuilder
 function CollisionEntityBuilder:with_menu_cursor(key) end
+
+---Set text cursor for menu
+---@param text string
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_menu_cursor_text(text) end
+
+---Set color for disabled menu items (RGBA)
+---@param r integer
+---@param g integer
+---@param b integer
+---@param a integer
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_menu_disabled_color(r, g, b, a) end
 
 ---Enable dynamic text updates for menu items
 ---@param dynamic boolean
