@@ -5,6 +5,7 @@
 //! - [`MenuItem`] – describes a single menu entry (label, position, etc.)
 //! - [`MenuActions`] – maps menu item IDs to actions like scene switching
 //! - [`MenuAction`] – the action to perform when a menu item is selected
+//! - [`MenuRebuild`] – marker requesting an in-place replacement of a menu's items
 //!
 //! See [`crate::systems::menu`] for the menu spawn, input, and selection systems.
 //! A confirmed item triggers [`MenuSelected`](crate::events::menu::MenuSelected)
@@ -188,6 +189,24 @@ impl Menu {
             top_indicator_entity: None,
             bottom_indicator_entity: None,
         }
+    }
+}
+
+/// Marker requesting an in-place replacement of a [`Menu`]'s items.
+///
+/// Inserting this component on a menu entity replaces the menu's items in
+/// place, re-activates the menu and selects the first enabled item; the
+/// marker is removed once applied.
+#[derive(Component, Clone, Debug)]
+pub struct MenuRebuild {
+    /// The replacement items.
+    pub items: Vec<MenuItem>,
+}
+
+impl MenuRebuild {
+    /// Creates a rebuild request carrying the replacement `items`.
+    pub fn new(items: Vec<MenuItem>) -> Self {
+        MenuRebuild { items }
     }
 }
 

@@ -14,7 +14,8 @@ use std::sync::Arc;
 use crate::components::dynamic_text::DynamicText;
 use crate::components::group::Group;
 use crate::components::menu::{
-    Menu, MenuAction, MenuActions, MenuStep, ensure_visible, step_selection,
+    Menu, MenuAction, MenuActions, MenuItem, MenuRebuild, MenuStep, ensure_visible, first_enabled,
+    step_selection,
 };
 use crate::components::screen_position::ScreenPosition;
 use crate::components::signals::Signals;
@@ -67,6 +68,15 @@ fn clear_menu_position(ecmd: &mut EntityCommands, use_screen_space: bool) {
     }
 }
 
+/// Menus `menu_spawn_system` handles: freshly added, or carrying a newly added
+/// [`MenuRebuild`] marker.
+type MenuSpawnQuery<'w, 's> = Query<
+    'w,
+    's,
+    (Entity, &'static mut Menu, Option<&'static mut MenuRebuild>),
+    Or<(Added<Menu>, Added<MenuRebuild>)>,
+>;
+
 /// Spawns entities for newly added [`Menu`] components.
 ///
 /// For each menu item, spawns a text entity (either [`DynamicText`] or a
@@ -75,15 +85,50 @@ fn clear_menu_position(ecmd: &mut EntityCommands, use_screen_space: bool) {
 ///
 /// When `visible_count` is set, only positions items within the visible window
 /// and spawns "..." indicator entities for scrolling.
+///
+/// An entity carrying a [`MenuRebuild`] marker has its items replaced in
+/// place first: the old item and indicator entities are despawned, the
+/// replacement items inherit the current `dynamic_text` mode, the menu is
+/// re-activated with the first enabled item selected and the scroll reset,
+/// and the marker is removed once applied.
 pub fn menu_spawn_system(
     mut commands: Commands,
-    mut query: Query<(Entity, &mut Menu), Added<Menu>>,
+    mut query: MenuSpawnQuery,
     font_metrics: Res<FontMetricsStore>,
     pending: Res<PendingAssets>,
     mut warn_cache: ResMut<FontMetricsWarnCache>,
     mut render_asset_cmd_writer: MessageWriter<RenderAssetCmd>,
+    mut texture_dims: ResMut<TextureDimsStore>,
 ) {
-    for (entity, mut menu) in query.iter_mut() {
+    for (entity, mut menu, rebuild) in query.iter_mut() {
+        if let Some(mut rebuild) = rebuild {
+            // Clean up from the old state: despawn the old item and indicator
+            // entities and drop their label textures. Items that were never
+            // spawned (`entity == None`) keep only the texture bookkeeping.
+            despawn_menu_parts(
+                &mut commands,
+                &menu.items,
+                menu.top_indicator_entity,
+                menu.bottom_indicator_entity,
+                &mut render_asset_cmd_writer,
+                &mut texture_dims,
+            );
+            menu.top_indicator_entity = None;
+            menu.bottom_indicator_entity = None;
+            // The replacement inherits the current mode; every new item
+            // starts unspawned. The marker is removed below, so its items
+            // move out by value instead of being cloned.
+            let dynamic_text = menu.items.first().is_none_or(|i| i.dynamic_text);
+            let mut new_items = std::mem::take(&mut rebuild.items);
+            for item in &mut new_items {
+                item.dynamic_text = dynamic_text;
+                item.entity = None;
+            }
+            menu.items = new_items;
+            menu.selected_index = first_enabled(&menu.items).unwrap_or(0);
+            menu.scroll_offset = 0;
+            menu.active = true;
+        }
         // Cache immutable data before mutable iteration to satisfy borrow rules
         let font_string = menu.font.clone();
         let font_size = menu.font_size;
@@ -296,6 +341,44 @@ pub fn menu_spawn_system(
             menu.items.len(),
             visible_count
         );
+
+        // A rebuild request is consumed once applied; a no-op otherwise.
+        commands.entity(entity).remove::<MenuRebuild>();
+    }
+}
+
+/// Despawns a menu's item and indicator entities and drops their label
+/// textures. Shared by [`menu_despawn`] and the [`MenuRebuild`] path of
+/// [`menu_spawn_system`]. An item whose `entity` is `None` was never spawned,
+/// so only its texture bookkeeping runs.
+fn despawn_menu_parts(
+    commands: &mut Commands,
+    items: &[MenuItem],
+    top: Option<Entity>,
+    bottom: Option<Entity>,
+    render_asset_writer: &mut MessageWriter<RenderAssetCmd>,
+    texture_dims: &mut TextureDimsStore,
+) {
+    for item in items {
+        // Remove the rasterized label texture if it exists (only non-dynamic
+        // items have one). Queued as a RenderAssetCmd: TextureStore
+        // is render-world-only, so even the GL-free `remove()` bookkeeping
+        // can't be called from logic-side cleanup. The dims mirror is
+        // logic-owned and dropped directly.
+        let texture_key = format!("menu_{}", item.id);
+        texture_dims.remove(&texture_key);
+        render_asset_writer.write(RenderAssetCmd::RemoveTexture { key: texture_key });
+
+        if let Some(item_entity) = item.entity {
+            commands.entity(item_entity).try_despawn();
+        }
+    }
+
+    if let Some(top_entity) = top {
+        commands.entity(top_entity).try_despawn();
+    }
+    if let Some(bottom_entity) = bottom {
+        commands.entity(bottom_entity).try_despawn();
     }
 }
 
@@ -322,29 +405,15 @@ pub fn menu_despawn(
         return;
     };
 
-    // Despawn menu item entities and clean up textures
-    for item in menu.items.iter() {
-        // Remove the rasterized label texture if it exists (only non-dynamic
-        // items have one). Queued as a RenderAssetCmd: TextureStore
-        // is render-world-only, so even the GL-free `remove()` bookkeeping
-        // can't be called from logic-side cleanup. The dims mirror is
-        // logic-owned and dropped directly.
-        let texture_key = format!("menu_{}", item.id);
-        texture_dims.remove(&texture_key);
-        render_asset_writer.write(RenderAssetCmd::RemoveTexture { key: texture_key });
-
-        if let Some(item_entity) = item.entity {
-            commands.entity(item_entity).try_despawn();
-        }
-    }
-
-    // Despawn indicator entities if applicable
-    if let Some(top_entity) = menu.top_indicator_entity {
-        commands.entity(top_entity).try_despawn();
-    }
-    if let Some(bottom_entity) = menu.bottom_indicator_entity {
-        commands.entity(bottom_entity).try_despawn();
-    }
+    // Despawn menu item and indicator entities and clean up textures
+    despawn_menu_parts(
+        &mut commands,
+        &menu.items,
+        menu.top_indicator_entity,
+        menu.bottom_indicator_entity,
+        &mut render_asset_writer,
+        &mut texture_dims,
+    );
 
     // Despawn cursor entity if applicable
     if let Some(cursor_entity) = menu.cursor_entity {
@@ -591,10 +660,10 @@ pub fn menu_selection_observer(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::components::menu::{MenuItem, first_enabled};
     use crate::math::{Color, Vec2};
     use crate::resources::world_signals::WorldSignals;
     use bevy_ecs::message::Messages;
+    use bevy_ecs::schedule::Schedule;
     use bevy_ecs::system::RunSystemOnce;
 
     use crate::protocol::asset_kind::AssetKind;
@@ -614,6 +683,7 @@ mod tests {
         world.insert_resource(FontMetricsWarnCache::default());
         world.insert_resource(PendingAssets::default());
         world.insert_resource(Messages::<RenderAssetCmd>::default());
+        world.insert_resource(TextureDimsStore::default());
         world
     }
 
@@ -715,15 +785,22 @@ mod tests {
         s.0.push((e.entity, e.item_id.clone(), e.index));
     }
 
-    /// Spawns `menu`, runs `menu_spawn_system`, and wires the input controller.
-    fn spawn_menu(menu: Menu) -> (World, Entity) {
-        let mut world = new_test_world();
+    /// Wires `world` for menu input and selection recording, spawns `menu`,
+    /// and runs `menu_spawn_system` once; returns the menu entity.
+    fn spawn_menu_in(world: &mut World, menu: Menu) -> Entity {
         world.insert_resource(Messages::<AudioCmd>::default());
         world.init_resource::<Selections>();
         world.add_observer(menu_controller_observer);
         world.add_observer(record_selection);
         let e = world.spawn(menu).id();
         world.run_system_once(menu_spawn_system).unwrap();
+        e
+    }
+
+    /// Spawns `menu` in a fresh test world via `spawn_menu_in`.
+    fn spawn_menu(menu: Menu) -> (World, Entity) {
+        let mut world = new_test_world();
+        let e = spawn_menu_in(&mut world, menu);
         (world, e)
     }
 
@@ -762,6 +839,55 @@ mod tests {
 
     fn played_sounds(world: &mut World) -> usize {
         world.resource_mut::<Messages<AudioCmd>>().drain().count()
+    }
+
+    /// A schedule running `menu_spawn_system`; unlike `run_system_once`, its
+    /// system persists between runs, so change detection is real across runs.
+    fn menu_schedule() -> Schedule {
+        let mut schedule = Schedule::default();
+        schedule.add_systems(menu_spawn_system);
+        schedule
+    }
+
+    /// Inserts `MenuRebuild::new(items)` on `menu` and runs it once through a
+    /// fresh persistent schedule, returned for further runs.
+    fn rebuild(world: &mut World, menu: Entity, items: Vec<MenuItem>) -> Schedule {
+        world.entity_mut(menu).insert(MenuRebuild::new(items));
+        let mut schedule = menu_schedule();
+        schedule.run(world);
+        schedule
+    }
+
+    /// Ids of the menu's current items, in order.
+    fn item_ids(world: &World, menu: Entity) -> Vec<String> {
+        world
+            .get::<Menu>(menu)
+            .unwrap()
+            .items
+            .iter()
+            .map(|i| i.id.clone())
+            .collect()
+    }
+
+    /// Entities `menu_spawn_system` created for `menu`: item entities plus
+    /// the scroll indicators.
+    fn spawned_entities(world: &World, menu: Entity) -> Vec<Entity> {
+        let m = world.get::<Menu>(menu).unwrap();
+        m.items
+            .iter()
+            .filter_map(|i| i.entity)
+            .chain(m.top_indicator_entity)
+            .chain(m.bottom_indicator_entity)
+            .collect()
+    }
+
+    /// Number of entities in the menu's `menu_<entity>` group.
+    fn menu_group_count(world: &World, menu: Entity) -> usize {
+        let name = format!("menu_{menu}");
+        world
+            .iter_entities()
+            .filter(|e| e.get::<Group>().is_some_and(|g| g.0 == name))
+            .count()
     }
 
     /// Updates the render-asset message buffer and drains the queued commands.
@@ -1068,7 +1194,6 @@ mod tests {
     #[test]
     fn menu_despawn_of_a_non_menu_entity_does_nothing() {
         let mut world = new_test_world();
-        world.insert_resource(TextureDimsStore::default());
         let plain = world.spawn_empty().id();
         world.run_system_once_with(menu_despawn, plain).unwrap();
         assert!(world.get_entity(plain).is_ok());
@@ -1464,5 +1589,294 @@ mod tests {
             Some(disabled),
             "a disabled static item is baked with the disabled color"
         );
+    }
+
+    #[test]
+    fn rebuild_replaces_items_despawns_old_entities_and_clears_the_marker_once() {
+        let (mut world, menu) = spawn_menu(five_items().with_visible_count(2));
+        let old_entities = spawned_entities(&world, menu);
+        let mut schedule = rebuild(
+            &mut world,
+            menu,
+            vec![
+                MenuItem::new("x", "X"),
+                MenuItem::new("y", "Y"),
+                MenuItem::new("z", "Z"),
+            ],
+        );
+
+        let m = world.get::<Menu>(menu).unwrap();
+        assert_eq!(item_ids(&world, menu), ["x", "y", "z"]);
+        assert_eq!(
+            m.items.iter().map(|i| i.label.as_str()).collect::<Vec<_>>(),
+            ["X", "Y", "Z"]
+        );
+        assert!(
+            world.get::<MenuRebuild>(menu).is_none(),
+            "the marker is removed once applied"
+        );
+        for e in &old_entities {
+            assert!(world.get_entity(*e).is_err(), "old entity {e:?} despawned");
+        }
+        let new_entities: Vec<Entity> = m.items.iter().filter_map(|i| i.entity).collect();
+        assert_eq!(new_entities.len(), 3, "one entity per new item");
+        for e in &new_entities {
+            assert!(
+                world.get_entity(*e).is_ok(),
+                "new item entity {e:?} spawned"
+            );
+        }
+        let top = m
+            .top_indicator_entity
+            .expect("visible_count keeps indicators");
+        let bottom = m
+            .bottom_indicator_entity
+            .expect("visible_count keeps indicators");
+        assert!(world.get_entity(top).is_ok() && world.get_entity(bottom).is_ok());
+
+        // A second run changes nothing: the marker is gone and nothing is Added.
+        let before: Vec<(String, Option<Entity>)> =
+            m.items.iter().map(|i| (i.id.clone(), i.entity)).collect();
+        schedule.run(&mut world);
+        let after = world.get::<Menu>(menu).unwrap();
+        assert_eq!(
+            after
+                .items
+                .iter()
+                .map(|i| (i.id.clone(), i.entity))
+                .collect::<Vec<_>>(),
+            before
+        );
+        assert!(world.get::<MenuRebuild>(menu).is_none());
+    }
+
+    #[test]
+    fn rebuild_keeps_the_cursor_entity_and_moves_it_to_the_selected_row() {
+        let mut world = new_test_world();
+        let cursor = world.spawn_empty().id();
+        let menu = spawn_menu_in(&mut world, five_items().with_cursor(cursor));
+
+        rebuild(
+            &mut world,
+            menu,
+            vec![
+                MenuItem::new("n0", "N0").disabled(),
+                MenuItem::new("n1", "N1"),
+                MenuItem::new("n2", "N2"),
+            ],
+        );
+
+        let m = world.get::<Menu>(menu).unwrap();
+        assert_eq!(item_ids(&world, menu), ["n0", "n1", "n2"]);
+        assert_eq!(m.selected_index, 1, "the first enabled new item");
+        assert_eq!(m.cursor_entity, Some(cursor), "the cursor entity is kept");
+        assert!(world.get_entity(cursor).is_ok(), "the cursor still exists");
+        assert_eq!(
+            screen_pos(&world, cursor),
+            Some(Vec2::new(100.0, 60.0)),
+            "the cursor sits on the selected row"
+        );
+    }
+
+    #[test]
+    fn rebuild_reactivates_a_confirmed_menu_and_restores_waiting_selection() {
+        let (mut world, menu) = spawn_menu(five_items());
+        press(&mut world, InputAction::Action1);
+        assert!(!world.get::<Menu>(menu).unwrap().active);
+        assert!(
+            !world
+                .get::<Signals>(menu)
+                .unwrap()
+                .has_flag("waiting_selection")
+        );
+
+        rebuild(&mut world, menu, vec![MenuItem::new("again", "Again")]);
+
+        assert_eq!(item_ids(&world, menu), ["again"]);
+        assert!(
+            world.get::<Menu>(menu).unwrap().active,
+            "a rebuild re-activates the menu"
+        );
+        assert!(
+            world
+                .get::<Signals>(menu)
+                .unwrap()
+                .has_flag("waiting_selection"),
+            "a rebuild restores the waiting_selection flag"
+        );
+        assert!(world.get::<MenuRebuild>(menu).is_none());
+    }
+
+    #[test]
+    fn rebuild_selects_the_first_enabled_new_item() {
+        let (mut world, menu) = spawn_menu(five_items());
+        rebuild(
+            &mut world,
+            menu,
+            vec![
+                MenuItem::new("n0", "N0").disabled(),
+                MenuItem::new("n1", "N1"),
+            ],
+        );
+        assert_eq!(item_ids(&world, menu), ["n0", "n1"]);
+        assert_eq!(
+            world.get::<Menu>(menu).unwrap().selected_index,
+            1,
+            "a leading disabled new item is skipped"
+        );
+    }
+
+    #[test]
+    fn rebuild_with_all_new_items_disabled_selects_index_zero() {
+        let (mut world, menu) = spawn_menu(five_items());
+        rebuild(
+            &mut world,
+            menu,
+            vec![
+                MenuItem::new("n0", "N0").disabled(),
+                MenuItem::new("n1", "N1").disabled(),
+            ],
+        );
+        assert_eq!(item_ids(&world, menu), ["n0", "n1"]);
+        assert_eq!(world.get::<Menu>(menu).unwrap().selected_index, 0);
+    }
+
+    #[test]
+    fn rebuild_recomputes_scroll_offset_so_the_first_enabled_item_is_visible() {
+        let (mut world, menu) = spawn_menu(five_items().with_visible_count(2));
+        let new_items: Vec<MenuItem> = (0..5)
+            .map(|i| {
+                let item = MenuItem::new(format!("n{i}"), format!("N{i}"));
+                if i < 3 { item.disabled() } else { item }
+            })
+            .collect();
+        rebuild(&mut world, menu, new_items);
+
+        assert_eq!(item_ids(&world, menu), ["n0", "n1", "n2", "n3", "n4"]);
+        let m = world.get::<Menu>(menu).unwrap();
+        assert_eq!(m.selected_index, 3, "the first enabled new item");
+        assert_eq!(m.scroll_offset, 2, "the window scrolled to reveal it");
+        assert_eq!(
+            visible_items(&world, menu),
+            [
+                None,
+                None,
+                Some(Vec2::new(100.0, 50.0)),
+                Some(Vec2::new(100.0, 60.0)),
+                None
+            ]
+        );
+    }
+
+    #[test]
+    fn rebuild_without_visible_count_keeps_scroll_offset_at_zero() {
+        let (mut world, menu) = spawn_menu(five_items());
+        rebuild(
+            &mut world,
+            menu,
+            vec![MenuItem::new("n0", "N0"), MenuItem::new("n1", "N1")],
+        );
+        assert_eq!(item_ids(&world, menu), ["n0", "n1"]);
+        assert_eq!(world.get::<Menu>(menu).unwrap().scroll_offset, 0);
+    }
+
+    #[test]
+    fn same_tick_menu_and_rebuild_spawn_only_the_new_items() {
+        let mut world = new_test_world();
+        let menu = world
+            .spawn((
+                five_items(),
+                MenuRebuild::new(vec![
+                    MenuItem::new("n1", "N1"),
+                    MenuItem::new("n2", "N2"),
+                    MenuItem::new("n3", "N3"),
+                ]),
+            ))
+            .id();
+        let mut schedule = menu_schedule();
+        schedule.run(&mut world);
+
+        assert_eq!(item_ids(&world, menu), ["n1", "n2", "n3"]);
+        assert!(
+            world
+                .get::<Signals>(menu)
+                .unwrap()
+                .has_flag("waiting_selection")
+        );
+        assert!(world.get::<MenuRebuild>(menu).is_none());
+        assert_eq!(
+            menu_group_count(&world, menu),
+            3,
+            "no entities leaked for the original items"
+        );
+    }
+
+    #[test]
+    fn rebuild_of_a_static_menu_removes_old_textures_and_rasterizes_the_new_items() {
+        let static_menu = Menu::from_items(
+            vec![MenuItem::new("old1", "O1"), MenuItem::new("old2", "O2")],
+            Vec2::new(100.0, 50.0),
+            "test_font",
+            12.0,
+            10.0,
+            true,
+        )
+        .with_dynamic_text(false);
+        let (mut world, menu) = spawn_menu(static_menu);
+        world.resource_mut::<Messages<RenderAssetCmd>>().clear();
+
+        // `MenuItem::new` defaults to dynamic; the replaced items inherit the
+        // static `dynamic_text` of the current first item.
+        rebuild(
+            &mut world,
+            menu,
+            vec![MenuItem::new("new1", "N1"), MenuItem::new("new2", "N2")],
+        );
+
+        assert_eq!(item_ids(&world, menu), ["new1", "new2"]);
+        assert!(
+            world
+                .get::<Menu>(menu)
+                .unwrap()
+                .items
+                .iter()
+                .all(|i| !i.dynamic_text),
+            "the replaced items stay static"
+        );
+        let cmds = read_render_asset_cmds(&mut world);
+        let removed: Vec<&str> = cmds
+            .iter()
+            .filter_map(|c| match c {
+                RenderAssetCmd::RemoveTexture { key } => Some(key.as_str()),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(removed, ["menu_old1", "menu_old2"]);
+        let rasterized: Vec<&str> = cmds
+            .iter()
+            .filter_map(|c| match c {
+                RenderAssetCmd::RasterizeText { key, .. } => Some(key.as_str()),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(rasterized, ["menu_new1", "menu_new2"]);
+    }
+
+    #[test]
+    fn rebuild_with_zero_items_empties_the_menu_without_panicking() {
+        let (mut world, menu) = spawn_menu(five_items());
+        let old_entities = spawned_entities(&world, menu);
+        rebuild(&mut world, menu, vec![]);
+
+        let m = world.get::<Menu>(menu).unwrap();
+        assert!(m.items.is_empty());
+        assert_eq!(m.selected_index, 0);
+        assert!(world.get::<MenuRebuild>(menu).is_none());
+        for e in &old_entities {
+            assert!(
+                world.get_entity(*e).is_err(),
+                "old item entity {e:?} despawned"
+            );
+        }
     }
 }
