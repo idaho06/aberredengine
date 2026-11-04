@@ -4,6 +4,7 @@
 //! by Rust systems. Commands are processed after Lua callbacks return.
 
 use super::lua_tag::LuaTag;
+use super::spawn_data::MenuItemData;
 // Re-export UniformValue from its canonical location for internal convenience.
 pub use super::spawn_data::TweenConfig;
 use aberred_core::components::shape::ShapeKind;
@@ -419,6 +420,13 @@ pub enum EntityCmd {
     Despawn { entity_id: u64 },
     /// Despawn a menu entity and its items/cursor/textures
     MenuDespawn { entity_id: u64 },
+    /// Replace a menu's items in place by inserting a
+    /// [`MenuRebuild`](aberred_core::components::menu::MenuRebuild) on the entity;
+    /// no-op without a `Menu`
+    MenuSetItems {
+        entity_id: u64,
+        items: Vec<MenuItemData>,
+    },
     /// Set an integer signal on an entity's Signals component
     SignalSetInteger {
         entity_id: u64,

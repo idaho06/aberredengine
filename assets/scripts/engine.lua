@@ -690,6 +690,11 @@ function engine.collision_entity_insert_tween_tint(entity_id, from_r, from_g, fr
 ---@param entity_id integer
 function engine.collision_entity_menu_despawn(entity_id) end
 
+---Replace a menu's items in place, re-activate it and select the first enabled item; no-op without a Menu
+---@param entity_id integer
+---@param items MenuItem[]
+function engine.collision_entity_menu_set_items(entity_id, items) end
+
 ---Remove CameraTarget component from an entity
 ---@param entity_id integer
 function engine.collision_entity_remove_camera_target(entity_id) end
@@ -1164,6 +1169,11 @@ function engine.entity_insert_tween_tint(entity_id, from_r, from_g, from_b, from
 ---Despawn a menu entity and its children
 ---@param entity_id integer
 function engine.entity_menu_despawn(entity_id) end
+
+---Replace a menu's items in place, re-activate it and select the first enabled item; no-op without a Menu
+---@param entity_id integer
+---@param items MenuItem[]
+function engine.entity_menu_set_items(entity_id, items) end
 
 ---Remove CameraTarget component from an entity
 ---@param entity_id integer

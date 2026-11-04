@@ -510,7 +510,7 @@ fn meta_functions_complete() {
 
         -- Entity commands should exist for both regular and collision prefix
         local entity_cmds = {
-            "entity_despawn", "entity_menu_despawn", "entity_set_velocity",
+            "entity_despawn", "entity_menu_despawn", "entity_menu_set_items", "entity_set_velocity",
             "entity_set_position", "entity_freeze", "entity_unfreeze",
             "entity_signal_set_flag", "entity_signal_remove_flag", "entity_signal_toggle_flag",
             "entity_insert_lua_timer", "entity_insert_lua_timer_once", "entity_remove_lua_timer",

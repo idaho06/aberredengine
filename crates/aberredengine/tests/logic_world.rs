@@ -2896,6 +2896,89 @@ fn lua_menu_action_request_scene_switches_the_scene() {
     );
 }
 
+/// Lua callbacks that spawn, in `on_scene_enter` for scene "menu", a menu with
+/// items `go`/"Go" and `stay`/"Stay", a text cursor and a Lua selection callback
+/// that replaces the menu's items via `engine.entity_menu_set_items`.
+#[cfg(feature = "lua")]
+const LUA_MENU_SET_ITEMS: &str = r#"
+function on_enter_play() engine.request_scene("menu") return "" end
+function on_scene_enter(scene)
+    if scene == "menu" then
+        engine.spawn()
+            :with_menu({ {id='go', label='Go'}, {id='stay', label='Stay'} }, 0, 0, 'f', 12, 10, true)
+            :with_menu_cursor_text('>')
+            :with_lua_menu_selected('on_menu_pick')
+            :register_as('pick_menu')
+            :build()
+    end
+end
+function on_menu_pick(ctx)
+    engine.entity_menu_set_items(ctx.menu_id, {
+        {id='again', label='Again'},
+        {id='locked', label='Locked', enabled=false},
+    })
+end
+"#;
+
+/// Confirming the menu fires `on_menu_pick`, whose `engine.entity_menu_set_items`
+/// replaces the menu's items in place: the new items are installed, the menu is
+/// re-activated with the first enabled item selected, the cursor entity is kept,
+/// and the old item entities are despawned.
+#[cfg(feature = "lua")]
+#[test]
+fn lua_entity_menu_set_items_replaces_the_menu_items_in_place() {
+    let mut tw = lua_script_world(LUA_MENU_SET_ITEMS);
+    tw.tick(1, DT);
+
+    let menu_entity = tw
+        .world
+        .resource::<WorldSignals>()
+        .get_entity("pick_menu")
+        .expect("the menu registered itself");
+    let (cursor_entity, old_item_entities) = {
+        let menu = tw.world.get::<Menu>(menu_entity).unwrap();
+        (
+            menu.cursor_entity.expect("the text cursor was spawned"),
+            menu.items
+                .iter()
+                .filter_map(|item| item.entity)
+                .collect::<Vec<_>>(),
+        )
+    };
+    assert_eq!(old_item_entities.len(), 2, "go and stay got item entities");
+
+    press_space(&mut tw);
+    tw.tick(3, DT);
+
+    let menu = tw.world.get::<Menu>(menu_entity).unwrap();
+    let ids: Vec<&str> = menu.items.iter().map(|item| item.id.as_str()).collect();
+    assert_eq!(ids, ["again", "locked"]);
+    assert!(!menu.items[1].enabled);
+    assert!(menu.active, "the rebuild re-activates the menu");
+    assert_eq!(menu.selected_index, 0, "the first enabled item is selected");
+    assert_eq!(
+        menu.cursor_entity,
+        Some(cursor_entity),
+        "the cursor entity is unchanged"
+    );
+    assert!(
+        tw.world.get_entity(cursor_entity).is_ok(),
+        "the cursor entity is still alive"
+    );
+    for old in old_item_entities {
+        assert!(
+            tw.world.get_entity(old).is_err(),
+            "old item entity {old:?} is despawned"
+        );
+    }
+    let new_item_entities: Vec<Entity> = menu.items.iter().filter_map(|item| item.entity).collect();
+    assert_eq!(
+        new_item_entities.len(),
+        2,
+        "the new items got fresh entities"
+    );
+}
+
 /// Writing the `scene` string and the `switch_scene` flag from `on_update`
 /// switches nothing: the same `on_update_<scene>` keeps running.
 #[cfg(feature = "lua")]

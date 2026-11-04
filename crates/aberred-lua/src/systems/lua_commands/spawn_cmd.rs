@@ -43,8 +43,9 @@ use aberred_core::math::Color;
 use crate::resources::lua_runtime::{
     AnimationControllerData, AnimationData, CloneCmd, ColliderData, EntityShaderData,
     LuaCollisionRuleData, LuaDialogueCallbacksSpawn, LuaPhaseCallbacksSpawn, LuaTimerSpawn,
-    MenuData, ParticleEmitterData, RigidBodyData, SpawnCmd, SpriteData, StuckToData, TextData,
-    TweenPositionData, TweenRotationData, TweenScaleData, TweenScreenPositionData, TweenTintData,
+    MenuData, MenuItemData, ParticleEmitterData, RigidBodyData, SpawnCmd, SpriteData, StuckToData,
+    TextData, TweenPositionData, TweenRotationData, TweenScaleData, TweenScreenPositionData,
+    TweenTintData,
 };
 use aberred_core::resources::world_signals::WorldSignals;
 use aberred_core::systems::propagate_transforms::ComputeInitialGlobalTransform;
@@ -544,14 +545,7 @@ fn apply_ui_components(
         let items: Vec<MenuItem> = menu_data
             .items
             .into_iter()
-            .map(|item| {
-                let menu_item = MenuItem::new(item.id, item.label);
-                if item.enabled {
-                    menu_item
-                } else {
-                    menu_item.disabled()
-                }
-            })
+            .map(MenuItemData::into_menu_item)
             .collect();
         let mut menu_component = Menu::from_items(
             items,

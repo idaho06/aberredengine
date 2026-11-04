@@ -29,6 +29,7 @@ use aberred_core::components::entity_shader::EntityShader;
 use aberred_core::components::global_transform2d::GlobalTransform2D;
 use aberred_core::components::gui_interactable::{GuiInteractable, GuiWidgetState};
 use aberred_core::components::gui_progress_bar::GuiProgressBar;
+use aberred_core::components::menu::{Menu, MenuRebuild};
 use aberred_core::components::phase::Phase;
 use aberred_core::components::rigid_body::RigidBody;
 use aberred_core::components::rotation::Rotation;
@@ -48,7 +49,8 @@ use aberred_core::systems::propagate_transforms::ComputeInitialGlobalTransform;
 use bevy_ecs::system::EntityCommand;
 
 use crate::resources::lua_runtime::{
-    EntityCmd, LuaDialogueCallbackKind, LuaPhaseCallbackKind, TweenConfig, UniformValue,
+    EntityCmd, LuaDialogueCallbackKind, LuaPhaseCallbackKind, MenuItemData, TweenConfig,
+    UniformValue,
 };
 use aberred_core::resources::animation_store::AnimationStore;
 use aberred_core::resources::dialogue_store::DialogueStore;
@@ -203,6 +205,21 @@ pub fn process_entity_commands(
             | EntityCmd::MenuDespawn { .. }
             | EntityCmd::InsertTtl { .. }) => {
                 process_lifecycle_cmd(cmd, commands, world_signals, systems_store)
+            }
+
+            EntityCmd::MenuSetItems { entity_id, items } => {
+                // Never writes `Menu.items` here; `menu_spawn_system` applies the
+                // `MenuRebuild` and replaces the items in place.
+                queue_on_entity(commands, entity_id, move |mut e| {
+                    if e.contains::<Menu>() {
+                        e.insert(MenuRebuild::new(
+                            items
+                                .into_iter()
+                                .map(MenuItemData::into_menu_item)
+                                .collect(),
+                        ));
+                    }
+                });
             }
 
             EntityCmd::SetGuiDisabled {
@@ -2447,6 +2464,107 @@ mod tests {
         );
         assert_eq!(world.resource::<MenuDespawnCalls>().0.len(), 1);
         assert!(world.get_entity(menu).is_ok());
+    }
+
+    /// The two replacement items used by the `MenuSetItems` tests.
+    fn set_items_data() -> Vec<MenuItemData> {
+        vec![
+            MenuItemData {
+                id: "a".into(),
+                label: "A".into(),
+                enabled: true,
+            },
+            MenuItemData {
+                id: "b".into(),
+                label: "B".into(),
+                enabled: false,
+            },
+        ]
+    }
+
+    #[test]
+    fn menu_set_items_leaves_the_existing_items_and_inserts_a_matching_rebuild() {
+        use aberred_core::components::menu::MenuItem;
+
+        let mut world = World::new();
+        let menu_entity = world
+            .spawn(Menu::from_items(
+                vec![MenuItem::new("old", "Old")],
+                Vec2::ZERO,
+                "f",
+                12.0,
+                10.0,
+                true,
+            ))
+            .id();
+
+        run_entity_cmd(
+            &mut world,
+            EntityCmd::MenuSetItems {
+                entity_id: menu_entity.to_bits(),
+                items: set_items_data(),
+            },
+        );
+
+        let menu = world.get::<Menu>(menu_entity).unwrap();
+        let ids: Vec<&str> = menu.items.iter().map(|item| item.id.as_str()).collect();
+        assert_eq!(
+            ids,
+            ["old"],
+            "the handler leaves Menu.items untouched; menu_spawn_system applies the rebuild"
+        );
+        let rebuild = world
+            .get::<MenuRebuild>(menu_entity)
+            .expect("a MenuRebuild is inserted");
+        let rebuilt: Vec<(&str, &str, bool)> = rebuild
+            .items
+            .iter()
+            .map(|item| (item.id.as_str(), item.label.as_str(), item.enabled))
+            .collect();
+        assert_eq!(rebuilt, [("a", "A", true), ("b", "B", false)]);
+        assert!(
+            rebuild.items.iter().all(|item| item.entity.is_none()),
+            "rebuild items start unspawned"
+        );
+    }
+
+    #[test]
+    fn menu_set_items_without_a_menu_inserts_nothing() {
+        let mut world = World::new();
+        let e = world.spawn_empty().id();
+
+        run_entity_cmd(
+            &mut world,
+            EntityCmd::MenuSetItems {
+                entity_id: e.to_bits(),
+                items: set_items_data(),
+            },
+        );
+
+        assert!(world.get::<Menu>(e).is_none());
+        assert!(
+            world.get::<MenuRebuild>(e).is_none(),
+            "no MenuRebuild without a Menu"
+        );
+    }
+
+    #[test]
+    fn menu_set_items_on_a_despawned_entity_is_skipped_without_panicking() {
+        let mut world = World::new();
+        let e = world.spawn_empty().id();
+        let id = e.to_bits();
+        run_entity_cmd(&mut world, EntityCmd::Despawn { entity_id: id });
+        assert!(world.get_entity(e).is_err());
+
+        run_entity_cmd(
+            &mut world,
+            EntityCmd::MenuSetItems {
+                entity_id: id,
+                items: set_items_data(),
+            },
+        );
+
+        assert!(world.get_entity(e).is_err(), "the entity stays despawned");
     }
 
     fn set_camera_target(id: u64, priority: Option<u8>, zoom: Option<f32>) -> EntityCmd {

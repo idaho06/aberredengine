@@ -10,7 +10,7 @@ use aberred_core::components::gui_image::GuiImage;
 use aberred_core::components::gui_label::GuiLabel;
 use aberred_core::components::gui_progress_bar::GuiProgressBar;
 use aberred_core::components::gui_window::GuiWindow;
-use aberred_core::components::menu::MenuAction;
+use aberred_core::components::menu::{MenuAction, MenuItem};
 use aberred_core::components::shape::{Polygon, Shape, ShapeKind};
 use aberred_core::components::timer::TimerMode;
 use aberred_core::components::tint::Tint;
@@ -356,6 +356,14 @@ pub struct MenuItemData {
     pub label: String,
     /// Whether the item can be selected; disabled items are skipped by navigation.
     pub enabled: bool,
+}
+
+impl MenuItemData {
+    /// Converts into a core [`MenuItem`], disabled when `enabled` is false.
+    pub(crate) fn into_menu_item(self) -> MenuItem {
+        let item = MenuItem::new(self.id, self.label);
+        if self.enabled { item } else { item.disabled() }
+    }
 }
 
 /// Data for spawning a Menu + MenuActions ensemble.
