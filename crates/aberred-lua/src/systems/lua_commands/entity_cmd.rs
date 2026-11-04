@@ -2482,6 +2482,17 @@ mod tests {
         ]
     }
 
+    /// Runs `EntityCmd::MenuSetItems` with `set_items_data()` on `entity_id`.
+    fn run_menu_set_items(world: &mut World, entity_id: u64) {
+        run_entity_cmd(
+            world,
+            EntityCmd::MenuSetItems {
+                entity_id,
+                items: set_items_data(),
+            },
+        );
+    }
+
     #[test]
     fn menu_set_items_leaves_the_existing_items_and_inserts_a_matching_rebuild() {
         use aberred_core::components::menu::MenuItem;
@@ -2498,13 +2509,7 @@ mod tests {
             ))
             .id();
 
-        run_entity_cmd(
-            &mut world,
-            EntityCmd::MenuSetItems {
-                entity_id: menu_entity.to_bits(),
-                items: set_items_data(),
-            },
-        );
+        run_menu_set_items(&mut world, menu_entity.to_bits());
 
         let menu = world.get::<Menu>(menu_entity).unwrap();
         let ids: Vec<&str> = menu.items.iter().map(|item| item.id.as_str()).collect();
@@ -2533,13 +2538,7 @@ mod tests {
         let mut world = World::new();
         let e = world.spawn_empty().id();
 
-        run_entity_cmd(
-            &mut world,
-            EntityCmd::MenuSetItems {
-                entity_id: e.to_bits(),
-                items: set_items_data(),
-            },
-        );
+        run_menu_set_items(&mut world, e.to_bits());
 
         assert!(world.get::<Menu>(e).is_none());
         assert!(
@@ -2556,13 +2555,7 @@ mod tests {
         run_entity_cmd(&mut world, EntityCmd::Despawn { entity_id: id });
         assert!(world.get_entity(e).is_err());
 
-        run_entity_cmd(
-            &mut world,
-            EntityCmd::MenuSetItems {
-                entity_id: id,
-                items: set_items_data(),
-            },
-        );
+        run_menu_set_items(&mut world, id);
 
         assert!(world.get_entity(e).is_err(), "the entity stays despawned");
     }

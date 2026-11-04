@@ -647,20 +647,17 @@ mod tests {
 
     #[test]
     fn parse_menu_items_requires_a_label_and_an_id() {
-        let (_lua, table) = lua_table("return { {id='a'} }");
-        let err = parse_menu_items(&table).expect_err("a missing label must error");
-        let message = err.to_string();
-        assert!(
-            message.contains("label"),
-            "error should name the 'label' field, got {message:?}"
-        );
-
-        let (_lua, table) = lua_table("return { {label='A'} }");
-        let err = parse_menu_items(&table).expect_err("a missing id must error");
-        let message = err.to_string();
-        assert!(
-            message.contains("id"),
-            "error should name the 'id' field, got {message:?}"
-        );
+        for (src, field) in [
+            ("return { {id='a'} }", "label"),
+            ("return { {label='A'} }", "id"),
+        ] {
+            let (_lua, table) = lua_table(src);
+            let err = parse_menu_items(&table).expect_err("a missing field must error");
+            let message = err.to_string();
+            assert!(
+                message.contains(field),
+                "error should name the '{field}' field, got {message:?}"
+            );
+        }
     }
 }

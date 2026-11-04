@@ -27,7 +27,7 @@ use crate::events::menu::MenuSelected;
 use crate::math::Vec2;
 use crate::protocol::audio::AudioCmd;
 use crate::protocol::render_assets::RenderAssetCmd;
-use crate::resources::font_metrics::{FontMetricsStore, FontMetricsWarnCache};
+use crate::resources::font_metrics::{FontMetrics, FontMetricsStore, FontMetricsWarnCache};
 use crate::resources::game_state::GameState::Quitting;
 use crate::resources::game_state::NextGameState;
 use crate::resources::input::InputAction;
@@ -66,6 +66,33 @@ fn clear_menu_position(ecmd: &mut EntityCommands, use_screen_space: bool) {
     } else {
         ecmd.remove::<WorldPosition>();
     }
+}
+
+/// Name of the [`Group`] every entity spawned for `entity` joins, so a menu's
+/// parts are found and despawned together.
+fn menu_group_name(entity: Entity) -> String {
+    format!("menu_{entity}")
+}
+
+/// Position of a menu element on `row`: `origin.x + indent` horizontally and
+/// `origin.y + row * item_spacing` vertically. `row` is the viewport row of an
+/// item or the cursor, -1 for the top "..." indicator and `visible_count` for
+/// the bottom one; the cursor passes an `indent` of 0.0 to sit at `origin.x`.
+fn menu_row_pos(origin: Vec2, row: i32, item_spacing: f32, indent: f32) -> Vec2 {
+    Vec2::new(origin.x + indent, origin.y + (row as f32) * item_spacing)
+}
+
+/// The menu font resolved for measuring or rasterizing: the resolved key
+/// (after the pending-asset fallback) and its cached [`FontMetrics`], `None`
+/// when the resolved font has none.
+fn resolve_menu_font<'a, 'k>(
+    font_metrics: &'a FontMetricsStore,
+    font_key: &'k str,
+    pending: &PendingAssets,
+    warn_cache: &mut FontMetricsWarnCache,
+) -> (&'k str, Option<&'a FontMetrics>) {
+    let resolved = font_metrics.resolve_key(font_key, pending, warn_cache);
+    (resolved, font_metrics.0.get(resolved))
 }
 
 /// Menus `menu_spawn_system` handles: freshly added, or carrying a newly added
@@ -158,8 +185,9 @@ pub fn menu_spawn_system(
         // cached metrics for the resolved font key, the indent is 0.0.
         let item_indent = match menu.cursor_text.as_deref() {
             Some(cursor) => {
-                let cursor_font = font_metrics.resolve_key(&font_string, &pending, &mut warn_cache);
-                match font_metrics.0.get(cursor_font) {
+                let (cursor_font, metrics) =
+                    resolve_menu_font(&font_metrics, &font_string, &pending, &mut warn_cache);
+                match metrics {
                     Some(metrics) => metrics.measure_text(&format!("{cursor} "), font_size).x,
                     None => {
                         if warn_cache.warn_once(cursor_font) {
@@ -219,8 +247,9 @@ pub fn menu_spawn_system(
                 // (render-destined).
                 // Resolve once so the label is measured and rasterized with
                 // the same font.
-                let label_font = font_metrics.resolve_key(&font_string, &pending, &mut warn_cache);
-                let Some(metrics) = font_metrics.0.get(label_font) else {
+                let (label_font, metrics) =
+                    resolve_menu_font(&font_metrics, &font_string, &pending, &mut warn_cache);
+                let Some(metrics) = metrics else {
                     if warn_cache.warn_once(label_font) {
                         warn!(
                             "menu_spawn_system: skipping menu item '{}' because font '{}' has no cached metrics",
@@ -270,16 +299,13 @@ pub fn menu_spawn_system(
             if is_visible {
                 // Calculate position within visible viewport
                 let viewport_index = i - scroll_offset;
-                let pos = Vec2 {
-                    x: origin.x + item_indent,
-                    y: origin.y + (viewport_index as f32) * item_spacing,
-                };
+                let pos = menu_row_pos(origin, viewport_index as i32, item_spacing, item_indent);
                 set_menu_position(&mut ecmd, use_screen_space, pos);
             }
             // Non-visible items don't get position component, so render system skips them
 
             let text_entity = ecmd.id();
-            ecmd.insert(Group::new(format!("menu_{}", entity)));
+            ecmd.insert(Group::new(menu_group_name(entity)));
             menu_item.entity = Some(text_entity);
             debug!(
                 "menu_spawn_system: Menu item id={} assigned entity {:?} (visible={})",
@@ -287,53 +313,35 @@ pub fn menu_spawn_system(
             );
         } // end for each menu item
 
-        // Spawn "..." indicators if visible_count is set
-        if let Some(vc) = visible_count {
-            // Top indicator (shown when scroll_offset > 0)
-            let mut top_cmd = commands.spawn(DynamicText::new(
+        // Spawns one "..." indicator on `row`, shown only when `show`: it joins
+        // the menu's group and gets the z-index always (needed once it becomes
+        // visible), but a position only while shown.
+        let spawn_indicator = |commands: &mut Commands, row: i32, show: bool| -> Entity {
+            let mut cmd = commands.spawn(DynamicText::new(
                 "...",
                 font_string.clone(),
                 font_size,
                 normal_color,
             ));
-            top_cmd.insert(Group::new(format!("menu_{}", entity)));
-            // Add always (needed once the indicator becomes visible).
-            insert_menu_z_index(&mut top_cmd);
-            let top_indicator = top_cmd.id();
-            // Position only if needed (scroll_offset > 0)
-            if scroll_offset > 0 {
-                let pos = Vec2 {
-                    x: origin.x + item_indent,
-                    y: origin.y - item_spacing,
-                };
-                set_menu_position(&mut commands.entity(top_indicator), use_screen_space, pos);
-            }
-            menu.top_indicator_entity = Some(top_indicator);
-
-            // Bottom indicator (shown when more items below)
-            let mut bottom_cmd = commands.spawn(DynamicText::new(
-                "...",
-                font_string.clone(),
-                font_size,
-                normal_color,
-            ));
-            bottom_cmd.insert(Group::new(format!("menu_{}", entity)));
-            // Add always (needed once the indicator becomes visible).
-            insert_menu_z_index(&mut bottom_cmd);
-            let bottom_indicator = bottom_cmd.id();
-            // Position only if needed (visible_end < items.len())
-            if visible_end < menu.items.len() {
-                let pos = Vec2 {
-                    x: origin.x + item_indent,
-                    y: origin.y + (vc as f32) * item_spacing,
-                };
+            cmd.insert(Group::new(menu_group_name(entity)));
+            insert_menu_z_index(&mut cmd);
+            let indicator = cmd.id();
+            if show {
                 set_menu_position(
-                    &mut commands.entity(bottom_indicator),
+                    &mut commands.entity(indicator),
                     use_screen_space,
-                    pos,
+                    menu_row_pos(origin, row, item_spacing, item_indent),
                 );
             }
-            menu.bottom_indicator_entity = Some(bottom_indicator);
+            indicator
+        };
+        // Spawn "..." indicators if visible_count is set
+        if let Some(vc) = visible_count {
+            let show_top = scroll_offset > 0;
+            let show_bottom = visible_end < menu.items.len();
+            menu.top_indicator_entity = Some(spawn_indicator(&mut commands, -1, show_top));
+            menu.bottom_indicator_entity =
+                Some(spawn_indicator(&mut commands, vc as i32, show_bottom));
         }
 
         // Add a signals component to the menu entity for state tracking
@@ -359,7 +367,7 @@ pub fn menu_spawn_system(
                 font_size,
                 selected_color,
             ));
-            cursor_cmd.insert(Group::new(format!("menu_{}", entity)));
+            cursor_cmd.insert(Group::new(menu_group_name(entity)));
             let text_cursor = cursor_cmd.id();
             menu.cursor_entity = Some(text_cursor);
             debug!(
@@ -383,10 +391,8 @@ pub fn menu_spawn_system(
                 );
                 // Position cursor at selected item's viewport position, at origin.x
                 let selected_viewport_index = menu.selected_index.saturating_sub(scroll_offset);
-                let cursor_position = Vec2 {
-                    x: origin.x,
-                    y: origin.y + (selected_viewport_index as f32) * item_spacing,
-                };
+                let cursor_position =
+                    menu_row_pos(origin, selected_viewport_index as i32, item_spacing, 0.0);
                 set_menu_position(&mut cursor_cmd, use_screen_space, cursor_position);
                 debug!(
                     "menu_spawn_system: Positioned cursor entity {:?} at {:?}",
@@ -595,12 +601,11 @@ pub fn menu_controller_observer(
             }
 
             if let Some(cursor_entity) = menu.cursor_entity {
-                // Calculate cursor position based on visible viewport
+                // Calculate cursor position based on visible viewport; the
+                // cursor sits at origin.x, without the item indent.
                 let viewport_index = menu.selected_index.saturating_sub(menu.scroll_offset);
-                let cursor_position = Vec2 {
-                    x: menu.origin.x,
-                    y: menu.origin.y + (viewport_index as f32) * menu.item_spacing,
-                };
+                let cursor_position =
+                    menu_row_pos(menu.origin, viewport_index as i32, menu.item_spacing, 0.0);
                 set_menu_position(
                     &mut commands.entity(cursor_entity),
                     menu.use_screen_space,
@@ -634,10 +639,12 @@ fn reposition_menu_items(commands: &mut Commands, menu: &Menu) {
             if is_visible {
                 // Add/update position component
                 let viewport_index = i - menu.scroll_offset;
-                let new_pos = Vec2 {
-                    x: menu.origin.x + menu.item_indent,
-                    y: menu.origin.y + (viewport_index as f32) * menu.item_spacing,
-                };
+                let new_pos = menu_row_pos(
+                    menu.origin,
+                    viewport_index as i32,
+                    menu.item_spacing,
+                    menu.item_indent,
+                );
                 set_menu_position(&mut commands.entity(entity), menu.use_screen_space, new_pos);
             } else {
                 // Remove position component to hide (render system skips)
@@ -652,10 +659,7 @@ fn reposition_menu_items(commands: &mut Commands, menu: &Menu) {
 
     if let Some(top_entity) = menu.top_indicator_entity {
         if show_top {
-            let pos = Vec2 {
-                x: menu.origin.x + menu.item_indent,
-                y: menu.origin.y - menu.item_spacing,
-            };
+            let pos = menu_row_pos(menu.origin, -1, menu.item_spacing, menu.item_indent);
             set_menu_position(&mut commands.entity(top_entity), menu.use_screen_space, pos);
         } else {
             clear_menu_position(&mut commands.entity(top_entity), menu.use_screen_space);
@@ -664,10 +668,12 @@ fn reposition_menu_items(commands: &mut Commands, menu: &Menu) {
 
     if let Some(bottom_entity) = menu.bottom_indicator_entity {
         if show_bottom {
-            let pos = Vec2 {
-                x: menu.origin.x + menu.item_indent,
-                y: menu.origin.y + (visible_count as f32) * menu.item_spacing,
-            };
+            let pos = menu_row_pos(
+                menu.origin,
+                visible_count as i32,
+                menu.item_spacing,
+                menu.item_indent,
+            );
             set_menu_position(
                 &mut commands.entity(bottom_entity),
                 menu.use_screen_space,
@@ -1126,13 +1132,7 @@ mod tests {
     fn selection_change_recolors_items_and_moves_the_cursor() {
         let mut world = new_test_world();
         let cursor = world.spawn_empty().id();
-        let menu_c = five_items().with_cursor(cursor);
-        // spawn_menu builds its own world, so wire this one by hand.
-        world.insert_resource(Messages::<AudioCmd>::default());
-        world.init_resource::<Selections>();
-        world.add_observer(menu_controller_observer);
-        let menu = world.spawn(menu_c).id();
-        world.run_system_once(menu_spawn_system).unwrap();
+        let menu = spawn_menu_in(&mut world, five_items().with_cursor(cursor));
         assert_eq!(screen_pos(&world, cursor), Some(Vec2::new(100.0, 50.0)));
 
         press(&mut world, InputAction::SecondaryDirectionDown);
