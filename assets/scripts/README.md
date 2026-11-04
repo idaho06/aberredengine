@@ -1645,7 +1645,7 @@ Create an interactive menu.
 
 **Parameters:**
 
-- `items` - Table of `{ id = "...", label = "...", enabled = true }`. `enabled` is optional and defaults to `true`; it must be a boolean when present. A disabled item (`enabled = false`) is skipped by up/down, cannot be confirmed, and draws in the disabled color (see `:with_menu_disabled_color`). The initial selection is the first enabled item.
+- `items` - Table of `{ id = "...", label = "...", enabled = true }`. `enabled` is optional and defaults to `true`; it must be a boolean when present. A disabled item (`enabled = false`) is skipped by up/down, cannot be confirmed, and draws in the disabled color (see `:with_menu_disabled_color`). The initial selection is the first enabled item. Keep `id` unique within a menu: items that share an id share one `:with_menu_action_*` action, report the same `item_id` to the callback, and in a menu with `:with_menu_dynamic_text(false)` share one label texture.
 - `origin_x`, `origin_y` - Menu position
 - `font` - Font identifier
 - `font_size` - Font size

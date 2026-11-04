@@ -2192,6 +2192,8 @@ let menu = Menu::new(
 );
 ```
 
+Item ids identify items: `MenuActions` and `MenuSelected` use them, and a static-text menu (`with_dynamic_text(false)`) keys each label texture by id. Keep ids unique within a menu: items that share an id share one action, report the same `item_id`, and in a static-text menu share one label texture.
+
 **Builder methods:**
 
 | Method | Description |
