@@ -73,6 +73,9 @@ pub struct Menu {
     pub normal_color: Color,
     /// Color for the selected item.
     pub selected_color: Color,
+    /// Explicit color for disabled items; `None` makes [`Menu::disabled_color`]
+    /// fall back to `normal_color` with halved alpha.
+    pub disabled_color: Option<Color>,
     /// Optional cursor/pointer entity.
     pub cursor_entity: Option<Entity>,
     /// Optional sound to play on selection change.
@@ -122,6 +125,24 @@ impl Menu {
         self.selected_color = selected;
         self
     }
+    /// Sets an explicit color for disabled items, overriding the
+    /// half-alpha `normal_color` default returned by [`Menu::disabled_color`].
+    pub fn with_disabled_color(mut self, color: Color) -> Self {
+        self.disabled_color = Some(color);
+        self
+    }
+    /// Returns the color disabled items are drawn with: the explicit
+    /// `disabled_color` field when set, otherwise `normal_color` with its
+    /// alpha halved (`a / 2`, integer division).
+    pub fn disabled_color(&self) -> Color {
+        match self.disabled_color {
+            Some(color) => color,
+            None => Color {
+                a: self.normal_color.a / 2,
+                ..self.normal_color
+            },
+        }
+    }
     pub fn with_dynamic_text(mut self, dynamic: bool) -> Self {
         for item in &mut self.items {
             item.dynamic_text = dynamic;
@@ -157,6 +178,7 @@ impl Menu {
             item_spacing,
             normal_color: Color::WHITE,
             selected_color: Color::YELLOW,
+            disabled_color: None,
             cursor_entity: None,
             selection_change_sound: None,
             origin,
@@ -314,6 +336,31 @@ mod tests {
     fn new_marks_every_item_enabled() {
         let menu = sample_menu();
         assert!(menu.items.iter().all(|i| i.enabled));
+    }
+
+    #[test]
+    fn from_items_leaves_disabled_color_unset() {
+        assert_eq!(sample_menu().disabled_color, None);
+    }
+
+    #[test]
+    fn disabled_color_defaults_to_normal_color_with_alpha_halved() {
+        let menu = sample_menu().with_colors(Color::new(10, 20, 30, 255), Color::YELLOW);
+        assert_eq!(menu.disabled_color(), Color::new(10, 20, 30, 127));
+    }
+
+    #[test]
+    fn with_disabled_color_wins_over_the_default() {
+        let menu = sample_menu()
+            .with_colors(Color::new(10, 20, 30, 255), Color::YELLOW)
+            .with_disabled_color(Color::new(1, 2, 3, 4));
+        assert_eq!(menu.disabled_color(), Color::new(1, 2, 3, 4));
+    }
+
+    #[test]
+    fn with_colors_changes_the_default_disabled_color() {
+        let menu = sample_menu().with_colors(Color::new(200, 100, 50, 200), Color::YELLOW);
+        assert_eq!(menu.disabled_color(), Color::new(200, 100, 50, 100));
     }
 
     fn item(id: &str, enabled: bool) -> MenuItem {

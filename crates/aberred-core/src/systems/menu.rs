@@ -89,6 +89,7 @@ pub fn menu_spawn_system(
         let font_size = menu.font_size;
         let normal_color = menu.normal_color;
         let selected_color = menu.selected_color;
+        let disabled_color = menu.disabled_color();
         let selected_index = menu.selected_index;
         let use_screen_space = menu.use_screen_space;
         let origin = menu.origin;
@@ -118,8 +119,11 @@ pub fn menu_spawn_system(
             let mut ecmd = commands.spawn_empty();
             if menu_item.dynamic_text {
                 // Dynamic text will be updated each frame
-                // Use selected_color for the initially selected item
-                let color = if i == selected_index {
+                // A disabled item gets disabled_color; otherwise the selected
+                // item gets selected_color and the rest normal_color.
+                let color = if !menu_item.enabled {
+                    disabled_color
+                } else if i == selected_index {
                     selected_color
                 } else {
                     normal_color
@@ -152,13 +156,21 @@ pub fn menu_spawn_system(
                 };
                 let size = metrics.measure_text(&menu_item.label, font_size);
                 let key = format!("menu_{}", menu_item.id);
+                // Static sprites are baked once, so they never recolour on
+                // selection: an enabled item keeps normal_color even when it
+                // is the selected index; a disabled item gets disabled_color.
+                let color = if menu_item.enabled {
+                    normal_color
+                } else {
+                    disabled_color
+                };
                 render_asset_cmd_writer.write(RenderAssetCmd::RasterizeText {
                     key: key.clone(),
                     font_key: label_font.to_owned(),
                     text: menu_item.label.clone(),
                     font_size,
                     spacing: metrics.spacing,
-                    color: normal_color,
+                    color,
                 });
                 ecmd.insert(Sprite {
                     tex_key: Arc::from(key),
@@ -438,6 +450,10 @@ pub fn menu_controller_observer(
                 && let Some(entity) = old_item.entity
                 && let Ok(mut text) = dynamic_text_query.get_mut(entity)
             {
+                // Restoring normal_color is valid because selection never rests
+                // on a disabled item (an all-disabled menu has no navigation).
+                // A "selectable but inert" mode would have to restore
+                // disabled_color() for disabled items instead.
                 text.color = menu.normal_color;
             }
             if let Some(new_item) = menu.items.get(menu.selected_index)
@@ -575,7 +591,7 @@ pub fn menu_selection_observer(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::components::menu::first_enabled;
+    use crate::components::menu::{MenuItem, first_enabled};
     use crate::math::{Color, Vec2};
     use crate::resources::world_signals::WorldSignals;
     use bevy_ecs::message::Messages;
@@ -746,6 +762,24 @@ mod tests {
 
     fn played_sounds(world: &mut World) -> usize {
         world.resource_mut::<Messages<AudioCmd>>().drain().count()
+    }
+
+    /// Updates the render-asset message buffer and drains the queued commands.
+    fn read_render_asset_cmds(world: &mut World) -> Vec<RenderAssetCmd> {
+        world.resource_mut::<Messages<RenderAssetCmd>>().update();
+        let mut reader_state =
+            bevy_ecs::system::SystemState::<MessageReader<RenderAssetCmd>>::new(world);
+        let mut reader = reader_state
+            .get_mut(world)
+            .expect("render asset reader should fetch");
+        reader.read().cloned().collect()
+    }
+
+    fn text_color(world: &World, menu: Entity, i: usize) -> Color {
+        world
+            .get::<DynamicText>(item(world, menu, i))
+            .unwrap()
+            .color
     }
 
     #[test]
@@ -1142,16 +1176,7 @@ mod tests {
         world
             .run_system_once(menu_spawn_system)
             .expect("system should run");
-        world.resource_mut::<Messages<RenderAssetCmd>>().update();
-
-        let mut reader_state =
-            bevy_ecs::system::SystemState::<MessageReader<RenderAssetCmd>>::new(&mut world);
-        let cmds: Vec<RenderAssetCmd> = {
-            let mut reader = reader_state
-                .get_mut(&mut world)
-                .expect("render asset reader should fetch");
-            reader.read().cloned().collect()
-        };
+        let cmds = read_render_asset_cmds(&mut world);
         assert_eq!(cmds.len(), 1);
         match &cmds[0] {
             RenderAssetCmd::RasterizeText {
@@ -1198,17 +1223,7 @@ mod tests {
         world
             .run_system_once(menu_spawn_system)
             .expect("system should run");
-        world.resource_mut::<Messages<RenderAssetCmd>>().update();
-
-        let mut reader_state =
-            bevy_ecs::system::SystemState::<MessageReader<RenderAssetCmd>>::new(&mut world);
-        let cmds: Vec<RenderAssetCmd> = {
-            let mut reader = reader_state
-                .get_mut(&mut world)
-                .expect("render asset reader should fetch");
-            reader.read().cloned().collect()
-        };
-        assert!(cmds.is_empty());
+        assert!(read_render_asset_cmds(&mut world).is_empty());
 
         let mut sprite_query = world.query::<&Sprite>();
         assert!(sprite_query.iter(&world).next().is_none());
@@ -1352,5 +1367,102 @@ mod tests {
         press(&mut world, InputAction::SecondaryDirectionUp);
         assert_eq!(world.get::<Menu>(menu).unwrap().selected_index, 0);
         assert_eq!(played_sounds(&mut world), 0, "no change, no sound");
+    }
+
+    #[test]
+    fn spawn_colors_a_disabled_dynamic_item_with_the_default_disabled_color() {
+        let (world, menu) = spawn_menu(five_items_with_disabled(&["b"]));
+        let expected = world.get::<Menu>(menu).unwrap().disabled_color();
+        assert_eq!(text_color(&world, menu, 1), expected);
+        assert_eq!(
+            text_color(&world, menu, 1),
+            Color::new(255, 255, 255, 127),
+            "the default is WHITE at half alpha"
+        );
+    }
+
+    #[test]
+    fn spawn_colors_a_disabled_dynamic_item_with_an_explicit_disabled_color() {
+        let menu = five_items_with_disabled(&["b"])
+            .with_colors(Color::new(10, 20, 30, 255), Color::YELLOW)
+            .with_disabled_color(Color::new(1, 2, 3, 200));
+        let (world, menu_entity) = spawn_menu(menu);
+        let expected = world.get::<Menu>(menu_entity).unwrap().disabled_color();
+        assert_eq!(text_color(&world, menu_entity, 1), expected);
+        assert_eq!(text_color(&world, menu_entity, 1), Color::new(1, 2, 3, 200));
+    }
+
+    #[test]
+    fn spawn_keeps_normal_and_selected_colors_on_enabled_items() {
+        let menu = five_items_with_disabled(&["c"])
+            .with_colors(Color::new(10, 20, 30, 255), Color::new(200, 200, 0, 255));
+        let (world, menu_entity) = spawn_menu(menu);
+        assert_eq!(world.get::<Menu>(menu_entity).unwrap().selected_index, 0);
+        assert_eq!(
+            text_color(&world, menu_entity, 0),
+            Color::new(200, 200, 0, 255),
+            "the selected enabled item keeps selected_color"
+        );
+        assert_eq!(
+            text_color(&world, menu_entity, 1),
+            Color::new(10, 20, 30, 255),
+            "an enabled non-selected item keeps normal_color"
+        );
+    }
+
+    #[test]
+    fn spawn_draws_a_selected_but_disabled_item_with_the_disabled_color() {
+        let (world, menu) = spawn_menu(five_items_with_disabled(&["a", "b", "c", "d", "e"]));
+        assert_eq!(world.get::<Menu>(menu).unwrap().selected_index, 0);
+        let expected = world.get::<Menu>(menu).unwrap().disabled_color();
+        assert_eq!(
+            text_color(&world, menu, 0),
+            expected,
+            "disabled wins over selected"
+        );
+    }
+
+    /// Drains the queued `RasterizeText` commands as `(text, color)` pairs.
+    fn rasterize_colors(world: &mut World) -> Vec<(String, Color)> {
+        read_render_asset_cmds(world)
+            .into_iter()
+            .filter_map(|cmd| match cmd {
+                RenderAssetCmd::RasterizeText { text, color, .. } => Some((text, color)),
+                _ => None,
+            })
+            .collect()
+    }
+
+    #[test]
+    fn spawn_rasterizes_a_disabled_static_item_with_the_disabled_color() {
+        let menu = Menu::from_items(
+            vec![MenuItem::new("a", "A"), MenuItem::new("b", "B").disabled()],
+            Vec2::new(100.0, 50.0),
+            "test_font",
+            12.0,
+            10.0,
+            true,
+        )
+        .with_dynamic_text(false)
+        .with_colors(Color::new(10, 20, 30, 255), Color::YELLOW);
+        let (mut world, menu_entity) = spawn_menu(menu);
+        let disabled = world.get::<Menu>(menu_entity).unwrap().disabled_color();
+        let colors = rasterize_colors(&mut world);
+        let color_of = |text: &str| {
+            colors
+                .iter()
+                .find(|(t, _)| t.as_str() == text)
+                .map(|(_, c)| *c)
+        };
+        assert_eq!(
+            color_of("A"),
+            Some(Color::new(10, 20, 30, 255)),
+            "an enabled static item keeps normal_color"
+        );
+        assert_eq!(
+            color_of("B"),
+            Some(disabled),
+            "a disabled static item is baked with the disabled color"
+        );
     }
 }
