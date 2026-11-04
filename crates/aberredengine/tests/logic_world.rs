@@ -4165,3 +4165,82 @@ fn lua_tag_observers_see_the_spawns_other_components() {
     tw.tick(1, DT);
     assert_eq!(max_speed(&tw, lead), Some(240.0), "promoted again");
 }
+
+/// A Lua game's dialogue through the real sim schedules: `on_setup` registers
+/// a table tree, scene entry spawns a `:with_dialogue` entity with the three
+/// callbacks, and `on_update_main` picks a choice. The choice made in tick N
+/// is applied by `dialogue_system` in tick N+1.
+#[cfg(feature = "lua")]
+mod lua_dialogue {
+    use super::*;
+
+    const SCRIPT: &str = r#"
+ARMED = false
+function on_setup()
+    engine.register_dialogue('quest', {
+        start = 'ask',
+        nodes = {
+            { id = 'ask', speaker = 'Elder', text = 'Help?', choices = {
+                { text = 'Yes', next = 'thanks', effects = { { type = 'set_flag', key = 'accepted' } } },
+                { text = 'No' } } },
+            { id = 'thanks', text = 'Thanks' },
+        },
+    })
+end
+function on_scene_enter(scene)
+    engine.spawn()
+        :with_dialogue('quest')
+        :with_lua_dialogue_node_entered('on_node')
+        :with_lua_dialogue_choice_selected('on_choice')
+        :with_lua_dialogue_ended('on_end')
+        :register_as('elder')
+        :build()
+end
+function on_node(ctx, d)
+    table.insert(LOG, 'node:' .. d.node .. ':' .. tostring(d.previous) .. ':' .. #d.choices)
+    engine.set_flag('seen_' .. d.node)
+end
+function on_choice(ctx, d)
+    table.insert(LOG, 'choice:' .. d.node .. ':' .. d.index .. ':' .. d.text)
+end
+function on_end(ctx, d)
+    table.insert(LOG, 'end:' .. d.node .. ':' .. d.reason)
+end
+function on_update_main(ctx, input)
+    if ARMED then
+        ARMED = false
+        engine.entity_dialogue_choose(engine.get_entity('elder'), 0)
+    end
+end
+"#;
+
+    #[test]
+    fn a_lua_dialogue_runs_its_callbacks_and_effects_across_ticks() {
+        let mut tw = lua_script_world(SCRIPT);
+        tw.tick(2, DT);
+        assert_eq!(take_lua_log(&mut tw), ["node:ask:nil:2"]);
+        assert!(tw.world.resource::<WorldSignals>().has_flag("seen_ask"));
+
+        exec_lua(&mut tw, "ARMED = true");
+        tw.tick(1, DT);
+        assert!(
+            take_lua_log(&mut tw).is_empty(),
+            "choose queued in tick N is applied in tick N+1"
+        );
+        tw.tick(2, DT);
+        assert_eq!(
+            take_lua_log(&mut tw),
+            ["choice:ask:0:Yes", "node:thanks:ask:0"]
+        );
+
+        exec_lua(
+            &mut tw,
+            "engine.entity_dialogue_advance(engine.get_entity('elder'))",
+        );
+        tw.tick(2, DT);
+        assert_eq!(take_lua_log(&mut tw), ["end:thanks:completed"]);
+        let signals = tw.world.resource::<WorldSignals>();
+        assert!(signals.has_flag("accepted"));
+        assert!(signals.has_flag("seen_thanks"));
+    }
+}
