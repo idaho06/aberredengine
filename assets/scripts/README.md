@@ -365,6 +365,7 @@ Collision callbacks process commands from their own dedicated queues, which are 
 - `engine.collision_entity_insert_tween_scale()` instead of `engine.entity_insert_tween_scale()`
 - `engine.collision_entity_insert_tween_tint()` instead of `engine.entity_insert_tween_tint()`
 - `engine.collision_entity_menu_despawn()` instead of `engine.entity_menu_despawn()`
+- `engine.collision_entity_menu_set_items()` instead of `engine.entity_menu_set_items()`
 - `engine.collision_entity_remove_tween_position()` instead of `engine.entity_remove_tween_position()`
 - `engine.collision_entity_remove_tween_rotation()` instead of `engine.entity_remove_tween_rotation()`
 - `engine.collision_entity_remove_tween_scale()` instead of `engine.entity_remove_tween_scale()`
@@ -1644,7 +1645,7 @@ Create an interactive menu.
 
 **Parameters:**
 
-- `items` - Table of `{ id = "...", label = "..." }`
+- `items` - Table of `{ id = "...", label = "...", enabled = true }`. `enabled` is optional and defaults to `true`; it must be a boolean when present. A disabled item (`enabled = false`) is skipped by up/down, cannot be confirmed, and draws in the disabled color (see `:with_menu_disabled_color`). The initial selection is the first enabled item.
 - `origin_x`, `origin_y` - Menu position
 - `font` - Font identifier
 - `font_size` - Font size
@@ -1664,6 +1665,8 @@ Create an interactive menu.
 )
 ```
 
+A confirm deactivates the menu, whether it runs a callback or a `MenuActions` action: the menu ignores input until `engine.entity_menu_set_items()` replaces its items, which re-activates it.
+
 #### `:with_menu_colors(normal_r, normal_g, normal_b, normal_a, selected_r, selected_g, selected_b, selected_a)`
 
 Set menu text colors (requires `:with_menu()`).
@@ -1673,6 +1676,14 @@ Set menu text colors (requires `:with_menu()`).
     200, 200, 200, 255,  -- Normal: gray
     255, 255, 0, 255     -- Selected: yellow
 )
+```
+
+#### `:with_menu_disabled_color(r, g, b, a)`
+
+Set the color of disabled items (requires `:with_menu()`). Without it, disabled items draw in the normal color at half alpha.
+
+```lua
+:with_menu_disabled_color(120, 120, 120, 255)
 ```
 
 #### `:with_menu_dynamic_text(dynamic)`
@@ -1713,6 +1724,22 @@ engine.spawn()
 ```
 
 **How it works:** The menu system will automatically move the cursor entity to align with the currently selected menu item.
+
+#### `:with_menu_cursor_text(text)`
+
+Give the menu a text cursor that it spawns and owns (requires `:with_menu()`). The cursor is a text entity in the menu font, drawn in the selected color at the menu origin on the selected row, so no separate cursor entity or `:register_as()` is needed. Items and the "..." scroll indicators shift right by the width of the cursor text plus one space.
+
+A menu has either a text cursor or a cursor entity: calling `:with_menu_cursor_text()` after `:with_menu_cursor()` (or the other way round) raises a Lua error.
+
+```lua
+engine.spawn()
+    :with_menu(
+        { { id = "start", label = "Start" }, { id = "quit", label = "Quit" } },
+        400, 300, "arcade", 32, 40, true
+    )
+    :with_menu_cursor_text("→")
+    :build()
+```
 
 #### `:with_menu_selection_sound(sound_key)`
 
@@ -3342,6 +3369,29 @@ end
 - The cursor entity (if present)
 - Generated menu item textures from TextureStore
 - The menu entity itself
+
+### `engine.entity_menu_set_items(entity_id, items)`
+
+Replace a menu's items in place. The replacement lands after the call, no later than the next tick; until then the menu is unchanged. The old items are removed, the menu becomes active again (a confirm deactivates it), the first enabled item is selected, and the scroll resets. The cursor, colors, selection sound and callback stay, and the new items keep the menu's static or dynamic text mode. Does nothing when the entity has no `Menu`.
+
+**Parameters:**
+
+- `entity_id` - Menu entity ID (entity with Menu component)
+- `items` - Table of `{ id = "...", label = "...", enabled = true }`, in the same shape as `:with_menu()`. A malformed table raises a Lua error at the call and queues nothing.
+
+```lua
+-- Show the next dialogue node's choices on the same menu
+function on_menu_pick(ctx)
+    engine.entity_menu_set_items(ctx.menu_id, {
+        { id = "again",  label = "Play Again" },
+        { id = "locked", label = "Locked", enabled = false },
+    })
+end
+```
+
+Available collision variant:
+
+- `engine.collision_entity_menu_set_items(entity_id, items)`
 
 ### `engine.entity_set_rotation(entity_id, degrees)`
 

@@ -395,6 +395,51 @@ mod menus {
     commands.spawn(menu).observe(on_menu_select);
     } // GLUE
 
+    fn spawn_with_disabled_item(mut commands: Commands) { // GLUE
+    use aberredengine::prelude::*;
+
+    let menu = Menu::from_items(
+        vec![
+            MenuItem::new("start", "Start Game"),
+            MenuItem::new("continue", "Continue").disabled(),
+            MenuItem::new("quit", "Quit"),
+        ],
+        Vec2::new(100.0, 80.0),
+        "arcade",
+        24.0,
+        30.0,
+        true,
+    )
+    .with_disabled_color(Color::GRAY);
+
+    commands.spawn(menu);
+    } // GLUE
+
+    fn spawn_with_text_cursor(mut commands: Commands) { // GLUE
+    use aberredengine::prelude::*;
+
+    let menu = Menu::new(
+        &[("play", "Play"), ("quit", "Quit")],
+        Vec2::new(200.0, 150.0),
+        "arcade",
+        32.0,
+        40.0,
+        true,
+    )
+    .with_cursor_text("→");
+
+    commands.spawn(menu);
+    } // GLUE
+
+    fn replace_menu_items(mut commands: Commands, menu: Entity) { // GLUE
+    use aberredengine::prelude::*;
+
+    commands.entity(menu).insert(MenuRebuild::new(vec![
+        MenuItem::new("again", "Play Again"),
+        MenuItem::new("locked", "Locked").disabled(),
+    ]));
+    } // GLUE
+
     use aberredengine::prelude::*;
 
     fn enter(_: On<SceneEntered>, mut commands: Commands) {

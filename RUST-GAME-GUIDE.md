@@ -2200,6 +2200,8 @@ let menu = Menu::new(
 | `.with_selection_sound("key")` | Play a sound on selection change |
 | `.with_visible_count(n)` | Limit visible items (enables scrolling) |
 | `.with_cursor(entity)` | Attach a cursor entity to the selection |
+| `.with_cursor_text("→")` | Spawn a text cursor owned by the menu (replaces `.with_cursor`) |
+| `.with_disabled_color(color)` | Set the color of disabled items (default: the normal color at half alpha) |
 
 **Two selection handling approaches:**
 
@@ -2246,7 +2248,58 @@ A global observer registered with `EngineBuilder::add_observer` sees every menu'
 
 **Dispatch order:** When an item is confirmed, the engine triggers `MenuSelected`, and the menu's `MenuActions` run alongside its `MenuSelected` observers. Don't combine `MenuActions` with an observer for the same item, or both act on it.
 
-**Navigation:** Up/down arrows move selection. `action_1` or `action_2` confirms. With `.with_visible_count(n)`, the menu shows at most `n` items at a time with bounded navigation and auto-scrolling.
+**Navigation:** Up/down arrows move selection and skip disabled items. `action_1` or `action_2` confirms the selected item; the menu then deactivates until a `MenuRebuild` re-activates it. With `.with_visible_count(n)`, the menu shows at most `n` items at a time with bounded navigation and auto-scrolling.
+
+**Disabled items:** `Menu::from_items` takes `MenuItem`s, and `MenuItem::new(id, label).disabled()` marks one that cannot be chosen. Navigation skips a disabled item, a confirm never fires on one, and it draws in the menu's disabled color. The initial selection is the first enabled item. A menu whose items are all disabled selects nothing: navigation and confirm do nothing and the cursor is hidden.
+
+```rust
+use aberredengine::prelude::*;
+
+let menu = Menu::from_items(
+    vec![
+        MenuItem::new("start", "Start Game"),
+        MenuItem::new("continue", "Continue").disabled(),
+        MenuItem::new("quit", "Quit"),
+    ],
+    Vec2::new(100.0, 80.0),
+    "arcade",
+    24.0,
+    30.0,
+    true,
+)
+.with_disabled_color(Color::GRAY);
+
+commands.spawn(menu);
+```
+
+**Text cursor:** `.with_cursor_text(text)` makes the menu spawn its own cursor: a text entity in the menu font, drawn in the selected color at `origin.x` on the selected row. Items and the `...` scroll indicators shift right by the width of the cursor text plus one space, so the cursor never overlaps a label. A text cursor replaces any entity set with `.with_cursor`; it is kept across a `MenuRebuild` and moves to the new selection.
+
+```rust
+use aberredengine::prelude::*;
+
+let menu = Menu::new(
+    &[("play", "Play"), ("quit", "Quit")],
+    Vec2::new(200.0, 150.0),
+    "arcade",
+    32.0,
+    40.0,
+    true,
+)
+.with_cursor_text("→");
+
+commands.spawn(menu);
+```
+
+**Replacing items:** inserting `MenuRebuild` on a menu entity replaces its items in place. Nothing changes at the insert: the replacement is applied by the next spawn step of the simulation, no later than the next tick, and the `MenuRebuild` is consumed then, so it can be inserted again later. The old items are removed, the menu becomes active again, the first enabled item is selected and the scroll resets. The cursor, colors and selection sound stay, and the new items keep the menu's static or dynamic text mode. `MenuActions` is keyed by item id and a rebuild leaves it alone: new items resolve against the existing actions, and an id without an action does nothing. A rebuild creates the item entities (and static label textures) anew, so insert it when the items change, not every frame.
+
+```rust
+use aberredengine::prelude::*;
+
+commands.entity(menu).insert(MenuRebuild::new(vec![
+    MenuItem::new("again", "Play Again"),
+    MenuItem::new("locked", "Locked").disabled(),
+]));
+```
 
 **Complete menu example:**
 
