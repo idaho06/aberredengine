@@ -1,0 +1,75 @@
+{
+  "start": "greet",
+  "nodes": [
+    {
+      "id": "greet",
+      "speaker": "Guard",
+      "text": "Halt! Who goes there?",
+      "labels": ["gate"],
+      "on_enter": [{ "type": "add_integer", "key": "visits", "delta": 1 }],
+      "choices": [
+        { "text": "Who are you?", "next": "question" },
+        {
+          "text": "I found the key.",
+          "next": "greet",
+          "when": { "type": "integer", "key": "keys", "op": "gt", "value": 0 },
+          "effects": [{ "type": "set_flag", "key": "has_key" }],
+          "labels": ["key"]
+        },
+        {
+          "text": "Open the gate!",
+          "next": "inside",
+          "when": { "type": "flag", "key": "has_key" },
+          "labels": ["locked"]
+        },
+        { "text": "Never mind." }
+      ]
+    },
+    {
+      "id": "question",
+      "speaker": "Guard",
+      "text": "Gate guard of the north pass.",
+      "next": "rumor"
+    },
+    {
+      "id": "rumor",
+      "speaker": "Guard",
+      "text": "They say a key lies in the old well.",
+      "labels": ["lore"],
+      "choices": [
+        {
+          "text": "Go look for the key in the well.",
+          "next": "greet",
+          "effects": [{ "type": "set_integer", "key": "keys", "value": 1 }],
+          "labels": ["well"]
+        },
+        { "text": "Maybe later.", "next": "pass" }
+      ]
+    },
+    {
+      "id": "pass",
+      "speaker": "Guard",
+      "text": "The pass is open until dusk.",
+      "next": "dusk"
+    },
+    {
+      "id": "dusk",
+      "speaker": "Guard",
+      "text": "Then hurry, traveller.",
+      "next": "farewell"
+    },
+    {
+      "id": "farewell",
+      "speaker": "Guard",
+      "text": "Safe travels, traveller.",
+      "labels": ["end"]
+    },
+    {
+      "id": "inside",
+      "speaker": "Guard",
+      "text": "The gate creaks open. Welcome in.",
+      "on_enter": [{ "type": "set_flag", "key": "gate_open" }],
+      "labels": ["success"]
+    }
+  ]
+}

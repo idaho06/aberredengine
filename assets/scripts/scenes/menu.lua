@@ -27,6 +27,8 @@ local function on_showcase_menu_select(ctx)
         engine.request_scene("gui_demo")
     elseif ctx.item_id == "shapes_showcase" then
         engine.request_scene("shapes_showcase")
+    elseif ctx.item_id == "dialogue_demo" then
+        engine.request_scene("dialogue_demo")
     elseif ctx.item_id == "exit" then
         engine.request_quit()
     end
@@ -118,6 +120,7 @@ function M.spawn()
                 { id = "bunnymark",    label = "Bunnymark" },
                 { id = "gui_demo",     label = "GUI Demo" },
                 { id = "shapes_showcase", label = "Shapes Showcase" },
+                { id = "dialogue_demo", label = "Dialogue Demo" },
                 { id = "exit",         label = "Exit" },
             },
             16 + 8,
