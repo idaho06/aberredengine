@@ -70,6 +70,11 @@ pub struct Menu {
     pub font_size: f32,
     /// Vertical spacing between menu items.
     pub item_spacing: f32,
+    /// Horizontal offset of the items and the "..." indicators from `origin.x`:
+    /// the measured width of the cursor text plus one space, written by
+    /// [`menu_spawn_system`](crate::systems::menu::menu_spawn_system); 0.0
+    /// without a text cursor or when the font has no cached metrics.
+    pub item_indent: f32,
     /// Color for unselected items.
     pub normal_color: Color,
     /// Color for the selected item.
@@ -79,6 +84,13 @@ pub struct Menu {
     pub disabled_color: Option<Color>,
     /// Optional cursor/pointer entity.
     pub cursor_entity: Option<Entity>,
+    /// Optional text drawn as the menu's cursor at `origin.x` on the selected
+    /// item's row. When `Some`, [`menu_spawn_system`](crate::systems::menu::menu_spawn_system)
+    /// spawns one [`DynamicText`](crate::components::dynamic_text::DynamicText)
+    /// entity with this text, the menu font, `font_size` and `selected_color`,
+    /// and stores it in [`cursor_entity`](Self::cursor_entity), overriding a
+    /// caller-supplied one; `None` leaves the cursor to [`Menu::with_cursor`].
+    pub cursor_text: Option<String>,
     /// Optional sound to play on selection change.
     pub selection_change_sound: Option<String>,
     /// Origin position of the menu.
@@ -119,6 +131,13 @@ impl Menu {
     }
     pub fn with_cursor(mut self, cursor_entity: Entity) -> Self {
         self.cursor_entity = Some(cursor_entity);
+        self
+    }
+    /// Sets the menu's text cursor. When [`cursor_text`](Self::cursor_text) is
+    /// `Some`, the menu spawns its own [`DynamicText`](crate::components::dynamic_text::DynamicText)
+    /// cursor entity, which wins over a cursor set with [`Menu::with_cursor`].
+    pub fn with_cursor_text(mut self, text: impl Into<String>) -> Self {
+        self.cursor_text = Some(text.into());
         self
     }
     pub fn with_colors(mut self, normal: Color, selected: Color) -> Self {
@@ -177,10 +196,12 @@ impl Menu {
             font: font.into(),
             font_size,
             item_spacing,
+            item_indent: 0.0,
             normal_color: Color::WHITE,
             selected_color: Color::YELLOW,
             disabled_color: None,
             cursor_entity: None,
+            cursor_text: None,
             selection_change_sound: None,
             origin,
             use_screen_space,

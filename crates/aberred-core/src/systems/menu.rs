@@ -80,17 +80,23 @@ type MenuSpawnQuery<'w, 's> = Query<
 /// Spawns entities for newly added [`Menu`] components.
 ///
 /// For each menu item, spawns a text entity (either [`DynamicText`] or a
-/// static sprite) and positions it in world or screen space. Also spawns
-/// the cursor entity if configured.
+/// static sprite) and positions it at `origin.x + item_indent` in world or
+/// screen space. When `cursor_text` is set, spawns a [`DynamicText`] cursor
+/// entity holding that text (stored in `cursor_entity`, overriding a
+/// caller-supplied one) and measures `item_indent` as the width of
+/// `"{cursor_text} "` in the menu font; the cursor itself sits at `origin.x`
+/// on the selected row, or is left unpositioned when the selected item is
+/// disabled. Without `cursor_text`, `item_indent` is 0.0 and a
+/// caller-supplied cursor entity is positioned as before.
 ///
 /// When `visible_count` is set, only positions items within the visible window
-/// and spawns "..." indicator entities for scrolling.
+/// and spawns "..." indicator entities for scrolling, at the same indented x.
 ///
 /// An entity carrying a [`MenuRebuild`] marker has its items replaced in
 /// place first: the old item and indicator entities are despawned, the
 /// replacement items inherit the current `dynamic_text` mode, the menu is
 /// re-activated with the first enabled item selected and the scroll reset,
-/// and the marker is removed once applied.
+/// `item_indent` is re-measured, and the marker is removed once applied.
 pub fn menu_spawn_system(
     mut commands: Commands,
     mut query: MenuSpawnQuery,
@@ -101,6 +107,7 @@ pub fn menu_spawn_system(
     mut texture_dims: ResMut<TextureDimsStore>,
 ) {
     for (entity, mut menu, rebuild) in query.iter_mut() {
+        let is_rebuild = rebuild.is_some();
         if let Some(mut rebuild) = rebuild {
             // Clean up from the old state: despawn the old item and indicator
             // entities and drop their label textures. Items that were never
@@ -145,6 +152,29 @@ pub fn menu_spawn_system(
             menu.scroll_offset = ensure_visible(menu.selected_index, 0, vc);
         }
         let scroll_offset = menu.scroll_offset;
+
+        // A text cursor indents the items and indicators by the measured width
+        // of "{cursor} " in the menu font; without a text cursor, or without
+        // cached metrics for the resolved font key, the indent is 0.0.
+        let item_indent = match menu.cursor_text.as_deref() {
+            Some(cursor) => {
+                let cursor_font = font_metrics.resolve_key(&font_string, &pending, &mut warn_cache);
+                match font_metrics.0.get(cursor_font) {
+                    Some(metrics) => metrics.measure_text(&format!("{cursor} "), font_size).x,
+                    None => {
+                        if warn_cache.warn_once(cursor_font) {
+                            warn!(
+                                "menu_spawn_system: item indent is 0 for menu {:?} because font '{}' has no cached metrics",
+                                entity, cursor_font
+                            );
+                        }
+                        0.0
+                    }
+                }
+            }
+            None => 0.0,
+        };
+        menu.item_indent = item_indent;
 
         debug!(
             "menu_spawn_system: Spawning menu entity {:?} with {} items",
@@ -241,7 +271,7 @@ pub fn menu_spawn_system(
                 // Calculate position within visible viewport
                 let viewport_index = i - scroll_offset;
                 let pos = Vec2 {
-                    x: origin.x,
+                    x: origin.x + item_indent,
                     y: origin.y + (viewport_index as f32) * item_spacing,
                 };
                 set_menu_position(&mut ecmd, use_screen_space, pos);
@@ -273,7 +303,7 @@ pub fn menu_spawn_system(
             // Position only if needed (scroll_offset > 0)
             if scroll_offset > 0 {
                 let pos = Vec2 {
-                    x: origin.x,
+                    x: origin.x + item_indent,
                     y: origin.y - item_spacing,
                 };
                 set_menu_position(&mut commands.entity(top_indicator), use_screen_space, pos);
@@ -294,7 +324,7 @@ pub fn menu_spawn_system(
             // Position only if needed (visible_end < items.len())
             if visible_end < menu.items.len() {
                 let pos = Vec2 {
-                    x: origin.x,
+                    x: origin.x + item_indent,
                     y: origin.y + (vc as f32) * item_spacing,
                 };
                 set_menu_position(
@@ -315,25 +345,57 @@ pub fn menu_spawn_system(
             entity
         );
 
-        // Spawn cursor entity if needed
+        // Spawn the text cursor entity if the menu asks for one: on a first
+        // spawn, or on a rebuild of a menu that has no cursor yet. A rebuild
+        // of a menu that already has its cursor never respawns it, and a
+        // spawned text cursor overrides a caller-supplied cursor entity
+        // (which is left untouched).
+        if let Some(cursor_text) = menu.cursor_text.clone()
+            && (!is_rebuild || menu.cursor_entity.is_none())
+        {
+            let mut cursor_cmd = commands.spawn(DynamicText::new(
+                cursor_text,
+                font_string.clone(),
+                font_size,
+                selected_color,
+            ));
+            cursor_cmd.insert(Group::new(format!("menu_{}", entity)));
+            let text_cursor = cursor_cmd.id();
+            menu.cursor_entity = Some(text_cursor);
+            debug!(
+                "menu_spawn_system: Spawned text cursor entity {:?} for menu {:?}",
+                text_cursor, entity
+            );
+        }
+        // Position the cursor entity if there is one
         if let Some(cursor_entity) = menu.cursor_entity {
-            debug!(
-                "menu_spawn_system: Spawning cursor entity {:?} for menu {:?}",
-                cursor_entity, entity
-            );
-            // Position cursor at selected item's viewport position
-            let selected_viewport_index = menu.selected_index.saturating_sub(scroll_offset);
-            let cursor_position = Vec2 {
-                x: origin.x,
-                y: origin.y + (selected_viewport_index as f32) * item_spacing,
-            };
             let mut cursor_cmd = commands.entity(cursor_entity);
-            set_menu_position(&mut cursor_cmd, use_screen_space, cursor_position);
+            // The cursor has a row only when the selected item is enabled; an
+            // all-disabled or empty menu leaves it unpositioned.
+            if menu
+                .items
+                .get(menu.selected_index)
+                .is_some_and(|item| item.enabled)
+            {
+                debug!(
+                    "menu_spawn_system: Positioning cursor entity {:?} for menu {:?}",
+                    cursor_entity, entity
+                );
+                // Position cursor at selected item's viewport position, at origin.x
+                let selected_viewport_index = menu.selected_index.saturating_sub(scroll_offset);
+                let cursor_position = Vec2 {
+                    x: origin.x,
+                    y: origin.y + (selected_viewport_index as f32) * item_spacing,
+                };
+                set_menu_position(&mut cursor_cmd, use_screen_space, cursor_position);
+                debug!(
+                    "menu_spawn_system: Positioned cursor entity {:?} at {:?}",
+                    cursor_entity, cursor_position
+                );
+            } else {
+                clear_menu_position(&mut cursor_cmd, use_screen_space);
+            }
             insert_menu_z_index(&mut cursor_cmd);
-            debug!(
-                "menu_spawn_system: Positioned cursor entity {:?} at {:?}",
-                cursor_entity, cursor_position
-            );
         }
         debug!(
             "menu_spawn_system: Spawned menu entity {:?} with {} items (visible_count={:?})",
@@ -557,8 +619,9 @@ pub fn menu_controller_observer(
 
 /// Repositions menu items and indicators after scrolling.
 ///
-/// Items within the visible window get position components added/updated,
-/// while items outside the window have their position components removed.
+/// Items within the visible window get position components added/updated at
+/// `origin.x + item_indent`, while items outside the window have their
+/// position components removed. The "..." indicators use the same indented x.
 fn reposition_menu_items(commands: &mut Commands, menu: &Menu) {
     let visible_count = menu.visible_count.unwrap_or(menu.items.len());
     let visible_end = (menu.scroll_offset + visible_count).min(menu.items.len());
@@ -572,7 +635,7 @@ fn reposition_menu_items(commands: &mut Commands, menu: &Menu) {
                 // Add/update position component
                 let viewport_index = i - menu.scroll_offset;
                 let new_pos = Vec2 {
-                    x: menu.origin.x,
+                    x: menu.origin.x + menu.item_indent,
                     y: menu.origin.y + (viewport_index as f32) * menu.item_spacing,
                 };
                 set_menu_position(&mut commands.entity(entity), menu.use_screen_space, new_pos);
@@ -590,7 +653,7 @@ fn reposition_menu_items(commands: &mut Commands, menu: &Menu) {
     if let Some(top_entity) = menu.top_indicator_entity {
         if show_top {
             let pos = Vec2 {
-                x: menu.origin.x,
+                x: menu.origin.x + menu.item_indent,
                 y: menu.origin.y - menu.item_spacing,
             };
             set_menu_position(&mut commands.entity(top_entity), menu.use_screen_space, pos);
@@ -602,7 +665,7 @@ fn reposition_menu_items(commands: &mut Commands, menu: &Menu) {
     if let Some(bottom_entity) = menu.bottom_indicator_entity {
         if show_bottom {
             let pos = Vec2 {
-                x: menu.origin.x,
+                x: menu.origin.x + menu.item_indent,
                 y: menu.origin.y + (visible_count as f32) * menu.item_spacing,
             };
             set_menu_position(
@@ -1878,5 +1941,291 @@ mod tests {
                 "old item entity {e:?} despawned"
             );
         }
+    }
+
+    /// The indent a text `cursor` produces on a `five_items` menu: the
+    /// measured width of `"{cursor} "` in `"test_font"` at size 12.
+    fn cursor_indent(world: &World, cursor: &str) -> f32 {
+        world.resource::<FontMetricsStore>().0["test_font"]
+            .measure_text(&format!("{cursor} "), 12.0)
+            .x
+    }
+
+    /// The menu's cursor entity; panics when no text cursor was spawned.
+    fn text_cursor(world: &World, menu: Entity) -> Entity {
+        world
+            .get::<Menu>(menu)
+            .unwrap()
+            .cursor_entity
+            .expect("the text cursor is spawned and stored in cursor_entity")
+    }
+
+    /// Spawns `menu` (a `five_items` variant with a text cursor) and returns
+    /// the world, the menu entity, the spawned cursor entity, and the measured
+    /// indent, asserted positive.
+    fn spawn_cursor_menu(menu: Menu) -> (World, Entity, Entity, f32) {
+        let cursor = menu
+            .cursor_text
+            .clone()
+            .expect("fixture menus set a cursor text");
+        let (world, entity) = spawn_menu(menu);
+        let indent = cursor_indent(&world, &cursor);
+        assert!(
+            indent > 0.0,
+            "the fixture font measures \"{cursor} \" wider than zero"
+        );
+        let cursor_entity = text_cursor(&world, entity);
+        (world, entity, cursor_entity, indent)
+    }
+
+    /// Expected `visible_items` for a menu with `count` items, scroll window
+    /// `[offset, offset + visible)`, origin (100, 50), spacing 10, and items
+    /// at x = 100.0 + `indent`: windowed items positioned, the rest not.
+    fn expected_rows(
+        count: usize,
+        offset: usize,
+        visible: usize,
+        indent: f32,
+    ) -> Vec<Option<Vec2>> {
+        (0..count)
+            .map(|i| {
+                (i >= offset && i < offset + visible)
+                    .then(|| Vec2::new(100.0 + indent, 50.0 + (i - offset) as f32 * 10.0))
+            })
+            .collect()
+    }
+
+    #[test]
+    fn text_cursor_indents_the_items_and_sits_at_the_origin_on_row_zero() {
+        let (world, menu, cursor, indent) = spawn_cursor_menu(five_items().with_cursor_text("a"));
+        assert_eq!(
+            world.get::<Menu>(menu).unwrap().item_indent,
+            indent,
+            "item_indent is the measured width of the cursor text plus one space"
+        );
+        assert_eq!(
+            screen_pos(&world, cursor),
+            Some(Vec2::new(100.0, 50.0)),
+            "the cursor sits at origin.x on the selected row"
+        );
+        assert_eq!(
+            visible_items(&world, menu),
+            expected_rows(5, 0, 5, indent),
+            "every item sits at origin.x + item_indent"
+        );
+    }
+
+    #[test]
+    fn the_text_cursor_is_a_selected_color_dynamic_text_in_the_menu_group_and_wins_over_with_cursor()
+     {
+        let mut world = new_test_world();
+        let other = world.spawn_empty().id();
+        let menu = spawn_menu_in(
+            &mut world,
+            five_items().with_cursor(other).with_cursor_text(">"),
+        );
+        let cursor = world.get::<Menu>(menu).unwrap().cursor_entity;
+        assert!(
+            cursor.is_some_and(|c| c != other),
+            "the spawned text cursor overrides the with_cursor entity"
+        );
+        let cursor = cursor.unwrap();
+        let text = world.get::<DynamicText>(cursor);
+        assert!(text.is_some(), "the cursor entity is a DynamicText");
+        let text = text.unwrap();
+        assert_eq!(&*text.text, ">");
+        assert_eq!(&*text.font, "test_font");
+        assert_eq!(text.font_size, 12.0);
+        assert_eq!(text.color, Color::YELLOW, "the cursor uses selected_color");
+        assert_eq!(
+            world.get::<Group>(cursor).unwrap().0,
+            format!("menu_{menu}")
+        );
+        assert_eq!(world.get::<ZIndex>(cursor).unwrap().0, MENU_Z_INDEX);
+        assert!(
+            world.get_entity(other).is_ok(),
+            "the with_cursor entity is untouched"
+        );
+    }
+
+    #[test]
+    fn navigation_moves_the_text_cursor_down_a_row_at_the_origin_x() {
+        let (mut world, menu, cursor, indent) =
+            spawn_cursor_menu(five_items().with_cursor_text("a"));
+        assert_eq!(screen_pos(&world, cursor), Some(Vec2::new(100.0, 50.0)));
+
+        press(&mut world, InputAction::SecondaryDirectionDown);
+
+        assert_eq!(
+            screen_pos(&world, cursor),
+            Some(Vec2::new(100.0, 60.0)),
+            "the cursor follows the selection to row 1 at origin.x"
+        );
+        assert_eq!(
+            visible_items(&world, menu),
+            expected_rows(5, 0, 5, indent),
+            "the items keep their indented x"
+        );
+    }
+
+    #[test]
+    fn a_visible_window_indents_the_indicators_and_the_scrolled_items() {
+        let (mut world, menu, cursor, indent) =
+            spawn_cursor_menu(five_items().with_visible_count(2).with_cursor_text("a"));
+        let m = world.get::<Menu>(menu).unwrap();
+        let bottom = m
+            .bottom_indicator_entity
+            .expect("visible_count spawns the indicators");
+        assert_eq!(
+            screen_pos(&world, bottom),
+            Some(Vec2::new(100.0 + indent, 70.0)),
+            "the bottom indicator sits at origin.x + item_indent below the window"
+        );
+        assert_eq!(visible_items(&world, menu), expected_rows(5, 0, 2, indent));
+
+        press(&mut world, InputAction::SecondaryDirectionDown);
+        press(&mut world, InputAction::SecondaryDirectionDown);
+        let m = world.get::<Menu>(menu).unwrap();
+        assert_eq!(
+            (m.selected_index, m.scroll_offset),
+            (2, 1),
+            "the window scrolled"
+        );
+        let top = m.top_indicator_entity.unwrap();
+        assert_eq!(
+            screen_pos(&world, top),
+            Some(Vec2::new(100.0 + indent, 40.0)),
+            "the top indicator is indented too"
+        );
+        assert_eq!(
+            screen_pos(&world, bottom),
+            Some(Vec2::new(100.0 + indent, 70.0))
+        );
+        assert_eq!(
+            visible_items(&world, menu),
+            expected_rows(5, 1, 2, indent),
+            "the scrolled items keep origin.x + item_indent"
+        );
+        assert_eq!(
+            screen_pos(&world, cursor),
+            Some(Vec2::new(100.0, 60.0)),
+            "the cursor stays at origin.x on the selected row"
+        );
+    }
+
+    #[test]
+    fn a_rebuild_keeps_the_text_cursor_entity_on_the_new_selected_row_and_remeasures_the_indent() {
+        let (mut world, menu, cursor, indent) =
+            spawn_cursor_menu(five_items().with_cursor_text("a"));
+        assert_eq!(
+            world.get::<Menu>(menu).unwrap().item_indent,
+            indent,
+            "the initial indent is measured"
+        );
+
+        rebuild(
+            &mut world,
+            menu,
+            vec![
+                MenuItem::new("n0", "N0").disabled(),
+                MenuItem::new("n1", "N1"),
+                MenuItem::new("n2", "N2"),
+            ],
+        );
+
+        let m = world.get::<Menu>(menu).unwrap();
+        assert_eq!(item_ids(&world, menu), ["n0", "n1", "n2"]);
+        assert_eq!(
+            m.cursor_entity,
+            Some(cursor),
+            "the cursor entity is not respawned"
+        );
+        assert!(world.get_entity(cursor).is_ok(), "the cursor still exists");
+        assert_eq!(
+            screen_pos(&world, cursor),
+            Some(Vec2::new(100.0, 60.0)),
+            "the cursor sits on the new selected row at origin.x"
+        );
+        assert_eq!(m.item_indent, indent, "the rebuild re-measures item_indent");
+        assert_eq!(
+            visible_items(&world, menu),
+            expected_rows(3, 0, 3, indent),
+            "the rebuilt items are indented"
+        );
+
+        press(&mut world, InputAction::SecondaryDirectionDown);
+        assert_eq!(
+            screen_pos(&world, cursor),
+            Some(Vec2::new(100.0, 70.0)),
+            "the surviving cursor still follows the selection"
+        );
+    }
+
+    #[test]
+    fn a_text_cursor_with_missing_font_metrics_spawns_without_indent_and_warns_once() {
+        let menu = Menu::new(
+            &[("a", "A"), ("b", "B")],
+            Vec2::new(100.0, 50.0),
+            "ghost_font",
+            12.0,
+            10.0,
+            true,
+        )
+        .with_cursor_text("a");
+        let (mut world, menu) = spawn_menu(menu);
+        let m = world.get::<Menu>(menu).unwrap();
+        assert_eq!(m.item_indent, 0.0, "no cached metrics: no indent");
+        let cursor = text_cursor(&world, menu);
+        assert!(world.get_entity(cursor).is_ok());
+        assert!(
+            !world
+                .resource_mut::<FontMetricsWarnCache>()
+                .warn_once("ghost_font"),
+            "the spawn consumed the missing-font warning for 'ghost_font'"
+        );
+    }
+
+    #[test]
+    fn an_all_disabled_text_cursor_menu_spawns_the_cursor_without_a_position() {
+        let (world, menu) =
+            spawn_menu(five_items_with_disabled(&["a", "b", "c", "d", "e"]).with_cursor_text("a"));
+        let cursor = text_cursor(&world, menu);
+        assert!(world.get_entity(cursor).is_ok());
+        assert!(
+            world.get::<ScreenPosition>(cursor).is_none(),
+            "no enabled item: the cursor has no screen position"
+        );
+        assert!(world.get::<WorldPosition>(cursor).is_none());
+    }
+
+    #[test]
+    fn menu_despawn_despawns_the_text_cursor_entity_with_the_menu() {
+        let (mut world, menu) = spawn_menu(five_items().with_cursor_text("a"));
+        let cursor = text_cursor(&world, menu);
+
+        world.run_system_once_with(menu_despawn, menu).unwrap();
+
+        assert!(
+            world.get_entity(cursor).is_err(),
+            "the text cursor is despawned"
+        );
+        assert!(world.get_entity(menu).is_err(), "the menu is despawned");
+    }
+
+    #[test]
+    fn sprite_cursor_and_cursor_less_menus_keep_zero_indent_and_items_at_the_origin() {
+        let mut world = new_test_world();
+        let cursor = world.spawn_empty().id();
+        let menu = spawn_menu_in(&mut world, five_items().with_cursor(cursor));
+        let m = world.get::<Menu>(menu).unwrap();
+        assert_eq!(m.item_indent, 0.0, "a sprite cursor indents nothing");
+        assert_eq!(m.cursor_entity, Some(cursor));
+        assert_eq!(visible_items(&world, menu), expected_rows(5, 0, 5, 0.0));
+
+        let (world, menu) = spawn_menu(five_items());
+        let m = world.get::<Menu>(menu).unwrap();
+        assert_eq!(m.item_indent, 0.0, "no cursor indents nothing");
+        assert_eq!(m.cursor_entity, None);
+        assert_eq!(visible_items(&world, menu), expected_rows(5, 0, 5, 0.0));
     }
 }
