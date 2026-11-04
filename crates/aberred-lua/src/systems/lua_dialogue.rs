@@ -11,8 +11,8 @@
 //!   the current node has none), `text` and `choices` from the
 //!   [`DialogueRunner`]. `choices` holds one entry per declared choice of
 //!   the current node — 0-based `index`, `text`, `labels` and `available`
-//!   (false for a locked choice) — and is empty when there is no runner or
-//!   the runner is finished, e.g. on a [`NoChoices`](DialogueEndReason::NoChoices)
+//!   (false for a locked choice) — and is empty unless the runner is active
+//!   on a choices node, e.g. on a [`NoChoices`](DialogueEndReason::NoChoices)
 //!   ending, where `speaker` and `text` still come from the last node.
 //! - [`lua_dialogue_choice_selected_observer`] (on
 //!   [`DialogueChoiceSelected`]) passes `node`, 0-based `index`, `text` and
@@ -37,8 +37,9 @@ use aberred_core::events::dialogue::{DialogueChoiceSelected, DialogueEnded, Dial
 
 /// Builds the `dialogue` table of a [`DialogueNodeEntered`] callback: `node`,
 /// `previous` and `labels` from `event`; `speaker`, `text` and `choices` from
-/// `runner` — a `None` or finished runner gives nil `speaker`/`text` and an
-/// empty `choices`.
+/// `runner` — nil `speaker`/`text` when the runner has no current node, and
+/// `choices` populated only while it is active on a choices node (a finished
+/// runner keeps its last node's `speaker`/`text` but offers no choices).
 pub(crate) fn node_entered_table(
     lua: &Lua,
     event: &DialogueNodeEntered,

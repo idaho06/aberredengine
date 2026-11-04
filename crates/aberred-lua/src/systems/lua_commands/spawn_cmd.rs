@@ -1541,9 +1541,6 @@ mod tests {
 
     #[test]
     fn lua_spawn_applies_lua_dialogue_callbacks() {
-        use crate::components::lua_on_dialogue::{
-            LuaOnDialogueChoiceSelected, LuaOnDialogueEnded, LuaOnDialogueNodeEntered,
-        };
         let mut world = World::new();
         let mut signals = WorldSignals::default();
         let e = spawn_from_lua(

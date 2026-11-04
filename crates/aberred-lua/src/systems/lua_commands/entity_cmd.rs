@@ -952,12 +952,9 @@ fn process_dialogue_cmd(cmd: EntityCmd, commands: &mut Commands) {
 mod tests {
     use super::super::test_helpers::world_with_dialogue_store;
     use super::*;
-    use crate::components::lua_on_dialogue::{
-        LuaOnDialogueChoiceSelected, LuaOnDialogueEnded, LuaOnDialogueNodeEntered,
-    };
     use crate::components::lua_on_tween_finished::LuaOnTweenFinished;
+    use crate::resources::lua_runtime::LuaTag;
     use crate::resources::lua_runtime::test_tags::{Boid, Fuel};
-    use crate::resources::lua_runtime::{LuaDialogueCallbackKind, LuaTag};
     use aberred_core::components::dialogue::{DialogueRequest, DialogueStatus};
     use aberred_core::components::shape::ShapeKind;
     use aberred_core::components::timer::TimerMode;
