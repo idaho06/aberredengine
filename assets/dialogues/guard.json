@@ -14,7 +14,7 @@
           "next": "greet",
           "when": { "type": "integer", "key": "keys", "op": "gt", "value": 0 },
           "effects": [{ "type": "set_flag", "key": "has_key" }],
-          "labels": ["key"]
+          "labels": ["key", "hide_when_locked"]
         },
         {
           "text": "Open the gate!",

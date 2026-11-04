@@ -15,9 +15,13 @@
 -- the engine handles up/down, confirm and the normal/selected colours itself.
 -- Every dialogue node, and the end of the dialogue, replaces its items with
 -- engine.entity_menu_set_items: a choices node lists its choices, each locked
--- choice a disabled item that up/down skips and the menu draws dimmed; a plain
--- node lists one "Continue" item, and an ended dialogue lists the two NPCs
--- to talk to. The scene's update reads no action keys: the menu confirms
+-- choice a disabled item that up/down skips and the menu draws dimmed, except
+-- a locked choice labelled "hide_when_locked" in the dialogue data, which the
+-- menu leaves out until it unlocks (the player sees the closed gate but has to
+-- find the key before "I found the key." appears). A choice item's id carries
+-- the choice's declared index, because hidden choices shift the menu positions.
+-- A plain node lists one "Continue" item, and an ended dialogue lists the two
+-- NPCs to talk to. The scene's update reads no action keys: the menu confirms
 -- during input resolution, ahead of the dialogue system in the same tick,
 -- so a second reader of the same press would act on the node the press just
 -- entered.
@@ -50,6 +54,16 @@ local function set_menu_items(items)
     if menu then
         engine.entity_menu_set_items(menu, items)
     end
+end
+
+--- True when the dialogue choice `choice` carries the dialogue label `label`.
+local function has_label(choice, label)
+    for _, name in ipairs(choice.labels) do
+        if name == label then
+            return true
+        end
+    end
+    return false
 end
 
 -- ─── Signal-driven lines ────────────────────────────────────────────────────
@@ -102,8 +116,9 @@ end
 
 --- Dialogue node-entered callback: writes the speaker and the line to the
 --- signal-driven text, replaces the menu's items with the node's choices (a
---- locked choice a disabled item) or with one "Continue" item on a node
---- without any, and writes the hint line.
+--- locked choice a disabled item, or no item when it is labelled
+--- "hide_when_locked") or with one "Continue" item on a node without any
+--- choices, and writes the hint line.
 --- @param ctx EntityContext
 --- @param dialogue DialogueLine
 local function dialogue_demo_node_entered(ctx, dialogue)
@@ -111,21 +126,24 @@ local function dialogue_demo_node_entered(ctx, dialogue)
     engine.set_string("dlg_text", dialogue.text or "")
     local items = {}
     for _, choice in ipairs(dialogue.choices) do
-        items[#items + 1] = {
-            id = "open",
-            label = choice.text or "",
-            enabled = choice.available and true or false,
-        }
+        if choice.available or not has_label(choice, "hide_when_locked") then
+            items[#items + 1] = {
+                id = "choice_" .. choice.index,
+                label = choice.text or "",
+                enabled = choice.available and true or false,
+            }
+        end
     end
-    if #items == 0 then
+    if #dialogue.choices == 0 then
         items[1] = { id = "continue", label = "Continue" }
     end
     set_menu_items(items)
     engine.set_string("dlg_hint", "up/down: select - action_1: confirm - back: leave")
 end
 
---- Menu-selected callback: an open pick chooses the matching dialogue choice,
---- "continue" advances, and an ended-menu pick restarts a conversation.
+--- Menu-selected callback: a choice pick chooses the dialogue choice whose
+--- declared index its item id carries, "continue" advances, and an ended-menu
+--- pick restarts a conversation.
 --- @param ctx table Context with menu_id, item_id (string) and item_index (0-based)
 local function dialogue_demo_menu_selected(ctx)
     local npc = engine.get_entity("dialogue_npc")
@@ -138,7 +156,12 @@ local function dialogue_demo_menu_selected(ctx)
     elseif ctx.item_id == "talk_innkeeper" then
         restart_dialogue("innkeeper")
     else
-        engine.entity_dialogue_choose(npc, ctx.item_index)
+        -- Hidden choices shift the menu positions, so ctx.item_index is not the
+        -- declared index the dialogue takes: the item id carries it.
+        local declared = tonumber(ctx.item_id:match("^choice_(%d+)$"))
+        if declared then
+            engine.entity_dialogue_choose(npc, declared)
+        end
     end
 end
 
