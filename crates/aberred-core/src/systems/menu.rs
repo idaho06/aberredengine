@@ -256,6 +256,10 @@ pub fn menu_spawn_system(
                             menu_item.id, label_font
                         );
                     }
+                    // The item gets no entity: drop the one reserved for it, so a
+                    // menu with missing metrics does not collect an empty entity
+                    // per item on every spawn and rebuild.
+                    ecmd.despawn();
                     continue;
                 };
                 let size = metrics.measure_text(&menu_item.label, font_size);
@@ -1415,6 +1419,42 @@ mod tests {
 
         let mut sprite_query = world.query::<&Sprite>();
         assert!(sprite_query.iter(&world).next().is_none());
+    }
+
+    /// Entities that carry no component at all: a stray `spawn_empty` leaves one.
+    fn count_empty_entities(world: &World) -> usize {
+        world
+            .iter_entities()
+            .filter(|e| e.archetype().id() == bevy_ecs::archetype::ArchetypeId::EMPTY)
+            .count()
+    }
+
+    #[test]
+    fn a_static_item_without_font_metrics_leaves_no_stray_entity_across_rebuilds() {
+        let static_menu = Menu::from_items(
+            vec![MenuItem::new("a", "A"), MenuItem::new("b", "B")],
+            Vec2::ZERO,
+            "missing_font",
+            20.0,
+            4.0,
+            false,
+        )
+        .with_dynamic_text(false);
+        let (mut world, menu) = spawn_menu(static_menu);
+        assert_eq!(count_empty_entities(&world), 0, "the spawn leaves none");
+
+        for _ in 0..2 {
+            rebuild(
+                &mut world,
+                menu,
+                vec![MenuItem::new("c", "C"), MenuItem::new("d", "D")],
+            );
+            assert_eq!(
+                count_empty_entities(&world),
+                0,
+                "a rebuild leaves none either"
+            );
+        }
     }
 
     /// Returns `five_items` with the given ids disabled; the selection starts
