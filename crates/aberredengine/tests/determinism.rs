@@ -712,7 +712,7 @@ fn golden_replay_rust_scene_matches_checked_in_trail() {
     // and changes it.
     // The scenario registers no scene, so it runs in the implicit "main"
     // scene: its SceneManager and scene entity are part of the hash too.
-    const GOLDEN_HASH: u64 = 0xff21_e9f4_ecce_6ca5;
+    const GOLDEN_HASH: u64 = 0xffe5_306b_14dd_1ba3;
     let actual = golden_scenario_final_hash(42);
     assert_eq!(
         actual, GOLDEN_HASH,

@@ -289,6 +289,67 @@ mod tests {
     }
 
     #[test]
+    fn entity_menu_set_items_queues_one_command_and_has_a_collision_twin() {
+        use crate::resources::lua_runtime::EntityCmd;
+
+        let runtime = LuaRuntime::new().unwrap();
+        runtime
+            .lua()
+            .load(
+                "local items = { {id='a', label='A'}, {id='b', label='B', enabled=false} }\n\
+                 engine.entity_menu_set_items(42, items)\n\
+                 engine.collision_entity_menu_set_items(42, items)",
+            )
+            .exec()
+            .unwrap();
+
+        let matches_rebuild = |cmd: &EntityCmd| {
+            matches!(
+                cmd,
+                EntityCmd::MenuSetItems {
+                    entity_id: 42,
+                    items,
+                } if items.len() == 2
+                    && items[0].id == "a"
+                    && items[0].label == "A"
+                    && items[0].enabled
+                    && items[1].id == "b"
+                    && items[1].label == "B"
+                    && !items[1].enabled
+            )
+        };
+
+        let mut regular = Vec::new();
+        runtime.drain_entity_commands_into(&mut regular);
+        assert_eq!(regular.len(), 1, "exactly one command on the entity queue");
+        assert!(matches_rebuild(&regular[0].cmd), "{:?}", regular[0].cmd);
+
+        let mut collision = Vec::new();
+        runtime.drain_collision_entity_commands_into(&mut collision);
+        assert_eq!(
+            collision.len(),
+            1,
+            "exactly one command on the collision entity queue"
+        );
+        assert!(matches_rebuild(&collision[0].cmd), "{:?}", collision[0].cmd);
+    }
+
+    #[test]
+    fn bad_menu_items_table_raises_at_the_call_and_queues_nothing() {
+        let runtime = LuaRuntime::new().unwrap();
+        let err = runtime
+            .lua()
+            .load("engine.entity_menu_set_items(42, { {id='a', label='A', enabled='yes'} })")
+            .exec()
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("enabled"), "{err}");
+        let mut queued = Vec::new();
+        runtime.drain_entity_commands_into(&mut queued);
+        assert!(queued.is_empty());
+    }
+
+    #[test]
     fn runtime_tween_inserts_accept_documented_names() {
         let runtime = LuaRuntime::new().unwrap();
         runtime

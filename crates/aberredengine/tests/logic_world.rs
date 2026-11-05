@@ -481,6 +481,107 @@ fn phase_transition_requested_by_observer_applies_next_tick() {
     assert_eq!(take_phase_log(&mut tw), ["exited:idle", "entered:run"]);
 }
 
+/// Dialogue wiring seen as a downstream game sees it: every name comes from
+/// `aberredengine::prelude`, the store is the real logic world's resource, and
+/// the runner moves in the real sim schedule.
+mod dialogue {
+    use std::sync::Arc;
+
+    use aberredengine::prelude::*;
+    use aberredengine::test_support::TestWorld;
+
+    use super::DT;
+
+    #[derive(Resource, Default)]
+    struct RequestChoice(bool);
+
+    /// Picks the first choice of every runner once `RequestChoice` is set.
+    fn request_choice(mut request: ResMut<RequestChoice>, mut runners: Query<&mut DialogueRunner>) {
+        if std::mem::take(&mut request.0) {
+            for mut runner in &mut runners {
+                runner.choose(0);
+            }
+        }
+    }
+
+    #[derive(Resource, Default)]
+    struct DialogueLog(Vec<String>);
+
+    fn log_entered(ev: On<DialogueNodeEntered>, mut log: ResMut<DialogueLog>) {
+        log.0.push(format!("entered:{}", ev.node));
+    }
+
+    fn log_selected(ev: On<DialogueChoiceSelected>, mut log: ResMut<DialogueLog>) {
+        log.0.push(format!("selected:{}:{}", ev.index, ev.text));
+    }
+
+    fn take_log(tw: &mut TestWorld) -> Vec<String> {
+        std::mem::take(&mut tw.world.resource_mut::<DialogueLog>().0)
+    }
+
+    /// A choice requested by a system in `SimSet::Update` at tick N moves its
+    /// runner, applies the choice and `on_enter` effects to `WorldSignals`
+    /// and fires the events at tick N+1, never at N.
+    #[test]
+    fn a_choice_requested_in_update_moves_the_runner_next_tick() {
+        let mut tw = TestWorld::builder()
+            .add_system(request_choice)
+            .add_observer(log_entered)
+            .add_observer(log_selected)
+            .build()
+            .expect("build should succeed");
+        tw.world.init_resource::<RequestChoice>();
+        tw.world.init_resource::<DialogueLog>();
+        tw.tick_to_play(DT, 8);
+
+        let tree = DialogueBuilder::new("hello")
+            .node("hello")
+            .text("Hi")
+            .choice("Ask", "info")
+            .effect(DialogueEffect::set_integer("asked", 1))
+            .node("info")
+            .text("Here.")
+            .on_enter(DialogueEffect::set_flag("informed"))
+            .build()
+            .expect("the tree is valid");
+        let mut store = tw.world.resource_mut::<DialogueStore>();
+        store.insert("intro", Arc::new(tree));
+        let tree = Arc::clone(store.get("intro").expect("intro is stored"));
+        let entity = tw.world.spawn(DialogueRunner::new(tree)).id();
+
+        tw.tick(1, DT);
+        assert_eq!(take_log(&mut tw), ["entered:hello"]);
+        assert_eq!(
+            tw.world.get::<DialogueRunner>(entity).unwrap().node_id(),
+            Some("hello")
+        );
+
+        tw.world.resource_mut::<RequestChoice>().0 = true;
+        tw.tick(1, DT);
+        assert!(
+            take_log(&mut tw).is_empty(),
+            "tick N: the request must not apply in the tick that made it"
+        );
+        let runner = tw.world.get::<DialogueRunner>(entity).unwrap();
+        assert_eq!(runner.pending(), Some(DialogueRequest::Choose(0)));
+        assert_eq!(runner.node_id(), Some("hello"));
+        assert_eq!(
+            tw.world.resource::<WorldSignals>().get_integer("asked"),
+            None
+        );
+
+        tw.tick(1, DT);
+        assert_eq!(take_log(&mut tw), ["selected:0:Ask", "entered:info"]);
+        assert_eq!(
+            tw.world.get::<DialogueRunner>(entity).unwrap().node_id(),
+            Some("info")
+        );
+        let signals = tw.world.resource::<WorldSignals>();
+        assert_eq!(signals.get_integer("asked"), Some(1));
+        assert!(signals.has_flag("informed"));
+    }
+}
+
 /// A particle cloned from a template that has a `Phase` fires its own initial
 /// enter, in the template's current phase, even though the template entered
 /// long ago.
@@ -2795,6 +2896,89 @@ fn lua_menu_action_request_scene_switches_the_scene() {
     );
 }
 
+/// Lua callbacks that spawn, in `on_scene_enter` for scene "menu", a menu with
+/// items `go`/"Go" and `stay`/"Stay", a text cursor and a Lua selection callback
+/// that replaces the menu's items via `engine.entity_menu_set_items`.
+#[cfg(feature = "lua")]
+const LUA_MENU_SET_ITEMS: &str = r#"
+function on_enter_play() engine.request_scene("menu") return "" end
+function on_scene_enter(scene)
+    if scene == "menu" then
+        engine.spawn()
+            :with_menu({ {id='go', label='Go'}, {id='stay', label='Stay'} }, 0, 0, 'f', 12, 10, true)
+            :with_menu_cursor_text('>')
+            :with_lua_menu_selected('on_menu_pick')
+            :register_as('pick_menu')
+            :build()
+    end
+end
+function on_menu_pick(ctx)
+    engine.entity_menu_set_items(ctx.menu_id, {
+        {id='again', label='Again'},
+        {id='locked', label='Locked', enabled=false},
+    })
+end
+"#;
+
+/// Confirming the menu fires `on_menu_pick`, whose `engine.entity_menu_set_items`
+/// replaces the menu's items in place: the new items are installed, the menu is
+/// re-activated with the first enabled item selected, the cursor entity is kept,
+/// and the old item entities are despawned.
+#[cfg(feature = "lua")]
+#[test]
+fn lua_entity_menu_set_items_replaces_the_menu_items_in_place() {
+    let mut tw = lua_script_world(LUA_MENU_SET_ITEMS);
+    tw.tick(1, DT);
+
+    let menu_entity = tw
+        .world
+        .resource::<WorldSignals>()
+        .get_entity("pick_menu")
+        .expect("the menu registered itself");
+    let (cursor_entity, old_item_entities) = {
+        let menu = tw.world.get::<Menu>(menu_entity).unwrap();
+        (
+            menu.cursor_entity.expect("the text cursor was spawned"),
+            menu.items
+                .iter()
+                .filter_map(|item| item.entity)
+                .collect::<Vec<_>>(),
+        )
+    };
+    assert_eq!(old_item_entities.len(), 2, "go and stay got item entities");
+
+    press_space(&mut tw);
+    tw.tick(3, DT);
+
+    let menu = tw.world.get::<Menu>(menu_entity).unwrap();
+    let ids: Vec<&str> = menu.items.iter().map(|item| item.id.as_str()).collect();
+    assert_eq!(ids, ["again", "locked"]);
+    assert!(!menu.items[1].enabled);
+    assert!(menu.active, "the rebuild re-activates the menu");
+    assert_eq!(menu.selected_index, 0, "the first enabled item is selected");
+    assert_eq!(
+        menu.cursor_entity,
+        Some(cursor_entity),
+        "the cursor entity is unchanged"
+    );
+    assert!(
+        tw.world.get_entity(cursor_entity).is_ok(),
+        "the cursor entity is still alive"
+    );
+    for old in old_item_entities {
+        assert!(
+            tw.world.get_entity(old).is_err(),
+            "old item entity {old:?} is despawned"
+        );
+    }
+    let new_item_entities: Vec<Entity> = menu.items.iter().filter_map(|item| item.entity).collect();
+    assert_eq!(
+        new_item_entities.len(),
+        2,
+        "the new items got fresh entities"
+    );
+}
+
 /// Writing the `scene` string and the `switch_scene` flag from `on_update`
 /// switches nothing: the same `on_update_<scene>` keeps running.
 #[cfg(feature = "lua")]
@@ -4063,4 +4247,83 @@ fn lua_tag_observers_see_the_spawns_other_components() {
     );
     tw.tick(1, DT);
     assert_eq!(max_speed(&tw, lead), Some(240.0), "promoted again");
+}
+
+/// A Lua game's dialogue through the real sim schedules: `on_setup` registers
+/// a table tree, scene entry spawns a `:with_dialogue` entity with the three
+/// callbacks, and `on_update_main` picks a choice. The choice made in tick N
+/// is applied by `dialogue_system` in tick N+1.
+#[cfg(feature = "lua")]
+mod lua_dialogue {
+    use super::*;
+
+    const SCRIPT: &str = r#"
+ARMED = false
+function on_setup()
+    engine.register_dialogue('quest', {
+        start = 'ask',
+        nodes = {
+            { id = 'ask', speaker = 'Elder', text = 'Help?', choices = {
+                { text = 'Yes', next = 'thanks', effects = { { type = 'set_flag', key = 'accepted' } } },
+                { text = 'No' } } },
+            { id = 'thanks', text = 'Thanks' },
+        },
+    })
+end
+function on_scene_enter(scene)
+    engine.spawn()
+        :with_dialogue('quest')
+        :with_lua_dialogue_node_entered('on_node')
+        :with_lua_dialogue_choice_selected('on_choice')
+        :with_lua_dialogue_ended('on_end')
+        :register_as('elder')
+        :build()
+end
+function on_node(ctx, d)
+    table.insert(LOG, 'node:' .. d.node .. ':' .. tostring(d.previous) .. ':' .. #d.choices)
+    engine.set_flag('seen_' .. d.node)
+end
+function on_choice(ctx, d)
+    table.insert(LOG, 'choice:' .. d.node .. ':' .. d.index .. ':' .. d.text)
+end
+function on_end(ctx, d)
+    table.insert(LOG, 'end:' .. d.node .. ':' .. d.reason)
+end
+function on_update_main(ctx, input)
+    if ARMED then
+        ARMED = false
+        engine.entity_dialogue_choose(engine.get_entity('elder'), 0)
+    end
+end
+"#;
+
+    #[test]
+    fn a_lua_dialogue_runs_its_callbacks_and_effects_across_ticks() {
+        let mut tw = lua_script_world(SCRIPT);
+        tw.tick(2, DT);
+        assert_eq!(take_lua_log(&mut tw), ["node:ask:nil:2"]);
+        assert!(tw.world.resource::<WorldSignals>().has_flag("seen_ask"));
+
+        exec_lua(&mut tw, "ARMED = true");
+        tw.tick(1, DT);
+        assert!(
+            take_lua_log(&mut tw).is_empty(),
+            "choose queued in tick N is applied in tick N+1"
+        );
+        tw.tick(2, DT);
+        assert_eq!(
+            take_lua_log(&mut tw),
+            ["choice:ask:0:Yes", "node:thanks:ask:0"]
+        );
+
+        exec_lua(
+            &mut tw,
+            "engine.entity_dialogue_advance(engine.get_entity('elder'))",
+        );
+        tw.tick(2, DT);
+        assert_eq!(take_lua_log(&mut tw), ["end:thanks:completed"]);
+        let signals = tw.world.resource::<WorldSignals>();
+        assert!(signals.has_flag("accepted"));
+        assert!(signals.has_flag("seen_thanks"));
+    }
 }

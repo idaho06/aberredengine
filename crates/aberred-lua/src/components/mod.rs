@@ -2,9 +2,12 @@
 //!
 //! See the crate root doc comment for the sim/logic-world boundary this
 //! crate sits at.
+//!
+//! - `lua_on_dialogue` – Lua callbacks for the core dialogue events
 
 pub mod lua_on_animation_finished;
 pub mod lua_on_collision;
+pub mod lua_on_dialogue;
 pub mod lua_on_gui_clicked;
 pub mod lua_on_menu_selected;
 pub mod lua_on_phase;

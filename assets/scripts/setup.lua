@@ -304,6 +304,61 @@ local function load_gui_demo()
     engine.set_gui_theme_progress_bar("compact", "fill",  "gui-progress-bars", 64, 64, 64, 64, 8, 8, 8, 8)
 end
 
+--- Register the dialogues for the Dialogue Demo example.
+---
+--- The gate guard's tree is authored as a JSON file and loaded from disk; the
+--- innkeeper's tree is defined inline as a Lua table. Both are registered
+--- under a key a scene can pass to :with_dialogue() / engine.entity_insert_dialogue().
+local function load_dialogue_demo()
+    engine.log_debug("Loading Dialogue Demo dialogues...")
+    engine.load_dialogue("guard", "./assets/dialogues/guard.json")
+    engine.register_dialogue("innkeeper", {
+        start = "welcome",
+        nodes = {
+            {
+                id = "welcome",
+                speaker = "Innkeeper",
+                text = "Welcome to the Rusty Tankard!",
+                labels = { "inn" },
+                choices = {
+                    { text = "What is on the menu?", next = "menu" },
+                    {
+                        text = "A room for the night?",
+                        next = "room",
+                        when = { type = "integer", key = "coins", op = "ge", value = 2 },
+                        effects = { { type = "add_integer", key = "coins", delta = -2 } },
+                        labels = { "room" },
+                    },
+                    {
+                        text = "Sell your old sword.",
+                        next = "welcome",
+                        when = { type = "integer", key = "swords", op = "ge", value = 1 },
+                        effects = {
+                            { type = "add_integer", key = "swords", delta = -1 },
+                            { type = "add_integer", key = "coins", delta = 5 },
+                        },
+                        labels = { "shop" },
+                    },
+                    { text = "Just passing through." },
+                },
+            },
+            {
+                id = "menu",
+                speaker = "Innkeeper",
+                text = "Stew, bread and ale, traveller.",
+                next = "welcome",
+            },
+            {
+                id = "room",
+                speaker = "Innkeeper",
+                text = "Two coins buy a bed upstairs.",
+                labels = { "shop" },
+                next = "welcome",
+            },
+        },
+    })
+end
+
 --- Called during the Setup game state to load all assets.
 --- Assets are queued here and processed by the Rust engine.
 function M.load_assets()
@@ -317,6 +372,7 @@ function M.load_assets()
     load_sidescroller()
     load_bunnymark()
     load_gui_demo()
+    load_dialogue_demo()
 
     engine.log_debug("All assets queued for loading!")
 end

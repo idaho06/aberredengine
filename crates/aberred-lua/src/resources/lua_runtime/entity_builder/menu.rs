@@ -30,13 +30,7 @@ pub(super) fn register<M: LuaUserDataMethods<LuaEntityBuilder>>(
             f32,
             bool
         )| {
-            let mut items: Vec<(String, String)> = Vec::new();
-            for value in items_table.sequence_values::<LuaTable>() {
-                let item_table = value?;
-                let id: String = item_table.get("id")?;
-                let label: String = item_table.get("label")?;
-                items.push((id, label));
-            }
+            let items = parse_menu_items(&items_table)?;
             this.cmd.menu = Some(MenuData {
                 items,
                 origin_x,
@@ -93,6 +87,28 @@ pub(super) fn register<M: LuaUserDataMethods<LuaEntityBuilder>>(
     builder_method!(
         methods,
         meta,
+        "with_menu_disabled_color",
+        "Set color for disabled menu items (RGBA)",
+        [
+            ("r", "integer"),
+            ("g", "integer"),
+            ("b", "integer"),
+            ("a", "integer"),
+        ],
+        |_, this: &mut LuaEntityBuilder, (r, g, b, a): (u8, u8, u8, u8)| {
+            let Some(ref mut menu) = this.cmd.menu else {
+                return Err(LuaError::runtime(
+                    "with_menu_disabled_color() requires with_menu() first",
+                ));
+            };
+            menu.disabled_color = Some(ColorData { r, g, b, a });
+            Ok(())
+        }
+    );
+
+    builder_method!(
+        methods,
+        meta,
         "with_menu_dynamic_text",
         "Enable dynamic text updates for menu items",
         [("dynamic", "boolean")],
@@ -119,7 +135,34 @@ pub(super) fn register<M: LuaUserDataMethods<LuaEntityBuilder>>(
                     "with_menu_cursor() requires with_menu() first",
                 ));
             };
+            if menu.cursor_text.is_some() {
+                return Err(LuaError::runtime(
+                    "with_menu_cursor() conflicts with with_menu_cursor_text()",
+                ));
+            }
             menu.cursor_entity_key = Some(key);
+            Ok(())
+        }
+    );
+
+    builder_method!(
+        methods,
+        meta,
+        "with_menu_cursor_text",
+        "Set text cursor for menu",
+        [("text", "string")],
+        |_, this: &mut LuaEntityBuilder, text: String| {
+            let Some(ref mut menu) = this.cmd.menu else {
+                return Err(LuaError::runtime(
+                    "with_menu_cursor_text() requires with_menu() first",
+                ));
+            };
+            if menu.cursor_entity_key.is_some() {
+                return Err(LuaError::runtime(
+                    "with_menu_cursor_text() conflicts with with_menu_cursor()",
+                ));
+            }
+            menu.cursor_text = Some(text);
             Ok(())
         }
     );
@@ -228,13 +271,12 @@ mod tests {
     #[test]
     fn with_menu_parses_items_in_order_and_layout_args() {
         let menu = built_menu("");
-        assert_eq!(
-            menu.items,
-            vec![
-                ("play".to_string(), "Play".to_string()),
-                ("quit".to_string(), "Quit".to_string()),
-            ]
-        );
+        let items: Vec<(&str, &str, bool)> = menu
+            .items
+            .iter()
+            .map(|item| (item.id.as_str(), item.label.as_str(), item.enabled))
+            .collect();
+        assert_eq!(items, [("play", "Play", true), ("quit", "Quit", true)]);
         assert_eq!((menu.origin_x, menu.origin_y), (10.0, 20.0));
         assert_eq!(menu.font, "arcade");
         assert_eq!((menu.font_size, menu.item_spacing), (16.0, 24.0));
@@ -257,8 +299,13 @@ mod tests {
     fn menu_modifiers_require_with_menu_first() {
         for (call, name) in [
             ("with_menu_colors(1,2,3,4,5,6,7,8)", "with_menu_colors"),
+            (
+                "with_menu_disabled_color(1,2,3,4)",
+                "with_menu_disabled_color",
+            ),
             ("with_menu_dynamic_text(true)", "with_menu_dynamic_text"),
             ("with_menu_cursor('c')", "with_menu_cursor"),
+            ("with_menu_cursor_text('t')", "with_menu_cursor_text"),
             (
                 "with_menu_selection_sound('s')",
                 "with_menu_selection_sound",
@@ -338,5 +385,51 @@ mod tests {
         assert_eq!(menu.selection_change_sound.as_deref(), Some("blip"));
         assert_eq!(menu.lua_on_menu_selected.as_deref(), Some("on_menu"));
         assert_eq!(menu.visible_count, Some(3));
+    }
+
+    #[test]
+    fn with_menu_keeps_each_items_enabled_flag() {
+        let menu = built_spawn_cmd(
+            "engine.spawn():with_menu({ {id='a', label='A', enabled=false} }, \
+             0, 0, 'f', 16, 24, false):build()",
+        )
+        .menu
+        .expect("with_menu sets cmd.menu");
+        assert!(
+            !menu.items[0].enabled,
+            "enabled=false must be kept on the parsed item"
+        );
+    }
+
+    #[test]
+    fn with_menu_disabled_color_stores_rgba() {
+        let menu = built_menu(":with_menu_disabled_color(1, 2, 3, 4)");
+        assert_eq!(
+            menu.disabled_color,
+            Some(ColorData {
+                r: 1,
+                g: 2,
+                b: 3,
+                a: 4
+            })
+        );
+    }
+
+    #[test]
+    fn with_menu_cursor_text_stores_the_text() {
+        let menu = built_menu(":with_menu_cursor_text('>')");
+        assert_eq!(menu.cursor_text.as_deref(), Some(">"));
+    }
+
+    #[test]
+    fn menu_cursor_entity_and_cursor_text_conflict_in_either_order() {
+        assert_runtime_error(
+            &format!("{MENU}:with_menu_cursor('c'):with_menu_cursor_text('>')"),
+            "with_menu_cursor_text() conflicts with with_menu_cursor()",
+        );
+        assert_runtime_error(
+            &format!("{MENU}:with_menu_cursor_text('>'):with_menu_cursor('c')"),
+            "with_menu_cursor() conflicts with with_menu_cursor_text()",
+        );
     }
 }

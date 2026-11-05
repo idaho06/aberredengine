@@ -4,12 +4,15 @@
 //! by Rust systems. Commands are processed after Lua callbacks return.
 
 use super::lua_tag::LuaTag;
+use super::spawn_data::MenuItemData;
 // Re-export UniformValue from its canonical location for internal convenience.
 pub use super::spawn_data::TweenConfig;
 use aberred_core::components::shape::ShapeKind;
 use aberred_core::components::timer::TimerMode;
 use aberred_core::components::tint::Tint;
+use aberred_core::resources::dialogue_tree::DialogueTree;
 pub use aberred_core::resources::uniform_value::UniformValue;
+use std::sync::Arc;
 
 /// Commands that Lua can queue for asset loading.
 /// These are processed by Rust systems that have access to the necessary resources.
@@ -222,6 +225,18 @@ pub enum LuaPhaseCallbackKind {
     Update,
 }
 
+/// Which Lua dialogue callback component an [`EntityCmd::InsertLuaDialogueCallback`]
+/// inserts.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LuaDialogueCallbackKind {
+    /// `LuaOnDialogueNodeEntered`
+    NodeEntered,
+    /// `LuaOnDialogueChoiceSelected`
+    ChoiceSelected,
+    /// `LuaOnDialogueEnded`
+    Ended,
+}
+
 /// Commands for manipulating entity components from Lua.
 #[derive(Debug, Clone)]
 pub enum EntityCmd {
@@ -405,6 +420,13 @@ pub enum EntityCmd {
     Despawn { entity_id: u64 },
     /// Despawn a menu entity and its items/cursor/textures
     MenuDespawn { entity_id: u64 },
+    /// Replace a menu's items in place by inserting a
+    /// [`MenuRebuild`](aberred_core::components::menu::MenuRebuild) on the entity;
+    /// no-op without a `Menu`
+    MenuSetItems {
+        entity_id: u64,
+        items: Vec<MenuItemData>,
+    },
     /// Set an integer signal on an entity's Signals component
     SignalSetInteger {
         entity_id: u64,
@@ -508,6 +530,25 @@ pub enum EntityCmd {
     InsertTag { entity_id: u64, tag: LuaTag },
     /// Remove the Rust component registered as a Lua tag
     RemoveTag { entity_id: u64, tag: LuaTag },
+    /// Insert a `DialogueRunner` for the tree stored under `key` in the
+    /// `DialogueStore`; replaces an existing runner, inserts nothing for an
+    /// unknown key
+    InsertDialogue { entity_id: u64, key: String },
+    /// Remove the entity's `DialogueRunner`; no-op without one
+    RemoveDialogue { entity_id: u64 },
+    /// Request advancing the entity's dialogue past the current node
+    DialogueAdvance { entity_id: u64 },
+    /// Request picking the choice at 0-based declared `index` of the entity's
+    /// current dialogue node
+    DialogueChoose { entity_id: u64, index: usize },
+    /// Request cancelling the entity's dialogue
+    DialogueCancel { entity_id: u64 },
+    /// Insert a Lua dialogue callback component of `kind`
+    InsertLuaDialogueCallback {
+        entity_id: u64,
+        kind: LuaDialogueCallbackKind,
+        callback: String,
+    },
 }
 
 /// Commands for tracked groups from Lua.
@@ -577,6 +618,18 @@ pub enum AnimationCmd {
         frame_count: usize,
         fps: f32,
         looped: bool,
+    },
+}
+
+/// Commands for registering dialogue trees from Lua.
+#[derive(Debug, Clone)]
+pub enum DialogueLuaCmd {
+    /// Register a validated [`DialogueTree`] under `key` in the dialogue store
+    Register {
+        /// Store key to register the tree under.
+        key: String,
+        /// The validated tree.
+        tree: Arc<DialogueTree>,
     },
 }
 

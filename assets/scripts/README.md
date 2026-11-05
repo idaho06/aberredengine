@@ -7,6 +7,7 @@ Complete reference for game developers using Lua scripting in Aberred Engine.
 - [Getting Started](#getting-started)
 - [Script Execution Flow](#script-execution-flow)
   - [Rust Events and Lua Callbacks](#4-rust-events-and-lua-callbacks)
+- [Dialogues](#dialogues)
 - [Logging Functions](#logging-functions)
 - [Input System](#input-system)
   - [Input Rebinding](#input-rebinding)
@@ -364,6 +365,7 @@ Collision callbacks process commands from their own dedicated queues, which are 
 - `engine.collision_entity_insert_tween_scale()` instead of `engine.entity_insert_tween_scale()`
 - `engine.collision_entity_insert_tween_tint()` instead of `engine.entity_insert_tween_tint()`
 - `engine.collision_entity_menu_despawn()` instead of `engine.entity_menu_despawn()`
+- `engine.collision_entity_menu_set_items()` instead of `engine.entity_menu_set_items()`
 - `engine.collision_entity_remove_tween_position()` instead of `engine.entity_remove_tween_position()`
 - `engine.collision_entity_remove_tween_rotation()` instead of `engine.entity_remove_tween_rotation()`
 - `engine.collision_entity_remove_tween_scale()` instead of `engine.entity_remove_tween_scale()`
@@ -428,6 +430,189 @@ the event fires.
 Details: [Collision Handling](#collision-handling), [GUI Widgets](#gui-widgets), [Menu Components](#menu-components),
 [LuaOnAnimationFinished Component](#luaonanimationfinished-component), [Tween Components](#tween-components),
 [Additional Components](#additional-components) (timers, collision rules), [Phase Component](#phase-component).
+
+---
+
+## Dialogues
+
+A dialogue is a named conversation tree kept in the engine's dialogue store. An entity runs a dialogue through a
+`DialogueRunner`, which steps the tree as the script requests transitions and fires Lua callbacks on each step.
+
+### Authoring a dialogue
+
+A dialogue definition is a `start` node id plus a `nodes` list. A node continues via `next`, or takes `choices`
+instead — never both. A node with neither is terminal. The same shape works as a JSON file and as a Lua table.
+
+```json
+{
+  "start": "greet",
+  "nodes": [
+    {
+      "id": "greet",
+      "speaker": "Guard",
+      "text": "Halt! Who goes there?",
+      "choices": [
+        { "text": "A friend.", "next": "friend" },
+        {
+          "text": "Here is my pass.",
+          "next": "pass",
+          "when": { "type": "flag", "key": "has_pass" },
+          "effects": [ { "type": "set_flag", "key": "pass_shown" } ],
+          "labels": ["bribe"]
+        },
+        { "text": "Never mind." }
+      ]
+    },
+    { "id": "friend", "speaker": "Guard", "text": "Hm. Move along." },
+    {
+      "id": "pass",
+      "speaker": "Guard",
+      "text": "Carry on.",
+      "next": "friend",
+      "on_enter": [ { "type": "add_integer", "key": "gold", "delta": -1 } ],
+      "labels": ["gate"]
+    }
+  ]
+}
+```
+
+Node fields: `id`, `speaker` (absent for narration), `text`, `labels`, `on_enter` (effects applied to world
+signals when the node is entered), `next`, `choices`. A choice has `text`, `next` (absent ends the
+conversation), `when`, `effects` (applied to world signals when picked) and `labels`.
+
+Conditions and effects are tables with a `type` field:
+
+| `type` | fields | meaning |
+|--------|--------|---------|
+| `flag` | `key` | condition: true while the flag `key` is set |
+| `integer` | `key`, `op`, `value` | condition: compares integer signal `key` with `value`; `op` is `eq`/`ne`/`lt`/`le`/`gt`/`ge`; a missing key reads as `0` |
+| `string_equals` | `key`, `value` | condition: true when string signal `key` equals `value` |
+| `not` | `cond` | condition: negates the inner condition |
+| `all` / `any` | `all` / `any` | condition: every / at least one sub-condition holds |
+| `set_flag` / `remove_flag` | `key` | effect: sets / removes the flag `key` |
+| `set_integer` / `add_integer` | `key`, `value` / `delta` | effect: writes / adds to the integer signal `key` |
+| `set_scalar` | `key`, `value` | effect: writes the scalar signal `key` |
+| `set_string` | `key`, `value` | effect: writes the string signal `key` |
+
+### `engine.register_dialogue(key, def)` / `engine.load_dialogue(key, path)`
+
+Register a dialogue under `key` from a Lua table or from a JSON file at `path`. Both validate the tree at the
+call: an invalid tree (unknown `start`, dangling `next`, empty `choices` list, bad condition, unreadable file, …)
+raises a Lua error naming the key and queues nothing.
+
+```lua
+function on_setup()
+    engine.register_dialogue("quest", {
+        start = "ask",
+        nodes = {
+            { id = "ask", speaker = "Elder", text = "Help?", choices = {
+                { text = "Yes", next = "thanks",
+                  effects = { { type = "set_flag", key = "accepted" } } },
+                { text = "No" },
+            } },
+            { id = "thanks", text = "Thanks" },
+        },
+    })
+
+    engine.load_dialogue("intro", "./assets/dialogues/intro.json")
+end
+```
+
+Registration is accepted from any callback and lands at the next regular drain — one made inside a timer or
+collision callback lands at that tick's update drain. Register in `on_setup` or `on_scene_enter` before
+spawning an entity with that key, so the key is in the store when the spawn applies.
+
+### Running a dialogue on an entity
+
+#### `:with_dialogue(key)`
+
+Attach a `DialogueRunner` for the tree registered under `key`; an unknown key spawns the entity without a
+runner.
+
+```lua
+engine.spawn()
+    :with_dialogue("quest")
+    :with_lua_dialogue_node_entered("on_node")
+    :with_lua_dialogue_choice_selected("on_choice")
+    :with_lua_dialogue_ended("on_end")
+    :register_as("elder")
+    :build()
+```
+
+#### `engine.entity_insert_dialogue(entity_id, key)` / `engine.entity_remove_dialogue(entity_id)`
+
+Attach a runner to a live entity (an existing runner is replaced; an unknown key inserts nothing) or remove it
+(a no-op without one). `entity_id` is the u64 entity id, e.g. `ctx.entity_id` or `engine.get_entity(key)`.
+
+#### `engine.entity_dialogue_advance(entity_id)` / `engine.entity_dialogue_choose(entity_id, index)` / `engine.entity_dialogue_cancel(entity_id)`
+
+Request a transition: advance past the current node, pick a choice, or cancel the dialogue. Each is a no-op
+without a runner. The `index` for `choose` is the 0-based declared index of the choice. Advance on a choices
+node is ignored; an out-of-range or unavailable choice warns and changes nothing.
+
+A runner takes at most one transition per tick, and a request made in tick n applies in tick n+1:
+
+```lua
+function on_update_main(input, dt)
+    local elder = engine.get_entity("elder")
+    if input.digital.action_1.just_pressed then
+        engine.entity_dialogue_advance(elder)
+    elseif input.digital.action_2.just_pressed then
+        engine.entity_dialogue_choose(elder, 0)  -- first declared choice
+    elseif input.digital.back.just_pressed then
+        engine.entity_dialogue_cancel(elder)
+    end
+end
+```
+
+### Dialogue callbacks
+
+#### `:with_lua_dialogue_node_entered(callback)` / `:with_lua_dialogue_choice_selected(callback)` / `:with_lua_dialogue_ended(callback)`
+
+Attach one `fn(ctx, dialogue)` per event kind;
+`engine.entity_insert_lua_dialogue_node_entered/choice_selected/ended(entity_id, callback)` attach the same
+callbacks to a live entity.
+
+- node entered: `dialogue` is a `DialogueLine` — `node` (id of the node entered), `previous` (id of the node
+  left; nil on the first node), `labels`, `speaker` (nil for narration), `text`, and `choices`: a 1-based Lua
+  sequence of `{ index, text, labels, available }` in declared order, so `choices[1].index == 0`; `available`
+  is false when the choice's `when` condition failed on node entry. `choices` is empty on a node without
+  choices and once the dialogue has ended. A node whose choices are all unavailable ends with reason
+  `no_choices`, reporting an empty `choices`.
+- choice selected: `dialogue` is a `DialogueChoiceSelected` — `node` (the node the choice was made on),
+  `index` (0-based declared index), `text`, `labels`; it fires before the target node is entered
+- ended: `dialogue` is a `DialogueEnded` — `node` (id of the last node; nil when cancelled before start) and
+  `reason`: `"completed"`, `"cancelled"` or `"no_choices"`
+
+```lua
+local function on_node(ctx, dialogue)
+    engine.log_info((dialogue.speaker or "narrator") .. ": " .. dialogue.text)
+    for _, choice in ipairs(dialogue.choices) do
+        if choice.available then
+            engine.log_info("  [" .. choice.index .. "] " .. choice.text)
+        end
+    end
+end
+
+local function on_choice(ctx, dialogue)
+    engine.log_info("picked [" .. dialogue.index .. "] " .. dialogue.text .. " on " .. dialogue.node)
+end
+
+local function on_end(ctx, dialogue)
+    engine.log_info("ended on " .. tostring(dialogue.node) .. " (" .. dialogue.reason .. ")")
+end
+```
+
+`ctx` is pooled and reused across callbacks and `dialogue` is built per event: read what you need inside
+the callback; never store `ctx`, `dialogue` or their subtables, and never write to them.
+
+### Dialogue commands in collision callbacks
+
+There are no `collision_` twins for the dialogue commands — call the regular `engine.register_dialogue` /
+`engine.load_dialogue` / `engine.entity_insert_dialogue` / `engine.entity_remove_dialogue` /
+`engine.entity_dialogue_advance` / `engine.entity_dialogue_choose` / `engine.entity_dialogue_cancel` from a
+collision callback; like every regular command there, they apply at the next regular drain (see
+[Callback Command Processing](#3-callback-command-processing)).
 
 ---
 
@@ -1460,7 +1645,7 @@ Create an interactive menu.
 
 **Parameters:**
 
-- `items` - Table of `{ id = "...", label = "..." }`
+- `items` - Table of `{ id = "...", label = "...", enabled = true }`. `enabled` is optional and defaults to `true`; it must be a boolean when present. A disabled item (`enabled = false`) is skipped by up/down, cannot be confirmed, and draws in the disabled color (see `:with_menu_disabled_color`). The initial selection is the first enabled item. Keep `id` unique within a menu: items that share an id share one `:with_menu_action_*` action, report the same `item_id` to the callback, and in a menu with `:with_menu_dynamic_text(false)` share one label texture.
 - `origin_x`, `origin_y` - Menu position
 - `font` - Font identifier
 - `font_size` - Font size
@@ -1480,6 +1665,8 @@ Create an interactive menu.
 )
 ```
 
+A confirm deactivates the menu, whether it runs a callback or a `MenuActions` action: the menu ignores input until `engine.entity_menu_set_items()` replaces its items, which re-activates it.
+
 #### `:with_menu_colors(normal_r, normal_g, normal_b, normal_a, selected_r, selected_g, selected_b, selected_a)`
 
 Set menu text colors (requires `:with_menu()`).
@@ -1489,6 +1676,14 @@ Set menu text colors (requires `:with_menu()`).
     200, 200, 200, 255,  -- Normal: gray
     255, 255, 0, 255     -- Selected: yellow
 )
+```
+
+#### `:with_menu_disabled_color(r, g, b, a)`
+
+Set the color of disabled items (requires `:with_menu()`). Without it, disabled items draw in the normal color at half alpha.
+
+```lua
+:with_menu_disabled_color(120, 120, 120, 255)
 ```
 
 #### `:with_menu_dynamic_text(dynamic)`
@@ -1529,6 +1724,22 @@ engine.spawn()
 ```
 
 **How it works:** The menu system will automatically move the cursor entity to align with the currently selected menu item.
+
+#### `:with_menu_cursor_text(text)`
+
+Give the menu a text cursor that it spawns and owns (requires `:with_menu()`). The cursor is a text entity in the menu font, drawn in the selected color at the menu origin on the selected row, so no separate cursor entity or `:register_as()` is needed. Items and the "..." scroll indicators shift right by the width of the cursor text plus one space.
+
+A menu has either a text cursor or a cursor entity: calling `:with_menu_cursor_text()` after `:with_menu_cursor()` (or the other way round) raises a Lua error.
+
+```lua
+engine.spawn()
+    :with_menu(
+        { { id = "start", label = "Start" }, { id = "quit", label = "Quit" } },
+        400, 300, "arcade", 32, 40, true
+    )
+    :with_menu_cursor_text("→")
+    :build()
+```
 
 #### `:with_menu_selection_sound(sound_key)`
 
@@ -3158,6 +3369,29 @@ end
 - The cursor entity (if present)
 - Generated menu item textures from TextureStore
 - The menu entity itself
+
+### `engine.entity_menu_set_items(entity_id, items)`
+
+Replace a menu's items in place. The replacement lands after the call, no later than the next tick; until then the menu is unchanged. The old items are removed, the menu becomes active again (a confirm deactivates it), the first enabled item is selected, and the scroll resets. The cursor, colors, selection sound and callback stay, and the new items keep the menu's static or dynamic text mode. Does nothing when the entity has no `Menu`.
+
+**Parameters:**
+
+- `entity_id` - Menu entity ID (entity with Menu component)
+- `items` - Table of `{ id = "...", label = "...", enabled = true }`, in the same shape as `:with_menu()`. A malformed table raises a Lua error at the call and queues nothing.
+
+```lua
+-- Show the next dialogue node's choices on the same menu
+function on_menu_pick(ctx)
+    engine.entity_menu_set_items(ctx.menu_id, {
+        { id = "again",  label = "Play Again" },
+        { id = "locked", label = "Locked", enabled = false },
+    })
+end
+```
+
+Available collision variant:
+
+- `engine.collision_entity_menu_set_items(entity_id, items)`
 
 ### `engine.entity_set_rotation(entity_id, degrees)`
 

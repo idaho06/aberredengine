@@ -110,6 +110,54 @@ pub(super) fn register<M: LuaUserDataMethods<LuaEntityBuilder>>(
     builder_method!(
         methods,
         meta,
+        "with_dialogue",
+        "Attach a DialogueRunner for the dialogue tree registered under `key` in the DialogueStore (an unknown key spawns the entity without a runner)",
+        [("key", "string")],
+        |_, this: &mut LuaEntityBuilder, key: String| {
+            this.cmd.dialogue = Some(key);
+            Ok(())
+        }
+    );
+
+    builder_method!(
+        methods,
+        meta,
+        "with_lua_dialogue_node_entered",
+        "Call a Lua function `fn(ctx, dialogue)` each time the entity's dialogue enters a node",
+        [("callback", "string")],
+        |_, this: &mut LuaEntityBuilder, callback: String| {
+            this.cmd.lua_dialogue_callbacks.node_entered = Some(callback);
+            Ok(())
+        }
+    );
+
+    builder_method!(
+        methods,
+        meta,
+        "with_lua_dialogue_choice_selected",
+        "Call a Lua function `fn(ctx, dialogue)` each time the player picks a choice in the entity's dialogue",
+        [("callback", "string")],
+        |_, this: &mut LuaEntityBuilder, callback: String| {
+            this.cmd.lua_dialogue_callbacks.choice_selected = Some(callback);
+            Ok(())
+        }
+    );
+
+    builder_method!(
+        methods,
+        meta,
+        "with_lua_dialogue_ended",
+        "Call a Lua function `fn(ctx, dialogue)` each time the entity's dialogue ends",
+        [("callback", "string")],
+        |_, this: &mut LuaEntityBuilder, callback: String| {
+            this.cmd.lua_dialogue_callbacks.ended = Some(callback);
+            Ok(())
+        }
+    );
+
+    builder_method!(
+        methods,
+        meta,
         "with_lua_phase_entered",
         "Call a Lua function `fn(ctx, input)` each time the core `Phase` enters a phase (branch on `ctx.phase`; `ctx.previous_phase` is the phase left). A returned phase name requests that phase.",
         [("callback", "string")],
@@ -509,6 +557,51 @@ mod tests {
                 &format!("engine.spawn():with_phase({arg})"),
                 "in method 'with_phase'",
             );
+        }
+    }
+
+    #[test]
+    fn with_dialogue_sets_the_spawn_dialogue_key() {
+        let cmd = built(":with_dialogue('k')");
+        assert_eq!(cmd.dialogue.as_deref(), Some("k"));
+    }
+
+    #[test]
+    fn with_dialogue_rejects_non_string() {
+        for arg in ["{ key = 'k' }", "true"] {
+            assert_runtime_error(
+                &format!("engine.spawn():with_dialogue({arg})"),
+                "in method 'with_dialogue'",
+            );
+        }
+    }
+
+    #[test]
+    fn with_lua_dialogue_callbacks_set_their_fields() {
+        let cmd = built(
+            ":with_lua_dialogue_node_entered('on_node')\
+             :with_lua_dialogue_choice_selected('on_choice')\
+             :with_lua_dialogue_ended('on_end')",
+        );
+        let callbacks = cmd.lua_dialogue_callbacks;
+        assert_eq!(callbacks.node_entered.as_deref(), Some("on_node"));
+        assert_eq!(callbacks.choice_selected.as_deref(), Some("on_choice"));
+        assert_eq!(callbacks.ended.as_deref(), Some("on_end"));
+    }
+
+    #[test]
+    fn with_lua_dialogue_callbacks_reject_non_string() {
+        for name in [
+            "with_lua_dialogue_node_entered",
+            "with_lua_dialogue_choice_selected",
+            "with_lua_dialogue_ended",
+        ] {
+            for arg in ["{ callback = 'cb' }", "true"] {
+                assert_runtime_error(
+                    &format!("engine.spawn():{name}({arg})"),
+                    &format!("in method '{name}'"),
+                );
+            }
         }
     }
 

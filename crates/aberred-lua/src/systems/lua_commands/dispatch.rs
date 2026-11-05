@@ -3,11 +3,13 @@
 //! Bundles the params and steps shared by `lua_timer_fired_observer`,
 //! `lua_setup_entity_system`, `lua_animation_finished_observer`,
 //! `lua_tween_finished_observer`, `lua_gui_clicked_observer`,
-//! `lua_menu_selected_observer`, and the Lua collision observers: sync the
-//! signal cache, build the callback's arguments (an entity context and
-//! optional input table, or a custom context table), call the named Lua
-//! function, then drain the commands it queued (the collision observers drain
-//! the collision-scoped queues).
+//! `lua_menu_selected_observer`, the Lua collision observers, and the
+//! dialogue observers (`crate::systems::lua_dialogue`): sync the signal
+//! cache, build the callback's arguments (an entity context and optional
+//! input table, or a custom context table), call the named Lua function,
+//! then drain the commands it queued (the collision observers drain the
+//! collision-scoped queues). The dialogue observers additionally pass a
+//! second, event-built table through [`dispatch_ctx_call_and_drain`].
 //!
 //! `lua_phase_callbacks_system` (`crate::systems::lua_phase`) batches like
 //! `lua_setup_entity_system` (one signal refresh, one drain per run) but
@@ -133,6 +135,29 @@ pub fn dispatch_and_drain(p: &mut LuaDispatch, entity: Entity, callback_name: &s
     }
 }
 
+/// Refresh the signal cache, call the named entity callback as
+/// `fn(ctx, extra)` — `ctx` built by `build_ctx_or_log`, `extra` built by
+/// `build_extra` — then drain the commands it queued, also after a Lua
+/// error, which may have queued some first. For the dialogue observers,
+/// where `extra` is the event's dialogue table.
+pub fn dispatch_ctx_call_and_drain(
+    p: &mut LuaDispatch,
+    entity: Entity,
+    callback_name: &str,
+    label: &str,
+    build_extra: impl FnOnce(&Lua) -> LuaResult<LuaTable>,
+) {
+    refresh_signal_cache(p);
+    let Some(ctx_table) = build_ctx_or_log(p, entity, label, None, None) else {
+        return;
+    };
+    p.lua_runtime.call_named(callback_name, label, |func| {
+        let extra = build_extra(p.lua_runtime.lua())?;
+        func.call::<()>((ctx_table, extra))
+    });
+    drain_dispatch_commands(p, DrainScope::Regular);
+}
+
 /// Build `entity`'s ctx table from the dispatch queries, logging (with
 /// `label`) and returning `None` on failure.
 pub(crate) fn build_ctx_or_log(
@@ -207,4 +232,45 @@ pub(crate) fn init_dispatch_resources(world: &mut World) {
     world.init_resource::<InputState>();
     world.init_resource::<WorldTime>();
     world.insert_resource(SystemsStore::default());
+}
+
+/// A `World` with the dispatch resources and a `LuaRuntime`, so unit tests
+/// can run a dispatching observer in a bare world.
+#[cfg(test)]
+pub(crate) fn init_test_world() -> World {
+    let mut world = World::new();
+    init_dispatch_resources(&mut world);
+    world.insert_non_send(LuaRuntime::new().expect("LuaRuntime::new"));
+    world
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::resources::lua_runtime::LuaRuntime;
+    use bevy_ecs::system::RunSystemOnce;
+
+    /// A Lua error raised inside the callback still drains the commands the
+    /// callback queued before raising.
+    #[test]
+    fn ctx_call_and_drain_still_drains_after_a_lua_error() {
+        let mut world = init_test_world();
+        world
+            .non_send::<LuaRuntime>()
+            .lua()
+            .load("function boom(ctx, extra) engine.set_flag('seen'); error('boom') end")
+            .exec()
+            .expect("lua load");
+        let entity = world.spawn_empty().id();
+
+        world
+            .run_system_once(move |mut p: LuaDispatch| {
+                dispatch_ctx_call_and_drain(&mut p, entity, "boom", "Test", |lua| {
+                    lua.create_table()
+                });
+            })
+            .expect("system runs");
+
+        assert!(world.resource::<WorldSignals>().has_flag("seen"));
+    }
 }

@@ -40,14 +40,12 @@ mod tests {
     //! `aberred_core::systems::timer`; these tests cover the Lua wiring.
     use super::*;
     use crate::resources::lua_runtime::LuaRuntime;
-    use crate::systems::lua_commands::init_dispatch_resources;
+    use crate::systems::lua_commands::init_test_world;
     use aberred_core::components::phase::Phase;
     use aberred_core::components::timer::TimerMode;
 
     fn setup_world() -> World {
-        let mut world = World::new();
-        init_dispatch_resources(&mut world);
-        world.insert_non_send(LuaRuntime::new().expect("LuaRuntime::new"));
+        let mut world = init_test_world();
         world.spawn(Observer::new(lua_timer_fired_observer));
         world.spawn(Observer::new(lua_timer_removed_observer));
         world.flush();

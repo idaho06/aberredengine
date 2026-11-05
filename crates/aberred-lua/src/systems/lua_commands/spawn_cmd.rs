@@ -7,6 +7,9 @@
 use aberred_core::math::Vec2;
 use bevy_ecs::prelude::*;
 
+use crate::components::lua_on_dialogue::{
+    LuaOnDialogueChoiceSelected, LuaOnDialogueEnded, LuaOnDialogueNodeEntered,
+};
 use crate::components::lua_on_gui_clicked::LuaOnGuiClicked;
 use crate::components::lua_on_menu_selected::LuaOnMenuSelected;
 use crate::components::lua_on_phase::{LuaOnPhaseEntered, LuaOnPhaseExited, LuaOnPhaseUpdate};
@@ -39,9 +42,10 @@ use aberred_core::math::Color;
 
 use crate::resources::lua_runtime::{
     AnimationControllerData, AnimationData, CloneCmd, ColliderData, EntityShaderData,
-    LuaCollisionRuleData, LuaPhaseCallbacksSpawn, LuaTimerSpawn, MenuData, ParticleEmitterData,
-    RigidBodyData, SpawnCmd, SpriteData, StuckToData, TextData, TweenPositionData,
-    TweenRotationData, TweenScaleData, TweenScreenPositionData, TweenTintData,
+    LuaCollisionRuleData, LuaDialogueCallbacksSpawn, LuaPhaseCallbacksSpawn, LuaTimerSpawn,
+    MenuData, MenuItemData, ParticleEmitterData, RigidBodyData, SpawnCmd, SpriteData, StuckToData,
+    TextData, TweenPositionData, TweenRotationData, TweenScaleData, TweenScreenPositionData,
+    TweenTintData,
 };
 use aberred_core::resources::world_signals::WorldSignals;
 use aberred_core::systems::propagate_transforms::ComputeInitialGlobalTransform;
@@ -159,7 +163,9 @@ pub(super) fn apply_components(
         entity_commands,
         BehaviorComponents {
             phase: cmd.phase,
+            dialogue: cmd.dialogue,
             lua_phase_callbacks: cmd.lua_phase_callbacks,
+            lua_dialogue_callbacks: cmd.lua_dialogue_callbacks,
             lua_timer: cmd.lua_timer,
             lua_collision_rule: cmd.lua_collision_rule,
             lua_setup: cmd.lua_setup,
@@ -446,7 +452,9 @@ fn apply_signal_components(
 
 struct BehaviorComponents {
     phase: Option<String>,
+    dialogue: Option<String>,
     lua_phase_callbacks: LuaPhaseCallbacksSpawn,
+    lua_dialogue_callbacks: LuaDialogueCallbacksSpawn,
     lua_timer: Option<LuaTimerSpawn>,
     lua_collision_rule: Option<LuaCollisionRuleData>,
     lua_setup: Option<String>,
@@ -456,7 +464,9 @@ struct BehaviorComponents {
 fn apply_behavior_components(entity_commands: &mut EntityCommands, b: BehaviorComponents) {
     let BehaviorComponents {
         phase,
+        dialogue,
         lua_phase_callbacks,
+        lua_dialogue_callbacks,
         lua_timer,
         lua_collision_rule,
         lua_setup,
@@ -464,6 +474,13 @@ fn apply_behavior_components(entity_commands: &mut EntityCommands, b: BehaviorCo
     } = b;
     if let Some(initial) = phase {
         entity_commands.insert(Phase::new(initial));
+    }
+    if let Some(key) = dialogue {
+        // No world access in a system: the DialogueStore lookup runs when the
+        // queued closure applies; an unknown key warns and inserts no runner.
+        entity_commands.queue(move |mut e: EntityWorldMut| {
+            super::entity_cmd::insert_dialogue_runner(&mut e, &key);
+        });
     }
     if let Some(callback) = lua_phase_callbacks.entered {
         entity_commands.insert(LuaOnPhaseEntered::new(callback));
@@ -473,6 +490,15 @@ fn apply_behavior_components(entity_commands: &mut EntityCommands, b: BehaviorCo
     }
     if let Some(callback) = lua_phase_callbacks.update {
         entity_commands.insert(LuaOnPhaseUpdate::new(callback));
+    }
+    if let Some(callback) = lua_dialogue_callbacks.node_entered {
+        entity_commands.insert(LuaOnDialogueNodeEntered::new(callback));
+    }
+    if let Some(callback) = lua_dialogue_callbacks.choice_selected {
+        entity_commands.insert(LuaOnDialogueChoiceSelected::new(callback));
+    }
+    if let Some(callback) = lua_dialogue_callbacks.ended {
+        entity_commands.insert(LuaOnDialogueEnded::new(callback));
     }
     if let Some(timer) = lua_timer {
         entity_commands.insert(LuaOnTimerFired::timer(
@@ -515,14 +541,14 @@ fn apply_ui_components(
         ));
     }
     if let Some(menu_data) = menu {
-        use aberred_core::components::menu::{Menu, MenuActions};
-        let labels: Vec<(&str, &str)> = menu_data
+        use aberred_core::components::menu::{Menu, MenuActions, MenuItem};
+        let items: Vec<MenuItem> = menu_data
             .items
-            .iter()
-            .map(|(id, label)| (id.as_str(), label.as_str()))
+            .into_iter()
+            .map(MenuItemData::into_menu_item)
             .collect();
-        let mut menu_component = Menu::new(
-            &labels,
+        let mut menu_component = Menu::from_items(
+            items,
             Vec2 {
                 x: menu_data.origin_x,
                 y: menu_data.origin_y,
@@ -532,6 +558,13 @@ fn apply_ui_components(
             menu_data.item_spacing,
             menu_data.use_screen_space,
         );
+        if let Some(disabled) = menu_data.disabled_color {
+            menu_component = menu_component
+                .with_disabled_color(Color::new(disabled.r, disabled.g, disabled.b, disabled.a));
+        }
+        if let Some(text) = menu_data.cursor_text {
+            menu_component = menu_component.with_cursor_text(text);
+        }
         if let (Some(normal), Some(selected)) = (menu_data.normal_color, menu_data.selected_color) {
             menu_component = menu_component.with_colors(
                 Color::new(normal.r, normal.g, normal.b, normal.a),
@@ -724,12 +757,14 @@ pub fn process_clone_command(
 mod tests {
     use bevy_ecs::system::SystemState;
 
+    use super::super::test_helpers::world_with_dialogue_store;
     use super::*;
     use crate::resources::lua_runtime::test_tags::{Boid, Fuel, Leader, runtime_with_test_tags};
     use crate::resources::lua_runtime::{
         AnimationConditionData, AnimationRuleData, LuaRuntime, LuaTag,
     };
     use aberred_core::components::animation::{CmpOp, Condition};
+    use aberred_core::components::dialogue::DialogueRunner;
     use aberred_core::components::timer::Timer;
     use aberred_core::components::tween::{Easing, LoopMode, Tween};
     use aberred_core::events::phase::PhaseEntered;
@@ -737,6 +772,7 @@ mod tests {
     use aberred_core::resources::world_time::WorldTime;
     use aberred_core::systems::phase::phase_system;
     use bevy_ecs::system::RunSystemOnce;
+    use std::sync::Arc;
 
     #[test]
     fn clone_of_despawned_source_skips_and_cleans_registry() {
@@ -1511,6 +1547,33 @@ mod tests {
     }
 
     #[test]
+    fn lua_spawn_applies_lua_dialogue_callbacks() {
+        let mut world = World::new();
+        let mut signals = WorldSignals::default();
+        let e = spawn_from_lua(
+            &mut world,
+            &mut signals,
+            "engine.spawn()\
+             :with_lua_dialogue_node_entered('a')\
+             :with_lua_dialogue_choice_selected('b')\
+             :with_lua_dialogue_ended('c'):build()",
+        );
+
+        assert_eq!(
+            &*world.get::<LuaOnDialogueNodeEntered>(e).unwrap().callback,
+            "a"
+        );
+        assert_eq!(
+            &*world
+                .get::<LuaOnDialogueChoiceSelected>(e)
+                .unwrap()
+                .callback,
+            "b"
+        );
+        assert_eq!(&*world.get::<LuaOnDialogueEnded>(e).unwrap().callback, "c");
+    }
+
+    #[test]
     fn lua_spawn_applies_behavior_components() {
         use crate::components::lua_on_animation_finished::LuaOnAnimationFinished;
         use crate::components::lua_on_collision::LuaOnCollision;
@@ -1640,6 +1703,31 @@ mod tests {
         assert!(matches!(actions.get("play"), MenuAction::RequestScene(s) if s == "level01"));
         assert!(matches!(actions.get("opts"), MenuAction::RequestScene(s) if s == "options"));
         assert!(matches!(actions.get("quit"), MenuAction::RequestQuit));
+    }
+
+    #[test]
+    fn lua_spawn_builds_menu_with_disabled_item_disabled_color_and_cursor_text() {
+        use aberred_core::components::menu::Menu;
+        let mut world = World::new();
+        let mut signals = WorldSignals::default();
+        let e = spawn_from_lua(
+            &mut world,
+            &mut signals,
+            "engine.spawn():with_menu({ {id='a', label='A'}, {id='b', label='B', enabled=false} }, \
+                0, 0, 'f', 16, 24, false)\
+             :with_menu_disabled_color(10, 20, 30, 40):with_menu_cursor_text('>'):build()",
+        );
+
+        let menu = world.get::<Menu>(e).unwrap();
+        assert!(menu.items[0].enabled);
+        assert!(
+            !menu.items[1].enabled,
+            "enabled=false must reach the core Menu item"
+        );
+        assert_eq!(menu.disabled_color, Some(Color::new(10, 20, 30, 40)));
+        assert_eq!(menu.cursor_text.as_deref(), Some(">"));
+        assert_eq!(menu.cursor_entity, None);
+        assert_eq!(menu.selected_index, 0);
     }
 
     #[test]
@@ -1778,5 +1866,40 @@ mod tests {
         );
         assert!(matches!(emitter.ttl, TtlSpec::Range { min, max } if min == 1.0 && max == 2.0));
         assert_eq!(emitter.time_since_emit, 0.0);
+    }
+
+    #[test]
+    fn lua_spawn_with_a_known_dialogue_key_inserts_a_runner_for_the_stored_tree() {
+        let (mut world, tree) = world_with_dialogue_store();
+        let mut signals = WorldSignals::default();
+
+        let e = spawn_from_lua(
+            &mut world,
+            &mut signals,
+            "engine.spawn():with_dialogue('k'):build()",
+        );
+
+        let runner = world
+            .get::<DialogueRunner>(e)
+            .expect("a DialogueRunner is inserted for the known key");
+        assert!(
+            Arc::ptr_eq(runner.tree(), &tree),
+            "the runner shares the stored tree's Arc"
+        );
+    }
+
+    #[test]
+    fn lua_spawn_with_an_unknown_dialogue_key_spawns_without_a_runner() {
+        let (mut world, _tree) = world_with_dialogue_store();
+        let mut signals = WorldSignals::default();
+
+        let e = spawn_from_lua(
+            &mut world,
+            &mut signals,
+            "engine.spawn():with_dialogue('ghost'):build()",
+        );
+
+        assert!(world.get_entity(e).is_ok());
+        assert!(world.get::<DialogueRunner>(e).is_none());
     }
 }

@@ -510,7 +510,7 @@ fn meta_functions_complete() {
 
         -- Entity commands should exist for both regular and collision prefix
         local entity_cmds = {
-            "entity_despawn", "entity_menu_despawn", "entity_set_velocity",
+            "entity_despawn", "entity_menu_despawn", "entity_menu_set_items", "entity_set_velocity",
             "entity_set_position", "entity_freeze", "entity_unfreeze",
             "entity_signal_set_flag", "entity_signal_remove_flag", "entity_signal_toggle_flag",
             "entity_insert_lua_timer", "entity_insert_lua_timer_once", "entity_remove_lua_timer",
@@ -687,4 +687,60 @@ fn meta_entity_context_includes_world_fields() {
     )
     .exec()
     .expect("Lua meta EntityContext world fields assertions");
+}
+
+#[test]
+fn dialogue_callbacks_and_types_appear_in_meta_and_stubs() {
+    let rt = LuaRuntime::new().unwrap();
+    rt.lua()
+        .load(
+            r#"
+        local cbs = engine.__meta.callbacks
+        local expected = {
+            dialogue_node_entered = "DialogueLine",
+            dialogue_choice_selected = "DialogueChoiceSelected",
+            dialogue_ended = "DialogueEnded",
+        }
+        for name, dialogue_type in pairs(expected) do
+            local cb = cbs[name]
+            assert(cb, "missing callback: " .. name)
+            assert(#cb.params == 2, name .. " should have 2 params")
+            assert(cb.params[1].name == "ctx" and cb.params[1].type == "EntityContext",
+                name .. " param 1 should be ctx: EntityContext")
+            assert(cb.params[2].name == "dialogue" and cb.params[2].type == dialogue_type,
+                name .. " param 2 should be dialogue: " .. dialogue_type)
+            assert(cb.context == "play", name .. " should have the play context")
+        end
+
+        local types = engine.__meta.types
+        for _, t in ipairs({ "DialogueLine", "DialogueChoiceInfo", "DialogueChoiceSelected", "DialogueEnded" }) do
+            assert(types[t], "missing type: " .. t)
+        end
+    "#,
+        )
+        .exec()
+        .unwrap();
+
+    let content = stub_generator::generate_stubs(&rt).unwrap();
+    for needle in [
+        "function dialogue_node_entered(ctx, dialogue) end",
+        "function dialogue_choice_selected(ctx, dialogue) end",
+        "function dialogue_ended(ctx, dialogue) end",
+        "---@class DialogueLine",
+        "---@class DialogueChoiceInfo",
+        "---@class DialogueChoiceSelected",
+        "---@class DialogueEnded",
+    ] {
+        assert!(content.contains(needle), "stubs miss `{needle}`");
+    }
+
+    // Callbacks render in a fixed order, not in table-iteration order.
+    let position = |needle: &str| content.find(needle).unwrap();
+    assert!(
+        position("function dialogue_node_entered(")
+            < position("function dialogue_choice_selected(")
+            && position("function dialogue_choice_selected(")
+                < position("function dialogue_ended("),
+        "dialogue callbacks render in event order"
+    );
 }

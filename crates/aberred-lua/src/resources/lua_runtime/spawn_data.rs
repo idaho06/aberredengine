@@ -10,7 +10,7 @@ use aberred_core::components::gui_image::GuiImage;
 use aberred_core::components::gui_label::GuiLabel;
 use aberred_core::components::gui_progress_bar::GuiProgressBar;
 use aberred_core::components::gui_window::GuiWindow;
-use aberred_core::components::menu::MenuAction;
+use aberred_core::components::menu::{MenuAction, MenuItem};
 use aberred_core::components::shape::{Polygon, Shape, ShapeKind};
 use aberred_core::components::timer::TimerMode;
 use aberred_core::components::tint::Tint;
@@ -74,6 +74,15 @@ pub struct LuaPhaseCallbacksSpawn {
     pub entered: Option<String>,
     pub exited: Option<String>,
     pub update: Option<String>,
+}
+
+/// Lua dialogue callback names (`LuaOnDialogueNodeEntered` /
+/// `LuaOnDialogueChoiceSelected` / `LuaOnDialogueEnded`) for spawning.
+#[derive(Debug, Clone, Default)]
+pub struct LuaDialogueCallbacksSpawn {
+    pub node_entered: Option<String>,
+    pub choice_selected: Option<String>,
+    pub ended: Option<String>,
 }
 
 /// Lua timer (`Timer` + `LuaOnTimerFired`) data for spawning.
@@ -176,6 +185,39 @@ pub(crate) fn parse_points(points: &mlua::Table) -> mlua::Result<Vec<Vec2>> {
 /// triangulates and a bad point raises at the Lua call.
 pub(crate) fn polygon_kind(points: &mlua::Table) -> mlua::Result<ShapeKind> {
     Ok(ShapeKind::Polygon(Polygon::new(&parse_points(points)?)))
+}
+
+/// Parses a Lua sequence of menu item tables into [`MenuItemData`] values, in
+/// sequence order. Each sequence value must be a table with a string `id`, a
+/// string `label`, and an `enabled` field that is a strict boolean or absent
+/// (defaulting to `true`); anything else is an error that names the offending
+/// field (`enabled`, `label`, or `id`).
+pub(crate) fn parse_menu_items(table: &mlua::Table) -> mlua::Result<Vec<MenuItemData>> {
+    let mut out = Vec::new();
+    for (i, value) in table.sequence_values::<mlua::Table>().enumerate() {
+        let item = value?;
+        let n = i + 1;
+        let id = get_menu_item_string(&item, n, "id")?;
+        let label = get_menu_item_string(&item, n, "label")?;
+        let enabled = match item.get::<mlua::Value>("enabled")? {
+            mlua::Value::Nil => true,
+            mlua::Value::Boolean(b) => b,
+            _ => {
+                return Err(mlua::Error::runtime(format!(
+                    "menu item #{n}: 'enabled' must be a boolean"
+                )));
+            }
+        };
+        out.push(MenuItemData { id, label, enabled });
+    }
+    Ok(out)
+}
+
+/// Reads a required string field from a menu item table, so a missing or
+/// non-string field raises a Lua error naming the field and the 1-based item index.
+fn get_menu_item_string(item: &mlua::Table, n: usize, field: &str) -> mlua::Result<String> {
+    item.get(field)
+        .map_err(|_| mlua::Error::runtime(format!("menu item #{n}: '{field}' must be a string")))
 }
 
 /// TweenPosition component data for spawning.
@@ -299,7 +341,7 @@ pub struct TextData {
 }
 
 /// RGBA color data (0-255 per channel)
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct ColorData {
     pub r: u8,
     pub g: u8,
@@ -307,11 +349,27 @@ pub struct ColorData {
     pub a: u8,
 }
 
+/// A single menu item parsed from a Lua `with_menu` items table.
+#[derive(Debug, Clone)]
+pub struct MenuItemData {
+    pub id: String,
+    pub label: String,
+    /// Whether the item can be selected; disabled items are skipped by navigation.
+    pub enabled: bool,
+}
+
+impl MenuItemData {
+    /// Converts into a core [`MenuItem`], disabled when `enabled` is false.
+    pub(crate) fn into_menu_item(self) -> MenuItem {
+        let item = MenuItem::new(self.id, self.label);
+        if self.enabled { item } else { item.disabled() }
+    }
+}
+
 /// Data for spawning a Menu + MenuActions ensemble.
 #[derive(Debug, Clone, Default)]
 pub struct MenuData {
-    /// (id, label)
-    pub items: Vec<(String, String)>,
+    pub items: Vec<MenuItemData>,
     pub origin_x: f32,
     pub origin_y: f32,
     pub font: String,
@@ -320,9 +378,13 @@ pub struct MenuData {
     pub use_screen_space: bool,
     pub normal_color: Option<ColorData>,
     pub selected_color: Option<ColorData>,
+    /// Explicit RGBA color for disabled items.
+    pub disabled_color: Option<ColorData>,
     pub dynamic_text: Option<bool>,
     /// WorldSignals key for the cursor entity (spawn it first, then reference it here)
     pub cursor_entity_key: Option<String>,
+    /// Text drawn as the menu's cursor; mutually exclusive with `cursor_entity_key`
+    pub cursor_text: Option<String>,
     pub selection_change_sound: Option<String>,
     /// (item_id, action)
     pub actions: Vec<(String, MenuAction)>,
@@ -448,8 +510,14 @@ pub struct SpawnCmd {
     pub signal_strings: Vec<(String, String)>,
     /// Initial phase of a core `Phase`
     pub phase: Option<String>,
+    /// Dialogue tree key — spawns the entity with a `DialogueRunner` for the
+    /// tree registered under this key in the `DialogueStore` (an unknown key
+    /// spawns the entity without a runner)
+    pub dialogue: Option<String>,
     /// Lua callbacks for the core `Phase`
     pub lua_phase_callbacks: LuaPhaseCallbacksSpawn,
+    /// Lua callbacks for the entity's dialogue events
+    pub lua_dialogue_callbacks: LuaDialogueCallbacksSpawn,
     /// Has Signals component (even if empty)
     pub has_signals: bool,
     /// StuckTo component data
@@ -526,4 +594,70 @@ pub struct SpawnCmd {
     /// GuiProgressBar component (size, value, max, direction, theme_key, signal_binding) —
     /// inserted as-is; rendered directly by `render_system` with no spawn system.
     pub gui_progress_bar: Option<GuiProgressBar>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Evaluates `src` (a chunk returning a table) and returns the table together
+    /// with the `Lua` that owns it (mlua values panic once the `Lua` is dropped,
+    /// so callers must keep it alive while using the table).
+    fn lua_table(src: &str) -> (mlua::Lua, mlua::Table) {
+        let lua = mlua::Lua::new();
+        let table = lua.load(src).eval().expect("chunk returns a table");
+        (lua, table)
+    }
+
+    #[test]
+    fn parse_menu_items_keeps_ids_labels_and_enabled_in_order() {
+        let (_lua, table) = lua_table(
+            "return {\
+                {id='a', label='A'},\
+                {id='b', label='B', enabled=false},\
+                {id='c', label='C', enabled=true},\
+            }",
+        );
+        let items = parse_menu_items(&table).expect("items parse");
+        let parsed: Vec<(&str, &str, bool)> = items
+            .iter()
+            .map(|item| (item.id.as_str(), item.label.as_str(), item.enabled))
+            .collect();
+        assert_eq!(
+            parsed,
+            [("a", "A", true), ("b", "B", false), ("c", "C", true)]
+        );
+    }
+
+    #[test]
+    fn parse_menu_items_rejects_non_boolean_enabled() {
+        for src in [
+            "return { {id='a', label='A', enabled='no'} }",
+            "return { {id='a', label='A', enabled=0} }",
+        ] {
+            let (_lua, table) = lua_table(src);
+            let err = parse_menu_items(&table).expect_err("a non-boolean enabled must error");
+            let message = err.to_string();
+            assert!(
+                message.contains("enabled"),
+                "error should name the 'enabled' field, got {message:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn parse_menu_items_requires_a_label_and_an_id() {
+        for (src, field) in [
+            ("return { {id='a'} }", "label"),
+            ("return { {label='A'} }", "id"),
+        ] {
+            let (_lua, table) = lua_table(src);
+            let err = parse_menu_items(&table).expect_err("a missing field must error");
+            let message = err.to_string();
+            assert!(
+                message.contains(field),
+                "error should name the '{field}' field, got {message:?}"
+            );
+        }
+    }
 }

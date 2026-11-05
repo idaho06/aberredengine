@@ -141,6 +141,7 @@ engine = {}
 ---@class MenuItem
 ---@field id string
 ---@field label string
+---@field enabled boolean|nil false = navigation skips the item
 
 ---Animation rule condition (polymorphic)
 ---@class AnimationRuleCondition
@@ -182,6 +183,34 @@ engine = {}
 ---@field y number Top edge in world space
 ---@field w number Width in world units
 ---@field h number Height in world units
+
+---One declared choice of the node a dialogue just entered
+---@class DialogueChoiceInfo
+---@field index integer 0-based declared index; pass it to engine.entity_dialogue_choose
+---@field text string
+---@field labels string[]
+---@field available boolean false when the choice's condition failed on node entry
+
+---Table passed to a dialogue choice-selected callback
+---@class DialogueChoiceSelected
+---@field node string Id of the node the choice was made on
+---@field index integer 0-based declared index
+---@field text string
+---@field labels string[]
+
+---Table passed to a dialogue ended callback
+---@class DialogueEnded
+---@field node string|nil Id of the last node; nil when cancelled before start
+---@field reason string 'completed', 'cancelled' or 'no_choices'
+
+---Table passed to a dialogue node-entered callback
+---@class DialogueLine
+---@field node string Id of the node entered
+---@field previous string|nil Id of the node left; nil on the first node
+---@field labels string[]
+---@field speaker string|nil
+---@field text string|nil
+---@field choices DialogueChoiceInfo[] Declared choices in order; empty on a node without choices or once the dialogue has ended (e.g. no available choice)
 
 -- ==================== Enums ====================
 
@@ -257,6 +286,24 @@ function phase_update(ctx, input, dt) end
 ---Context: play
 ---@param ctx EntityContext
 function phase_exited(ctx) end
+
+---Dialogue node callback (:with_lua_dialogue_node_entered): called each time the entity's dialogue enters a node
+---Context: play
+---@param ctx EntityContext
+---@param dialogue DialogueLine
+function dialogue_node_entered(ctx, dialogue) end
+
+---Dialogue choice callback (:with_lua_dialogue_choice_selected): called when a choice is picked, before the target node is entered
+---Context: play
+---@param ctx EntityContext
+---@param dialogue DialogueChoiceSelected
+function dialogue_choice_selected(ctx, dialogue) end
+
+---Dialogue end callback (:with_lua_dialogue_ended): called when the entity's dialogue ends
+---Context: play
+---@param ctx EntityContext
+---@param dialogue DialogueEnded
+function dialogue_ended(ctx, dialogue) end
 
 ---Called when a Lua timer fires
 ---Context: play
@@ -642,6 +689,11 @@ function engine.collision_entity_insert_tween_tint(entity_id, from_r, from_g, fr
 ---Despawn a menu entity and its children
 ---@param entity_id integer
 function engine.collision_entity_menu_despawn(entity_id) end
+
+---Replace a menu's items in place, re-activate it and select the first enabled item; no-op without a Menu
+---@param entity_id integer
+---@param items MenuItem[]
+function engine.collision_entity_menu_set_items(entity_id, items) end
 
 ---Remove CameraTarget component from an entity
 ---@param entity_id integer
@@ -1117,6 +1169,11 @@ function engine.entity_insert_tween_tint(entity_id, from_r, from_g, from_b, from
 ---Despawn a menu entity and its children
 ---@param entity_id integer
 function engine.entity_menu_despawn(entity_id) end
+
+---Replace a menu's items in place, re-activate it and select the first enabled item; no-op without a Menu
+---@param entity_id integer
+---@param items MenuItem[]
+function engine.entity_menu_set_items(entity_id, items) end
 
 ---Remove CameraTarget component from an entity
 ---@param entity_id integer
@@ -1834,15 +1891,72 @@ function engine.set_vsync(enabled) end
 ---@param key string
 function engine.add_binding(action, key) end
 
+-- ==================== dialogue ====================
+
+---Request advancing the entity's dialogue past the current node; no-op without a runner
+---@param entity_id integer
+function engine.entity_dialogue_advance(entity_id) end
+
+---Request cancelling the entity's dialogue; no-op without a runner
+---@param entity_id integer
+function engine.entity_dialogue_cancel(entity_id) end
+
+---Request picking the choice at 0-based declared `index` of the entity's current dialogue node; no-op without a runner
+---@param entity_id integer
+---@param index integer
+function engine.entity_dialogue_choose(entity_id, index) end
+
+---Attach a DialogueRunner running the tree registered under `key`; an existing runner is replaced, an unknown key inserts nothing
+---@param entity_id integer
+---@param key string
+function engine.entity_insert_dialogue(entity_id, key) end
+
+---Call a Lua function `fn(ctx, dialogue)` each time the player picks a choice in the entity's dialogue
+---@param entity_id integer
+---@param callback string
+function engine.entity_insert_lua_dialogue_choice_selected(entity_id, callback) end
+
+---Call a Lua function `fn(ctx, dialogue)` each time the entity's dialogue ends
+---@param entity_id integer
+---@param callback string
+function engine.entity_insert_lua_dialogue_ended(entity_id, callback) end
+
+---Call a Lua function `fn(ctx, dialogue)` each time the entity's dialogue enters a node
+---@param entity_id integer
+---@param callback string
+function engine.entity_insert_lua_dialogue_node_entered(entity_id, callback) end
+
+---Remove the entity's DialogueRunner; no-op without one
+---@param entity_id integer
+function engine.entity_remove_dialogue(entity_id) end
+
+-- ==================== input ====================
+
 ---Get the first key binding for an action as a string (nil if unbound)
 ---@param action string
 ---@return string|nil
 function engine.get_binding(action) end
 
+-- ==================== dialogue ====================
+
+---Load a dialogue JSON file from `path` and register it under `key`
+---@param key string
+---@param path string
+function engine.load_dialogue(key, path) end
+
+-- ==================== input ====================
+
 ---Rebind a logical action to a new key (replaces existing binding)
 ---@param action string
 ---@param key string
 function engine.rebind_action(action, key) end
+
+-- ==================== dialogue ====================
+
+---Register a dialogue definition table as a validated tree under `key`
+---@param key string
+---@param def table
+function engine.register_dialogue(key, def) end
 
 -- ==================== Entity Builder ====================
 
@@ -1893,6 +2007,11 @@ function EntityBuilder:with_box_collider_offset(offset_x, offset_y) end
 ---@param zoom number|nil
 ---@return EntityBuilder
 function EntityBuilder:with_camera_target(priority, zoom) end
+
+---Attach a DialogueRunner for the dialogue tree registered under `key` in the DialogueStore (an unknown key spawns the entity without a runner)
+---@param key string
+---@return EntityBuilder
+function EntityBuilder:with_dialogue(key) end
 
 ---Set friction (creates RigidBody if needed)
 ---@param friction number
@@ -2030,6 +2149,21 @@ function EntityBuilder:with_lua_collision_rule(group_a, group_b, ongoing) end
 ---@return EntityBuilder
 function EntityBuilder:with_lua_collision_started(callback) end
 
+---Call a Lua function `fn(ctx, dialogue)` each time the player picks a choice in the entity's dialogue
+---@param callback string
+---@return EntityBuilder
+function EntityBuilder:with_lua_dialogue_choice_selected(callback) end
+
+---Call a Lua function `fn(ctx, dialogue)` each time the entity's dialogue ends
+---@param callback string
+---@return EntityBuilder
+function EntityBuilder:with_lua_dialogue_ended(callback) end
+
+---Call a Lua function `fn(ctx, dialogue)` each time the entity's dialogue enters a node
+---@param callback string
+---@return EntityBuilder
+function EntityBuilder:with_lua_dialogue_node_entered(callback) end
+
 ---Attach a callback fired on each GuiClicked of this entity's GuiInteractable (spawned by :with_gui_button() / :with_gui_image()). Signature: fn(ctx) with ctx.entity_id. A disabled widget does not dispatch it.
 ---@param callback string
 ---@return EntityBuilder
@@ -2140,6 +2274,19 @@ function EntityBuilder:with_menu_colors(nr, ng, nb, na, sr, sg, sb, sa) end
 ---@param key string
 ---@return EntityBuilder
 function EntityBuilder:with_menu_cursor(key) end
+
+---Set text cursor for menu
+---@param text string
+---@return EntityBuilder
+function EntityBuilder:with_menu_cursor_text(text) end
+
+---Set color for disabled menu items (RGBA)
+---@param r integer
+---@param g integer
+---@param b integer
+---@param a integer
+---@return EntityBuilder
+function EntityBuilder:with_menu_disabled_color(r, g, b, a) end
 
 ---Enable dynamic text updates for menu items
 ---@param dynamic boolean
@@ -2600,6 +2747,11 @@ function CollisionEntityBuilder:with_box_collider_offset(offset_x, offset_y) end
 ---@return CollisionEntityBuilder
 function CollisionEntityBuilder:with_camera_target(priority, zoom) end
 
+---Attach a DialogueRunner for the dialogue tree registered under `key` in the DialogueStore (an unknown key spawns the entity without a runner)
+---@param key string
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_dialogue(key) end
+
 ---Set friction (creates RigidBody if needed)
 ---@param friction number
 ---@return CollisionEntityBuilder
@@ -2736,6 +2888,21 @@ function CollisionEntityBuilder:with_lua_collision_rule(group_a, group_b, ongoin
 ---@return CollisionEntityBuilder
 function CollisionEntityBuilder:with_lua_collision_started(callback) end
 
+---Call a Lua function `fn(ctx, dialogue)` each time the player picks a choice in the entity's dialogue
+---@param callback string
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_lua_dialogue_choice_selected(callback) end
+
+---Call a Lua function `fn(ctx, dialogue)` each time the entity's dialogue ends
+---@param callback string
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_lua_dialogue_ended(callback) end
+
+---Call a Lua function `fn(ctx, dialogue)` each time the entity's dialogue enters a node
+---@param callback string
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_lua_dialogue_node_entered(callback) end
+
 ---Attach a callback fired on each GuiClicked of this entity's GuiInteractable (spawned by :with_gui_button() / :with_gui_image()). Signature: fn(ctx) with ctx.entity_id. A disabled widget does not dispatch it.
 ---@param callback string
 ---@return CollisionEntityBuilder
@@ -2846,6 +3013,19 @@ function CollisionEntityBuilder:with_menu_colors(nr, ng, nb, na, sr, sg, sb, sa)
 ---@param key string
 ---@return CollisionEntityBuilder
 function CollisionEntityBuilder:with_menu_cursor(key) end
+
+---Set text cursor for menu
+---@param text string
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_menu_cursor_text(text) end
+
+---Set color for disabled menu items (RGBA)
+---@param r integer
+---@param g integer
+---@param b integer
+---@param a integer
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_menu_disabled_color(r, g, b, a) end
 
 ---Enable dynamic text updates for menu items
 ---@param dynamic boolean
