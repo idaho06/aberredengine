@@ -71,8 +71,11 @@ pub enum ShapeKind {
     /// A rectangle with its top-left corner at `(0, 0)`. Its 1 px outline lies
     /// half a world unit inside its bounds: on the same pixels the fill covers
     /// for an unrotated rect at an integral position, size and scale, at zoom 1.
-    /// With [`Shape::thickness`] set, the outline lies half of it inside instead
-    /// and stays within the bounds.
+    /// With [`Shape::thickness`] set, the outline lies half of it inside instead:
+    /// under a uniform `Scale` its straight sides stay within the bounds, while
+    /// under a non-uniform `Scale` the stroke is `thickness` times the mean scale
+    /// wide in every direction and the inset follows each axis, so it can poke
+    /// out of the bounds on the axis with the smaller scale.
     Rect {
         /// Width and height.
         size: Vec2,
@@ -89,11 +92,14 @@ pub enum ShapeKind {
     /// inside its bounds, the hairline outline of a `RoundedRect` with a positive
     /// radius runs on the bounds themselves. With [`Shape::thickness`] set, the
     /// outline is the ring of the rect inset by half of it (local units, clamped
-    /// to half the size) with the corner radius reduced by the same inset: the
-    /// straight sides of the stroke stay within the bounds like a thick `Rect`
-    /// outline, but the square caps of the corner-arc segments can poke out of
-    /// the bounds by a small fraction of the stroke width (well under 0.15 of it
-    /// for ordinary radii).
+    /// to half the size) with the corner radius reduced by the same inset. Under
+    /// a uniform `Scale` the straight sides of the stroke stay within the bounds
+    /// like a thick `Rect` outline, and the square caps of the corner-arc
+    /// segments can poke out of them by a small fraction of the stroke width
+    /// (well under 0.15 of it for ordinary radii). Under a non-uniform `Scale`
+    /// the stroke is `thickness` times the mean scale wide in every direction
+    /// while the inset follows each axis, so it can poke out of the bounds on
+    /// the axis with the smaller scale.
     RoundedRect {
         /// Width and height.
         size: Vec2,

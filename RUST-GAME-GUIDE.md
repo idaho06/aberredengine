@@ -1512,7 +1512,7 @@ Lines and outlines draw as a 1 px hairline unless `.with_thickness(t)` sets a wi
 - `t` is the stroke width in world units, multiplied by the mean of `|scale.x|` and `|scale.y|` — so the stroke grows with the camera zoom, and on a screen shape (scale 1) `t` is pixels. A non-positive `t` draws the hairline.
 - `thickness` applies to a `Line`, a `Bezier` and the outlines of a `Rect`, a `RoundedRect` and a `Polygon`; a `Point`, `Circle` and `Ellipse` ignore it.
 - Thick segments have square caps (each extended by half the width at both ends) so joints close; overlapping caps can darken semi-transparent colours.
-- A thick `Rect` or `RoundedRect` outline is inset by half the thickness (local units) so its straight sides stay inside the bounds, while a `Line`, `Bezier` and `Polygon` stroke straddles its path.
+- A thick `Rect` or `RoundedRect` outline is inset by half the thickness (local units): under a uniform `Scale` its straight sides stay inside the bounds, while under a non-uniform `Scale` the stroke is `thickness` times the mean scale wide in every direction and the inset follows each axis, so it can poke out of the bounds on the axis with the smaller scale. A `Line`, `Bezier` and `Polygon` stroke straddles its path.
 
 A rect's hairline outline lies half a world unit inside its bounds (on the same pixels the fill covers, for an unrotated rect at an integral position, size and scale, at zoom 1); the hairline outline of a `RoundedRect` with a positive radius runs on the bounds themselves.
 
@@ -1520,7 +1520,7 @@ A rect's hairline outline lies half a world unit inside its bounds (on the same 
 
 A `Bezier` (`Shape::bezier(c1, c2, to, color)`) is a cubic curve from the local origin `(0, 0)` to `to` with control points `c1` and `c2`, all in local coordinates. It is outline-only, like a `Line`. It is drawn as 24 connected segments; at the 1 px hairline the joins between segments can show small gaps, so use `.with_thickness(..)` for a gap-free curve.
 
-A `RoundedRect` (`Shape::rounded_rect(size, radius, color)`) has its top-left corner at `(0, 0)` like a `Rect`. `radius` is clamped to `[0, min(|size.x|, |size.y|) / 2]`, and a radius of 0 (or a negative or `NaN` one) draws exactly like a `Rect`; each corner is a quarter circle of 8 segments. The fill is built from triangles, so `Rotation` and non-uniform `Scale` apply. With thickness, the square caps of the corner-arc segments can poke out of the bounds by a small fraction (well under 0.15) of the stroke width.
+A `RoundedRect` (`Shape::rounded_rect(size, radius, color)`) has its top-left corner at `(0, 0)` like a `Rect`. `radius` is clamped to `[0, min(|size.x|, |size.y|) / 2]`, and a radius of 0 (or a negative or `NaN` one) draws exactly like a `Rect`; each corner is a quarter circle of 8 segments. The fill is built from triangles, so `Rotation` and non-uniform `Scale` apply. With thickness and a uniform `Scale`, the square caps of the corner-arc segments can poke out of the bounds by a small fraction (well under 0.15) of the stroke width.
 
 `Tint` multiplies both colours. A `Shadow` draws the shape's silhouette (the fill of a filled shape, the outline otherwise) at `position + offset` in the shadow colour, ignoring `Tint`.
 

@@ -194,12 +194,16 @@ impl Transform {
 /// units, emitted as [`DrawOp::ThickLine`] with square caps (each segment extended
 /// by half its width at both ends so joints close without gaps; overlapping caps
 /// may darken semi-transparent colours). A thick `Rect` outline is inset by
-/// `thickness / 2` local units so the stroke stays inside the rect bounds, and a
-/// thick `RoundedRect` outline insets its rounded polygon the same way, with the
-/// corner radius reduced by the same inset: its straight sides stay inside the
-/// bounds, but the square caps of its corner-arc segments can poke out of them
-/// by a small fraction of the stroke width (well under 0.15 of it for ordinary
-/// radii). `Line`, `Bezier` and `Polygon` outlines straddle their path.
+/// `thickness / 2` local units, and a thick `RoundedRect` outline insets its
+/// rounded polygon the same way, with the corner radius reduced by the same
+/// inset: under a uniform `scale` the straight sides of the stroke stay inside
+/// the bounds, but under a non-uniform `scale` the stroke keeps that width in
+/// every direction while the inset follows each axis, so it can poke out of
+/// the bounds on the axis with the smaller scale. Under a uniform `scale` the
+/// square caps of a thick `RoundedRect`'s corner-arc segments can poke out of
+/// the bounds by a small fraction of the stroke width (well under 0.15 of it
+/// for ordinary radii). `Line`, `Bezier` and `Polygon` outlines straddle their
+/// path.
 /// `Point`, `Circle` and `Ellipse` ignore `thickness`. A `None` or non-positive
 /// `thickness` keeps the 1 px hairline.
 pub fn shape_ops(
