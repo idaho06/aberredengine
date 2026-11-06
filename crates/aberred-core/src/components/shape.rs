@@ -1,4 +1,4 @@
-//! Drawable primitives: point, line, rectangle, circle, ellipse and polygon.
+//! Drawable primitives: point, line, bezier curve, rectangle, circle, ellipse and polygon.
 //!
 //! A [`Shape`] carries its geometry in local coordinates plus its colours, a pivot `origin`
 //! and an optional line `thickness`.
@@ -9,7 +9,7 @@ use bevy_ecs::prelude::Component;
 
 use crate::math::{Color, Vec2, cross};
 
-/// A drawable primitive: a point, line, rectangle, circle, ellipse or polygon.
+/// A drawable primitive: a point, line, bezier curve, rectangle, circle, ellipse or polygon.
 ///
 /// A `Shape` draws when its entity also carries a `ZIndex` and a position: a
 /// `WorldPosition` places it on the map (the camera applies), a `ScreenPosition`
@@ -17,9 +17,9 @@ use crate::math::{Color, Vec2, cross};
 /// silhouette behind it.
 ///
 /// Lines and outlines are 1 px wide unless `thickness` is set. `color` is the fill colour of a
-/// `filled` shape and the line colour of an outlined shape, a point or a line. A filled
-/// shape with an `outline_color` draws the fill first and an outline on top.
-/// `filled` and `outline_color` do not affect `Point` and `Line`, and
+/// `filled` shape and the line colour of an outlined shape, a point, a line or a bezier curve.
+/// A filled shape with an `outline_color` draws the fill first and an outline on top.
+/// `filled` and `outline_color` do not affect `Point`, `Line` and `Bezier`, and
 /// `outline_color` does not affect an unfilled shape.
 ///
 /// All geometry is in local coordinates. `origin` is the local point that sits
@@ -37,11 +37,11 @@ pub struct Shape {
     pub outline_color: Option<Color>,
     /// Local point that sits on the entity position and pivots `Scale` and `Rotation`.
     pub origin: Vec2,
-    /// Line width of a `Line` and of the outlines of a `Rect` and a `Polygon`:
-    /// `None` draws a 1 px hairline, `Some(t)` draws `t` world units wide (times
-    /// the mean of `|scale.x|`, `|scale.y|`, so it grows with the camera zoom).
-    /// `Point`, `Circle` and `Ellipse` ignore it. Overlapping square caps at
-    /// joints can darken semi-transparent colours.
+    /// Line width of a `Line`, a `Bezier` and of the outlines of a `Rect` and a
+    /// `Polygon`: `None` draws a 1 px hairline, `Some(t)` draws `t` world units
+    /// wide (times the mean of `|scale.x|`, `|scale.y|`, so it grows with the
+    /// camera zoom). `Point`, `Circle` and `Ellipse` ignore it. Overlapping
+    /// square caps at joints can darken semi-transparent colours.
     pub thickness: Option<f32>,
 }
 
@@ -53,6 +53,19 @@ pub enum ShapeKind {
     /// A segment from `(0, 0)` to `to`.
     Line {
         /// End of the segment.
+        to: Vec2,
+    },
+    /// A cubic bezier curve from `(0, 0)` to `to` with control points `c1` and `c2`.
+    ///
+    /// The curve is drawn as 24 connected segments; at the 1 px hairline the
+    /// joins between segments can show small gaps, so set [`Shape::thickness`]
+    /// for a gap-free curve.
+    Bezier {
+        /// First control point.
+        c1: Vec2,
+        /// Second control point.
+        c2: Vec2,
+        /// End of the curve.
         to: Vec2,
     },
     /// A rectangle with its top-left corner at `(0, 0)`. Its 1 px outline lies
@@ -199,6 +212,11 @@ impl Shape {
         Self::new(ShapeKind::Line { to }, color)
     }
 
+    /// A cubic bezier curve from the local origin to `to` with control points `c1` and `c2`.
+    pub fn bezier(c1: Vec2, c2: Vec2, to: Vec2, color: Color) -> Self {
+        Self::new(ShapeKind::Bezier { c1, c2, to }, color)
+    }
+
     /// A rectangle of the given size with its top-left corner at the local origin.
     pub fn rect(size: Vec2, color: Color) -> Self {
         Self::new(ShapeKind::Rect { size }, color)
@@ -261,8 +279,14 @@ mod tests {
     fn constructors_pick_their_kind() {
         let to = Vec2::new(3.0, 4.0);
         let size = Vec2::new(5.0, 6.0);
+        let c1 = Vec2::new(1.0, 2.0);
+        let c2 = Vec2::new(2.0, 1.0);
         assert_eq!(Shape::point(RED).kind, ShapeKind::Point);
         assert_eq!(Shape::line(to, RED).kind, ShapeKind::Line { to });
+        assert_eq!(
+            Shape::bezier(c1, c2, to, RED).kind,
+            ShapeKind::Bezier { c1, c2, to }
+        );
         assert_eq!(Shape::rect(size, RED).kind, ShapeKind::Rect { size });
         assert_eq!(
             Shape::circle(2.5, RED).kind,

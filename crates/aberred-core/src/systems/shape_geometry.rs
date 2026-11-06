@@ -83,12 +83,12 @@ pub enum ShapeLayer {
 
 /// The layers a shape draws, in draw order, with the colour each uses before tint.
 ///
-/// An unfilled shape, a point and a line draw one `Outline` layer in `color`.
-/// A filled shape draws a `Fill` layer in `color`, then an `Outline` layer in
-/// `outline_color` when that is set.
+/// An unfilled shape, a point, a line and a bezier curve draw one `Outline` layer
+/// in `color`. A filled shape draws a `Fill` layer in `color`, then an `Outline`
+/// layer in `outline_color` when that is set.
 pub fn shape_layers(shape: &Shape) -> [Option<(ShapeLayer, Color)>; 2] {
     match (&shape.kind, shape.filled) {
-        (ShapeKind::Point | ShapeKind::Line { .. }, _) | (_, false) => {
+        (ShapeKind::Point | ShapeKind::Line { .. } | ShapeKind::Bezier { .. }, _) | (_, false) => {
             [Some((ShapeLayer::Outline, shape.color)), None]
         }
         _ => [
@@ -179,19 +179,21 @@ impl Transform {
 /// An outlined `Rect` is four full-length edges half a world unit inside its
 /// sides (see `Transform::rect_outline_edges`). `Line` and `Polygon` outlines
 /// are drawn at their exact transformed coordinates, on the lattice between
-/// pixels. An `Ellipse` ignores the rotation. A `Circle` rotates only its centre and
+/// pixels. A `Bezier` is sampled at 24 equal parameter steps into 24 connected
+/// segments whose first and last points are the transformed `(0, 0)` and `to`
+/// exactly. An `Ellipse` ignores the rotation. A `Circle` rotates only its centre and
 /// becomes an ellipse when `scale` is non-uniform. Every `Triangle` is emitted
 /// counter-clockwise for raylib whatever the input winding or mirroring, and
 /// zero-area triangles are skipped.
 ///
-/// A positive [`Shape::thickness`] widens a `Line` and the outlines of a `Rect`
-/// and a `Polygon` to `thickness * mean(|scale.x|, |scale.y|)` world units,
-/// emitted as [`DrawOp::ThickLine`] with square caps (each segment extended by
-/// half its width at both ends so joints close without gaps; overlapping caps
+/// A positive [`Shape::thickness`] widens a `Line`, a `Bezier` and the outlines
+/// of a `Rect` and a `Polygon` to `thickness * mean(|scale.x|, |scale.y|)` world
+/// units, emitted as [`DrawOp::ThickLine`] with square caps (each segment extended
+/// by half its width at both ends so joints close without gaps; overlapping caps
 /// may darken semi-transparent colours). A thick `Rect` outline is inset by
 /// `thickness / 2` local units so the stroke stays inside the rect bounds;
-/// `Line` and `Polygon` outlines straddle their path. `Point`, `Circle` and
-/// `Ellipse` ignore `thickness`. A `None` or non-positive `thickness` keeps
+/// `Line`, `Bezier` and `Polygon` outlines straddle their path. `Point`, `Circle`
+/// and `Ellipse` ignore `thickness`. A `None` or non-positive `thickness` keeps
 /// the 1 px hairline.
 pub fn shape_ops(
     shape: &Shape,
@@ -215,6 +217,17 @@ pub fn shape_ops(
         ShapeKind::Line { to } => {
             if !fill {
                 push_segment(out, xf.point(Vec2::ZERO), xf.point(*to), stroke);
+            }
+        }
+        ShapeKind::Bezier { c1, c2, to } => {
+            if !fill {
+                // An affine transform of a cubic is the cubic of the transformed
+                // control points, so transforming the four control points is exact.
+                push_bezier(
+                    out,
+                    [Vec2::ZERO, *c1, *c2, *to].map(|p| xf.point(p)),
+                    stroke,
+                );
             }
         }
         ShapeKind::Rect { size } => {
@@ -290,6 +303,11 @@ pub fn shape_cull_bounds(
     let found = match &shape.kind {
         ShapeKind::Point => bounding_box([xf.point(Vec2::ZERO)]),
         ShapeKind::Line { to } => bounding_box([Vec2::ZERO, *to].map(|p| xf.point(p))),
+        ShapeKind::Bezier { c1, c2, to } => {
+            // The curve lies inside the convex hull of its control points, so the
+            // box of the four transformed control points encloses it.
+            bounding_box([Vec2::ZERO, *c1, *c2, *to].map(|p| xf.point(p)))
+        }
         ShapeKind::Rect { size } => bounding_box(xf.rect_corners(*size)),
         ShapeKind::Circle { radius } => {
             let (center, radii, _) = xf.circle(*radius);
@@ -373,6 +391,34 @@ fn push_thick_line(out: &mut Vec<DrawOp>, a: Vec2, b: Vec2, thickness: f32) {
     });
 }
 
+/// How many equal parameter steps a [`ShapeKind::Bezier`] is sampled into.
+const BEZIER_SEGMENTS: usize = 24;
+
+/// Appends the cubic with transformed control points `p` as `BEZIER_SEGMENTS`
+/// connected segments, each through `push_segment`: with a stroke each is a
+/// square-capped [`DrawOp::ThickLine`] extended by half its width at both ends
+/// (the cap rule of `push_thick_line`), so the joints close; without one it is
+/// a 1 px [`DrawOp::Line`], whose joins can show hairline gaps. The first
+/// point is `p[0]` and the last is `p[3]`, taken straight from the control
+/// points, so they equal the transformed start and `to` exactly.
+fn push_bezier(out: &mut Vec<DrawOp>, p: [Vec2; 4], stroke: Option<(f32, f32)>) {
+    let mut prev = p[0];
+    for i in 1..=BEZIER_SEGMENTS {
+        let next = if i == BEZIER_SEGMENTS {
+            p[3]
+        } else {
+            let t = i as f32 / BEZIER_SEGMENTS as f32;
+            let u = 1.0 - t;
+            p[0] * (u * u * u)
+                + p[1] * (3.0 * u * u * t)
+                + p[2] * (3.0 * u * t * t)
+                + p[3] * (t * t * t)
+        };
+        push_segment(out, prev, next, stroke);
+        prev = next;
+    }
+}
+
 /// Appends a circle (`round`, radius `radii.x`) or an ellipse, filled or outlined.
 fn push_round(out: &mut Vec<DrawOp>, fill: bool, center: Vec2, radii: Vec2, round: bool) {
     out.push(match (round, fill) {
@@ -420,6 +466,10 @@ mod tests {
 
     fn fill(shape: &Shape) -> Vec<DrawOp> {
         ops(shape, ShapeLayer::Fill, Vec2::ZERO, Vec2::ONE, 0.0)
+    }
+
+    fn bezier(c1: Vec2, c2: Vec2, to: Vec2) -> Shape {
+        Shape::bezier(c1, c2, to, C)
     }
 
     fn lines(ops: &[DrawOp]) -> Vec<(Vec2, Vec2)> {
@@ -961,6 +1011,7 @@ mod tests {
 
     #[test]
     fn each_layer_emits_only_its_own_op_kinds() {
+        let b = bezier(v(1.0, 3.0), v(4.0, -1.0), v(6.0, 2.0));
         let shapes = [
             Shape::point(C),
             Shape::line(v(2.0, 2.0), C),
@@ -968,9 +1019,11 @@ mod tests {
             Shape::circle(2.0, C),
             Shape::ellipse(v(3.0, 2.0), C),
             Shape::polygon(&l_shape(), C),
+            b.clone(),
             Shape::line(v(2.0, 2.0), C).with_thickness(1.5),
             Shape::rect(v(3.0, 2.0), C).with_thickness(1.5),
             Shape::polygon(&l_shape(), C).with_thickness(1.5),
+            b.with_thickness(1.5),
             Shape::point(C).with_thickness(1.5),
             Shape::circle(2.0, C).with_thickness(1.5),
             Shape::ellipse(v(3.0, 2.0), C).with_thickness(1.5),
@@ -1163,5 +1216,188 @@ mod tests {
                 assert!(p.cmpge(min).all() && p.cmple(max).all());
             }
         }
+    }
+
+    #[test]
+    fn a_bezier_starts_and_ends_exactly_at_the_transformed_origin_and_to() {
+        let to = v(10.0, 4.0);
+        let s = bezier(v(2.0, 5.0), v(8.0, -3.0), to);
+        let (pos, scale, rot) = (v(7.0, 9.0), v(2.0, 3.0), 25.0);
+        let l = lines(&ops(&s, ShapeLayer::Outline, pos, scale, rot));
+        assert_eq!(l.len(), 24);
+        let xf = Transform::new(&s, pos, scale, rot);
+        assert_eq!(l[0].0, xf.point(Vec2::ZERO));
+        assert_eq!(l[23].1, xf.point(to));
+    }
+
+    #[test]
+    fn a_hairline_bezier_emits_24_connected_segments() {
+        let s = bezier(v(1.0, 4.0), v(6.0, -2.0), v(8.0, 3.0));
+        let l = lines(&ops(
+            &s,
+            ShapeLayer::Outline,
+            v(3.0, 4.0),
+            v(2.0, 1.0),
+            40.0,
+        ));
+        assert_eq!(l.len(), 24);
+        for pair in l.windows(2) {
+            assert_eq!(pair[0].1, pair[1].0, "segment ends join the next start");
+        }
+    }
+
+    #[test]
+    fn the_bezier_samples_match_the_cubic_polynomial() {
+        let (c1, c2, to) = (v(0.0, 3.0), v(3.0, 3.0), v(3.0, 0.0));
+        let s = bezier(c1, c2, to);
+        let l = lines(&outline(&s));
+        // The end of segment 11 samples t = 12 / 24 = 0.5:
+        // P(0.5) = 0.125 P0 + 0.375 P1 + 0.375 P2 + 0.125 P3 = (1.5, 2.25).
+        let expected = Vec2::ZERO * 0.125 + c1 * 0.375 + c2 * 0.375 + to * 0.125;
+        assert!(vec2_approx_eq(l[11].1, expected));
+        assert!(vec2_approx_eq(l[11].1, v(1.5, 2.25)));
+    }
+
+    #[test]
+    fn a_straight_cubic_bezier_yields_collinear_points() {
+        // c1 and c2 on the chord from (0, 0) to `to` make the curve the chord itself.
+        let to = v(24.0, 0.0);
+        let s = bezier(v(8.0, 0.0), v(16.0, 0.0), to);
+        let l = lines(&outline(&s));
+        assert_eq!(l.len(), 24);
+        for &(a, b) in &l {
+            assert_eq!(a.y, 0.0);
+            assert_eq!(b.y, 0.0);
+        }
+        // Under rotation the points stay on the transformed chord. Compare the
+        // distance to the chord line (unit direction), not the raw cross product,
+        // whose rotation error scales with the chord length.
+        let (pos, scale, rot) = (v(2.0, 3.0), Vec2::ONE, 90.0);
+        let l = lines(&ops(&s, ShapeLayer::Outline, pos, scale, rot));
+        let xf = Transform::new(&s, pos, scale, rot);
+        let chord_a = xf.point(Vec2::ZERO);
+        let chord = xf.point(to) - chord_a;
+        let dir = chord / chord.length();
+        for &(a, b) in &l {
+            for p in [a, b] {
+                assert!(approx_eq(dir.perp_dot(p - chord_a), 0.0), "{p:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn the_bezier_box_encloses_every_emitted_vertex_under_rotation_scale_and_mirroring() {
+        let to = v(6.0, 5.0);
+        let s = bezier(v(2.0, 8.0), v(9.0, -1.0), to).with_origin(v(1.0, 2.0));
+        let pos = v(5.0, 5.0);
+        for (scale, rot) in [
+            (Vec2::ONE, 90.0),
+            (v(2.0, 3.0), 33.0),
+            (v(-2.0, -1.0), 20.0),
+            (v(1.0, -3.0), 0.0),
+        ] {
+            let (min, max) = shape_cull_bounds(&s, pos, scale, rot);
+            assert!(min.x <= max.x && min.y <= max.y, "{scale:?} {rot}");
+            let l = lines(&ops(&s, ShapeLayer::Outline, pos, scale, rot));
+            assert_eq!(l.len(), 24, "{scale:?} {rot}");
+            for &(a, b) in &l {
+                for p in [a, b] {
+                    assert!(
+                        p.cmpge(min).all() && p.cmple(max).all(),
+                        "{p:?} outside {min:?}..{max:?} at {scale:?} {rot}"
+                    );
+                }
+            }
+            let xf = Transform::new(&s, pos, scale, rot);
+            assert_eq!(l[0].0, xf.point(Vec2::ZERO));
+            assert_eq!(l[23].1, xf.point(to));
+        }
+    }
+
+    #[test]
+    fn a_filled_bezier_with_an_outline_color_draws_one_outline_layer_and_no_fill() {
+        let plain = bezier(v(1.0, 2.0), v(3.0, 4.0), v(5.0, 6.0));
+        let s = plain.clone().filled().with_outline_color(Color::BLUE);
+        assert_eq!(shape_layers(&s), [Some((ShapeLayer::Outline, C)), None]);
+        assert!(fill(&s).is_empty());
+        assert_eq!(shape_layers(&plain), [Some((ShapeLayer::Outline, C)), None]);
+        assert!(fill(&plain).is_empty());
+    }
+
+    #[test]
+    fn a_hairline_bezier_emits_only_line_ops() {
+        let s = bezier(v(2.0, 5.0), v(8.0, -3.0), v(10.0, 4.0));
+        let o = ops(&s, ShapeLayer::Outline, v(10.0, 10.0), v(2.0, 4.0), 30.0);
+        assert_eq!(lines(&o).len(), 24);
+        assert!(thick_lines(&o).is_empty());
+        assert!(triangles(&o).is_empty());
+    }
+
+    #[test]
+    fn a_thick_bezier_emits_only_thick_lines_of_the_mean_scaled_width() {
+        let s = bezier(v(2.0, 5.0), v(8.0, -3.0), v(10.0, 4.0)).with_thickness(2.0);
+        // width = 2 * mean(|2|, |4|) = 6.
+        let o = ops(&s, ShapeLayer::Outline, v(10.0, 10.0), v(2.0, 4.0), 0.0);
+        let t = thick_lines(&o);
+        assert_eq!(t.len(), 24);
+        assert!(t.iter().all(|&(_, _, w)| approx_eq(w, 6.0)));
+        assert!(lines(&o).is_empty());
+    }
+
+    #[test]
+    fn every_thick_bezier_segment_is_extended_by_half_the_width_at_both_ends() {
+        let to = v(9.0, 0.0);
+        // A straight cubic on the x-axis: every polyline segment runs along +x.
+        let s = bezier(v(3.0, 0.0), v(6.0, 0.0), to).with_thickness(2.0);
+        let t = thick_lines(&outline(&s));
+        assert_eq!(t.len(), 24);
+        let mut prev = v(0.0, 0.0);
+        for &(a, b, w) in &t {
+            assert!(approx_eq(w, 2.0));
+            let d = (b - a) / (b - a).length();
+            assert!(vec2_approx_eq(d, v(1.0, 0.0)), "direction {d:?}");
+            // Square caps: the geometric endpoints sit w / 2 inside `a` and `b`,
+            // so the unextended polyline stays connected from (0, 0) to `to`.
+            let ga = a + d * (w / 2.0);
+            let gb = b - d * (w / 2.0);
+            assert!(vec2_approx_eq(ga, prev), "cap rule: {ga:?} vs {prev:?}");
+            prev = gb;
+        }
+        assert!(vec2_approx_eq(prev, to));
+    }
+
+    #[test]
+    fn a_degenerate_thick_bezier_emits_nothing() {
+        let s = bezier(Vec2::ZERO, Vec2::ZERO, Vec2::ZERO).with_thickness(2.0);
+        assert!(outline(&s).is_empty());
+    }
+
+    #[test]
+    fn reusing_the_bezier_buffer_does_not_grow_its_capacity() {
+        let s = bezier(v(1.0, 5.0), v(7.0, -2.0), v(9.0, 3.0));
+        let mut out = Vec::new();
+        shape_ops(
+            &s,
+            ShapeLayer::Outline,
+            Vec2::ZERO,
+            Vec2::ONE,
+            0.0,
+            &mut out,
+        );
+        assert_eq!(out.len(), 24);
+        let cap = out.capacity();
+        for _ in 0..3 {
+            out.clear();
+            shape_ops(
+                &s,
+                ShapeLayer::Outline,
+                Vec2::ZERO,
+                Vec2::ONE,
+                0.0,
+                &mut out,
+            );
+            assert_eq!(out.len(), 24);
+        }
+        assert_eq!(out.capacity(), cap);
     }
 }
