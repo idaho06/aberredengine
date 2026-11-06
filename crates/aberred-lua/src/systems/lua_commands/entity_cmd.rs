@@ -182,6 +182,7 @@ pub fn process_entity_commands(
             | EntityCmd::SetShapeFilled { .. }
             | EntityCmd::SetShapeOrigin { .. }
             | EntityCmd::SetShapeKind { .. }
+            | EntityCmd::SetShapeThickness { .. }
             | EntityCmd::RemoveShape { .. }) => process_shape_cmd(cmd, commands),
 
             cmd @ (EntityCmd::SetPosition { .. }
@@ -593,6 +594,14 @@ fn process_shape_cmd(cmd: EntityCmd, commands: &mut Commands) {
         EntityCmd::SetShapeKind { entity_id, kind } => {
             queue_on_component::<Shape>(commands, entity_id, move |shape| {
                 shape.kind = kind;
+            });
+        }
+        EntityCmd::SetShapeThickness {
+            entity_id,
+            thickness,
+        } => {
+            queue_on_component::<Shape>(commands, entity_id, move |shape| {
+                shape.thickness = thickness;
             });
         }
         EntityCmd::RemoveShape { entity_id } => {
@@ -1025,6 +1034,20 @@ mod tests {
             process_entity_commands(&mut commands, cmds, world_signals, systems_store);
         }
         system_state.apply(world);
+    }
+
+    /// Spawns `start`, runs `cmd(entity_id)` through [`run_entity_cmd`], and
+    /// asserts the entity's resulting `Shape` equals `expected`.
+    fn assert_shape_cmd(
+        cmd: impl FnOnce(u64) -> EntityCmd,
+        start: Shape,
+        expected: Shape,
+        name: &str,
+    ) {
+        let mut world = World::new();
+        let e = world.spawn(start).id();
+        run_entity_cmd(&mut world, cmd(e.to_bits()));
+        assert_eq!(*world.get::<Shape>(e).unwrap(), expected, "{name}");
     }
 
     #[test]
@@ -1786,6 +1809,10 @@ mod tests {
                     entity_id: id,
                     kind: ShapeKind::Circle { radius: 3.0 },
                 },
+                EntityCmd::SetShapeThickness {
+                    entity_id: id,
+                    thickness: Some(2.0),
+                },
             ],
         );
         assert!(world.get::<Shape>(e).is_none());
@@ -1851,10 +1878,33 @@ mod tests {
             ),
         ];
         for (name, cmd, start, expected) in cases {
-            let mut world = World::new();
-            let e = world.spawn(start).id();
-            run_entity_cmd(&mut world, cmd(e.to_bits()));
-            assert_eq!(*world.get::<Shape>(e).unwrap(), expected, "{name}");
+            assert_shape_cmd(cmd, start, expected, name);
+        }
+    }
+
+    #[test]
+    fn set_shape_thickness_sets_and_clears_only_the_thickness() {
+        let styled = || {
+            Shape::rect(Vec2::new(4.0, 2.0), Color::RED)
+                .filled()
+                .with_outline_color(Color::WHITE)
+                .with_origin(Vec2::new(1.0, 2.0))
+                .with_thickness(7.0)
+        };
+        // (name, thickness to set or clear; every other styled field is untouched)
+        for (name, thickness) in [("set", Some(3.0)), ("cleared", None)] {
+            assert_shape_cmd(
+                |entity_id| EntityCmd::SetShapeThickness {
+                    entity_id,
+                    thickness,
+                },
+                styled(),
+                Shape {
+                    thickness,
+                    ..styled()
+                },
+                name,
+            );
         }
     }
 
@@ -1863,7 +1913,8 @@ mod tests {
         let styled = Shape::rect(Vec2::new(4.0, 2.0), Color::RED)
             .filled()
             .with_outline_color(Color::WHITE)
-            .with_origin(Vec2::new(1.0, 1.0));
+            .with_origin(Vec2::new(1.0, 1.0))
+            .with_thickness(2.5);
         let kinds = [
             ShapeKind::Point,
             ShapeKind::Line {
@@ -1876,6 +1927,15 @@ mod tests {
             ShapeKind::Ellipse {
                 radius: Vec2::new(2.0, 3.0),
             },
+            ShapeKind::Bezier {
+                c1: Vec2::new(1.0, 0.0),
+                c2: Vec2::new(0.0, 1.0),
+                to: Vec2::new(6.0, 7.0),
+            },
+            ShapeKind::RoundedRect {
+                size: Vec2::new(8.0, 4.0),
+                radius: 1.5,
+            },
             Shape::polygon(
                 &[Vec2::ZERO, Vec2::new(4.0, 0.0), Vec2::new(2.0, 3.0)],
                 Color::RED,
@@ -1883,21 +1943,15 @@ mod tests {
             .kind,
         ];
         for kind in kinds {
-            let mut world = World::new();
-            let e = world.spawn(styled.clone()).id();
-            run_entity_cmd(
-                &mut world,
-                EntityCmd::SetShapeKind {
-                    entity_id: e.to_bits(),
-                    kind: kind.clone(),
-                },
-            );
-            assert_eq!(
-                *world.get::<Shape>(e).unwrap(),
-                Shape {
-                    kind,
-                    ..styled.clone()
-                }
+            let expected = Shape {
+                kind: kind.clone(),
+                ..styled.clone()
+            };
+            assert_shape_cmd(
+                |entity_id| EntityCmd::SetShapeKind { entity_id, kind },
+                styled.clone(),
+                expected,
+                "kind",
             );
         }
     }

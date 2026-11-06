@@ -43,7 +43,7 @@ pub(super) fn register<M: LuaUserDataMethods<LuaEntityBuilder>>(
         methods,
         meta,
         "with_shape_line",
-        "Draw a 1 px line from the local origin to (to_x, to_y)",
+        "Draw a line from the local origin to (to_x, to_y) (1 px by default; with_shape_thickness() changes the width)",
         [
             ("to_x", "number"),
             ("to_y", "number"),
@@ -54,6 +54,47 @@ pub(super) fn register<M: LuaUserDataMethods<LuaEntityBuilder>>(
         ],
         |_, this: &mut LuaEntityBuilder, (to_x, to_y, r, g, b, a): (f32, f32, u8, u8, u8, u8)| {
             this.cmd.shape = Some(Shape::line(Vec2::new(to_x, to_y), Color::new(r, g, b, a)));
+            Ok(())
+        }
+    );
+
+    builder_method!(
+        methods,
+        meta,
+        "with_shape_bezier",
+        "Draw a cubic bezier from the local origin to (tox, toy) with control points (c1x, c1y) and (c2x, c2y); outline only (fill and outline colour do not affect it); use with_shape_thickness() for a gap-free curve",
+        [
+            ("c1x", "number"),
+            ("c1y", "number"),
+            ("c2x", "number"),
+            ("c2y", "number"),
+            ("tox", "number"),
+            ("toy", "number"),
+            ("r", "integer"),
+            ("g", "integer"),
+            ("b", "integer"),
+            ("a", "integer")
+        ],
+        |_,
+         this: &mut LuaEntityBuilder,
+         (c1x, c1y, c2x, c2y, tox, toy, r, g, b, a): (
+            f32,
+            f32,
+            f32,
+            f32,
+            f32,
+            f32,
+            u8,
+            u8,
+            u8,
+            u8
+        )| {
+            this.cmd.shape = Some(Shape::bezier(
+                Vec2::new(c1x, c1y),
+                Vec2::new(c2x, c2y),
+                Vec2::new(tox, toy),
+                Color::new(r, g, b, a),
+            ));
             Ok(())
         }
     );
@@ -73,6 +114,32 @@ pub(super) fn register<M: LuaUserDataMethods<LuaEntityBuilder>>(
         ],
         |_, this: &mut LuaEntityBuilder, (w, h, r, g, b, a): (f32, f32, u8, u8, u8, u8)| {
             this.cmd.shape = Some(Shape::rect(Vec2::new(w, h), Color::new(r, g, b, a)));
+            Ok(())
+        }
+    );
+
+    builder_method!(
+        methods,
+        meta,
+        "with_shape_rounded_rect",
+        "Draw a rectangle with rounded corners (radius is clamped to half the short side), outline; add with_shape_filled() to fill; top-left corner at the local origin",
+        [
+            ("width", "number"),
+            ("height", "number"),
+            ("radius", "number"),
+            ("r", "integer"),
+            ("g", "integer"),
+            ("b", "integer"),
+            ("a", "integer")
+        ],
+        |_,
+         this: &mut LuaEntityBuilder,
+         (w, h, radius, r, g, b, a): (f32, f32, f32, u8, u8, u8, u8)| {
+            this.cmd.shape = Some(Shape::rounded_rect(
+                Vec2::new(w, h),
+                radius,
+                Color::new(r, g, b, a),
+            ));
             Ok(())
         }
     );
@@ -148,7 +215,7 @@ pub(super) fn register<M: LuaUserDataMethods<LuaEntityBuilder>>(
         methods,
         meta,
         "with_shape_outline_color",
-        "Draw a 1 px outline in this color over a filled shape",
+        "Draw an outline in this color over a filled shape (1 px by default; with_shape_thickness() changes the width)",
         [
             ("r", "integer"),
             ("g", "integer"),
@@ -171,6 +238,19 @@ pub(super) fn register<M: LuaUserDataMethods<LuaEntityBuilder>>(
         |_, this: &mut LuaEntityBuilder, (x, y): (f32, f32)| {
             modify_shape(this, "with_shape_origin", |shape| {
                 shape.with_origin(Vec2::new(x, y))
+            })
+        }
+    );
+
+    builder_method!(
+        methods,
+        meta,
+        "with_shape_thickness",
+        "Set the line width in world units (it scales with the camera zoom); applies to lines, bezier curves and outlines of rects, rounded rects and polygons; points, circles and ellipses ignore it",
+        [("thickness", "number")],
+        |_, this: &mut LuaEntityBuilder, thickness: f32| {
+            modify_shape(this, "with_shape_thickness", |shape| {
+                shape.with_thickness(thickness)
             })
         }
     );
@@ -203,8 +283,21 @@ mod tests {
             Shape::line(Vec2::new(5.0, 6.0), C)
         );
         assert_eq!(
+            shape_of(":with_shape_bezier(1, 2, 3, 4, 5, 6, 1, 2, 3, 4)"),
+            Shape::bezier(
+                Vec2::new(1.0, 2.0),
+                Vec2::new(3.0, 4.0),
+                Vec2::new(5.0, 6.0),
+                C
+            )
+        );
+        assert_eq!(
             shape_of(":with_shape_rect(7, 8, 1, 2, 3, 4)"),
             Shape::rect(Vec2::new(7.0, 8.0), C)
+        );
+        assert_eq!(
+            shape_of(":with_shape_rounded_rect(9, 10, 2.5, 1, 2, 3, 4)"),
+            Shape::rounded_rect(Vec2::new(9.0, 10.0), 2.5, C)
         );
         assert_eq!(
             shape_of(":with_shape_circle(9, 1, 2, 3, 4)"),
@@ -245,6 +338,28 @@ mod tests {
     }
 
     #[test]
+    fn with_shape_thickness_stores_some_t_and_keeps_the_other_fields() {
+        let expected = Shape::line(Vec2::new(5.0, 6.0), C)
+            .filled()
+            .with_outline_color(Color::new(5, 6, 7, 8))
+            .with_origin(Vec2::new(1.0, 1.5))
+            .with_thickness(2.5);
+        let kind = ":with_shape_line(5, 6, 1, 2, 3, 4)";
+        let modifiers =
+            ":with_shape_filled():with_shape_outline_color(5, 6, 7, 8):with_shape_origin(1, 1.5)";
+        // Chained right after the kind, before the other modifiers.
+        assert_eq!(
+            shape_of(&format!("{kind}:with_shape_thickness(2.5){modifiers}")),
+            expected
+        );
+        // Chained after the other modifiers.
+        assert_eq!(
+            shape_of(&format!("{kind}{modifiers}:with_shape_thickness(2.5)")),
+            expected
+        );
+    }
+
+    #[test]
     fn modifiers_require_a_shape_kind_first() {
         for (call, method) in [
             ("with_shape_filled()", "with_shape_filled"),
@@ -253,6 +368,7 @@ mod tests {
                 "with_shape_outline_color",
             ),
             ("with_shape_origin(1, 2)", "with_shape_origin"),
+            ("with_shape_thickness(1)", "with_shape_thickness"),
         ] {
             assert_runtime_error(
                 &format!("engine.spawn():{call}"),
@@ -281,5 +397,15 @@ mod tests {
             "engine.spawn():with_shape_rect(1, 1, 256, 0, 0, 255)",
             "with_shape_rect",
         );
+    }
+
+    #[test]
+    fn with_shape_bezier_rejects_wrong_typed_arguments() {
+        for call in [
+            ":with_shape_bezier({}, 2, 3, 4, 5, 6, 1, 2, 3, 4)",
+            ":with_shape_bezier(1, 2, 3, 4, 5, 6, 1, 2, 3, 'x')",
+        ] {
+            assert_runtime_error(&format!("engine.spawn(){call}"), "with_shape_bezier");
+        }
     }
 }

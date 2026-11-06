@@ -853,6 +853,16 @@ function engine.collision_entity_set_shader(entity_id, key) end
 ---@param a integer
 function engine.collision_entity_set_shadow(entity_id, dx, dy, r, g, b, a) end
 
+---Replace an entity Shape's geometry with a cubic bezier from the local origin to (tox, toy) with control points (c1x, c1y) and (c2x, c2y); no-op without a Shape
+---@param entity_id integer
+---@param c1x number
+---@param c1y number
+---@param c2x number
+---@param c2y number
+---@param tox number
+---@param toy number
+function engine.collision_entity_set_shape_bezier(entity_id, c1x, c1y, c2x, c2y, tox, toy) end
+
 ---Replace an entity Shape's geometry with a circle; no-op without a Shape
 ---@param entity_id integer
 ---@param radius number
@@ -911,6 +921,18 @@ function engine.collision_entity_set_shape_polygon(entity_id, points) end
 ---@param width number
 ---@param height number
 function engine.collision_entity_set_shape_rect(entity_id, width, height) end
+
+---Replace an entity Shape's geometry with a rectangle with rounded corners; no-op without a Shape
+---@param entity_id integer
+---@param width number
+---@param height number
+---@param radius number
+function engine.collision_entity_set_shape_rounded_rect(entity_id, width, height, radius) end
+
+---Set the line width (world units) of an entity's Shape, or pass nil to go back to the 1 px hairline; no-op without a Shape
+---@param entity_id integer
+---@param thickness number|nil
+function engine.collision_entity_set_shape_thickness(entity_id, thickness) end
 
 ---Set entity speed (scales velocity to this magnitude)
 ---@param entity_id integer
@@ -1333,6 +1355,16 @@ function engine.entity_set_shader(entity_id, key) end
 ---@param a integer
 function engine.entity_set_shadow(entity_id, dx, dy, r, g, b, a) end
 
+---Replace an entity Shape's geometry with a cubic bezier from the local origin to (tox, toy) with control points (c1x, c1y) and (c2x, c2y); no-op without a Shape
+---@param entity_id integer
+---@param c1x number
+---@param c1y number
+---@param c2x number
+---@param c2y number
+---@param tox number
+---@param toy number
+function engine.entity_set_shape_bezier(entity_id, c1x, c1y, c2x, c2y, tox, toy) end
+
 ---Replace an entity Shape's geometry with a circle; no-op without a Shape
 ---@param entity_id integer
 ---@param radius number
@@ -1391,6 +1423,18 @@ function engine.entity_set_shape_polygon(entity_id, points) end
 ---@param width number
 ---@param height number
 function engine.entity_set_shape_rect(entity_id, width, height) end
+
+---Replace an entity Shape's geometry with a rectangle with rounded corners; no-op without a Shape
+---@param entity_id integer
+---@param width number
+---@param height number
+---@param radius number
+function engine.entity_set_shape_rounded_rect(entity_id, width, height, radius) end
+
+---Set the line width (world units) of an entity's Shape, or pass nil to go back to the 1 px hairline; no-op without a Shape
+---@param entity_id integer
+---@param thickness number|nil
+function engine.entity_set_shape_thickness(entity_id, thickness) end
 
 ---Set entity speed (scales velocity to this magnitude)
 ---@param entity_id integer
@@ -2376,6 +2420,20 @@ function EntityBuilder:with_shader(shader_key, uniforms) end
 ---@return EntityBuilder
 function EntityBuilder:with_shadow(dx, dy, r, g, b, a) end
 
+---Draw a cubic bezier from the local origin to (tox, toy) with control points (c1x, c1y) and (c2x, c2y); outline only (fill and outline colour do not affect it); use with_shape_thickness() for a gap-free curve
+---@param c1x number
+---@param c1y number
+---@param c2x number
+---@param c2y number
+---@param tox number
+---@param toy number
+---@param r integer
+---@param g integer
+---@param b integer
+---@param a integer
+---@return EntityBuilder
+function EntityBuilder:with_shape_bezier(c1x, c1y, c2x, c2y, tox, toy, r, g, b, a) end
+
 ---Draw a circle (outline; add with_shape_filled() to fill) centred on the local origin
 ---@param radius number
 ---@param r integer
@@ -2399,7 +2457,7 @@ function EntityBuilder:with_shape_ellipse(radius_x, radius_y, r, g, b, a) end
 ---@return EntityBuilder
 function EntityBuilder:with_shape_filled() end
 
----Draw a 1 px line from the local origin to (to_x, to_y)
+---Draw a line from the local origin to (to_x, to_y) (1 px by default; with_shape_thickness() changes the width)
 ---@param to_x number
 ---@param to_y number
 ---@param r integer
@@ -2415,7 +2473,7 @@ function EntityBuilder:with_shape_line(to_x, to_y, r, g, b, a) end
 ---@return EntityBuilder
 function EntityBuilder:with_shape_origin(x, y) end
 
----Draw a 1 px outline in this color over a filled shape
+---Draw an outline in this color over a filled shape (1 px by default; with_shape_thickness() changes the width)
 ---@param r integer
 ---@param g integer
 ---@param b integer
@@ -2449,6 +2507,22 @@ function EntityBuilder:with_shape_polygon(points, r, g, b, a) end
 ---@param a integer
 ---@return EntityBuilder
 function EntityBuilder:with_shape_rect(width, height, r, g, b, a) end
+
+---Draw a rectangle with rounded corners (radius is clamped to half the short side), outline; add with_shape_filled() to fill; top-left corner at the local origin
+---@param width number
+---@param height number
+---@param radius number
+---@param r integer
+---@param g integer
+---@param b integer
+---@param a integer
+---@return EntityBuilder
+function EntityBuilder:with_shape_rounded_rect(width, height, radius, r, g, b, a) end
+
+---Set the line width in world units (it scales with the camera zoom); applies to lines, bezier curves and outlines of rects, rounded rects and polygons; points, circles and ellipses ignore it
+---@param thickness number
+---@return EntityBuilder
+function EntityBuilder:with_shape_thickness(thickness) end
 
 ---Bind text to a WorldSignal value
 ---@param key string
@@ -3115,6 +3189,20 @@ function CollisionEntityBuilder:with_shader(shader_key, uniforms) end
 ---@return CollisionEntityBuilder
 function CollisionEntityBuilder:with_shadow(dx, dy, r, g, b, a) end
 
+---Draw a cubic bezier from the local origin to (tox, toy) with control points (c1x, c1y) and (c2x, c2y); outline only (fill and outline colour do not affect it); use with_shape_thickness() for a gap-free curve
+---@param c1x number
+---@param c1y number
+---@param c2x number
+---@param c2y number
+---@param tox number
+---@param toy number
+---@param r integer
+---@param g integer
+---@param b integer
+---@param a integer
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_shape_bezier(c1x, c1y, c2x, c2y, tox, toy, r, g, b, a) end
+
 ---Draw a circle (outline; add with_shape_filled() to fill) centred on the local origin
 ---@param radius number
 ---@param r integer
@@ -3138,7 +3226,7 @@ function CollisionEntityBuilder:with_shape_ellipse(radius_x, radius_y, r, g, b, 
 ---@return CollisionEntityBuilder
 function CollisionEntityBuilder:with_shape_filled() end
 
----Draw a 1 px line from the local origin to (to_x, to_y)
+---Draw a line from the local origin to (to_x, to_y) (1 px by default; with_shape_thickness() changes the width)
 ---@param to_x number
 ---@param to_y number
 ---@param r integer
@@ -3154,7 +3242,7 @@ function CollisionEntityBuilder:with_shape_line(to_x, to_y, r, g, b, a) end
 ---@return CollisionEntityBuilder
 function CollisionEntityBuilder:with_shape_origin(x, y) end
 
----Draw a 1 px outline in this color over a filled shape
+---Draw an outline in this color over a filled shape (1 px by default; with_shape_thickness() changes the width)
 ---@param r integer
 ---@param g integer
 ---@param b integer
@@ -3188,6 +3276,22 @@ function CollisionEntityBuilder:with_shape_polygon(points, r, g, b, a) end
 ---@param a integer
 ---@return CollisionEntityBuilder
 function CollisionEntityBuilder:with_shape_rect(width, height, r, g, b, a) end
+
+---Draw a rectangle with rounded corners (radius is clamped to half the short side), outline; add with_shape_filled() to fill; top-left corner at the local origin
+---@param width number
+---@param height number
+---@param radius number
+---@param r integer
+---@param g integer
+---@param b integer
+---@param a integer
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_shape_rounded_rect(width, height, radius, r, g, b, a) end
+
+---Set the line width in world units (it scales with the camera zoom); applies to lines, bezier curves and outlines of rects, rounded rects and polygons; points, circles and ellipses ignore it
+---@param thickness number
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_shape_thickness(thickness) end
 
 ---Bind text to a WorldSignal value
 ---@param key string

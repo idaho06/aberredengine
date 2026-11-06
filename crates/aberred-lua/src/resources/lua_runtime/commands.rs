@@ -515,6 +515,11 @@ pub enum EntityCmd {
     SetShapeOrigin { entity_id: u64, x: f32, y: f32 },
     /// Replace the geometry of an existing `Shape`, keeping its colours, fill and origin
     SetShapeKind { entity_id: u64, kind: ShapeKind },
+    /// Set (`Some`) or clear (`None`) the line width of an existing `Shape`
+    SetShapeThickness {
+        entity_id: u64,
+        thickness: Option<f32>,
+    },
     /// Remove the `Shape` component
     RemoveShape { entity_id: u64 },
     /// Set CameraTarget component on an entity. `priority`/`zoom` of `None`

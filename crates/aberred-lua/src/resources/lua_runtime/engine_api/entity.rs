@@ -100,11 +100,36 @@ impl LuaRuntime {
 
 #[cfg(test)]
 mod tests {
-    use crate::resources::lua_runtime::LuaRuntime;
+    use crate::resources::lua_runtime::{EntityCmd, LuaRuntime};
+    use aberred_core::components::shape::ShapeKind;
+    use aberred_core::math::Vec2;
 
     fn run_err(script: &str) -> String {
         let runtime = LuaRuntime::new().unwrap();
         runtime.lua().load(script).exec().unwrap_err().to_string()
+    }
+
+    /// Drains both entity command queues, returning the queued commands
+    /// (regular, then collision) in call order.
+    fn drained_entity_cmds(runtime: &LuaRuntime) -> (Vec<EntityCmd>, Vec<EntityCmd>) {
+        let mut regular = Vec::new();
+        runtime.drain_entity_commands_into(&mut regular);
+        let mut collision = Vec::new();
+        runtime.drain_collision_entity_commands_into(&mut collision);
+        (
+            regular.into_iter().map(|c| c.cmd).collect(),
+            collision.into_iter().map(|c| c.cmd).collect(),
+        )
+    }
+
+    /// The `SetShapeKind` payload of each command; panics on any other command.
+    fn shape_kinds(cmds: &[EntityCmd]) -> Vec<&ShapeKind> {
+        cmds.iter()
+            .map(|cmd| match cmd {
+                EntityCmd::SetShapeKind { kind, .. } => kind,
+                other => panic!("unexpected command {other:?}"),
+            })
+            .collect()
     }
 
     #[test]
@@ -136,8 +161,6 @@ mod tests {
 
     #[test]
     fn shape_style_functions_queue_one_command_each_and_have_collision_twins() {
-        use crate::resources::lua_runtime::EntityCmd;
-
         let runtime = LuaRuntime::new().unwrap();
         runtime
             .lua()
@@ -154,9 +177,7 @@ mod tests {
             .exec()
             .unwrap();
 
-        let mut regular = Vec::new();
-        runtime.drain_entity_commands_into(&mut regular);
-        let regular: Vec<&EntityCmd> = regular.iter().map(|c| &c.cmd).collect();
+        let (regular, collision) = drained_entity_cmds(&runtime);
         assert!(
             matches!(
                 regular.as_slice(),
@@ -177,10 +198,6 @@ mod tests {
             ),
             "{regular:?}"
         );
-
-        let mut collision = Vec::new();
-        runtime.drain_collision_entity_commands_into(&mut collision);
-        let collision: Vec<&EntityCmd> = collision.iter().map(|c| &c.cmd).collect();
         assert!(
             matches!(
                 collision.as_slice(),
@@ -195,10 +212,6 @@ mod tests {
 
     #[test]
     fn shape_geometry_functions_queue_a_ready_kind_and_have_collision_twins() {
-        use crate::resources::lua_runtime::EntityCmd;
-        use aberred_core::components::shape::ShapeKind;
-        use aberred_core::math::Vec2;
-
         let runtime = LuaRuntime::new().unwrap();
         runtime
             .lua()
@@ -209,21 +222,18 @@ mod tests {
                  engine.entity_set_shape_circle(1, 2)\n\
                  engine.entity_set_shape_ellipse(1, 7, 8)\n\
                  engine.entity_set_shape_polygon(1, { {x=0,y=0}, {x=4,y=0}, {x=2,y=3} })\n\
+                 engine.entity_set_shape_bezier(1, 1, 2, 3, 4, 5, 6)\n\
+                 engine.entity_set_shape_rounded_rect(1, 10, 11, 2)\n\
                  engine.collision_entity_set_shape_circle(1, 9)\n\
-                 engine.collision_entity_set_shape_polygon(1, { {x=0,y=0}, {x=1,y=0}, {x=0,y=1} })",
+                 engine.collision_entity_set_shape_polygon(1, { {x=0,y=0}, {x=1,y=0}, {x=0,y=1} })\n\
+                 engine.collision_entity_set_shape_bezier(1, 7, 8, 9, 10, 11, 12)\n\
+                 engine.collision_entity_set_shape_rounded_rect(1, 13, 14, 3)",
             )
             .exec()
             .unwrap();
 
-        let mut regular = Vec::new();
-        runtime.drain_entity_commands_into(&mut regular);
-        let kinds: Vec<&ShapeKind> = regular
-            .iter()
-            .map(|c| match &c.cmd {
-                EntityCmd::SetShapeKind { kind, .. } => kind,
-                other => panic!("unexpected command {other:?}"),
-            })
-            .collect();
+        let (regular, collision) = drained_entity_cmds(&runtime);
+        let kinds = shape_kinds(&regular);
         assert!(matches!(kinds[0], ShapeKind::Point));
         assert_eq!(
             *kinds[1],
@@ -248,27 +258,96 @@ mod tests {
             panic!("a polygon kind");
         };
         assert_eq!(polygon.triangles().len(), 1, "triangulated at call time");
-        assert_eq!(kinds.len(), 6);
+        assert_eq!(
+            *kinds[6],
+            ShapeKind::Bezier {
+                c1: Vec2::new(1.0, 2.0),
+                c2: Vec2::new(3.0, 4.0),
+                to: Vec2::new(5.0, 6.0),
+            }
+        );
+        assert_eq!(
+            *kinds[7],
+            ShapeKind::RoundedRect {
+                size: Vec2::new(10.0, 11.0),
+                radius: 2.0,
+            }
+        );
+        assert_eq!(kinds.len(), 8);
 
-        let mut collision = Vec::new();
-        runtime.drain_collision_entity_commands_into(&mut collision);
-        assert!(matches!(
-            collision
-                .iter()
-                .map(|c| &c.cmd)
-                .collect::<Vec<_>>()
-                .as_slice(),
-            [
-                EntityCmd::SetShapeKind {
-                    kind: ShapeKind::Circle { radius: 9.0 },
-                    ..
-                },
-                EntityCmd::SetShapeKind {
-                    kind: ShapeKind::Polygon(_),
-                    ..
-                },
-            ]
-        ));
+        let collision_kinds = shape_kinds(&collision);
+        assert_eq!(*collision_kinds[0], ShapeKind::Circle { radius: 9.0 });
+        assert!(matches!(collision_kinds[1], ShapeKind::Polygon(_)));
+        assert_eq!(
+            *collision_kinds[2],
+            ShapeKind::Bezier {
+                c1: Vec2::new(7.0, 8.0),
+                c2: Vec2::new(9.0, 10.0),
+                to: Vec2::new(11.0, 12.0),
+            }
+        );
+        assert_eq!(
+            *collision_kinds[3],
+            ShapeKind::RoundedRect {
+                size: Vec2::new(13.0, 14.0),
+                radius: 3.0,
+            }
+        );
+        assert_eq!(collision_kinds.len(), 4);
+    }
+
+    #[test]
+    fn shape_thickness_function_sets_or_clears_and_has_a_collision_twin() {
+        let runtime = LuaRuntime::new().unwrap();
+        runtime
+            .lua()
+            .load(
+                "engine.entity_set_shape_thickness(1, 3)\n\
+                 engine.entity_set_shape_thickness(2, nil)\n\
+                 engine.entity_set_shape_thickness(3)\n\
+                 engine.collision_entity_set_shape_thickness(4, 2.5)\n\
+                 engine.collision_entity_set_shape_thickness(5)",
+            )
+            .exec()
+            .unwrap();
+
+        let (regular, collision) = drained_entity_cmds(&runtime);
+        assert!(
+            matches!(
+                regular.as_slice(),
+                [
+                    EntityCmd::SetShapeThickness {
+                        entity_id: 1,
+                        thickness: Some(3.0),
+                    },
+                    EntityCmd::SetShapeThickness {
+                        entity_id: 2,
+                        thickness: None,
+                    },
+                    EntityCmd::SetShapeThickness {
+                        entity_id: 3,
+                        thickness: None,
+                    },
+                ]
+            ),
+            "{regular:?}"
+        );
+        assert!(
+            matches!(
+                collision.as_slice(),
+                [
+                    EntityCmd::SetShapeThickness {
+                        entity_id: 4,
+                        thickness: Some(2.5),
+                    },
+                    EntityCmd::SetShapeThickness {
+                        entity_id: 5,
+                        thickness: None,
+                    },
+                ]
+            ),
+            "{collision:?}"
+        );
     }
 
     #[test]
@@ -290,8 +369,6 @@ mod tests {
 
     #[test]
     fn entity_menu_set_items_queues_one_command_and_has_a_collision_twin() {
-        use crate::resources::lua_runtime::EntityCmd;
-
         let runtime = LuaRuntime::new().unwrap();
         runtime
             .lua()
