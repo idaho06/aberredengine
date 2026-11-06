@@ -6155,7 +6155,7 @@ Available collision variants:
 
 ## Shape Component
 
-The Shape component draws a point, line, rectangle, circle, ellipse or polygon with a color, in world space or screen space. Shapes are 1 px, hard-edged and unantialiased, which suits pixel-art games. They sort by `ZIndex` together with sprites and text.
+The Shape component draws a point, line, bezier curve, rectangle, rounded rectangle, circle, ellipse or polygon with a color, in world space or screen space. Shapes are hard-edged and unantialiased, which suits pixel-art games. Lines and outlines draw as a 1 px hairline unless `:with_shape_thickness(t)` sets a wider stroke. They sort by `ZIndex` together with sprites and text.
 
 ### Adding a Shape via Builder
 
@@ -6185,6 +6185,24 @@ engine.spawn()
     :with_position(300, 100)
     :with_z_index(1)
     :build()
+
+-- Thick bezier curve from the local origin (outline only)
+engine.spawn()
+    :with_shape_bezier(30, -50, 90, -50, 120, 0, 90, 200, 255, 255) -- c1x, c1y, c2x, c2y, tox, toy, r, g, b, a
+    :with_shape_thickness(4)
+    :with_position(420, 160)
+    :with_z_index(1)
+    :build()
+
+-- Filled rounded rectangle with a thick white outline
+engine.spawn()
+    :with_shape_rounded_rect(90, 50, 10, 120, 230, 120, 255)      -- width, height, radius, r, g, b, a
+    :with_shape_filled()
+    :with_shape_outline_color(255, 255, 255, 255)
+    :with_shape_thickness(3)
+    :with_position(560, 110)
+    :with_z_index(1)
+    :build()
 ```
 
 **Kinds** (each takes the color as trailing `r, g, b, a` integers 0-255; a later kind call replaces an earlier one):
@@ -6193,16 +6211,19 @@ engine.spawn()
 |---|---|
 | `:with_shape_point(r, g, b, a)` | One pixel at `(0, 0)` |
 | `:with_shape_line(to_x, to_y, r, g, b, a)` | Line from `(0, 0)` to `(to_x, to_y)` |
+| `:with_shape_bezier(c1x, c1y, c2x, c2y, tox, toy, r, g, b, a)` | Cubic bezier from `(0, 0)` to `(tox, toy)` with control points `(c1x, c1y)` and `(c2x, c2y)`; outline only |
 | `:with_shape_rect(width, height, r, g, b, a)` | Rectangle with its top-left corner at `(0, 0)` |
+| `:with_shape_rounded_rect(width, height, radius, r, g, b, a)` | Rectangle with rounded corners and its top-left corner at `(0, 0)`; `radius` is clamped to `[0, min(width, height) / 2]`, and a radius of 0 draws exactly like a rect |
 | `:with_shape_circle(radius, r, g, b, a)` | Circle centered on `(0, 0)` |
 | `:with_shape_ellipse(radius_x, radius_y, r, g, b, a)` | Axis-aligned ellipse centered on `(0, 0)` |
 | `:with_shape_polygon(points, r, g, b, a)` | Polygon through `points`, a sequence of `{x = .., y = ..}` tables (convex or concave, no holes) |
 
 **Modifiers** (each requires a kind method first and raises `"with_shape_filled() requires a with_shape_*() first"` otherwise):
 
-- `:with_shape_filled()` fills the interior with the shape's color. Without it a rectangle, circle, ellipse or polygon is a 1 px outline.
-- `:with_shape_outline_color(r, g, b, a)` draws a 1 px outline in this color over a filled shape. It has no effect on an unfilled shape, a point or a line.
+- `:with_shape_filled()` fills the interior with the shape's color. Without it a rectangle, rounded rectangle, circle, ellipse or polygon is an outline, 1 px (hairline) by default. It has no effect on a point, a line or a bezier curve.
+- `:with_shape_outline_color(r, g, b, a)` draws an outline in this color over a filled shape — a 1 px hairline by default, wider with `:with_shape_thickness()`. It has no effect on an unfilled shape, a point, a line or a bezier curve.
 - `:with_shape_origin(x, y)` sets the local pivot: the point that sits on the entity position and is the center of `Scale` and `Rotation`. The default is `(0, 0)`.
+- `:with_shape_thickness(thickness)` sets the line width in world units: it applies to lines, bezier curves and the outlines of rectangles, rounded rectangles and polygons, and is ignored by points, circles and ellipses. A non-positive thickness draws the 1 px hairline.
 
 An invalid polygon point raises an error naming its 1-based index (`point 2 must be a table with numeric x and y`). A polygon with two points draws one line, and fewer than two draw nothing.
 
@@ -6213,6 +6234,10 @@ An invalid polygon point raises an error naming its 1-based index (`point 2 must
 - World shapes honor `Scale`, `Rotation` and parent-child hierarchy, pivoting on `origin`. Screen shapes honor `origin` but not `Scale`, `Rotation` or hierarchy.
 - A negative `Scale` mirrors a shape; filled shapes stay visible.
 - An ellipse ignores `Rotation` entirely. A circle rotates only its center about `origin` (the circle itself looks the same at every angle). Under a non-uniform `Scale` a circle becomes an ellipse.
+- `:with_shape_thickness(t)` widens the stroke to `t` world units, multiplied by the mean of `|scale.x|` and `|scale.y|` — so the stroke grows with the camera zoom, and on a screen shape (scale 1) `t` is pixels. A rect's or rounded rectangle's thick outline is inset by half the thickness so its straight sides stay inside the bounds; a line, bezier or polygon stroke straddles its path. Thick segments have square caps (each extended by half the width at both ends) so joints close, and overlapping caps can darken semi-transparent colors.
+- A rect's 1 px hairline outline lies half a world unit inside its bounds (on the same pixels the fill covers, for an unrotated rect at an integral position, size and scale, at zoom 1); the hairline outline of a rounded rectangle with a positive radius runs on the bounds themselves.
+- With thickness, the square caps of a rounded rectangle's corner arcs can poke out of the bounds by a small fraction (well under 0.15) of the stroke width.
+- A bezier curve is drawn as 24 connected segments; at the 1 px hairline the joins can show small gaps, so set `:with_shape_thickness()` for a gap-free curve.
 - Shapes do not use per-entity shaders.
 - Polygons are triangulated once, when `:with_shape_polygon()` or `engine.entity_set_shape_polygon()` runs. Build a polygon once and reuse it rather than rebuilding it every tick.
 - This `shape` is unrelated to the `shape` table of a particle emitter's configuration.
@@ -6230,13 +6255,16 @@ Each function below changes the entity's existing `Shape` and does nothing if th
 | `engine.entity_set_shape_origin(entity_id, x, y)` | Set the pivot |
 | `engine.entity_set_shape_point(entity_id)` | Replace the geometry with a point |
 | `engine.entity_set_shape_line(entity_id, to_x, to_y)` | Replace the geometry with a line |
+| `engine.entity_set_shape_bezier(entity_id, c1x, c1y, c2x, c2y, tox, toy)` | Replace the geometry with a cubic bezier from `(0, 0)` to `(tox, toy)` with control points `(c1x, c1y)` and `(c2x, c2y)` |
 | `engine.entity_set_shape_rect(entity_id, width, height)` | Replace the geometry with a rectangle |
+| `engine.entity_set_shape_rounded_rect(entity_id, width, height, radius)` | Replace the geometry with a rectangle with rounded corners (`radius` clamped like `:with_shape_rounded_rect()`) |
 | `engine.entity_set_shape_circle(entity_id, radius)` | Replace the geometry with a circle |
 | `engine.entity_set_shape_ellipse(entity_id, radius_x, radius_y)` | Replace the geometry with an ellipse |
 | `engine.entity_set_shape_polygon(entity_id, points)` | Replace the geometry with a polygon; bad points raise at the call |
+| `engine.entity_set_shape_thickness(entity_id, thickness)` | Set the line width in world units; nil or omitted goes back to the 1 px hairline |
 | `engine.entity_remove_shape(entity_id)` | Remove the shape |
 
-The geometry functions keep the shape's color, fill, outline color and origin. Every function has a `collision_` variant for collision callbacks (`engine.collision_entity_set_shape_color(...)`, and so on).
+The geometry functions (`entity_set_shape_point` through `entity_set_shape_polygon`) and `entity_set_shape_thickness` keep the shape's color, fill, outline color and origin. Every function has a `collision_` variant for collision callbacks (`engine.collision_entity_set_shape_color(...)`, and so on).
 
 ```lua
 -- Pulse a circle from on_update (`elapsed` is seconds accumulated from dt)

@@ -353,7 +353,8 @@ local function build_zorder(x0)
 end
 
 --- Screen-space entities of the last page, keyed so they can be despawned on leaving.
-local SCREEN_KEYS = { "ss_frame", "ss_fill", "ss_hline", "ss_vline", "ss_ring", "ss_note" }
+local SCREEN_KEYS = { "ss_frame", "ss_fill", "ss_hline", "ss_vline", "ss_ring", "ss_note",
+                      "ss_curve", "ss_box", "ss_thick", "ss_thick_note" }
 
 local function spawn_screen_page()
     engine.spawn():with_shape_rect(200, 16, 255, 255, 255, 255)
@@ -368,6 +369,17 @@ local function spawn_screen_page()
         :with_screen_position(320, 180):with_z_index(15):register_as("ss_ring"):build()
     engine.spawn():with_text("screen shapes do not move with the camera", "default", 14, 200, 200, 200, 255)
         :with_screen_position(176, 330):with_z_index(15):register_as("ss_note"):build()
+    -- A thick bezier, a filled rounded rect with a thick outline and a thick line.
+    -- Screen shapes have scale 1, so the thickness is in pixels here.
+    engine.spawn():with_shape_bezier(30, -50, 90, -50, 120, 0, 90, 200, 255, 255):with_shape_thickness(4)
+        :with_screen_position(40, 120):with_z_index(15):register_as("ss_curve"):build()
+    engine.spawn():with_shape_rounded_rect(100, 56, 12, 120, 230, 120, 255):with_shape_filled()
+        :with_shape_outline_color(255, 255, 255, 255):with_shape_thickness(3)
+        :with_screen_position(200, 44):with_z_index(15):register_as("ss_box"):build()
+    engine.spawn():with_shape_line(180, 0, 255, 160, 60, 255):with_shape_thickness(6)
+        :with_screen_position(380, 80):with_z_index(15):register_as("ss_thick"):build()
+    engine.spawn():with_text("bezier, rounded rect and a thick line", "default", 14, 200, 200, 200, 255)
+        :with_screen_position(40, 140):with_z_index(15):register_as("ss_thick_note"):build()
 end
 
 local function despawn_screen_page()

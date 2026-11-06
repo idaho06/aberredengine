@@ -105,6 +105,43 @@ mod shapes_polygon {
     } // GLUE
 }
 
+// Shapes: thick strokes, a bezier edge and a rounded rect
+mod shapes_curves {
+    use aberredengine::prelude::*; // GLUE
+
+    fn enter(mut commands: Commands) { // GLUE
+    use aberredengine::prelude::*;
+
+    // A thick bezier edge, a filled rounded-rect box with a thick outline, and a thick line.
+    commands.spawn((
+        WorldPosition::new(120.0, 200.0),
+        Shape::bezier(
+            Vec2::new(20.0, -40.0),
+            Vec2::new(60.0, -40.0),
+            Vec2::new(80.0, 0.0),
+            Color::WHITE,
+        )
+        .with_thickness(4.0),
+        ZIndex(5.0),
+    ));
+
+    commands.spawn((
+        WorldPosition::new(240.0, 180.0),
+        Shape::rounded_rect(Vec2::new(60.0, 36.0), 8.0, Color::DARKBLUE)
+            .filled()
+            .with_outline_color(Color::WHITE)
+            .with_thickness(3.0),
+        ZIndex(5.0),
+    ));
+
+    commands.spawn((
+        WorldPosition::new(120.0, 260.0),
+        Shape::line(Vec2::new(200.0, 0.0), Color::ORANGE).with_thickness(2.0),
+        ZIndex(5.0),
+    ));
+    } // GLUE
+}
+
 // Component constructor quick reference: animation controller rules
 mod animation_controller_rules {
     use aberredengine::prelude::*; // GLUE

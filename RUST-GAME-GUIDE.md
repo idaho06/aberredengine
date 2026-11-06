@@ -1503,11 +1503,24 @@ When `WorldSignals` has a value for key `"score"`, the text automatically update
 
 ### Shapes
 
-A `Shape` draws a point, line, rectangle, circle, ellipse or polygon. Like a sprite, the position component picks the space (`WorldPosition` draws on the map under the camera, `ScreenPosition` on the screen) and the entity needs a `ZIndex` or it never draws. Shapes sort with sprites and texts by `ZIndex`.
+A `Shape` draws a point, line, bezier curve, rectangle, rounded rectangle, circle, ellipse or polygon. Like a sprite, the position component picks the space (`WorldPosition` draws on the map under the camera, `ScreenPosition` on the screen) and the entity needs a `ZIndex` or it never draws. Shapes sort with sprites and texts by `ZIndex`.
 
-Build a shape with a constructor (`Shape::point`, `line`, `rect`, `circle`, `ellipse`, `polygon`), then chain `.filled()`, `.with_outline_color(color)` and `.with_origin(v)`. Lines and outlines are 1 px wide, and a rect's outline lies half a world unit inside its bounds (on the same pixels the fill covers, for an unrotated rect at an integral position, size and scale, at zoom 1). `color` is the line colour, or the fill colour once the shape is `.filled()`; `.with_outline_color` adds an outline drawn over the fill. A `Point` and a `Line` ignore both builders.
+Build a shape with a constructor (`Shape::point`, `line`, `bezier`, `rect`, `rounded_rect`, `circle`, `ellipse`, `polygon`), then chain `.filled()`, `.with_outline_color(color)`, `.with_origin(v)` and `.with_thickness(t)`. `color` is the line colour, or the fill colour once the shape is `.filled()`; `.with_outline_color` adds an outline drawn over the fill. A `Point`, a `Line` and a `Bezier` ignore both builders.
+
+Lines and outlines draw as a 1 px hairline unless `.with_thickness(t)` sets a wider stroke:
+
+- `t` is the stroke width in world units, multiplied by the mean of `|scale.x|` and `|scale.y|` — so the stroke grows with the camera zoom, and on a screen shape (scale 1) `t` is pixels. A non-positive `t` draws the hairline.
+- `thickness` applies to a `Line`, a `Bezier` and the outlines of a `Rect`, a `RoundedRect` and a `Polygon`; a `Point`, `Circle` and `Ellipse` ignore it.
+- Thick segments have square caps (each extended by half the width at both ends) so joints close; overlapping caps can darken semi-transparent colours.
+- A thick `Rect` or `RoundedRect` outline is inset by half the thickness (local units) so its straight sides stay inside the bounds, while a `Line`, `Bezier` and `Polygon` stroke straddles its path.
+
+A rect's hairline outline lies half a world unit inside its bounds (on the same pixels the fill covers, for an unrotated rect at an integral position, size and scale, at zoom 1); the hairline outline of a `RoundedRect` with a positive radius runs on the bounds themselves.
 
 `origin` is the local point that sits on the entity position and pivots `Scale` and `Rotation`, like `Sprite`'s origin. World shapes honor `Scale`, `Rotation` and the parent's transform; screen shapes treat `origin` as a plain offset and ignore `Scale` and `Rotation`. An `Ellipse` is axis-aligned and ignores `Rotation`. A `Circle` keeps its radius, but `Rotation` still swings its centre around `origin`; under a non-uniform `Scale` it draws as an ellipse.
+
+A `Bezier` (`Shape::bezier(c1, c2, to, color)`) is a cubic curve from the local origin `(0, 0)` to `to` with control points `c1` and `c2`, all in local coordinates. It is outline-only, like a `Line`. It is drawn as 24 connected segments; at the 1 px hairline the joins between segments can show small gaps, so use `.with_thickness(..)` for a gap-free curve.
+
+A `RoundedRect` (`Shape::rounded_rect(size, radius, color)`) has its top-left corner at `(0, 0)` like a `Rect`. `radius` is clamped to `[0, min(|size.x|, |size.y|) / 2]`, and a radius of 0 (or a negative or `NaN` one) draws exactly like a `Rect`; each corner is a quarter circle of 8 segments. The fill is built from triangles, so `Rotation` and non-uniform `Scale` apply. With thickness, the square caps of the corner-arc segments can poke out of the bounds by a small fraction (well under 0.15) of the stroke width.
 
 `Tint` multiplies both colours. A `Shadow` draws the shape's silhouette (the fill of a filled shape, the outline otherwise) at `position + offset` in the shadow colour, ignoring `Tint`.
 
@@ -1557,6 +1570,38 @@ commands.spawn((
 ));
 ```
 
+```rust
+use aberredengine::prelude::*;
+
+// A thick bezier edge, a filled rounded-rect box with a thick outline, and a thick line.
+commands.spawn((
+    WorldPosition::new(120.0, 200.0),
+    Shape::bezier(
+        Vec2::new(20.0, -40.0),
+        Vec2::new(60.0, -40.0),
+        Vec2::new(80.0, 0.0),
+        Color::WHITE,
+    )
+    .with_thickness(4.0),
+    ZIndex(5.0),
+));
+
+commands.spawn((
+    WorldPosition::new(240.0, 180.0),
+    Shape::rounded_rect(Vec2::new(60.0, 36.0), 8.0, Color::DARKBLUE)
+        .filled()
+        .with_outline_color(Color::WHITE)
+        .with_thickness(3.0),
+    ZIndex(5.0),
+));
+
+commands.spawn((
+    WorldPosition::new(120.0, 260.0),
+    Shape::line(Vec2::new(200.0, 0.0), Color::ORANGE).with_thickness(2.0),
+    ZIndex(5.0),
+));
+```
+
 ### Component constructor quick reference
 
 `Sprite`, `Camera2D`, `AnimationClip` and the GUI theme types (`GuiTheme`, `GuiNinePatch`, `GuiButtonSkin`, `GuiProgressBarSkin`) are `#[non_exhaustive]`: build them with their constructors (or `Default` plus field assignment for `GuiTheme`), not struct literals, so the engine can add fields without breaking your game. Their fields stay public to read and write.
@@ -1574,7 +1619,7 @@ commands.spawn((
 | `ZIndex` | `ZIndex(f32)` — higher draws later (on top), sprites, shapes and texts sorted together; at equal z a text draws over a sprite or shape |
 | `Rotation` | `Rotation::new(degrees)` |
 | `Scale` | `Scale::new(sx, sy)` |
-| `Shape` | `Shape::point(color)`, `line(to, color)`, `rect(size, color)`, `circle(radius, color)`, `ellipse(radii, color)`, `polygon(&points, color)`, then `.filled()`, `.with_outline_color(c)`, `.with_origin(v)`; needs a position and a `ZIndex`; see [Shapes](#shapes) |
+| `Shape` | `Shape::point(color)`, `line(to, color)`, `bezier(c1, c2, to, color)`, `rect(size, color)`, `rounded_rect(size, radius, color)`, `circle(radius, color)`, `ellipse(radii, color)`, `polygon(&points, color)`, then `.filled()`, `.with_outline_color(c)`, `.with_origin(v)`, `.with_thickness(t)`; needs a position and a `ZIndex`; see [Shapes](#shapes) |
 | `Tint` | `Tint::new(r, g, b, a)` — values are `u8` (0–255); multiplies a text's or shape's colour, replaces a sprite's white |
 | `Persistent` | `Persistent` — tag, survives scene transitions |
 | `Ttl` | `Ttl::new(seconds)` — auto-despawn after duration |

@@ -74,7 +74,7 @@ crates/aberred-lua/src/resources/lua_runtime/
 │   ├── transform.rs     # with_group, with_tag, with_position, with_z_index, with_rotation, with_scale, with_persistent, with_screen_position, with_parent
 │   ├── physics.rs       # with_velocity, with_friction, with_max_speed, with_acceleration, with_frozen, with_box_collider*, with_mouse_controlled, with_stuck_to*
 │   ├── sprite.rs        # with_sprite*, with_text, with_tint, with_shadow, with_shader, with_animation*, with_lua_animation_finished
-│   ├── shape.rs          # with_shape_point/line/rect/circle/ellipse/polygon, with_shape_filled, with_shape_outline_color, with_shape_origin
+│   ├── shape.rs          # with_shape_point/line/bezier/rect/rounded_rect/circle/ellipse/polygon, with_shape_filled, with_shape_outline_color, with_shape_origin, with_shape_thickness
 │   ├── gui.rs            # with_gui_window/button/label/image/progress_bar/offset/theme_key, their per-state offset variants, with_lua_gui_clicked
 │   ├── menu.rs           # with_menu and its with_menu_* configuration methods
 │   ├── tween.rs          # with_tween_position/rotation/scale/screen_position/tint and their *_easing/*_loop/*_backwards variants, with_lua_tween_*_finished
@@ -518,7 +518,8 @@ All are registered in `engine_api/render.rs` and queue into `gui_theme_commands`
 - `entity_set_tint`, `entity_remove_tint`
 - `entity_set_shadow`, `entity_remove_shadow`
 - `entity_set_shape_color`, `entity_set_shape_outline_color`, `entity_remove_shape_outline_color`, `entity_set_shape_filled`, `entity_set_shape_origin`, `entity_remove_shape`
-- `entity_set_shape_point`, `entity_set_shape_line`, `entity_set_shape_rect`, `entity_set_shape_circle`, `entity_set_shape_ellipse`, `entity_set_shape_polygon` (all queue `EntityCmd::SetShapeKind`; the polygon row parses and triangulates at the Lua call)
+- `entity_set_shape_point`, `entity_set_shape_line`, `entity_set_shape_bezier`, `entity_set_shape_rect`, `entity_set_shape_rounded_rect`, `entity_set_shape_circle`, `entity_set_shape_ellipse`, `entity_set_shape_polygon` (all queue `EntityCmd::SetShapeKind`; the polygon row parses and triangulates at the Lua call)
+- `entity_set_shape_thickness` (queues `EntityCmd::SetShapeThickness`; a nil thickness clears back to the 1 px hairline)
 - `entity_set_parent`, `entity_remove_parent`
 - `entity_set_camera_target`, `entity_remove_camera_target`
 - `entity_set_gui_disabled` — enable/disable a `GuiButton`/`GuiImage` (cosmetic: `gui_hit_test_system` stops promoting it and skips its click callback)
@@ -603,13 +604,16 @@ with_lua_animation_finished
 ```text
 with_shape_point
 with_shape_line
+with_shape_bezier
 with_shape_rect
+with_shape_rounded_rect
 with_shape_circle
 with_shape_ellipse
 with_shape_polygon
 with_shape_filled
 with_shape_outline_color
 with_shape_origin
+with_shape_thickness
 ```
 
 **GUI widgets** (`gui.rs`)
