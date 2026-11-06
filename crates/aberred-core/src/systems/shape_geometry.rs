@@ -21,6 +21,18 @@ pub enum DrawOp {
         /// End point.
         b: Vec2,
     },
+    /// A line segment of the given `thickness` with square caps: `a` and `b`
+    /// already include the cap extension of `thickness / 2` beyond the
+    /// geometric endpoints, so joints close without gaps. Only the `Outline`
+    /// layer emits this op.
+    ThickLine {
+        /// Start point, extended by half the width along the segment.
+        a: Vec2,
+        /// End point, extended by half the width along the segment.
+        b: Vec2,
+        /// Width in the same units as `a` and `b`.
+        thickness: f32,
+    },
     /// A filled triangle in counter-clockwise order for raylib (`cross(b - a, c - a) < 0` in y-down coordinates).
     Triangle {
         /// First vertex.
@@ -65,7 +77,7 @@ pub enum DrawOp {
 pub enum ShapeLayer {
     /// The interior: only `Triangle`, `Circle` and `Ellipse` ops.
     Fill,
-    /// The 1 px boundary: only `Pixel`, `Line`, `CircleLines` and `EllipseLines` ops.
+    /// The boundary: only `Pixel`, `Line`, `ThickLine`, `CircleLines` and `EllipseLines` ops.
     Outline,
 }
 
@@ -171,6 +183,16 @@ impl Transform {
 /// becomes an ellipse when `scale` is non-uniform. Every `Triangle` is emitted
 /// counter-clockwise for raylib whatever the input winding or mirroring, and
 /// zero-area triangles are skipped.
+///
+/// A positive [`Shape::thickness`] widens a `Line` and the outlines of a `Rect`
+/// and a `Polygon` to `thickness * mean(|scale.x|, |scale.y|)` world units,
+/// emitted as [`DrawOp::ThickLine`] with square caps (each segment extended by
+/// half its width at both ends so joints close without gaps; overlapping caps
+/// may darken semi-transparent colours). A thick `Rect` outline is inset by
+/// `thickness / 2` local units so the stroke stays inside the rect bounds;
+/// `Line` and `Polygon` outlines straddle their path. `Point`, `Circle` and
+/// `Ellipse` ignore `thickness`. A `None` or non-positive `thickness` keeps
+/// the 1 px hairline.
 pub fn shape_ops(
     shape: &Shape,
     layer: ShapeLayer,
@@ -181,6 +203,7 @@ pub fn shape_ops(
 ) {
     let xf = Transform::new(shape, pos, scale, rotation_degrees);
     let fill = layer == ShapeLayer::Fill;
+    let stroke = stroke_of(shape, scale);
     match &shape.kind {
         ShapeKind::Point => {
             if !fill {
@@ -191,10 +214,7 @@ pub fn shape_ops(
         }
         ShapeKind::Line { to } => {
             if !fill {
-                out.push(DrawOp::Line {
-                    a: xf.point(Vec2::ZERO),
-                    b: xf.point(*to),
-                });
+                push_segment(out, xf.point(Vec2::ZERO), xf.point(*to), stroke);
             }
         }
         ShapeKind::Rect { size } => {
@@ -202,6 +222,22 @@ pub fn shape_ops(
                 let c = xf.rect_corners(*size);
                 push_triangle(out, c[0], c[1], c[2]);
                 push_triangle(out, c[0], c[2], c[3]);
+            } else if let Some((t, w)) = stroke {
+                // The stroke lies inside the rect bounds: the path is the rect
+                // inset by t / 2 per side (clamped to half the size, like the
+                // hairline inset) and the caps extend it by w / 2 along each edge.
+                let inset = Vec2::splat(t / 2.0).min(size.abs() / 2.0) * size.signum();
+                let far = size - inset;
+                let corners = [
+                    Vec2::new(inset.x, inset.y),
+                    Vec2::new(far.x, inset.y),
+                    far,
+                    Vec2::new(inset.x, far.y),
+                ]
+                .map(|p| xf.point(p));
+                for i in 0..4 {
+                    push_thick_line(out, corners[i], corners[(i + 1) % 4], w);
+                }
             } else {
                 out.extend(
                     xf.rect_outline_edges(*size)
@@ -225,7 +261,12 @@ pub fn shape_ops(
                     push_triangle(out, a, b, c);
                 }
             } else {
-                push_ring(out, verts.len(), |i| xf.point(verts[i]));
+                push_ring(
+                    out,
+                    verts.len(),
+                    |i| xf.point(verts[i]),
+                    |out, a, b| push_segment(out, a, b, stroke),
+                );
             }
         }
     }
@@ -236,7 +277,8 @@ pub fn shape_ops(
 /// The arguments follow [`shape_ops`]: `scale` may be negative and the rotation
 /// is in degrees, clockwise on the y-down screen. A point has `min == max`, and
 /// a polygon without vertices gets the degenerate box at `pos`. The box excludes
-/// any shadow offset and the 1 px line width; a culling caller adds both.
+/// any shadow offset and the line width (hairline or `thickness`); a culling
+/// caller adds both.
 pub fn shape_cull_bounds(
     shape: &Shape,
     pos: Vec2,
@@ -279,16 +321,56 @@ fn push_triangle(out: &mut Vec<DrawOp>, a: Vec2, b: Vec2, c: Vec2) {
     }
 }
 
-/// Appends the closed ring of `n` points as lines; two points make one line, fewer make none.
-fn push_ring(out: &mut Vec<DrawOp>, n: usize, point: impl Fn(usize) -> Vec2) {
+/// Appends the closed ring of `n` points as edges; two points make one edge, fewer make none.
+fn push_ring(
+    out: &mut Vec<DrawOp>,
+    n: usize,
+    point: impl Fn(usize) -> Vec2,
+    push_edge: impl Fn(&mut Vec<DrawOp>, Vec2, Vec2),
+) {
     if n < 2 {
         return;
     }
     let edges = if n == 2 { 1 } else { n };
-    out.extend((0..edges).map(|i| DrawOp::Line {
-        a: point(i),
-        b: point((i + 1) % n),
-    }));
+    for i in 0..edges {
+        push_edge(out, point(i), point((i + 1) % n));
+    }
+}
+
+/// The stroke `shape` draws with at `scale` when its `thickness` is positive:
+/// `(local thickness, width in the target space)`, the width being the local
+/// thickness times the mean of `|scale.x|`, `|scale.y|`. `None` keeps the
+/// 1 px hairline.
+fn stroke_of(shape: &Shape, scale: Vec2) -> Option<(f32, f32)> {
+    shape
+        .effective_thickness()
+        .map(|t| (t, t * (scale.x.abs() + scale.y.abs()) / 2.0))
+}
+
+/// Appends one outline segment `a -> b`: a square-capped [`DrawOp::ThickLine`]
+/// of the stroke's width when there is one, else a 1 px [`DrawOp::Line`].
+fn push_segment(out: &mut Vec<DrawOp>, a: Vec2, b: Vec2, stroke: Option<(f32, f32)>) {
+    match stroke {
+        Some((_, w)) => push_thick_line(out, a, b, w),
+        None => out.push(DrawOp::Line { a, b }),
+    }
+}
+
+/// Appends `a -> b` as a square-capped thick segment of width `thickness`:
+/// each end is extended by `thickness / 2` along the segment direction. A
+/// zero-length segment emits nothing.
+fn push_thick_line(out: &mut Vec<DrawOp>, a: Vec2, b: Vec2, thickness: f32) {
+    let d = b - a;
+    let len = d.length();
+    if len == 0.0 {
+        return;
+    }
+    let ext = d * (thickness / 2.0 / len);
+    out.push(DrawOp::ThickLine {
+        a: a - ext,
+        b: b + ext,
+        thickness,
+    });
 }
 
 /// Appends a circle (`round`, radius `radii.x`) or an ellipse, filled or outlined.
@@ -356,6 +438,25 @@ mod tests {
                 _ => None,
             })
             .collect()
+    }
+
+    fn thick_lines(ops: &[DrawOp]) -> Vec<(Vec2, Vec2, f32)> {
+        ops.iter()
+            .filter_map(|op| match *op {
+                DrawOp::ThickLine { a, b, thickness } => Some((a, b, thickness)),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// The stroke of the thick segment `(a, b, w)` (its endpoints plus half the
+    /// width on each side) lies within `lo..hi`.
+    fn assert_stroke_inside((a, b, w): (Vec2, Vec2, f32), lo: Vec2, hi: Vec2) {
+        let d = (b - a) / (b - a).length();
+        let perp = v(-d.y, d.x) * (w / 2.0);
+        for p in [a + perp, a - perp, b + perp, b - perp] {
+            assert!(p.cmpge(lo).all() && p.cmple(hi).all(), "{p:?}");
+        }
     }
 
     fn l_shape() -> Vec<Vec2> {
@@ -679,6 +780,166 @@ mod tests {
     }
 
     #[test]
+    fn a_thick_line_emits_one_thick_line_with_the_mean_scaled_width() {
+        let s = Shape::line(v(4.0, 0.0), C).with_thickness(2.0);
+        // width = 2 * mean(|2|, |4|) = 6.
+        let o = ops(&s, ShapeLayer::Outline, v(10.0, 10.0), v(2.0, 4.0), 0.0);
+        let t = thick_lines(&o);
+        assert_eq!(t.len(), 1);
+        assert!(approx_eq(t[0].2, 6.0));
+        // The segment runs (10, 10) -> (18, 10); square caps extend it by width / 2 = 3.
+        assert!(vec2_approx_eq(t[0].0, v(7.0, 10.0)));
+        assert!(vec2_approx_eq(t[0].1, v(21.0, 10.0)));
+    }
+
+    #[test]
+    fn thick_line_caps_extend_along_the_segment_direction() {
+        let s = Shape::line(v(3.0, 4.0), C).with_thickness(2.0);
+        let t = thick_lines(&outline(&s));
+        assert_eq!(t.len(), 1);
+        assert!(approx_eq(t[0].2, 2.0));
+        // Direction (3, 4) / 5, extension width / 2 = 1: (0.6, 0.8) at each end.
+        assert!(vec2_approx_eq(t[0].0, v(-0.6, -0.8)));
+        assert!(vec2_approx_eq(t[0].1, v(3.6, 4.8)));
+    }
+
+    #[test]
+    fn a_zero_length_thick_line_emits_nothing() {
+        let s = Shape::line(Vec2::ZERO, C).with_thickness(2.0);
+        assert!(outline(&s).is_empty());
+    }
+
+    #[test]
+    fn a_non_positive_thickness_still_draws_a_hairline() {
+        for t in [0.0, -3.0] {
+            let s = Shape::line(v(2.0, 1.0), C).with_thickness(t);
+            assert_eq!(
+                outline(&s),
+                vec![DrawOp::Line {
+                    a: Vec2::ZERO,
+                    b: v(2.0, 1.0)
+                }],
+                "thickness {t}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_shape_without_thickness_emits_no_thick_lines() {
+        let shapes = [
+            Shape::point(C),
+            Shape::line(v(2.0, 2.0), C),
+            Shape::rect(v(3.0, 2.0), C),
+            Shape::circle(2.0, C),
+            Shape::ellipse(v(3.0, 2.0), C),
+            Shape::polygon(&l_shape(), C),
+        ];
+        for s in &shapes {
+            assert!(
+                thick_lines(&ops(s, ShapeLayer::Outline, Vec2::ZERO, Vec2::ONE, 0.0)).is_empty(),
+                "{s:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_thick_rect_outline_is_four_thick_lines_whose_stroke_stays_inside_the_rect() {
+        let size = v(10.0, 6.0);
+        let s = Shape::rect(size, C).with_thickness(2.0);
+        let t = thick_lines(&outline(&s));
+        assert_eq!(t.len(), 4);
+        assert!(t.iter().all(|&(_, _, w)| approx_eq(w, 2.0)));
+        // The path is the rect inset by t / 2 = 1 per side, caps extend it by width / 2 = 1.
+        let expected = [
+            (v(0.0, 1.0), v(10.0, 1.0)),
+            (v(9.0, 0.0), v(9.0, 6.0)),
+            (v(10.0, 5.0), v(0.0, 5.0)),
+            (v(1.0, 6.0), v(1.0, 0.0)),
+        ];
+        for (i, &(a, b, _)) in t.iter().enumerate() {
+            assert!(vec2_approx_eq(a, expected[i].0), "edge {i}: {a:?}");
+            assert!(vec2_approx_eq(b, expected[i].1), "edge {i}: {b:?}");
+        }
+        // The stroke (path plus half width plus caps) never leaves the rect bounds.
+        for &seg in &t {
+            assert_stroke_inside(seg, Vec2::ZERO, size);
+        }
+    }
+
+    #[test]
+    fn a_thick_rect_outline_scales_the_inset_and_the_width_with_the_scale() {
+        let size = v(10.0, 6.0);
+        let s = Shape::rect(size, C).with_thickness(2.0);
+        let t = thick_lines(&ops(
+            &s,
+            ShapeLayer::Outline,
+            v(10.0, 20.0),
+            v(2.0, 2.0),
+            0.0,
+        ));
+        assert_eq!(t.len(), 4);
+        // width = 2 * 2 = 4, the inset stays t / 2 = 1 local unit = 2 world units.
+        assert!(t.iter().all(|&(_, _, w)| approx_eq(w, 4.0)));
+        assert!(vec2_approx_eq(t[0].0, v(10.0, 22.0)));
+        assert!(vec2_approx_eq(t[0].1, v(30.0, 22.0)));
+        let lo = v(10.0, 20.0);
+        let hi = lo + size * 2.0;
+        for &seg in &t {
+            assert_stroke_inside(seg, lo, hi);
+        }
+    }
+
+    #[test]
+    fn a_thick_polygon_outline_emits_one_thick_line_per_edge() {
+        let s = Shape::polygon(&l_shape(), C).with_thickness(2.0);
+        let t = thick_lines(&outline(&s));
+        assert_eq!(t.len(), 6);
+        assert!(t.iter().all(|&(_, _, w)| approx_eq(w, 2.0)));
+        // First edge (0, 0) -> (4, 0), caps extend by 1: (-1, 0) -> (5, 0).
+        assert!(vec2_approx_eq(t[0].0, v(-1.0, 0.0)));
+        assert!(vec2_approx_eq(t[0].1, v(5.0, 0.0)));
+        // Closing edge (0, 4) -> (0, 0), caps extend by 1 along it: (0, 5) -> (0, -1).
+        assert!(vec2_approx_eq(t[5].0, v(0.0, 5.0)));
+        assert!(vec2_approx_eq(t[5].1, v(0.0, -1.0)));
+    }
+
+    #[test]
+    fn point_circle_and_ellipse_ignore_the_thickness() {
+        let pairs = [
+            (Shape::point(C), Shape::point(C).with_thickness(4.0)),
+            (
+                Shape::circle(2.0, C),
+                Shape::circle(2.0, C).with_thickness(4.0),
+            ),
+            (
+                Shape::ellipse(v(3.0, 2.0), C),
+                Shape::ellipse(v(3.0, 2.0), C).with_thickness(4.0),
+            ),
+        ];
+        for (plain, thick) in pairs {
+            assert_eq!(outline(&plain), outline(&thick));
+            assert_eq!(fill(&plain), fill(&thick));
+        }
+    }
+
+    #[test]
+    fn the_fill_layer_of_a_thick_shape_is_unchanged() {
+        let pairs = [
+            (
+                Shape::rect(v(4.0, 2.0), C),
+                Shape::rect(v(4.0, 2.0), C).with_thickness(3.0),
+            ),
+            (
+                Shape::polygon(&l_shape(), C),
+                Shape::polygon(&l_shape(), C).with_thickness(3.0),
+            ),
+        ];
+        for (plain, thick) in pairs {
+            assert_eq!(fill(&plain), fill(&thick));
+        }
+    }
+
+    #[test]
     fn shape_layers_follow_the_colour_model() {
         let blue = Color::BLUE;
         let layers = |s: &Shape| shape_layers(s).into_iter().flatten().collect::<Vec<_>>();
@@ -707,7 +968,14 @@ mod tests {
             Shape::circle(2.0, C),
             Shape::ellipse(v(3.0, 2.0), C),
             Shape::polygon(&l_shape(), C),
+            Shape::line(v(2.0, 2.0), C).with_thickness(1.5),
+            Shape::rect(v(3.0, 2.0), C).with_thickness(1.5),
+            Shape::polygon(&l_shape(), C).with_thickness(1.5),
+            Shape::point(C).with_thickness(1.5),
+            Shape::circle(2.0, C).with_thickness(1.5),
+            Shape::ellipse(v(3.0, 2.0), C).with_thickness(1.5),
         ];
+        let mut saw_thick_line = false;
         for s in &shapes {
             for scale in [Vec2::ONE, v(2.0, 3.0)] {
                 for op in ops(s, ShapeLayer::Fill, Vec2::ZERO, scale, 30.0) {
@@ -722,11 +990,15 @@ mod tests {
                     );
                 }
                 for op in ops(s, ShapeLayer::Outline, Vec2::ZERO, scale, 30.0) {
+                    if matches!(op, DrawOp::ThickLine { .. }) {
+                        saw_thick_line = true;
+                    }
                     assert!(
                         matches!(
                             op,
                             DrawOp::Pixel { .. }
                                 | DrawOp::Line { .. }
+                                | DrawOp::ThickLine { .. }
                                 | DrawOp::CircleLines { .. }
                                 | DrawOp::EllipseLines { .. }
                         ),
@@ -735,6 +1007,7 @@ mod tests {
                 }
             }
         }
+        assert!(saw_thick_line, "the thick shapes should emit ThickLine ops");
     }
 
     #[test]

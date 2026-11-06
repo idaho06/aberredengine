@@ -1,6 +1,7 @@
 //! Drawable primitives: point, line, rectangle, circle, ellipse and polygon.
 //!
-//! A [`Shape`] carries its geometry in local coordinates plus its colours and a pivot `origin`.
+//! A [`Shape`] carries its geometry in local coordinates plus its colours, a pivot `origin`
+//! and an optional line `thickness`.
 
 use std::sync::Arc;
 
@@ -15,9 +16,9 @@ use crate::math::{Color, Vec2, cross};
 /// places it on the screen. `Tint` multiplies its colours and `Shadow` draws a
 /// silhouette behind it.
 ///
-/// Lines and outlines are 1 px wide. `color` is the fill colour of a `filled`
-/// shape and the line colour of an outlined shape, a point or a line. A filled
-/// shape with an `outline_color` draws the fill first and a 1 px outline on top.
+/// Lines and outlines are 1 px wide unless `thickness` is set. `color` is the fill colour of a
+/// `filled` shape and the line colour of an outlined shape, a point or a line. A filled
+/// shape with an `outline_color` draws the fill first and an outline on top.
 /// `filled` and `outline_color` do not affect `Point` and `Line`, and
 /// `outline_color` does not affect an unfilled shape.
 ///
@@ -32,10 +33,16 @@ pub struct Shape {
     pub color: Color,
     /// Fill the interior instead of drawing only the outline.
     pub filled: bool,
-    /// Colour of an extra 1 px outline drawn over a filled shape.
+    /// Colour of an extra outline drawn over a filled shape.
     pub outline_color: Option<Color>,
     /// Local point that sits on the entity position and pivots `Scale` and `Rotation`.
     pub origin: Vec2,
+    /// Line width of a `Line` and of the outlines of a `Rect` and a `Polygon`:
+    /// `None` draws a 1 px hairline, `Some(t)` draws `t` world units wide (times
+    /// the mean of `|scale.x|`, `|scale.y|`, so it grows with the camera zoom).
+    /// `Point`, `Circle` and `Ellipse` ignore it. Overlapping square caps at
+    /// joints can darken semi-transparent colours.
+    pub thickness: Option<f32>,
 }
 
 /// The geometry of a [`Shape`], in local coordinates.
@@ -51,6 +58,8 @@ pub enum ShapeKind {
     /// A rectangle with its top-left corner at `(0, 0)`. Its 1 px outline lies
     /// half a world unit inside its bounds: on the same pixels the fill covers
     /// for an unrotated rect at an integral position, size and scale, at zoom 1.
+    /// With [`Shape::thickness`] set, the outline lies half of it inside instead
+    /// and stays within the bounds.
     Rect {
         /// Width and height.
         size: Vec2,
@@ -176,6 +185,7 @@ impl Shape {
             filled: false,
             outline_color: None,
             origin: Vec2::ZERO,
+            thickness: None,
         }
     }
 
@@ -215,7 +225,7 @@ impl Shape {
         self
     }
 
-    /// Draw a 1 px outline in `color` over a filled shape.
+    /// Draw an outline in `color` over a filled shape (1 px unless `thickness` is set).
     pub fn with_outline_color(mut self, color: Color) -> Self {
         self.outline_color = Some(color);
         self
@@ -225,6 +235,18 @@ impl Shape {
     pub fn with_origin(mut self, origin: Vec2) -> Self {
         self.origin = origin;
         self
+    }
+
+    /// Set the line width in world units; see [`Shape::thickness`].
+    pub fn with_thickness(mut self, thickness: f32) -> Self {
+        self.thickness = Some(thickness);
+        self
+    }
+
+    /// The line width in local units that `thickness` gives: `Some(t)` when it is
+    /// positive, `None` when unset or non-positive (a 1 px hairline).
+    pub fn effective_thickness(&self) -> Option<f32> {
+        self.thickness.filter(|&t| t > 0.0)
     }
 }
 
@@ -272,6 +294,7 @@ mod tests {
         assert!(!s.filled);
         assert_eq!(s.outline_color, None);
         assert_eq!(s.origin, Vec2::ZERO);
+        assert_eq!(s.thickness, None);
     }
 
     #[test]
@@ -279,10 +302,12 @@ mod tests {
         let s = Shape::rect(Vec2::new(2.0, 2.0), RED)
             .filled()
             .with_outline_color(BLUE)
-            .with_origin(Vec2::new(1.0, 1.0));
+            .with_origin(Vec2::new(1.0, 1.0))
+            .with_thickness(3.0);
         assert!(s.filled);
         assert_eq!(s.outline_color, Some(BLUE));
         assert_eq!(s.origin, Vec2::new(1.0, 1.0));
+        assert_eq!(s.thickness, Some(3.0));
         assert_eq!(s.color, RED);
         assert_eq!(
             s.kind,

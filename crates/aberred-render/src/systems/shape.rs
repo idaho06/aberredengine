@@ -96,6 +96,9 @@ pub(super) fn draw_shape_ops(d: &mut impl RaylibDraw, ops: &[DrawOp], color: Col
         match *op {
             DrawOp::Pixel { p } => d.draw_pixel_v(vec2_to_raylib(p), color),
             DrawOp::Line { a, b } => d.draw_line_v(vec2_to_raylib(a), vec2_to_raylib(b), color),
+            DrawOp::ThickLine { a, b, thickness } => {
+                d.draw_line_ex(vec2_to_raylib(a), vec2_to_raylib(b), thickness, color)
+            }
             DrawOp::Triangle { a, b, c } => d.draw_triangle(
                 vec2_to_raylib(a),
                 vec2_to_raylib(b),
@@ -119,7 +122,9 @@ pub(super) fn draw_shape_ops(d: &mut impl RaylibDraw, ops: &[DrawOp], color: Col
 }
 
 /// Whether any part of the shape (or its shadow) can overlap the view box
-/// `view_min..view_max`, with a 1 px margin for line width.
+/// `view_min..view_max`, with a 1 px margin for the hairline plus half the
+/// line `thickness` scaled by `max(|scale.x|, |scale.y|)` plus the shadow
+/// offset. Conservative for every shape kind.
 pub(super) fn shape_in_view(
     shape: &Shape,
     place: ShapePlacement,
@@ -128,7 +133,12 @@ pub(super) fn shape_in_view(
     view_max: Vector2,
 ) -> bool {
     let (min, max) = shape_cull_bounds(shape, place.pos, place.scale, place.rotation_degrees);
-    let margin = Vec2::ONE + maybe_shadow.map_or(Vec2::ZERO, |s| s.offset.abs());
+    let half_thickness = shape.effective_thickness().map_or(0.0, |t| {
+        t / 2.0 * place.scale.x.abs().max(place.scale.y.abs())
+    });
+    let margin = Vec2::ONE
+        + maybe_shadow.map_or(Vec2::ZERO, |s| s.offset.abs())
+        + Vec2::splat(half_thickness);
     bounds_overlap_view(
         vec2_to_raylib(min - margin),
         vec2_to_raylib(max + margin),
@@ -335,6 +345,39 @@ mod tests {
             ShapePlacement::at(Vec2::new(102.0, 0.0)),
             None
         ));
+    }
+
+    #[test]
+    fn the_view_margin_grows_with_the_thickness() {
+        let line = Shape::line(Vec2::new(0.0, 10.0), RED);
+        let thick = |t: f32| line.clone().with_thickness(t);
+        // At x = 103 the hairline (margin 1) is out of the 0..100 view.
+        let place = ShapePlacement::at(Vec2::new(103.0, 0.0));
+        assert!(!visible(&line, place, None));
+        // Thickness 6 adds a margin of 6 / 2 = 3: 103 - (1 + 3) = 99 < 100, visible again.
+        assert!(visible(&thick(6.0), place, None));
+        // The added margin scales with max(|scale.x|, |scale.y|): at scale (3, 1),
+        // thickness 2 adds 2 / 2 * 3 = 3 on top of the 1 px margin.
+        let scaled = ShapePlacement {
+            pos: Vec2::new(103.0, 0.0),
+            scale: Vec2::new(3.0, 1.0),
+            rotation_degrees: 0.0,
+        };
+        assert!(!visible(&thick(1.0), scaled, None));
+        assert!(visible(&thick(2.0), scaled, None));
+    }
+
+    #[test]
+    fn a_thick_line_passes_through_as_a_thick_line_op() {
+        let s = Shape::line(Vec2::new(4.0, 0.0), RED).with_thickness(2.0);
+        let p = passes(&s, ShapePlacement::at(Vec2::ZERO), None, None);
+        assert_eq!(p.len(), 1);
+        assert_eq!(p[0].0.len(), 1);
+        assert!(
+            matches!(p[0].0[0], DrawOp::ThickLine { thickness, .. } if thickness == 2.0),
+            "{:?}",
+            p[0].0[0]
+        );
     }
 
     #[test]
