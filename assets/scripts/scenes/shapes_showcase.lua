@@ -1,8 +1,8 @@
 -- scenes/shapes_showcase.lua
 -- Shapes showcase: every Shape kind, transforms, hierarchy, tint tweens, runtime edits,
--- z-order and screen space.
+-- z-order, curves/rounded boxes/thickness and screen space.
 --
--- Seven pages sit side by side in the world, PAGE_W apart. An anchor entity carries the camera
+-- Eight pages sit side by side in the world, PAGE_W apart. An anchor entity carries the camera
 -- target; left/right moves the anchor to the next page and the engine's camera follow glides
 -- there. Back returns to the menu. The screen-space page spawns its entities once the camera
 -- arrives and despawns them when it is left, because screen shapes ignore the camera and would
@@ -22,10 +22,12 @@ local TITLES = {
     "Tint tweens and shadows",
     "Runtime edits from on_update",
     "Z-order: shapes, sprite and text",
+    "Curves, rounded boxes and thickness",
     "Screen space: ignores the camera",
 }
 local PAGE_COUNT = #TITLES
 local SCREEN_PAGE = PAGE_COUNT -- the last page spawns screen-space entities
+local STROKES_PAGE = SCREEN_PAGE - 1 -- the world-space page just before it
 
 -- Page state, reset by M.spawn().
 local page
@@ -34,6 +36,7 @@ local last_blink
 local last_sides
 local last_bar_width
 local last_fill_width
+local last_hairline
 local screen_spawned -- whether the screen-space page's entities exist
 
 -- ─── Small helpers ──────────────────────────────────────────────────────────
@@ -352,6 +355,64 @@ local function build_zorder(x0)
     text("one sort across shapes, sprites and text", x0 - 310, 150)
 end
 
+--- Page 7: bezier curves, rounded rects and stroke thickness in world space.
+local function build_strokes(x0)
+    -- the shared box look: filled, white outline, 2-unit stroke
+    local function node_box(builder)
+        return builder:with_shape_filled()
+            :with_shape_outline_color(255, 255, 255, 255)
+            :with_shape_thickness(2)
+    end
+
+    -- the same S-curve twice: a 1 px hairline against a 4-unit stroke
+    engine.spawn():with_shape_bezier(25, -35, 45, 35, 70, 0, 255, 255, 255, 255)
+        :with_position(x0 - 290, -60):with_z_index(1):build()
+    engine.spawn():with_shape_bezier(25, -35, 45, 35, 70, 0, 90, 200, 255, 255):with_shape_thickness(4)
+        :with_position(x0 - 210, -60):with_z_index(1):build()
+    label("hairline", x0 - 255, -8)
+    label("thickness 4", x0 - 175, -8)
+
+    -- radius sweep: 0 is a plain rect, 100 clamps to half the short side
+    for i, radius in ipairs({ 0, 6, 14, 100 }) do
+        node_box(engine.spawn():with_shape_rounded_rect(40, 28, radius, 120, 230, 120, 255))
+            :with_position(x0 - 100 + (i - 1) * 50, -74):with_z_index(1):build()
+    end
+    label("radius 0, 6, 14, 100", x0 - 5, -8)
+
+    -- a graph edge: the curve runs under the two node boxes
+    engine.spawn():with_shape_bezier(40, 0, 40, 30, 80, 30, 255, 220, 70, 255):with_shape_thickness(3)
+        :with_position(x0 + 175, -61):with_z_index(1):build()
+    node_box(engine.spawn():with_shape_rounded_rect(40, 28, 8, 255, 220, 70, 255))
+        :with_position(x0 + 135, -75):with_z_index(2):build()
+    node_box(engine.spawn():with_shape_rounded_rect(40, 28, 8, 255, 220, 70, 255))
+        :with_position(x0 + 255, -45):with_z_index(2):build()
+    label("a graph edge", x0 + 215, -8)
+
+    -- a scaled rounded rect: the stroke grows with the Scale
+    engine.spawn():with_shape_rounded_rect(60, 40, 10, 255, 160, 60, 255):with_shape_filled()
+        :with_shape_outline_color(255, 255, 255, 255):with_shape_thickness(4):with_shape_origin(30, 20)
+        :with_scale(1, 1)
+        :with_tween_scale(0.6, 0.6, 1.4, 1.4, 1.5)
+        :with_tween_scale_easing("quad_in_out")
+        :with_tween_scale_loop("ping_pong")
+        :with_position(x0 - 210, 60):with_z_index(1):build()
+    label("scale tween: stroke follows", x0 - 210, 110)
+
+    -- a rotating rounded rect keeps its corners round
+    spin(engine.spawn():with_shape_rounded_rect(56, 40, 10, 90, 200, 255, 255):with_shape_filled()
+        :with_shape_outline_color(255, 255, 255, 255):with_shape_thickness(3):with_shape_origin(28, 20), 4)
+        :with_position(x0, 60):with_z_index(1):build()
+    label("rotating, still round", x0, 110)
+
+    -- edited every tick from update_strokes
+    engine.spawn():with_shape_bezier(25, -35, 45, 35, 70, 0, 255, 100, 160, 255):with_shape_thickness(4)
+        :with_position(x0 + 175, 60):with_z_index(1):register_as("st_curve"):build()
+    label("set_shape_bezier / _thickness", x0 + 210, 110)
+
+    text("world strokes scale with Scale and camera zoom", x0 - 310, 135)
+    text("the runtime curve drops to the 1 px hairline every 6 s (thickness nil)", x0 - 310, 152)
+end
+
 --- Screen-space entities of the last page, keyed so they can be despawned on leaving.
 local SCREEN_KEYS = { "ss_frame", "ss_fill", "ss_hline", "ss_vline", "ss_ring", "ss_note",
                       "ss_curve", "ss_box", "ss_thick", "ss_thick_note" }
@@ -469,7 +530,26 @@ local function update_runtime()
     end
 end
 
---- Page 7: grow the progress fill.
+--- Page 7: sway the registered curve and cycle its stroke thickness.
+local function update_strokes()
+    local id = engine.get_entity("st_curve")
+    if not id then
+        return
+    end
+    local sway = 28 * math.sin(elapsed * 2)
+    engine.entity_set_shape_bezier(id, 25, -35 - sway, 45, 35 + sway, 70, 0)
+    if math.floor(elapsed / 2) % 3 == 2 then
+        if not last_hairline then
+            last_hairline = true
+            engine.entity_set_shape_thickness(id, nil)
+        end
+    else
+        last_hairline = false
+        engine.entity_set_shape_thickness(id, 2 + 5 * (0.5 + 0.5 * math.sin(elapsed * 3)))
+    end
+end
+
+--- Page 8: grow the progress fill.
 local function update_screen()
     local fill = engine.get_entity("ss_fill")
     if fill then
@@ -498,6 +578,8 @@ local function on_update_shapes_showcase(input, dt)
     update_screen_page_arrival()
     if page == 5 then
         update_runtime()
+    elseif page == STROKES_PAGE then
+        update_strokes()
     elseif page == SCREEN_PAGE then
         update_screen()
     end
@@ -522,11 +604,12 @@ function M.spawn()
     last_sides = nil
     last_bar_width = nil
     last_fill_width = nil
+    last_hairline = nil
     screen_spawned = false
 
     local builders = {
         build_gallery, build_transforms, build_hierarchy, build_tint,
-        build_runtime, build_zorder, function() end,
+        build_runtime, build_zorder, build_strokes, function() end,
     }
     for i, build in ipairs(builders) do
         build(page_x(i))
@@ -535,7 +618,7 @@ function M.spawn()
 
     -- Page counter, top right, bound to a signal.
     engine.spawn()
-        :with_text("< 1 / 7 >", "default", 14, 140, 140, 140, 255)
+        :with_text("< 1 / 8 >", "default", 14, 140, 140, 140, 255)
         :with_screen_position(540, 8)
         :with_z_index(30)
         :with_signal_binding("showcase_page")
