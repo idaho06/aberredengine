@@ -33,7 +33,7 @@
 //! - [`scale`] – 2D scale factor for sprites and shapes
 //! - [`scene`] – the name carried by each registered scene's persistent entity
 //! - [`screen_position`] – screen-space position for UI elements
-//! - [`shape`] – point, line, bezier curve, rectangle, circle, ellipse and polygon primitives drawn in world or screen space
+//! - [`shape`] – point, line, bezier curve, rectangle, rounded rectangle, circle, ellipse and polygon primitives drawn in world or screen space
 //! - [`signal_binding`] – binds UI text to signal values for reactive updates
 //! - [`signals`] – per-entity signal storage for cross-system communication
 //! - [`sprite`] – 2D sprite rendering component

@@ -1,4 +1,4 @@
-//! Drawable primitives: point, line, bezier curve, rectangle, circle, ellipse and polygon.
+//! Drawable primitives: point, line, bezier curve, rectangle, rounded rectangle, circle, ellipse and polygon.
 //!
 //! A [`Shape`] carries its geometry in local coordinates plus its colours, a pivot `origin`
 //! and an optional line `thickness`.
@@ -9,7 +9,7 @@ use bevy_ecs::prelude::Component;
 
 use crate::math::{Color, Vec2, cross};
 
-/// A drawable primitive: a point, line, bezier curve, rectangle, circle, ellipse or polygon.
+/// A drawable primitive: a point, line, bezier curve, rectangle, rounded rectangle, circle, ellipse or polygon.
 ///
 /// A `Shape` draws when its entity also carries a `ZIndex` and a position: a
 /// `WorldPosition` places it on the map (the camera applies), a `ScreenPosition`
@@ -37,8 +37,8 @@ pub struct Shape {
     pub outline_color: Option<Color>,
     /// Local point that sits on the entity position and pivots `Scale` and `Rotation`.
     pub origin: Vec2,
-    /// Line width of a `Line`, a `Bezier` and of the outlines of a `Rect` and a
-    /// `Polygon`: `None` draws a 1 px hairline, `Some(t)` draws `t` world units
+    /// Line width of a `Line`, a `Bezier` and of the outlines of a `Rect`, a
+    /// `RoundedRect` and a `Polygon`: `None` draws a 1 px hairline, `Some(t)` draws `t` world units
     /// wide (times the mean of `|scale.x|`, `|scale.y|`, so it grows with the
     /// camera zoom). `Point`, `Circle` and `Ellipse` ignore it. Overlapping
     /// square caps at joints can darken semi-transparent colours.
@@ -76,6 +76,29 @@ pub enum ShapeKind {
     Rect {
         /// Width and height.
         size: Vec2,
+    },
+    /// A rectangle with rounded corners and its top-left corner at `(0, 0)`.
+    ///
+    /// `radius` is clamped to `[0, min(|size.x|, |size.y|) / 2]` (a negative or
+    /// `NaN` radius counts as 0), and a zero radius draws exactly like a
+    /// [`Rect`](ShapeKind::Rect). Each corner is a quarter circle of 8 segments.
+    /// The fill is a triangle fan from the rect centre and the outline the ring
+    /// of the rounded polygon, so `Rotation`, non-uniform `Scale` and a negative
+    /// `size` apply, unlike raylib's axis-aligned rounded-rectangle draw. Unlike
+    /// a [`Rect`](ShapeKind::Rect), whose hairline outline lies half a world unit
+    /// inside its bounds, the hairline outline of a `RoundedRect` with a positive
+    /// radius runs on the bounds themselves. With [`Shape::thickness`] set, the
+    /// outline is the ring of the rect inset by half of it (local units, clamped
+    /// to half the size) with the corner radius reduced by the same inset: the
+    /// straight sides of the stroke stay within the bounds like a thick `Rect`
+    /// outline, but the square caps of the corner-arc segments can poke out of
+    /// the bounds by a small fraction of the stroke width (well under 0.15 of it
+    /// for ordinary radii).
+    RoundedRect {
+        /// Width and height.
+        size: Vec2,
+        /// Corner radius before clamping.
+        radius: f32,
     },
     /// A circle centred at `(0, 0)`.
     ///
@@ -222,6 +245,12 @@ impl Shape {
         Self::new(ShapeKind::Rect { size }, color)
     }
 
+    /// A rectangle of the given size with corners rounded by `radius`, top-left
+    /// corner at the local origin. See [`ShapeKind::RoundedRect`].
+    pub fn rounded_rect(size: Vec2, radius: f32, color: Color) -> Self {
+        Self::new(ShapeKind::RoundedRect { size, radius }, color)
+    }
+
     /// A circle of the given radius centred on the local origin.
     pub fn circle(radius: f32, color: Color) -> Self {
         Self::new(ShapeKind::Circle { radius }, color)
@@ -288,6 +317,10 @@ mod tests {
             ShapeKind::Bezier { c1, c2, to }
         );
         assert_eq!(Shape::rect(size, RED).kind, ShapeKind::Rect { size });
+        assert_eq!(
+            Shape::rounded_rect(size, 1.5, RED).kind,
+            ShapeKind::RoundedRect { size, radius: 1.5 }
+        );
         assert_eq!(
             Shape::circle(2.5, RED).kind,
             ShapeKind::Circle { radius: 2.5 }

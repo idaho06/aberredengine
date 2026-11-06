@@ -179,7 +179,10 @@ impl Transform {
 /// An outlined `Rect` is four full-length edges half a world unit inside its
 /// sides (see `Transform::rect_outline_edges`). `Line` and `Polygon` outlines
 /// are drawn at their exact transformed coordinates, on the lattice between
-/// pixels. A `Bezier` is sampled at 24 equal parameter steps into 24 connected
+/// pixels. A `RoundedRect` is the ring of its rounded outline polygon (four
+/// quarter-circle corners of 8 segments each); a zero effective radius draws
+/// exactly like a `Rect`, and its fill is a triangle fan from the rect centre.
+/// A `Bezier` is sampled at 24 equal parameter steps into 24 connected
 /// segments whose first and last points are the transformed `(0, 0)` and `to`
 /// exactly. An `Ellipse` ignores the rotation. A `Circle` rotates only its centre and
 /// becomes an ellipse when `scale` is non-uniform. Every `Triangle` is emitted
@@ -187,14 +190,18 @@ impl Transform {
 /// zero-area triangles are skipped.
 ///
 /// A positive [`Shape::thickness`] widens a `Line`, a `Bezier` and the outlines
-/// of a `Rect` and a `Polygon` to `thickness * mean(|scale.x|, |scale.y|)` world
+/// of a `Rect`, a `RoundedRect` and a `Polygon` to `thickness * mean(|scale.x|, |scale.y|)` world
 /// units, emitted as [`DrawOp::ThickLine`] with square caps (each segment extended
 /// by half its width at both ends so joints close without gaps; overlapping caps
 /// may darken semi-transparent colours). A thick `Rect` outline is inset by
-/// `thickness / 2` local units so the stroke stays inside the rect bounds;
-/// `Line`, `Bezier` and `Polygon` outlines straddle their path. `Point`, `Circle`
-/// and `Ellipse` ignore `thickness`. A `None` or non-positive `thickness` keeps
-/// the 1 px hairline.
+/// `thickness / 2` local units so the stroke stays inside the rect bounds, and a
+/// thick `RoundedRect` outline insets its rounded polygon the same way, with the
+/// corner radius reduced by the same inset: its straight sides stay inside the
+/// bounds, but the square caps of its corner-arc segments can poke out of them
+/// by a small fraction of the stroke width (well under 0.15 of it for ordinary
+/// radii). `Line`, `Bezier` and `Polygon` outlines straddle their path.
+/// `Point`, `Circle` and `Ellipse` ignore `thickness`. A `None` or non-positive
+/// `thickness` keeps the 1 px hairline.
 pub fn shape_ops(
     shape: &Shape,
     layer: ShapeLayer,
@@ -230,31 +237,45 @@ pub fn shape_ops(
                 );
             }
         }
-        ShapeKind::Rect { size } => {
-            if fill {
-                let c = xf.rect_corners(*size);
-                push_triangle(out, c[0], c[1], c[2]);
-                push_triangle(out, c[0], c[2], c[3]);
-            } else if let Some((t, w)) = stroke {
-                // The stroke lies inside the rect bounds: the path is the rect
-                // inset by t / 2 per side (clamped to half the size, like the
-                // hairline inset) and the caps extend it by w / 2 along each edge.
-                let inset = Vec2::splat(t / 2.0).min(size.abs() / 2.0) * size.signum();
-                let far = size - inset;
-                let corners = [
-                    Vec2::new(inset.x, inset.y),
-                    Vec2::new(far.x, inset.y),
-                    far,
-                    Vec2::new(inset.x, far.y),
-                ]
-                .map(|p| xf.point(p));
-                for i in 0..4 {
-                    push_thick_line(out, corners[i], corners[(i + 1) % 4], w);
-                }
+        ShapeKind::Rect { size } => push_rect_ops(out, fill, stroke, &xf, *size),
+        ShapeKind::RoundedRect { size, radius } => {
+            let r = rounded_rect_radius(*size, *radius);
+            if r == 0.0 {
+                // A zero effective radius draws exactly like a rect.
+                push_rect_ops(out, fill, stroke, &xf, *size);
+            } else if fill {
+                // A triangle fan from the rect centre covers the convex rounded
+                // polygon; push_triangle keeps every triangle CCW for raylib.
+                let poly = rounded_rect_polygon(*size, r);
+                let center = xf.point(*size / 2.0);
+                push_ring(
+                    out,
+                    poly.len(),
+                    |i| xf.point(poly[i]),
+                    |out, a, b| push_triangle(out, center, a, b),
+                );
             } else {
-                out.extend(
-                    xf.rect_outline_edges(*size)
-                        .map(|(a, b)| DrawOp::Line { a, b }),
+                // Hairline: the ring of the outline polygon. Thick: the ring of
+                // the polygon of the rect inset by t / 2 per side (clamped to
+                // half the size, like a thick Rect) with the corner radius
+                // reduced by the same inset. The straight sides of the stroke
+                // stay within the rect bounds; the square caps of the corner
+                // arcs can poke out of them by a small fraction of the width.
+                let (poly, offset) = match stroke {
+                    Some((t, _)) => {
+                        let inset = half_stroke_inset(*size, t);
+                        (
+                            rounded_rect_polygon(*size - inset * 2.0, (r - t / 2.0).max(0.0)),
+                            inset,
+                        )
+                    }
+                    None => (rounded_rect_polygon(*size, r), Vec2::ZERO),
+                };
+                push_ring(
+                    out,
+                    poly.len(),
+                    |i| xf.point(poly[i] + offset),
+                    |out, a, b| push_segment(out, a, b, stroke),
                 );
             }
         }
@@ -308,7 +329,9 @@ pub fn shape_cull_bounds(
             // box of the four transformed control points encloses it.
             bounding_box([Vec2::ZERO, *c1, *c2, *to].map(|p| xf.point(p)))
         }
-        ShapeKind::Rect { size } => bounding_box(xf.rect_corners(*size)),
+        ShapeKind::Rect { size } | ShapeKind::RoundedRect { size, .. } => {
+            bounding_box(xf.rect_corners(*size))
+        }
         ShapeKind::Circle { radius } => {
             let (center, radii, _) = xf.circle(*radius);
             Some(around(center, radii))
@@ -327,6 +350,124 @@ fn bounding_box(points: impl IntoIterator<Item = Vec2>) -> Option<(Vec2, Vec2)> 
     points.into_iter().fold(None, |acc, p| {
         Some(acc.map_or((p, p), |(lo, hi)| (lo.min(p), hi.max(p))))
     })
+}
+
+/// The inset by half the stroke width `t` per side of a rect of `size`, clamped
+/// to half of `size` and mirrored by its sign, so a thick outline path stays on
+/// its own side of the bounds.
+fn half_stroke_inset(size: Vec2, t: f32) -> Vec2 {
+    Vec2::splat(t / 2.0).min(size.abs() / 2.0) * size.signum()
+}
+
+/// The ops of a plain `Rect` — and of a `RoundedRect` whose effective radius is
+/// zero: two fill triangles, a thick inset outline, or the four hairline edges.
+fn push_rect_ops(
+    out: &mut Vec<DrawOp>,
+    fill: bool,
+    stroke: Option<(f32, f32)>,
+    xf: &Transform,
+    size: Vec2,
+) {
+    if fill {
+        let c = xf.rect_corners(size);
+        push_triangle(out, c[0], c[1], c[2]);
+        push_triangle(out, c[0], c[2], c[3]);
+    } else if let Some((t, w)) = stroke {
+        // The stroke lies inside the rect bounds: the path is the rect inset
+        // by t / 2 per side and the caps extend it by w / 2 along each edge.
+        let inset = half_stroke_inset(size, t);
+        let far = size - inset;
+        let corners = [
+            Vec2::new(inset.x, inset.y),
+            Vec2::new(far.x, inset.y),
+            far,
+            Vec2::new(inset.x, far.y),
+        ]
+        .map(|p| xf.point(p));
+        for i in 0..4 {
+            push_thick_line(out, corners[i], corners[(i + 1) % 4], w);
+        }
+    } else {
+        out.extend(
+            xf.rect_outline_edges(size)
+                .map(|(a, b)| DrawOp::Line { a, b }),
+        );
+    }
+}
+
+/// Segments per quarter-circle corner of a `ShapeKind::RoundedRect` outline.
+const ROUNDED_RECT_ARC_SEGMENTS: usize = 8;
+
+/// The effective corner radius of a rounded rect: `radius` clamped to
+/// `[0, min(|size.x|, |size.y|) / 2]`; a negative or `NaN` radius counts as 0.
+fn rounded_rect_radius(size: Vec2, radius: f32) -> f32 {
+    if radius > 0.0 {
+        radius.min(size.x.abs().min(size.y.abs()) / 2.0)
+    } else {
+        0.0
+    }
+}
+
+/// The outline polygon of a rounded rect with its top-left at `(0, 0)`, in
+/// local coordinates, wound clockwise on the y-down screen for a positive
+/// `size`; negative `size` components mirror it through `size.signum()`.
+///
+/// Each of the four corners is a quarter circle of `ROUNDED_RECT_ARC_SEGMENTS`
+/// segments, emitted as its 9 points including both tangent ends. Those tangent
+/// points are shared with the neighbouring straight sides and never duplicated,
+/// so the polygon has 4 * 9 = 36 vertices and 36 ring edges (32 arc segments
+/// plus the 4 sides); with `radius == 0` the arcs collapse and it degenerates
+/// to the 4 rect corners. When the radius equals half of a side, that side's
+/// two tangent points coincide and merge, so no two consecutive vertices
+/// coincide and no ring edge has zero length. The arc ends use exact axis
+/// directions so coincident tangent points compare equal.
+fn rounded_rect_polygon(size: Vec2, radius: f32) -> Vec<Vec2> {
+    let (w, h) = (size.x.abs(), size.y.abs());
+    // Corner centres with the exact unit directions of each quarter arc's
+    // start and end, in ring order: top-right, bottom-right, bottom-left, top-left.
+    let corners = [
+        (
+            Vec2::new(w - radius, radius),
+            Vec2::new(0.0, -1.0),
+            Vec2::new(1.0, 0.0),
+        ),
+        (
+            Vec2::new(w - radius, h - radius),
+            Vec2::new(1.0, 0.0),
+            Vec2::new(0.0, 1.0),
+        ),
+        (
+            Vec2::new(radius, h - radius),
+            Vec2::new(0.0, 1.0),
+            Vec2::new(-1.0, 0.0),
+        ),
+        (
+            Vec2::new(radius, radius),
+            Vec2::new(-1.0, 0.0),
+            Vec2::new(0.0, -1.0),
+        ),
+    ];
+    let mut poly = Vec::with_capacity(4 * (ROUNDED_RECT_ARC_SEGMENTS + 1));
+    for (i, (center, u0, u1)) in corners.iter().enumerate() {
+        let start = 90.0 * i as f32 - 90.0;
+        for j in 0..=ROUNDED_RECT_ARC_SEGMENTS {
+            let p = if j == 0 {
+                center + radius * *u0
+            } else if j == ROUNDED_RECT_ARC_SEGMENTS {
+                center + radius * *u1
+            } else {
+                let a = (start + 90.0 * j as f32 / ROUNDED_RECT_ARC_SEGMENTS as f32).to_radians();
+                center + radius * Vec2::new(a.cos(), a.sin())
+            };
+            poly.push(p * size.signum());
+        }
+    }
+    // Merge tangent points that coincide when the radius equals half of a side.
+    poly.dedup();
+    if poly.len() > 1 && poly.first() == poly.last() {
+        poly.pop();
+    }
+    poly
 }
 
 /// Appends a triangle in raylib's counter-clockwise order, or nothing if it is flat.
@@ -472,6 +613,10 @@ mod tests {
         Shape::bezier(c1, c2, to, C)
     }
 
+    fn rounded(size: Vec2, radius: f32) -> Shape {
+        Shape::rounded_rect(size, radius, C)
+    }
+
     fn lines(ops: &[DrawOp]) -> Vec<(Vec2, Vec2)> {
         ops.iter()
             .filter_map(|op| match *op {
@@ -499,12 +644,17 @@ mod tests {
             .collect()
     }
 
-    /// The stroke of the thick segment `(a, b, w)` (its endpoints plus half the
-    /// width on each side) lies within `lo..hi`.
-    fn assert_stroke_inside((a, b, w): (Vec2, Vec2, f32), lo: Vec2, hi: Vec2) {
+    /// The four corners of the stroke of the thick segment `(a, b, w)`: its
+    /// endpoints plus half the width on each side.
+    fn stroke_corners((a, b, w): (Vec2, Vec2, f32)) -> [Vec2; 4] {
         let d = (b - a) / (b - a).length();
         let perp = v(-d.y, d.x) * (w / 2.0);
-        for p in [a + perp, a - perp, b + perp, b - perp] {
+        [a + perp, a - perp, b + perp, b - perp]
+    }
+
+    /// The stroke of the thick segment `(a, b, w)` (its corners) lies within `lo..hi`.
+    fn assert_stroke_inside(seg: (Vec2, Vec2, f32), lo: Vec2, hi: Vec2) {
+        for p in stroke_corners(seg) {
             assert!(p.cmpge(lo).all() && p.cmple(hi).all(), "{p:?}");
         }
     }
@@ -880,6 +1030,7 @@ mod tests {
             Shape::point(C),
             Shape::line(v(2.0, 2.0), C),
             Shape::rect(v(3.0, 2.0), C),
+            Shape::rounded_rect(v(3.0, 2.0), 0.8, C),
             Shape::circle(2.0, C),
             Shape::ellipse(v(3.0, 2.0), C),
             Shape::polygon(&l_shape(), C),
@@ -1016,12 +1167,14 @@ mod tests {
             Shape::point(C),
             Shape::line(v(2.0, 2.0), C),
             Shape::rect(v(3.0, 2.0), C),
+            Shape::rounded_rect(v(3.0, 2.0), 0.8, C),
             Shape::circle(2.0, C),
             Shape::ellipse(v(3.0, 2.0), C),
             Shape::polygon(&l_shape(), C),
             b.clone(),
             Shape::line(v(2.0, 2.0), C).with_thickness(1.5),
             Shape::rect(v(3.0, 2.0), C).with_thickness(1.5),
+            Shape::rounded_rect(v(3.0, 2.0), 0.8, C).with_thickness(1.5),
             Shape::polygon(&l_shape(), C).with_thickness(1.5),
             b.with_thickness(1.5),
             Shape::point(C).with_thickness(1.5),
@@ -1069,6 +1222,7 @@ mod tests {
         let cw: Vec<Vec2> = ccw.iter().rev().copied().collect();
         let shapes = [
             Shape::rect(v(3.0, 2.0), C),
+            Shape::rounded_rect(v(3.0, 2.0), 0.8, C),
             Shape::polygon(&ccw, C),
             Shape::polygon(&cw, C),
         ];
@@ -1399,5 +1553,289 @@ mod tests {
             assert_eq!(out.len(), 24);
         }
         assert_eq!(out.capacity(), cap);
+    }
+
+    #[test]
+    fn a_zero_or_nan_radius_rounded_rect_emits_exactly_the_rect_ops() {
+        let size = v(10.0, 6.0);
+        for radius in [0.0, -2.0, f32::NAN] {
+            for thickness in [None, Some(2.0)] {
+                let mut r = rounded(size, radius);
+                let mut rect = Shape::rect(size, C);
+                if let Some(t) = thickness {
+                    r = r.with_thickness(t);
+                    rect = rect.with_thickness(t);
+                }
+                for (pos, scale, rot) in [
+                    (Vec2::ZERO, Vec2::ONE, 0.0),
+                    (v(3.0, 4.0), v(2.0, 1.0), 30.0),
+                ] {
+                    assert_eq!(
+                        ops(&r, ShapeLayer::Outline, pos, scale, rot),
+                        ops(&rect, ShapeLayer::Outline, pos, scale, rot),
+                        "radius {radius} thickness {thickness:?} at {pos:?} {scale:?} {rot}"
+                    );
+                    assert_eq!(
+                        ops(&r, ShapeLayer::Fill, pos, scale, rot),
+                        ops(&rect, ShapeLayer::Fill, pos, scale, rot),
+                        "radius {radius} thickness {thickness:?} fill"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn a_radius_larger_than_half_the_short_side_is_clamped() {
+        let size = v(10.0, 6.0);
+        // min(|10|, |6|) / 2 = 3.
+        let clamped = rounded(size, 100.0);
+        let at_the_cap = rounded(size, 3.0);
+        assert_eq!(outline(&clamped), outline(&at_the_cap));
+        assert_eq!(fill(&clamped), fill(&at_the_cap));
+        // Every emitted outline vertex lies inside the rect bounds.
+        for &(a, b) in &lines(&outline(&clamped)) {
+            for p in [a, b] {
+                assert!(p.cmpge(Vec2::ZERO).all() && p.cmple(size).all(), "{p:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn a_hairline_rounded_rect_outline_is_a_closed_ring_of_36_edges_without_zero_length_ones() {
+        let l = lines(&outline(&rounded(v(10.0, 6.0), 2.0)));
+        assert_eq!(l.len(), 36);
+        for pair in l.windows(2) {
+            assert_eq!(pair[0].1, pair[1].0, "ring edges connect");
+        }
+        assert_eq!(l[35].1, l[0].0, "the ring closes on its first vertex");
+        assert!(l.iter().all(|&(a, b)| a != b), "no zero-length edge");
+        // The first vertex is the top-right arc's start, local (w - r, 0).
+        assert_eq!(l[0].0, v(8.0, 0.0));
+    }
+
+    #[test]
+    fn a_radius_equal_to_half_a_side_merges_the_vanishing_side() {
+        // r clamps to 4 / 2 = 2: the top and bottom sides vanish and their two
+        // tangent points each merge, leaving 36 - 2 = 34 vertices, still a
+        // closed ring with no zero-length edge.
+        let l = lines(&outline(&rounded(v(4.0, 8.0), 100.0)));
+        assert_eq!(l.len(), 34);
+        assert!(l.iter().all(|&(a, b)| a != b));
+        for pair in l.windows(2) {
+            assert_eq!(pair[0].1, pair[1].0);
+        }
+        assert_eq!(l[33].1, l[0].0);
+    }
+
+    #[test]
+    fn a_thick_rounded_rect_outline_emits_only_thick_lines_of_the_stroke_width() {
+        let s = rounded(v(10.0, 6.0), 2.0).with_thickness(2.0);
+        let o = outline(&s);
+        let t = thick_lines(&o);
+        assert_eq!(
+            t.len(),
+            o.len(),
+            "the thick outline emits ThickLine ops only"
+        );
+        assert_eq!(t.len(), 36);
+        assert!(t.iter().all(|&(_, _, w)| approx_eq(w, 2.0)));
+        // The path is the rounded rect inset by t / 2 = 1 per side: trimming
+        // the square caps off each segment lands inside the inset rect.
+        let inset = v(1.0, 1.0);
+        let shrunk_hi = v(10.0, 6.0) - inset;
+        for &(a, b, w) in &t {
+            let d = (b - a) / (b - a).length();
+            for p in [a + d * (w / 2.0), b - d * (w / 2.0)] {
+                assert!(
+                    p.cmpge(inset).all() && p.cmple(shrunk_hi).all(),
+                    "path point {p:?} outside the inset rect"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn a_thick_rounded_rect_with_a_radius_within_the_inset_stays_inside_the_bounds() {
+        let size = v(10.0, 6.0);
+        // radius 1 <= t / 2 = 1, so the inset corner radius is 0 and the thick
+        // path is the plain inset rect, exactly like a thick Rect.
+        let s = rounded(size, 1.0).with_thickness(2.0);
+        let t = thick_lines(&outline(&s));
+        assert_eq!(t.len(), 4);
+        for &seg in &t {
+            assert_stroke_inside(seg, Vec2::ZERO, size);
+        }
+    }
+
+    #[test]
+    fn a_thick_rounded_rect_with_arc_corners_stays_inside_the_bounds_up_to_0_15_width_of_caps() {
+        let size = v(100.0, 40.0);
+        let s = rounded(size, 8.0).with_thickness(2.0);
+        let t = thick_lines(&outline(&s));
+        assert_eq!(t.len(), 36);
+        assert!(t.iter().all(|&(_, _, w)| approx_eq(w, 2.0)));
+        // The four straight sides are axis-aligned and keep their whole stroke
+        // exactly inside the bounds.
+        let mut axis_aligned = 0;
+        for &(a, b, w) in &t {
+            let d = b - a;
+            if d.x == 0.0 || d.y == 0.0 {
+                axis_aligned += 1;
+                assert_stroke_inside((a, b, w), Vec2::ZERO, size);
+            }
+        }
+        assert_eq!(axis_aligned, 4);
+        // The corner-arc segments are not axis-aligned: their square caps can
+        // poke out of the bounds, but every stroke corner overshoots by at most
+        // 0.15 * width.
+        for &(a, b, w) in &t {
+            for p in stroke_corners((a, b, w)) {
+                let overshoot = (-p.x)
+                    .max(p.x - size.x)
+                    .max(-p.y)
+                    .max(p.y - size.y)
+                    .max(0.0);
+                assert!(
+                    overshoot <= 0.15 * w,
+                    "corner {p:?} overshoots by {overshoot} > {}",
+                    0.15 * w
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn a_90_degree_rotation_maps_every_hairline_rounded_rect_vertex_through_the_transform() {
+        let size = v(10.0, 6.0);
+        let s = rounded(size, 2.0);
+        let (pos, scale, rot) = (Vec2::ZERO, Vec2::ONE, 90.0);
+        let l = lines(&ops(&s, ShapeLayer::Outline, pos, scale, rot));
+        let poly = rounded_rect_polygon(size, rounded_rect_radius(size, 2.0));
+        let xf = Transform::new(&s, pos, scale, rot);
+        assert_eq!(l.len(), poly.len());
+        // The first ring vertex is local (w - r, 0) = (8, 0) and lands exactly
+        // where Transform::point puts it.
+        assert!(vec2_approx_eq(l[0].0, xf.point(v(8.0, 0.0))));
+        for (i, &(a, b)) in l.iter().enumerate() {
+            assert!(vec2_approx_eq(a, xf.point(poly[i])), "vertex {i}: {a:?}");
+            assert!(
+                vec2_approx_eq(b, xf.point(poly[(i + 1) % poly.len()])),
+                "edge {i}: {b:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_filled_rounded_rect_with_an_outline_color_draws_fill_then_outline() {
+        let blue = Color::BLUE;
+        let s = rounded(v(4.0, 3.0), 1.0).filled().with_outline_color(blue);
+        assert_eq!(
+            shape_layers(&s),
+            [
+                Some((ShapeLayer::Fill, C)),
+                Some((ShapeLayer::Outline, blue))
+            ]
+        );
+        assert_eq!(
+            shape_layers(&rounded(v(4.0, 3.0), 1.0)),
+            [Some((ShapeLayer::Outline, C)), None]
+        );
+    }
+
+    #[test]
+    fn every_rounded_rect_vertex_stays_inside_the_cull_box_under_rotation_scale_and_mirroring() {
+        for size in [v(10.0, 6.0), v(-10.0, 6.0), v(10.0, -6.0)] {
+            let s = rounded(size, 2.0).with_origin(v(1.0, 2.0));
+            let pos = v(5.0, 5.0);
+            for (scale, rot) in [
+                (Vec2::ONE, 0.0),
+                (Vec2::ONE, 90.0),
+                (v(2.0, 3.0), 33.0),
+                (v(-2.0, -1.0), 20.0),
+                (v(1.0, -3.0), 0.0),
+            ] {
+                let (min, max) = shape_cull_bounds(&s, pos, scale, rot);
+                assert!(min.x <= max.x && min.y <= max.y, "{size:?} {scale:?} {rot}");
+                for layer in [ShapeLayer::Fill, ShapeLayer::Outline] {
+                    let o = ops(&s, layer, pos, scale, rot);
+                    assert!(!o.is_empty(), "{size:?} {scale:?} {rot} {layer:?}");
+                    for op in o {
+                        let pts = match op {
+                            DrawOp::Triangle { a, b, c } => [a, b, c],
+                            DrawOp::Line { a, b } => [a, b, b],
+                            other => panic!("unexpected op {other:?}"),
+                        };
+                        for p in pts {
+                            assert!(
+                                p.cmpge(min).all() && p.cmple(max).all(),
+                                "{p:?} outside {min:?}..{max:?} at {size:?} {scale:?} {rot}"
+                            );
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn a_rounded_rect_gets_the_same_cull_box_as_a_rect() {
+        let s = rounded(v(10.0, 6.0), 2.0);
+        let r = Shape::rect(v(10.0, 6.0), C);
+        for (pos, scale, rot) in [
+            (Vec2::ZERO, Vec2::ONE, 0.0),
+            (v(5.0, 5.0), v(2.0, 3.0), 33.0),
+            (v(5.0, 5.0), v(-2.0, -1.0), 20.0),
+        ] {
+            assert_eq!(
+                shape_cull_bounds(&s, pos, scale, rot),
+                shape_cull_bounds(&r, pos, scale, rot)
+            );
+        }
+    }
+
+    #[test]
+    fn rotation_90_degrees_maps_the_rounded_rect_polygon_vertices() {
+        let l = lines(&ops(
+            &rounded(v(10.0, 6.0), 2.0),
+            ShapeLayer::Outline,
+            Vec2::ZERO,
+            Vec2::ONE,
+            90.0,
+        ));
+        assert_eq!(l.len(), 36);
+        // (x, y) -> (-y, x) at 90 degrees clockwise on the y-down screen: the
+        // top-right arc's start (w - r, 0) = (8, 0) lands at (0, 8) ...
+        assert!(vec2_approx_eq(l[0].0, v(0.0, 8.0)));
+        // ... and its end (w, r) = (10, 2) lands at (-2, 10).
+        assert!(vec2_approx_eq(l[8].0, v(-2.0, 10.0)));
+    }
+
+    #[test]
+    fn a_negative_size_mirrors_the_rounded_rect_polygon_through_the_sign() {
+        let pos = lines(&outline(&rounded(v(10.0, 6.0), 2.0)));
+        let neg = lines(&outline(&rounded(v(-10.0, 6.0), 2.0)));
+        assert_eq!(pos.len(), neg.len());
+        for (&(a, b), &(na, nb)) in pos.iter().zip(&neg) {
+            assert!(vec2_approx_eq(na, v(-a.x, a.y)), "{na:?} vs {a:?}");
+            assert!(vec2_approx_eq(nb, v(-b.x, b.y)), "{nb:?} vs {b:?}");
+        }
+    }
+
+    #[test]
+    fn reusing_the_rounded_rect_buffer_does_not_grow_its_capacity() {
+        let s = rounded(v(10.0, 6.0), 2.0);
+        for layer in [ShapeLayer::Fill, ShapeLayer::Outline] {
+            let mut out = Vec::new();
+            shape_ops(&s, layer, Vec2::ZERO, Vec2::ONE, 0.0, &mut out);
+            let (cap, len) = (out.capacity(), out.len());
+            assert!(len > 0);
+            for _ in 0..3 {
+                out.clear();
+                shape_ops(&s, layer, Vec2::ZERO, Vec2::ONE, 0.0, &mut out);
+                assert_eq!(out.len(), len);
+            }
+            assert_eq!(out.capacity(), cap);
+        }
     }
 }
