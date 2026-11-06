@@ -122,9 +122,14 @@ pub(super) fn draw_shape_ops(d: &mut impl RaylibDraw, ops: &[DrawOp], color: Col
 }
 
 /// Whether any part of the shape (or its shadow) can overlap the view box
-/// `view_min..view_max`, with a 1 px margin for the hairline plus half the
-/// line `thickness` scaled by `max(|scale.x|, |scale.y|)` plus the shadow
-/// offset. Conservative for every shape kind.
+/// `view_min..view_max`, with a 1 px margin for the hairline plus the shadow
+/// offset plus room for a thick stroke. A thick segment is drawn as a
+/// square-capped `ThickLine` of width `thickness * mean(|scale.x|, |scale.y|)`:
+/// a cap corner lies `(width / 2) * (|cos theta| + |sin theta|)` beyond the
+/// path AABB per axis, at most `width / sqrt(2)` (at 45 degrees). The margin
+/// adds `thickness * max(|scale.x|, |scale.y|) * 1/sqrt(2)` per axis, which
+/// covers that worst case because `mean(|scale.x|, |scale.y|) <= max(...)`.
+/// Conservative for every shape kind.
 pub(super) fn shape_in_view(
     shape: &Shape,
     place: ShapePlacement,
@@ -133,12 +138,11 @@ pub(super) fn shape_in_view(
     view_max: Vector2,
 ) -> bool {
     let (min, max) = shape_cull_bounds(shape, place.pos, place.scale, place.rotation_degrees);
-    let half_thickness = shape.effective_thickness().map_or(0.0, |t| {
-        t / 2.0 * place.scale.x.abs().max(place.scale.y.abs())
+    let cap_margin = shape.effective_thickness().map_or(0.0, |t| {
+        t * place.scale.x.abs().max(place.scale.y.abs()) * std::f32::consts::FRAC_1_SQRT_2
     });
-    let margin = Vec2::ONE
-        + maybe_shadow.map_or(Vec2::ZERO, |s| s.offset.abs())
-        + Vec2::splat(half_thickness);
+    let margin =
+        Vec2::ONE + maybe_shadow.map_or(Vec2::ZERO, |s| s.offset.abs()) + Vec2::splat(cap_margin);
     bounds_overlap_view(
         vec2_to_raylib(min - margin),
         vec2_to_raylib(max + margin),
@@ -351,20 +355,45 @@ mod tests {
     fn the_view_margin_grows_with_the_thickness() {
         let line = Shape::line(Vec2::new(0.0, 10.0), RED);
         let thick = |t: f32| line.clone().with_thickness(t);
-        // At x = 103 the hairline (margin 1) is out of the 0..100 view.
-        let place = ShapePlacement::at(Vec2::new(103.0, 0.0));
+        // At x = 105 the hairline (margin 1) is out of the 0..100 view.
+        let place = ShapePlacement::at(Vec2::new(105.0, 0.0));
         assert!(!visible(&line, place, None));
-        // Thickness 6 adds a margin of 6 / 2 = 3: 103 - (1 + 3) = 99 < 100, visible again.
-        assert!(visible(&thick(6.0), place, None));
+        // Thickness 10 adds a margin of 10 / sqrt(2) ≈ 7.07:
+        // 105 - (1 + 7.07) = 96.93 < 100, visible again.
+        assert!(visible(&thick(10.0), place, None));
         // The added margin scales with max(|scale.x|, |scale.y|): at scale (3, 1),
-        // thickness 2 adds 2 / 2 * 3 = 3 on top of the 1 px margin.
+        // thickness 1 adds 1 * 3 / sqrt(2) ≈ 2.12 on top of the 1 px margin
+        // (105 - 3.12 = 101.88 > 100, culled), while thickness 3 adds
+        // 3 * 3 / sqrt(2) ≈ 6.36 (105 - 7.36 = 97.64 < 100, visible).
         let scaled = ShapePlacement {
-            pos: Vec2::new(103.0, 0.0),
+            pos: Vec2::new(105.0, 0.0),
             scale: Vec2::new(3.0, 1.0),
             rotation_degrees: 0.0,
         };
         assert!(!visible(&thick(1.0), scaled, None));
-        assert!(visible(&thick(2.0), scaled, None));
+        assert!(visible(&thick(3.0), scaled, None));
+    }
+
+    #[test]
+    fn the_square_cap_corner_of_a_diagonal_thick_line_is_not_culled() {
+        // A thick segment is drawn with square caps, so a cap corner lies
+        // (width / 2) * (|cos theta| + |sin theta|) beyond the path AABB per
+        // axis; at 45 degrees that is width / sqrt(2), i.e. 10 / sqrt(2) ≈ 7.07 here.
+        let line = Shape::line(Vec2::new(10.0, 10.0), RED).with_thickness(10.0);
+        // The path AABB starts at x = 106.5 and the cap corner reaches
+        // 106.5 - 7.07 = 99.43 < 100, so the line is visible even though a
+        // margin of just 1 + width / 2 = 6 reaches only 106.5 - 6 = 100.5.
+        assert!(visible(
+            &line,
+            ShapePlacement::at(Vec2::new(106.5, 0.0)),
+            None
+        ));
+        // At x = 120 even the cap corner is outside: 120 - 7.07 > 100.
+        assert!(!visible(
+            &line,
+            ShapePlacement::at(Vec2::new(120.0, 0.0)),
+            None
+        ));
     }
 
     #[test]
