@@ -123,6 +123,24 @@ pub enum ShapeKind {
     Polygon(Polygon),
 }
 
+impl ShapeKind {
+    /// Whether this kind has no interior: a `Point`, a `Line` and a `Bezier` draw
+    /// only an outline, and `filled` and `outline_color` do not affect them.
+    ///
+    /// The match has no wildcard arm, so adding a kind fails to compile until it
+    /// is classified here.
+    pub fn is_outline_only(&self) -> bool {
+        match self {
+            ShapeKind::Point | ShapeKind::Line { .. } | ShapeKind::Bezier { .. } => true,
+            ShapeKind::Rect { .. }
+            | ShapeKind::RoundedRect { .. }
+            | ShapeKind::Circle { .. }
+            | ShapeKind::Ellipse { .. }
+            | ShapeKind::Polygon(_) => false,
+        }
+    }
+}
+
 /// A polygon's vertices in local coordinates, shared cheaply between clones.
 ///
 /// The fill triangulation is computed once in [`Polygon::new`]. Two polygons

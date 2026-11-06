@@ -15,7 +15,9 @@ use aberred_core::components::shape::Shape;
 use aberred_core::components::tint::Tint;
 use aberred_core::components::world_position::WorldPosition;
 use aberred_core::math::Vec2;
-use aberred_core::systems::shape_geometry::{DrawOp, shape_cull_bounds, shape_layers, shape_ops};
+use aberred_core::systems::shape_geometry::{
+    DrawOp, shape_cull_bounds, shape_layers, shape_ops, stroke_cull_margin,
+};
 
 /// Where and how a shape is drawn: the transform handed to `shape_ops`.
 #[derive(Clone, Copy)]
@@ -122,13 +124,8 @@ pub(super) fn draw_shape_ops(d: &mut impl RaylibDraw, ops: &[DrawOp], color: Col
 }
 
 /// Whether any part of the shape (or its shadow) can overlap the view box
-/// `view_min..view_max`, with a 1 px margin for the hairline plus the shadow
-/// offset plus room for a thick stroke. A thick segment is drawn as a
-/// square-capped `ThickLine` of width `thickness * mean(|scale.x|, |scale.y|)`:
-/// a cap corner lies `(width / 2) * (|cos theta| + |sin theta|)` beyond the
-/// path AABB per axis, at most `width / sqrt(2)` (at 45 degrees). The margin
-/// adds `thickness * max(|scale.x|, |scale.y|) * 1/sqrt(2)` per axis, which
-/// covers that worst case because `mean(|scale.x|, |scale.y|) <= max(...)`.
+/// `view_min..view_max`, with a 1 px margin for the hairline, the shadow offset
+/// and the reach of a thick stroke past the path (`stroke_cull_margin`).
 /// Conservative for every shape kind.
 pub(super) fn shape_in_view(
     shape: &Shape,
@@ -138,11 +135,9 @@ pub(super) fn shape_in_view(
     view_max: Vector2,
 ) -> bool {
     let (min, max) = shape_cull_bounds(shape, place.pos, place.scale, place.rotation_degrees);
-    let cap_margin = shape.effective_thickness().map_or(0.0, |t| {
-        t * place.scale.x.abs().max(place.scale.y.abs()) * std::f32::consts::FRAC_1_SQRT_2
-    });
-    let margin =
-        Vec2::ONE + maybe_shadow.map_or(Vec2::ZERO, |s| s.offset.abs()) + Vec2::splat(cap_margin);
+    let margin = Vec2::ONE
+        + maybe_shadow.map_or(Vec2::ZERO, |s| s.offset.abs())
+        + Vec2::splat(stroke_cull_margin(shape, place.scale));
     bounds_overlap_view(
         vec2_to_raylib(min - margin),
         vec2_to_raylib(max + margin),
@@ -361,17 +356,18 @@ mod tests {
         // Thickness 10 adds a margin of 10 / sqrt(2) ≈ 7.07:
         // 105 - (1 + 7.07) = 96.93 < 100, visible again.
         assert!(visible(&thick(10.0), place, None));
-        // The added margin scales with max(|scale.x|, |scale.y|): at scale (3, 1),
-        // thickness 1 adds 1 * 3 / sqrt(2) ≈ 2.12 on top of the 1 px margin
-        // (105 - 3.12 = 101.88 > 100, culled), while thickness 3 adds
-        // 3 * 3 / sqrt(2) ≈ 6.36 (105 - 7.36 = 97.64 < 100, visible).
+        // The margin follows the drawn width, thickness * mean(|scale.x|, |scale.y|):
+        // at scale (3, 1) that is 2 * thickness. Thickness 1 draws 2 wide and adds
+        // 2 / sqrt(2) ≈ 1.41 on top of the 1 px margin (105 - 2.41 = 102.59 > 100,
+        // culled), while thickness 4 draws 8 wide and adds 8 / sqrt(2) ≈ 5.66
+        // (105 - 6.66 = 98.34 < 100, visible).
         let scaled = ShapePlacement {
             pos: Vec2::new(105.0, 0.0),
             scale: Vec2::new(3.0, 1.0),
             rotation_degrees: 0.0,
         };
         assert!(!visible(&thick(1.0), scaled, None));
-        assert!(visible(&thick(3.0), scaled, None));
+        assert!(visible(&thick(4.0), scaled, None));
     }
 
     #[test]

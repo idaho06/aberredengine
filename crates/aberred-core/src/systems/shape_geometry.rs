@@ -87,14 +87,13 @@ pub enum ShapeLayer {
 /// in `color`. A filled shape draws a `Fill` layer in `color`, then an `Outline`
 /// layer in `outline_color` when that is set.
 pub fn shape_layers(shape: &Shape) -> [Option<(ShapeLayer, Color)>; 2] {
-    match (&shape.kind, shape.filled) {
-        (ShapeKind::Point | ShapeKind::Line { .. } | ShapeKind::Bezier { .. }, _) | (_, false) => {
-            [Some((ShapeLayer::Outline, shape.color)), None]
-        }
-        _ => [
+    if shape.kind.is_outline_only() || !shape.filled {
+        [Some((ShapeLayer::Outline, shape.color)), None]
+    } else {
+        [
             Some((ShapeLayer::Fill, shape.color)),
             shape.outline_color.map(|c| (ShapeLayer::Outline, c)),
-        ],
+        ]
     }
 }
 
@@ -216,7 +215,7 @@ pub fn shape_ops(
 ) {
     let xf = Transform::new(shape, pos, scale, rotation_degrees);
     let fill = layer == ShapeLayer::Fill;
-    let stroke = stroke_of(shape, scale);
+    let stroke = Stroke::of(shape, scale);
     match &shape.kind {
         ShapeKind::Point => {
             if !fill {
@@ -266,10 +265,10 @@ pub fn shape_ops(
                 // stay within the rect bounds; the square caps of the corner
                 // arcs can poke out of them by a small fraction of the width.
                 let (poly, offset) = match stroke {
-                    Some((t, _)) => {
-                        let inset = half_stroke_inset(*size, t);
+                    Some(Stroke { local, .. }) => {
+                        let inset = half_stroke_inset(*size, local);
                         (
-                            rounded_rect_polygon(*size - inset * 2.0, (r - t / 2.0).max(0.0)),
+                            rounded_rect_polygon(*size - inset * 2.0, (r - local / 2.0).max(0.0)),
                             inset,
                         )
                     }
@@ -316,7 +315,7 @@ pub fn shape_ops(
 /// is in degrees, clockwise on the y-down screen. A point has `min == max`, and
 /// a polygon without vertices gets the degenerate box at `pos`. The box excludes
 /// any shadow offset and the line width (hairline or `thickness`); a culling
-/// caller adds both.
+/// caller adds both, the stroke part through [`stroke_cull_margin`].
 pub fn shape_cull_bounds(
     shape: &Shape,
     pos: Vec2,
@@ -368,7 +367,7 @@ fn half_stroke_inset(size: Vec2, t: f32) -> Vec2 {
 fn push_rect_ops(
     out: &mut Vec<DrawOp>,
     fill: bool,
-    stroke: Option<(f32, f32)>,
+    stroke: Option<Stroke>,
     xf: &Transform,
     size: Vec2,
 ) {
@@ -376,10 +375,10 @@ fn push_rect_ops(
         let c = xf.rect_corners(size);
         push_triangle(out, c[0], c[1], c[2]);
         push_triangle(out, c[0], c[2], c[3]);
-    } else if let Some((t, w)) = stroke {
-        // The stroke lies inside the rect bounds: the path is the rect inset
-        // by t / 2 per side and the caps extend it by w / 2 along each edge.
-        let inset = half_stroke_inset(size, t);
+    } else if let Some(Stroke { local, width }) = stroke {
+        // The path is the rect inset by `local / 2` per side and the caps
+        // extend it by `width / 2` along each edge.
+        let inset = half_stroke_inset(size, local);
         let far = size - inset;
         let corners = [
             Vec2::new(inset.x, inset.y),
@@ -389,7 +388,7 @@ fn push_rect_ops(
         ]
         .map(|p| xf.point(p));
         for i in 0..4 {
-            push_thick_line(out, corners[i], corners[(i + 1) % 4], w);
+            push_thick_line(out, corners[i], corners[(i + 1) % 4], width);
         }
     } else {
         out.extend(
@@ -451,20 +450,22 @@ fn rounded_rect_polygon(size: Vec2, radius: f32) -> Vec<Vec2> {
             Vec2::new(0.0, -1.0),
         ),
     ];
+    // The interior directions of the first corner's arc, from straight up to
+    // straight right. Each following corner is the previous one turned a quarter
+    // clockwise, `(x, y) -> (-y, x)` on the y-down screen, so the trigonometry
+    // runs once per interior point, not once per corner.
+    let mut dirs: [Vec2; ROUNDED_RECT_ARC_SEGMENTS - 1] = std::array::from_fn(|k| {
+        let step = 90.0 * (k + 1) as f32 / ROUNDED_RECT_ARC_SEGMENTS as f32;
+        Vec2::from_angle((step - 90.0).to_radians())
+    });
     let mut poly = Vec::with_capacity(4 * (ROUNDED_RECT_ARC_SEGMENTS + 1));
-    for (i, (center, u0, u1)) in corners.iter().enumerate() {
-        let start = 90.0 * i as f32 - 90.0;
-        for j in 0..=ROUNDED_RECT_ARC_SEGMENTS {
-            let p = if j == 0 {
-                center + radius * *u0
-            } else if j == ROUNDED_RECT_ARC_SEGMENTS {
-                center + radius * *u1
-            } else {
-                let a = (start + 90.0 * j as f32 / ROUNDED_RECT_ARC_SEGMENTS as f32).to_radians();
-                center + radius * Vec2::new(a.cos(), a.sin())
-            };
-            poly.push(p * size.signum());
+    for (center, u0, u1) in corners {
+        poly.push((center + radius * u0) * size.signum());
+        for dir in dirs {
+            poly.push((center + radius * dir) * size.signum());
         }
+        poly.push((center + radius * u1) * size.signum());
+        dirs = dirs.map(|d| Vec2::new(-d.y, d.x));
     }
     // Merge tangent points that coincide when the radius equals half of a side.
     poly.dedup();
@@ -500,21 +501,45 @@ fn push_ring(
     }
 }
 
-/// The stroke `shape` draws with at `scale` when its `thickness` is positive:
-/// `(local thickness, width in the target space)`, the width being the local
-/// thickness times the mean of `|scale.x|`, `|scale.y|`. `None` keeps the
-/// 1 px hairline.
-fn stroke_of(shape: &Shape, scale: Vec2) -> Option<(f32, f32)> {
-    shape
-        .effective_thickness()
-        .map(|t| (t, t * (scale.x.abs() + scale.y.abs()) / 2.0))
+/// A thick stroke: the shape's positive `thickness` in local units and the
+/// width it draws with in the target space.
+#[derive(Clone, Copy)]
+struct Stroke {
+    /// `thickness` in local units; a thick `Rect` or `RoundedRect` outline is inset by half of it.
+    local: f32,
+    /// `local` times the mean of `|scale.x|`, `|scale.y|`: the drawn width.
+    width: f32,
+}
+
+impl Stroke {
+    /// The stroke `shape` draws with at `scale`, or `None` for the 1 px hairline
+    /// (no positive `thickness`).
+    fn of(shape: &Shape, scale: Vec2) -> Option<Self> {
+        shape.effective_thickness().map(|local| Self {
+            local,
+            width: local * (scale.x.abs() + scale.y.abs()) / 2.0,
+        })
+    }
+}
+
+/// How far the strokes of `shape` reach beyond the box of [`shape_cull_bounds`]
+/// at `scale`: `0` for a hairline.
+///
+/// A segment is a square-capped [`DrawOp::ThickLine`] of the stroke width `w`, so
+/// a cap corner lies `(w / 2) * (|cos θ| + |sin θ|)` beyond its end points per
+/// axis, which is at most `w / sqrt(2)` (a 45-degree segment). Every outline of
+/// every kind stays within that reach of the cull box: its path lies in the box,
+/// and a thick `Rect` or `RoundedRect` outline pokes out of it by at most `w / 2`.
+/// A culling caller adds this to its own margin.
+pub fn stroke_cull_margin(shape: &Shape, scale: Vec2) -> f32 {
+    Stroke::of(shape, scale).map_or(0.0, |s| s.width * std::f32::consts::FRAC_1_SQRT_2)
 }
 
 /// Appends one outline segment `a -> b`: a square-capped [`DrawOp::ThickLine`]
 /// of the stroke's width when there is one, else a 1 px [`DrawOp::Line`].
-fn push_segment(out: &mut Vec<DrawOp>, a: Vec2, b: Vec2, stroke: Option<(f32, f32)>) {
+fn push_segment(out: &mut Vec<DrawOp>, a: Vec2, b: Vec2, stroke: Option<Stroke>) {
     match stroke {
-        Some((_, w)) => push_thick_line(out, a, b, w),
+        Some(s) => push_thick_line(out, a, b, s.width),
         None => out.push(DrawOp::Line { a, b }),
     }
 }
@@ -546,7 +571,7 @@ const BEZIER_SEGMENTS: usize = 24;
 /// a 1 px [`DrawOp::Line`], whose joins can show hairline gaps. The first
 /// point is `p[0]` and the last is `p[3]`, taken straight from the control
 /// points, so they equal the transformed start and `to` exactly.
-fn push_bezier(out: &mut Vec<DrawOp>, p: [Vec2; 4], stroke: Option<(f32, f32)>) {
+fn push_bezier(out: &mut Vec<DrawOp>, p: [Vec2; 4], stroke: Option<Stroke>) {
     let mut prev = p[0];
     for i in 1..=BEZIER_SEGMENTS {
         let next = if i == BEZIER_SEGMENTS {
@@ -646,6 +671,20 @@ mod tests {
                 _ => None,
             })
             .collect()
+    }
+
+    /// The edges form one closed ring: each ends where the next starts, the last
+    /// ends on the first's start, and none has zero length.
+    fn assert_closed_ring(edges: &[(Vec2, Vec2)]) {
+        for pair in edges.windows(2) {
+            assert_eq!(pair[0].1, pair[1].0, "ring edges connect");
+        }
+        assert_eq!(
+            edges.last().unwrap().1,
+            edges[0].0,
+            "the ring closes on its first vertex"
+        );
+        assert!(edges.iter().all(|&(a, b)| a != b), "no zero-length edge");
     }
 
     /// The four corners of the stroke of the thick segment `(a, b, w)`: its
@@ -1609,11 +1648,7 @@ mod tests {
     fn a_hairline_rounded_rect_outline_is_a_closed_ring_of_36_edges_without_zero_length_ones() {
         let l = lines(&outline(&rounded(v(10.0, 6.0), 2.0)));
         assert_eq!(l.len(), 36);
-        for pair in l.windows(2) {
-            assert_eq!(pair[0].1, pair[1].0, "ring edges connect");
-        }
-        assert_eq!(l[35].1, l[0].0, "the ring closes on its first vertex");
-        assert!(l.iter().all(|&(a, b)| a != b), "no zero-length edge");
+        assert_closed_ring(&l);
         // The first vertex is the top-right arc's start, local (w - r, 0).
         assert_eq!(l[0].0, v(8.0, 0.0));
     }
@@ -1625,11 +1660,7 @@ mod tests {
         // closed ring with no zero-length edge.
         let l = lines(&outline(&rounded(v(4.0, 8.0), 100.0)));
         assert_eq!(l.len(), 34);
-        assert!(l.iter().all(|&(a, b)| a != b));
-        for pair in l.windows(2) {
-            assert_eq!(pair[0].1, pair[1].0);
-        }
-        assert_eq!(l[33].1, l[0].0);
+        assert_closed_ring(&l);
     }
 
     #[test]
@@ -1718,9 +1749,11 @@ mod tests {
         let poly = rounded_rect_polygon(size, rounded_rect_radius(size, 2.0));
         let xf = Transform::new(&s, pos, scale, rot);
         assert_eq!(l.len(), poly.len());
-        // The first ring vertex is local (w - r, 0) = (8, 0) and lands exactly
-        // where Transform::point puts it.
-        assert!(vec2_approx_eq(l[0].0, xf.point(v(8.0, 0.0))));
+        // (x, y) -> (-y, x) at 90 degrees clockwise on the y-down screen: the
+        // top-right arc's start (w - r, 0) = (8, 0) lands at (0, 8) ...
+        assert!(vec2_approx_eq(l[0].0, v(0.0, 8.0)));
+        // ... and its end (w, r) = (10, 2) lands at (-2, 10).
+        assert!(vec2_approx_eq(l[8].0, v(-2.0, 10.0)));
         for (i, &(a, b)) in l.iter().enumerate() {
             assert!(vec2_approx_eq(a, xf.point(poly[i])), "vertex {i}: {a:?}");
             assert!(
@@ -1799,23 +1832,6 @@ mod tests {
     }
 
     #[test]
-    fn rotation_90_degrees_maps_the_rounded_rect_polygon_vertices() {
-        let l = lines(&ops(
-            &rounded(v(10.0, 6.0), 2.0),
-            ShapeLayer::Outline,
-            Vec2::ZERO,
-            Vec2::ONE,
-            90.0,
-        ));
-        assert_eq!(l.len(), 36);
-        // (x, y) -> (-y, x) at 90 degrees clockwise on the y-down screen: the
-        // top-right arc's start (w - r, 0) = (8, 0) lands at (0, 8) ...
-        assert!(vec2_approx_eq(l[0].0, v(0.0, 8.0)));
-        // ... and its end (w, r) = (10, 2) lands at (-2, 10).
-        assert!(vec2_approx_eq(l[8].0, v(-2.0, 10.0)));
-    }
-
-    #[test]
     fn a_negative_size_mirrors_the_rounded_rect_polygon_through_the_sign() {
         let pos = lines(&outline(&rounded(v(10.0, 6.0), 2.0)));
         let neg = lines(&outline(&rounded(v(-10.0, 6.0), 2.0)));
@@ -1840,6 +1856,54 @@ mod tests {
                 assert_eq!(out.len(), len);
             }
             assert_eq!(out.capacity(), cap);
+        }
+    }
+
+    #[test]
+    fn the_stroke_cull_margin_is_zero_for_a_hairline_and_the_cap_reach_for_a_thick_stroke() {
+        let line = Shape::line(v(5.0, 5.0), C);
+        assert_eq!(stroke_cull_margin(&line, Vec2::ONE), 0.0);
+        let thick = line.with_thickness(10.0);
+        // The stroke is 10 wide: a 45-degree cap corner reaches 10 / sqrt(2).
+        assert!(approx_eq(
+            stroke_cull_margin(&thick, Vec2::ONE),
+            10.0 / 2.0_f32.sqrt()
+        ));
+        // The width follows the mean scale: at (3, 1) it is 2 * 10 = 20.
+        assert!(approx_eq(
+            stroke_cull_margin(&thick, v(3.0, 1.0)),
+            20.0 / 2.0_f32.sqrt()
+        ));
+    }
+
+    #[test]
+    fn the_stroke_cull_margin_reaches_every_stroke_corner_of_every_thick_kind() {
+        let shapes = [
+            Shape::line(v(10.0, 10.0), C).with_thickness(6.0),
+            bezier(v(2.0, 8.0), v(9.0, -1.0), v(6.0, 5.0)).with_thickness(5.0),
+            Shape::polygon(&l_shape(), C).with_thickness(4.0),
+            Shape::rect(v(10.0, 6.0), C).with_thickness(4.0),
+            rounded(v(10.0, 6.0), 2.0).with_thickness(3.0),
+        ];
+        let pos = v(5.0, 5.0);
+        for s in &shapes {
+            for (scale, rot) in [
+                (Vec2::ONE, 0.0),
+                (Vec2::ONE, 45.0),
+                (v(3.0, 1.0), 30.0),
+                (v(-2.0, 0.5), 70.0),
+            ] {
+                let (min, max) = shape_cull_bounds(s, pos, scale, rot);
+                let reach = Vec2::splat(stroke_cull_margin(s, scale) + 1e-3);
+                for seg in thick_lines(&ops(s, ShapeLayer::Outline, pos, scale, rot)) {
+                    for p in stroke_corners(seg) {
+                        assert!(
+                            p.cmpge(min - reach).all() && p.cmple(max + reach).all(),
+                            "{p:?} outside {min:?}..{max:?} + {reach:?} for {s:?} at {scale:?} {rot}"
+                        );
+                    }
+                }
+            }
         }
     }
 }
