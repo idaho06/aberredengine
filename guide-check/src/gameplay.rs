@@ -225,6 +225,47 @@ mod dialogues {
         } // GLUE
     }
 
+    // Placeholders
+    mod placeholders {
+        use aberredengine::prelude::*;
+
+        #[derive(Component)]
+        struct DialogueBox;
+
+        // Registered with `EngineBuilder::add_system`; runs once per sim tick
+        fn show_dialogue(
+            runners: Query<(&DialogueRunner, Option<&Signals>)>,
+            world: Res<WorldSignals>,
+            mut boxes: Query<&mut DynamicText, With<DialogueBox>>,
+        ) {
+            let Ok(mut dialogue_box) = boxes.single_mut() else {
+                return;
+            };
+            let Some((runner, stock)) = runners.iter().next() else {
+                return;
+            };
+            let mut shown = String::new();
+            if let Some(speaker) = runner.speaker() {
+                shown.push_str(&format_signal_text(speaker, &*world, stock));
+                shown.push_str(": ");
+            }
+            if let Some(text) = runner.text() {
+                shown.push_str(&format_signal_text(text, &*world, stock));
+            }
+            for choice in runner.choices() {
+                let label = format_signal_text(choice.text, &*world, stock);
+                shown.push_str(&format!("\n{}. {label}", choice.index + 1));
+            }
+            if *dialogue_box.text != *shown {
+                dialogue_box.set_text(&shown);
+            }
+        }
+
+        fn register(builder: EngineBuilder) -> EngineBuilder { // GLUE
+            builder.add_system(show_dialogue) // GLUE
+        } // GLUE
+    }
+
     #[cfg(test)]
     mod tests {
         /// Body of the first ```json fence after the `### Dialogues` heading of

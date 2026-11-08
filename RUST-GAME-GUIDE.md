@@ -1913,7 +1913,7 @@ Lua phase callbacks (`:with_lua_phase_entered/exited/update`) run on this same `
 
 ### Dialogues
 
-**Source:** `aberred-core/src/components/dialogue.rs`, `aberred-core/src/systems/dialogue.rs`, `aberred-core/src/events/dialogue.rs`, `aberred-core/src/resources/dialogue_builder.rs`, `aberred-core/src/resources/dialogue_def.rs`, `aberred-core/src/resources/dialogue_tree.rs`, `aberred-core/src/resources/dialogue_store.rs`
+**Source:** `aberred-core/src/components/dialogue.rs`, `aberred-core/src/systems/dialogue.rs`, `aberred-core/src/events/dialogue.rs`, `aberred-core/src/resources/dialogue_builder.rs`, `aberred-core/src/resources/dialogue_def.rs`, `aberred-core/src/resources/dialogue_tree.rs`, `aberred-core/src/resources/dialogue_store.rs`, `aberred-core/src/resources/signal_text.rs`
 
 A dialogue is a graph of named nodes — loops and joins are legal. Each node shows a line (an optional speaker, a `text`, and opaque `labels`) and waits for the player. The engine renders nothing: your game reads the `DialogueRunner` and draws the conversation itself.
 
@@ -1979,7 +1979,7 @@ fn setup(mut dialogues: ResMut<DialogueStore>) -> Result {
 
 A choice whose `next` is absent ends the conversation. The optional fields (`speaker`, `labels`, `on_enter`, `when`, `effects`, `next`, `choices`) may be omitted.
 
-**Validation.** `build()` and `load_dialogue` report the first error they find: a missing start node, a duplicate node id, an unknown `next` target, a node with both `next` and `choices`, or an empty `choices` list. A node no path reaches logs a warning and still builds.
+**Validation.** `build()` and `load_dialogue` report the first error they find: a missing start node, a duplicate node id, an unknown `next` target, a node with both `next` and `choices`, an empty `choices` list, or a malformed placeholder (see **Placeholders** below) in a `text`, `speaker` or choice `text` (`DialogueError::BadPlaceholder`). A node no path reaches logs a warning and still builds.
 
 **Conditions and effects.** A choice can carry a `when` condition that locks it and `effects` that run when it is picked; a node can carry `on_enter` effects. Conditions evaluate read-only against `WorldSignals`; effects write to it, so `SignalBinding` text updates as for any other writer.
 
@@ -2079,6 +2079,59 @@ fn on_dialogue_ended(ev: On<DialogueEnded>, mut commands: Commands) {
 
 `DialogueNodeEntered { entity, node, previous, labels }`, `DialogueChoiceSelected { entity, node, index, text, labels }` and `DialogueEnded { entity, node, reason }` are `EntityEvent`s targeted at the runner entity, so handle them with `.observe(handler)` on the runner or one global `add_observer`. `previous` is `None` for the start node, so `DialogueNodeEntered` doubles as "dialogue started"; `DialogueChoiceSelected` fires before the target's `DialogueNodeEntered`; `DialogueEnded` carries `DialogueEndReason::{Completed, Cancelled, NoChoices}`, with `node` the last node shown (`None` when cancelled before the start). The observers run after the engine's update, so the runner already shows the new state and the event carries what would otherwise be lost.
 
+**Placeholders.** A node `text`, a node `speaker` and a choice `text` can hold values that only exist at run time, such as a shopkeeper's stock or the name the player typed:
+
+- `{key}` reads `WorldSignals`.
+- `{self.key}` reads the `Signals` component that your code passes in, by convention the runner entity's.
+- `{key:.N}` prints a number with `N` digits after the point (`N` from 0 to 6). An integer prints as a decimal then (`6` with `.2` is `6.00`); a string or flag ignores the spec.
+- `{{` and `}}` are literal braces.
+
+A key is looked up as an integer, then a scalar, then a string, then a flag; a set flag prints `true`. The two sources never fall back to each other.
+
+The tree, the runner, `text()`, `speaker()`, `choices()` and the events keep the raw template. The engine fills nothing in and renders nothing: your game calls `format_signal_text(template, world, entity)` where it draws, and a call reads the signals as they are at that moment, so a counter on screen updates while the line is shown. This system formats the speaker, the line and every choice into one `DynamicText` each tick:
+
+```rust
+use aberredengine::prelude::*;
+
+#[derive(Component)]
+struct DialogueBox;
+
+// Registered with `EngineBuilder::add_system`; runs once per sim tick
+fn show_dialogue(
+    runners: Query<(&DialogueRunner, Option<&Signals>)>,
+    world: Res<WorldSignals>,
+    mut boxes: Query<&mut DynamicText, With<DialogueBox>>,
+) {
+    let Ok(mut dialogue_box) = boxes.single_mut() else {
+        return;
+    };
+    let Some((runner, stock)) = runners.iter().next() else {
+        return;
+    };
+    let mut shown = String::new();
+    if let Some(speaker) = runner.speaker() {
+        shown.push_str(&format_signal_text(speaker, &*world, stock));
+        shown.push_str(": ");
+    }
+    if let Some(text) = runner.text() {
+        shown.push_str(&format_signal_text(text, &*world, stock));
+    }
+    for choice in runner.choices() {
+        let label = format_signal_text(choice.text, &*world, stock);
+        shown.push_str(&format!("\n{}. {label}", choice.index + 1));
+    }
+    if *dialogue_box.text != *shown {
+        dialogue_box.set_text(&shown);
+    }
+}
+```
+
+`format_signal_text` takes the world signals as `&dyn SignalsRead` and the entity signals as `Option<&Signals>`. It returns a borrowed `Cow` when the template has no braces. A GUI or world-draw callback runs render-side, so it passes `ctx.signals` (the `SignalSnapshot`) and `None`: the render world has no entity `Signals`.
+
+A key with no value keeps its literal token in the output (`{player_name}`, or `{price:.2}` with its spec), and `{self.key}` with no entity passed counts as missing. `format_signal_text` never fails: a malformed part is copied through as written. Entering a node logs one warning per missing key, naming the node, the field and the key. The warning is advisory and does not change the transition. The dialogue update runs before `.add_system()` systems, so a key that a game system sets in the tick the node is entered is reported even though it renders fine afterwards. To avoid the warning, set the signal before the node is entered: in a choice effect, in `on_enter`, or before requesting the transition.
+
+A malformed template is rejected when the tree is built: `build()` and `load_dialogue` return `DialogueError::BadPlaceholder { node, field, source }` for an unclosed `{`, a stray `}`, an empty key (`{}`, `{self.}`) or a precision outside 0 to 6. Only the text after the last `:` of a placeholder is a spec, and only when it starts with `.`, so engine keys such as `{group_count:enemies}` work as written. A world key whose last `:` is followed by `.`, or one that starts with `self.`, cannot be written as a placeholder.
+
 **Timing and rules:**
 
 - The engine's dialogue update runs at the start of every sim tick in `SimSet::Phases`, in every game state, before `.add_system()` systems (the same slot as `phase_system`).
@@ -2093,7 +2146,7 @@ fn on_dialogue_ended(ev: On<DialogueEnded>, mut commands: Commands) {
 - The tree is immutable and shared, and a conversation loop (A -> B -> A) re-evaluates conditions on every pass.
 - In a replay, the runner's status, cached availability and pending request are part of the determinism hash while the shared tree is not, so a conversation replays identically and a different tree surfaces through the node index or `WorldSignals`.
 
-**Lua builds only:** Lua drives the same `DialogueRunner` and `DialogueStore`. `engine.register_dialogue(key, def)` and `engine.load_dialogue(key, path)` validate a tree and store it under `key`; `:with_dialogue(key)` or `engine.entity_insert_dialogue(entity, key)` attaches a runner; `engine.entity_dialogue_advance`, `entity_dialogue_choose` and `entity_dialogue_cancel` set the requests; and `:with_lua_dialogue_node_entered`, `:with_lua_dialogue_choice_selected` and `:with_lua_dialogue_ended` call a Lua function from observers of the three events above. A Rust system can therefore drive or draw a conversation a Lua script started, and the other way round. The Lua reference is the Dialogues section of `assets/scripts/README.md`.
+**Lua builds only:** Lua drives the same `DialogueRunner` and `DialogueStore`. `engine.register_dialogue(key, def)` and `engine.load_dialogue(key, path)` validate a tree and store it under `key`; `:with_dialogue(key)` or `engine.entity_insert_dialogue(entity, key)` attaches a runner; `engine.entity_dialogue_advance`, `entity_dialogue_choose` and `entity_dialogue_cancel` set the requests; and `:with_lua_dialogue_node_entered`, `:with_lua_dialogue_choice_selected` and `:with_lua_dialogue_ended` call a Lua function from observers of the three events above. `engine.format_text(template, signals)` fills the same placeholders from a Lua script. A Rust system can therefore drive or draw a conversation a Lua script started, and the other way round. The Lua reference is the Dialogues section of `assets/scripts/README.md`.
 
 ### Collision rules
 
