@@ -26,10 +26,29 @@
 -- so a second reader of the same press would act on the node the press just
 -- entered.
 -- Back cancels the dialogue and returns to the menu.
+--
+-- Placeholders: lines and choices hold templates ({player_name}, {self.apples},
+-- {shop_grain:.1}); the engine keeps them raw and the script fills them in with
+-- engine.format_text. The node-entered callback formats with its own ctx.signals,
+-- so {self.apples} is right at entry, and keeps a copy of that table. on_update
+-- formats the line again every tick with the copy, which keeps the world values
+-- ({player_name}, the shop_grain counter) live while {self.apples} stays as it was
+-- at entry. A live per-NPC value would live in a world signal instead.
 
 local M = {}
 
 local SCREEN_W, SCREEN_H = 640, 360
+
+local GRAIN_START = 5.0 -- kg of grain in the shop at scene start
+local GRAIN_PER_SECOND = 0.1 -- grain the shop sells per second
+
+-- State of the line on screen: the raw template, a copy of the `ctx.signals`
+-- that was passed to the node-entered callback (ctx is pooled, so the callback
+-- copies what it keeps), and the last text written to "dlg_text".
+local raw_text = ""
+local entity_signals = nil
+local shown_text = ""
+local grain = GRAIN_START
 
 -- ─── Choice menu ────────────────────────────────────────────────────────────
 
@@ -82,8 +101,35 @@ local function signal_line(key, x, y, r, g, b, format)
     line:build()
 end
 
---- Clears the speaker/text/hint signals.
+--- Copies the sequence and the three maps of an entity `signals` table.
+--- A callback's `ctx.signals` is pooled and must not be kept, so a callback
+--- that wants the values later keeps this copy.
+local function copy_signals(signals)
+    local copy = { flags = {}, integers = {}, scalars = {}, strings = {} }
+    for i, flag in ipairs(signals.flags or {}) do
+        copy.flags[i] = flag
+    end
+    for _, kind in ipairs({ "integers", "scalars", "strings" }) do
+        for key, value in pairs(signals[kind] or {}) do
+            copy[kind][key] = value
+        end
+    end
+    return copy
+end
+
+--- Shows `text` in the "dlg_text" line, writing the signal only when it changed.
+local function show_text(text)
+    if text ~= shown_text then
+        shown_text = text
+        engine.set_string("dlg_text", text)
+    end
+end
+
+--- Clears the speaker/text/hint signals and forgets the raw line.
 local function clear_dialogue_signals()
+    raw_text = ""
+    entity_signals = nil
+    shown_text = ""
     engine.set_string("dlg_speaker", "")
     engine.set_string("dlg_text", "")
     engine.set_string("dlg_hint", "")
@@ -91,8 +137,12 @@ end
 
 --- Resets the story signals the dialogue trees read and write when the scene
 --- starts: the guard's key and gate flags, visit count and the player's inventory
---- (0 keys, 2 swords, 0 coins). Restarting a dialogue keeps them.
+--- (0 keys, 2 swords, 0 coins), the player's name and the shop's grain counter.
+--- Restarting a dialogue keeps them.
 local function reset_story_state()
+    engine.set_string("player_name", "Idaho06")
+    grain = GRAIN_START
+    engine.set_scalar("shop_grain", grain)
     engine.remove_flag("has_key")
     engine.remove_flag("gate_open")
     engine.set_integer("visits", 0)
@@ -114,22 +164,25 @@ end
 
 -- ─── Callbacks (local — injected into _G by main.lua) ───────────────────────
 
---- Dialogue node-entered callback: writes the speaker and the line to the
---- signal-driven text, replaces the menu's items with the node's choices (a
---- locked choice a disabled item, or no item when it is labelled
---- "hide_when_locked") or with one "Continue" item on a node without any
---- choices, and writes the hint line.
+--- Dialogue node-entered callback: keeps the raw line and a copy of `ctx.signals`
+--- for the per-tick re-format, writes the speaker and the formatted line to the
+--- signal-driven text, replaces the menu's items with the node's choices
+--- (formatted once here; a locked choice a disabled item, or no item when it is
+--- labelled "hide_when_locked") or with one "Continue" item on a node without
+--- any choices, and writes the hint line.
 --- @param ctx EntityContext
 --- @param dialogue DialogueLine
 local function dialogue_demo_node_entered(ctx, dialogue)
     engine.set_string("dlg_speaker", dialogue.speaker or "")
-    engine.set_string("dlg_text", dialogue.text or "")
+    raw_text = dialogue.text or ""
+    entity_signals = copy_signals(ctx.signals)
+    show_text(engine.format_text(raw_text, ctx.signals))
     local items = {}
     for _, choice in ipairs(dialogue.choices) do
         if choice.available or not has_label(choice, "hide_when_locked") then
             items[#items + 1] = {
                 id = "choice_" .. choice.index,
-                label = choice.text or "",
+                label = engine.format_text(choice.text or "", ctx.signals),
                 enabled = choice.available and true or false,
             }
         end
@@ -194,6 +247,13 @@ end
 --- @param input InputSnapshot Input state table
 --- @param dt number Delta time in seconds
 local function on_update_dialogue_demo(input, dt)
+    -- The shop sells grain over time; the line re-formats with the new value.
+    grain = math.max(0.0, grain - GRAIN_PER_SECOND * dt)
+    engine.set_scalar("shop_grain", grain)
+    if raw_text ~= "" then
+        show_text(engine.format_text(raw_text, entity_signals))
+    end
+
     if input.digital.back.just_pressed then
         local npc = engine.get_entity("dialogue_npc")
         if npc then
@@ -228,8 +288,10 @@ function M.spawn()
     -- the NPC's first dialogue node replaces its items.
     spawn_choice_menu()
 
-    -- The NPC runs the guard dialogue from the moment it spawns.
+    -- The NPC runs the guard dialogue from the moment it spawns. Its own
+    -- signals hold the apples that the innkeeper's {self.apples} reads.
     engine.spawn()
+        :with_signal_integer("apples", 6)
         :with_dialogue("guard")
         :with_lua_dialogue_node_entered("dialogue_demo_node_entered")
         :with_lua_dialogue_choice_selected("dialogue_demo_choice_selected")

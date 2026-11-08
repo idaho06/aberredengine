@@ -494,6 +494,59 @@ Conditions and effects are tables with a `type` field:
 | `set_scalar` | `key`, `value` | effect: writes the scalar signal `key` |
 | `set_string` | `key`, `value` | effect: writes the string signal `key` |
 
+### Placeholders
+
+A node `text`, a node `speaker` and a choice `text` can hold values that only exist at run time, such as a
+shopkeeper's stock or the name the player typed:
+
+| placeholder | reads |
+|-------------|-------|
+| `{key}` | the world signals (`engine.get_*`) |
+| `{self.key}` | the entity `signals` table that your script passes to `engine.format_text` |
+| `{key:.N}` | like `{key}`, printing a number with `N` digits after the point (`N` from 0 to 6); an integer prints as a decimal then (`6` with `.2` is `6.00`), and a string or flag ignores the spec |
+| `{{` / `}}` | a literal `{` / `}` |
+
+A key is looked up as an integer, then a scalar, then a string, then a flag (a set flag prints `true`). The two
+sources never fall back to each other.
+
+The engine keeps every template raw: the `text`, `speaker` and `choices` of a `DialogueLine`, the events and the
+Rust side all hold the template as authored, and the engine fills nothing in. Your script fills it in with
+`engine.format_text` where it draws, and calls it again when the values may
+have changed:
+
+```lua
+local raw_text = ""
+
+local function on_node(ctx, dialogue)
+    raw_text = dialogue.text
+    engine.set_string("dlg_text", engine.format_text(raw_text, ctx.signals))
+end
+
+local function on_update_shop(input, dt)
+    if raw_text ~= "" then
+        -- World values only: no `signals` table is passed, so a `{self.key}` would stay literal.
+        engine.set_string("dlg_text", engine.format_text(raw_text))
+    end
+end
+```
+
+- A key with no value keeps its literal token in the text (`{player_name}`, or `{price:.2}` with its spec). The
+  engine logs one warning per missing key when a node is entered, naming the node, the field and the key. The
+  warning is advisory. A key that a script sets in the tick the node is entered is reported even though it formats
+  fine afterwards; set the signal before the node is entered (a choice effect, `on_enter`, or before requesting
+  the transition) to avoid it.
+- World values are live: every `engine.format_text` call reads the current tick's signal snapshot.
+- `{self.key}` reads the table you pass, normally a callback's `ctx.signals`, so in Lua its values are frozen at
+  the moment that callback ran, not live. `ctx` is pooled and must not be kept, so a script that re-formats later
+  keeps a copy of the table (see `assets/scripts/scenes/dialogue_demo.lua`). A Lua game that needs a live
+  per-NPC value keeps it in a world signal.
+- A malformed template is rejected when the tree is registered (`engine.register_dialogue` /
+  `engine.load_dialogue` raise a Lua error): an unclosed `{`, a stray `}`, an empty key (`{}`, `{self.}`) or a
+  precision outside 0 to 6. `engine.format_text` raises the same error for a malformed template.
+- Only the text after the last `:` of a placeholder is a spec, and only when it starts with `.`, so engine keys
+  such as `{group_count:enemies}` work as written. A world key whose last `:` is followed by `.`, or one that
+  starts with `self.`, cannot be written as a placeholder.
+
 ### `engine.register_dialogue(key, def)` / `engine.load_dialogue(key, path)`
 
 Register a dialogue under `key` from a Lua table or from a JSON file at `path`. Both validate the tree at the
@@ -3015,6 +3068,23 @@ Read string world signal.
 
 ```lua
 local scene_name = engine.get_string("scene")
+```
+
+#### `engine.format_text(template, signals?) -> string`
+
+Fill the `{key}` / `{self.key}` / `{key:.N}` placeholders of `template` (see [Placeholders](#placeholders)).
+`{key}` reads the world signals; `{self.key}` reads the optional `signals` table, which has the shape of a
+callback's `ctx.signals` (`flags` sequence, `integers`, `scalars`, `strings`; each may be absent). A key with no
+value keeps its literal token, and `{self.key}` without a `signals` table counts as missing. A malformed template
+raises a Lua error.
+
+World values come from the per-tick signal snapshot, so an `engine.set_*` queued earlier in the same callback is
+not visible yet. `{self.key}` values are frozen at the time the passed table was built; they are not live.
+
+```lua
+engine.set_string("player_name", "Idaho06")
+local line = engine.format_text("Hi {player_name}, I have {self.apples} apples", ctx.signals)
+local price = engine.format_text("{price:.2} gold")
 ```
 
 #### `engine.has_flag(key) -> bool`

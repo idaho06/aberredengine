@@ -4,7 +4,7 @@
     {
       "id": "greet",
       "speaker": "Guard",
-      "text": "Halt! Who goes there?",
+      "text": "Halt, {player_name}! Who goes there?",
       "labels": ["gate"],
       "on_enter": [{ "type": "add_integer", "key": "visits", "delta": 1 }],
       "choices": [
@@ -22,7 +22,7 @@
           "when": { "type": "flag", "key": "has_key" },
           "labels": ["locked"]
         },
-        { "text": "Never mind." }
+        { "text": "Never mind, {player_name}." }
       ]
     },
     {

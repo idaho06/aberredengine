@@ -339,13 +339,13 @@ local function load_dialogue_demo()
                         },
                         labels = { "shop" },
                     },
-                    { text = "Just passing through." },
+                    { text = "Just passing through, {player_name}." },
                 },
             },
             {
                 id = "menu",
                 speaker = "Innkeeper",
-                text = "Stew, bread and ale, traveller.",
+                text = "I have {self.apples} apples and {shop_grain:.1} kg of grain left.",
                 next = "welcome",
             },
             {
