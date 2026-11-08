@@ -35,11 +35,11 @@ pub fn update_world_signals_binding_system(
     crate::tracy::tracy_span!("update_world_signals_binding");
     for (mut dynamic_text, signal_binding) in query.iter_mut() {
         let value_opt = match &signal_binding.source {
-            SignalSource::World => signal_as_str(&*world_signals, &signal_binding.signal_key),
+            SignalSource::World => signal_as_str(&*world_signals, &signal_binding.signal_key, None),
             SignalSource::Entity(entity) => signals_query
                 .get(*entity)
                 .ok()
-                .and_then(|signals| signal_as_str(signals, &signal_binding.signal_key)),
+                .and_then(|signals| signal_as_str(signals, &signal_binding.signal_key, None)),
         };
 
         if let Some(value) = value_opt {

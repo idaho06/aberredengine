@@ -270,7 +270,12 @@ fn format_text(lua: &Lua, template: &str, signals: Option<&LuaTable>) -> LuaResu
         .app_data_ref::<LuaAppData>()
         .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?;
     let snapshot = data.signal_snapshot.borrow();
-    let entity = signals.map(entity_signals_from_table).transpose()?;
+    // Converting the table costs allocations per key, and `engine.format_text` runs per tick in
+    // scripts: only a `{self.` placeholder reads it.
+    let entity = match signals {
+        Some(table) if template.contains("{self.") => Some(entity_signals_from_table(table)?),
+        _ => None,
+    };
     Ok(format_signal_text(template, &**snapshot, entity.as_ref()).into_owned())
 }
 

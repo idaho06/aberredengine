@@ -20,7 +20,7 @@ use crate::resources::world_signals::SignalsRead;
 /// Capacity for a formatted number. `f32`'s `Display` never uses exponent notation, so its
 /// widest output is `-f32::MAX` at 40 chars (`i32::MIN` is 11). A buffer that is too small
 /// makes `write!` fail part-way and the text shows a truncated number.
-pub(crate) const NUM_BUF_LEN: usize = 48;
+const NUM_BUF_LEN: usize = 48;
 
 /// Stack-allocated string for signal-to-text conversion.
 /// Uses a [`NUM_BUF_LEN`]-byte ArrayString for numeric types (i32 / f32), borrowed &str for others.
@@ -89,18 +89,10 @@ fn write_stack<'a>(args: std::fmt::Arguments<'_>) -> SignalStr<'a> {
 
 /// Converts a signal value to a string representation.
 ///
-/// Tries each signal type in order: integer, scalar, string, flag.
-/// Returns `None` if the signal key is not found.
+/// Tries each signal type in order: integer, scalar, string, flag. `precision` is the number
+/// of digits after the point for numbers (an integer prints as a float then); strings and
+/// flags ignore it. Returns `None` if the signal key is not found.
 pub(crate) fn signal_as_str<'a, S: SignalLookup + ?Sized>(
-    src: &'a S,
-    key: &str,
-) -> Option<SignalStr<'a>> {
-    signal_as_str_with(src, key, None)
-}
-
-/// Like [`signal_as_str`], with `precision` digits after the point for numbers (an integer
-/// prints as a float then). Strings and flags ignore it.
-pub(crate) fn signal_as_str_with<'a, S: SignalLookup + ?Sized>(
     src: &'a S,
     key: &str,
     precision: Option<u8>,
@@ -174,6 +166,8 @@ pub(crate) enum PlaceholderSource {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct Placeholder<'a> {
     pub(crate) source: PlaceholderSource,
+    /// The key as authored: with its `self.` prefix, without the spec.
+    pub(crate) written: &'a str,
     pub(crate) key: &'a str,
     /// Digits after the point from a `:.N` spec, `0..=6`.
     pub(crate) precision: Option<u8>,
@@ -272,8 +266,10 @@ fn parse_placeholder(inner: &str, at: usize) -> Result<Placeholder<'_>, SignalTe
     if key.is_empty() {
         return Err(SignalTextError::EmptyKey { at });
     }
+    let written = &inner[..inner.len() - rest.len() + key.len()];
     Ok(Placeholder {
         source,
+        written,
         key,
         precision,
     })
@@ -294,12 +290,8 @@ fn resolve<'a>(
     entity: Option<&'a Signals>,
 ) -> Option<SignalStr<'a>> {
     match placeholder.source {
-        PlaceholderSource::World => {
-            signal_as_str_with(world, placeholder.key, placeholder.precision)
-        }
-        PlaceholderSource::Entity => {
-            signal_as_str_with(entity?, placeholder.key, placeholder.precision)
-        }
+        PlaceholderSource::World => signal_as_str(world, placeholder.key, placeholder.precision),
+        PlaceholderSource::Entity => signal_as_str(entity?, placeholder.key, placeholder.precision),
     }
 }
 
@@ -356,21 +348,12 @@ pub fn for_each_missing_signal_key(
     if validate_signal_text(template).is_err() {
         return;
     }
-    let mut parts = segments(template);
-    loop {
-        let start = parts.pos;
-        let Some(part) = parts.next() else { break };
+    for part in segments(template) {
         let Ok(Segment::Placeholder(p)) = part else {
             continue;
         };
         if resolve(&p, world, entity).is_none() {
-            // The key as written: after the `{`, with its `self.` prefix if any.
-            let prefix = match p.source {
-                PlaceholderSource::World => 0,
-                PlaceholderSource::Entity => SELF_PREFIX.len(),
-            };
-            let inner = &template[start + 1..parts.pos - 1];
-            f(&inner[..prefix + p.key.len()]);
+            f(p.written);
         }
     }
 }
@@ -383,13 +366,15 @@ mod tests {
         Ok(Segment::Literal(s))
     }
 
-    fn ph(
+    fn ph<'a>(
         source: PlaceholderSource,
-        key: &str,
+        written: &'a str,
+        key: &'a str,
         precision: Option<u8>,
-    ) -> Result<Segment<'_>, SignalTextError> {
+    ) -> Result<Segment<'a>, SignalTextError> {
         Ok(Segment::Placeholder(Placeholder {
             source,
+            written,
             key,
             precision,
         }))
@@ -431,7 +416,7 @@ mod tests {
             parse("I have {apples} apples"),
             vec![
                 lit("I have "),
-                ph(PlaceholderSource::World, "apples", None),
+                ph(PlaceholderSource::World, "apples", "apples", None),
                 lit(" apples"),
             ]
         );
@@ -441,7 +426,7 @@ mod tests {
     fn self_placeholder_reads_the_entity() {
         assert_eq!(
             parse("{self.apples}"),
-            vec![ph(PlaceholderSource::Entity, "apples", None)]
+            vec![ph(PlaceholderSource::Entity, "self.apples", "apples", None)]
         );
     }
 
@@ -449,15 +434,15 @@ mod tests {
     fn precision_spec_is_parsed() {
         assert_eq!(
             parse("{k:.2}"),
-            vec![ph(PlaceholderSource::World, "k", Some(2))]
+            vec![ph(PlaceholderSource::World, "k", "k", Some(2))]
         );
         assert_eq!(
             parse("{self.k:.0}"),
-            vec![ph(PlaceholderSource::Entity, "k", Some(0))]
+            vec![ph(PlaceholderSource::Entity, "self.k", "k", Some(0))]
         );
         assert_eq!(
             parse("{k:.6}"),
-            vec![ph(PlaceholderSource::World, "k", Some(6))]
+            vec![ph(PlaceholderSource::World, "k", "k", Some(6))]
         );
     }
 
@@ -465,7 +450,12 @@ mod tests {
     fn a_colon_without_dot_belongs_to_the_key() {
         assert_eq!(
             parse("{group_count:enemies}"),
-            vec![ph(PlaceholderSource::World, "group_count:enemies", None)]
+            vec![ph(
+                PlaceholderSource::World,
+                "group_count:enemies",
+                "group_count:enemies",
+                None
+            )]
         );
     }
 
@@ -473,7 +463,7 @@ mod tests {
     fn only_the_last_colon_starts_a_spec() {
         assert_eq!(
             parse("{a:b:.1}"),
-            vec![ph(PlaceholderSource::World, "a:b", Some(1))]
+            vec![ph(PlaceholderSource::World, "a:b", "a:b", Some(1))]
         );
     }
 
@@ -532,7 +522,7 @@ mod tests {
         let parsed = parse("{}{ok}");
         assert_eq!(parsed.len(), 2);
         assert_eq!(parsed[0], Err(SignalTextError::EmptyKey { at: 0 }));
-        assert_eq!(parsed[1], ph(PlaceholderSource::World, "ok", None));
+        assert_eq!(parsed[1], ph(PlaceholderSource::World, "ok", "ok", None));
     }
 
     #[test]
