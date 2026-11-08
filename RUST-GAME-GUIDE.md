@@ -1915,7 +1915,7 @@ Lua phase callbacks (`:with_lua_phase_entered/exited/update`) run on this same `
 
 **Source:** `aberred-core/src/components/dialogue.rs`, `aberred-core/src/systems/dialogue.rs`, `aberred-core/src/events/dialogue.rs`, `aberred-core/src/resources/dialogue_builder.rs`, `aberred-core/src/resources/dialogue_def.rs`, `aberred-core/src/resources/dialogue_tree.rs`, `aberred-core/src/resources/dialogue_store.rs`
 
-A dialogue is a graph of named nodes — loops and joins are legal. Each node shows a line (an optional speaker, a `text`, and opaque `labels`) and waits for the player. The engine renders nothing: your game reads the `DialogueRunner` and draws the conversation itself. Dialogue is Rust-only; there is no Lua API for it.
+A dialogue is a graph of named nodes — loops and joins are legal. Each node shows a line (an optional speaker, a `text`, and opaque `labels`) and waits for the player. The engine renders nothing: your game reads the `DialogueRunner` and draws the conversation itself.
 
 **Authoring a tree.** `DialogueBuilder` builds a conversation in code:
 
@@ -2092,6 +2092,8 @@ fn on_dialogue_ended(ev: On<DialogueEnded>, mut commands: Commands) {
 - A finished runner stays on its entity and keeps showing its last line (`text()`, `speaker()`, `node_id()`); requests on it are ignored, and the game despawns or removes it.
 - The tree is immutable and shared, and a conversation loop (A -> B -> A) re-evaluates conditions on every pass.
 - In a replay, the runner's status, cached availability and pending request are part of the determinism hash while the shared tree is not, so a conversation replays identically and a different tree surfaces through the node index or `WorldSignals`.
+
+**Lua builds only:** Lua drives the same `DialogueRunner` and `DialogueStore`. `engine.register_dialogue(key, def)` and `engine.load_dialogue(key, path)` validate a tree and store it under `key`; `:with_dialogue(key)` or `engine.entity_insert_dialogue(entity, key)` attaches a runner; `engine.entity_dialogue_advance`, `entity_dialogue_choose` and `entity_dialogue_cancel` set the requests; and `:with_lua_dialogue_node_entered`, `:with_lua_dialogue_choice_selected` and `:with_lua_dialogue_ended` call a Lua function from observers of the three events above. A Rust system can therefore drive or draw a conversation a Lua script started, and the other way round. The Lua reference is the Dialogues section of `assets/scripts/README.md`.
 
 ### Collision rules
 
