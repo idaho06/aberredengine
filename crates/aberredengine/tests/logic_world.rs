@@ -580,6 +580,55 @@ mod dialogue {
         assert_eq!(signals.get_integer("asked"), Some(1));
         assert!(signals.has_flag("informed"));
     }
+
+    /// Placeholders are filled by the game: the runner keeps the raw template,
+    /// and each `format_signal_text` call reads the signals as they are now
+    /// (`{self.key}` from the runner entity's `Signals`, `{key}` from
+    /// `WorldSignals`).
+    #[test]
+    fn placeholders_format_live_while_the_runner_keeps_the_raw_template() {
+        const RAW: &str = "I have {self.apples} apples, {grain:.1} kg of grain, {player_name}";
+
+        let mut tw = TestWorld::builder().build().expect("build should succeed");
+        tw.tick_to_play(DT, 8);
+
+        let tree = DialogueBuilder::new("shop")
+            .node("shop")
+            .text(RAW)
+            .build()
+            .expect("the tree is valid");
+        {
+            let mut world_signals = tw.world.resource_mut::<WorldSignals>();
+            world_signals.set_scalar("grain", 2.5);
+            world_signals.set_string("player_name", "Idaho06");
+        }
+        let mut stock = Signals::default();
+        stock.set_integer("apples", 6);
+        let entity = tw
+            .world
+            .spawn((DialogueRunner::new(Arc::new(tree)), stock))
+            .id();
+        tw.tick(1, DT);
+
+        let format = |tw: &TestWorld| {
+            let runner = tw.world.get::<DialogueRunner>(entity).unwrap();
+            let stock = tw.world.get::<Signals>(entity).unwrap();
+            let world_signals = tw.world.resource::<WorldSignals>();
+            format_signal_text(runner.text().unwrap(), world_signals, Some(stock)).into_owned()
+        };
+        assert_eq!(format(&tw), "I have 6 apples, 2.5 kg of grain, Idaho06");
+
+        // Change a world value without advancing: the next call sees it.
+        tw.world
+            .resource_mut::<WorldSignals>()
+            .set_scalar("grain", 4.0);
+        assert_eq!(format(&tw), "I have 6 apples, 4.0 kg of grain, Idaho06");
+        assert_eq!(
+            tw.world.get::<DialogueRunner>(entity).unwrap().text(),
+            Some(RAW),
+            "the runner still holds the raw template"
+        );
+    }
 }
 
 /// A particle cloned from a template that has a `Phase` fires its own initial

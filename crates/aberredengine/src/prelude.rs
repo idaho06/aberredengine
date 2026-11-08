@@ -91,6 +91,7 @@ pub use aberred_core::resources::post_process_shader::PostProcessShader;
 pub use aberred_core::resources::render_size::RenderSize;
 pub use aberred_core::resources::signal_intents::SignalIntents;
 pub use aberred_core::resources::signal_keys as sk;
+pub use aberred_core::resources::signal_text::{SignalTextError, format_signal_text};
 pub use aberred_core::resources::sim_rng::SimRng;
 pub use aberred_core::resources::texture_filter::TextureFilter;
 pub use aberred_core::resources::uniform_value::UniformValue;
