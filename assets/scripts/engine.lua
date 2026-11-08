@@ -447,6 +447,12 @@ function engine.unload_sound(id) end
 
 -- ==================== World Signals ====================
 
+---Format `template`, filling `{key}` / `{self.key}` / `{key:.N}` placeholders. World values come from the per-tick signal snapshot, so an `engine.set_*` queued earlier in the same callback is not visible yet; `{self.key}` reads the optional `signals` table (normally a callback's `ctx.signals`), whose values are frozen at the time that table was built
+---@param template string
+---@param signals table|nil
+---@return string
+function engine.format_text(template, signals) end
+
 ---Get a registered entity ID by key
 ---@param key string
 ---@return integer|nil

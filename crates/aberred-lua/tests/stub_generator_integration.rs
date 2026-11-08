@@ -471,7 +471,7 @@ fn meta_functions_complete() {
             -- signal reads
             "get_scalar", "get_integer", "get_string", "has_flag",
             "get_scalars", "get_integers", "get_strings", "get_flags",
-            "get_group_count", "get_entity",
+            "get_group_count", "get_entity", "format_text",
             -- signal writes
             "set_scalar", "set_integer", "set_string", "set_flag", "remove_flag",
             "toggle_flag",

@@ -1,4 +1,6 @@
 use super::*;
+use aberred_core::components::signals::Signals;
+use aberred_core::resources::signal_text::{format_signal_text, validate_signal_text};
 
 impl LuaRuntime {
     pub(in crate::resources::lua_runtime) fn register_signal_api(&self) -> LuaResult<()> {
@@ -55,6 +57,20 @@ impl LuaRuntime {
             cat = "signal",
             params = [("key", "string")],
             returns = "string?"
+        );
+
+        register_getter!(
+            engine,
+            self.lua,
+            meta_fns,
+            "format_text",
+            |lua, (template, signals): (LuaString, Option<LuaTable>)| {
+                format_text(lua, &template.to_str()?, signals.as_ref())
+            },
+            desc = "Format `template`, filling `{key}` / `{self.key}` / `{key:.N}` placeholders. World values come from the per-tick signal snapshot, so an `engine.set_*` queued earlier in the same callback is not visible yet; `{self.key}` reads the optional `signals` table (normally a callback's `ctx.signals`), whose values are frozen at the time that table was built",
+            cat = "signal",
+            params = [("template", "string"), ("signals", "table?")],
+            returns = "string"
         );
 
         register_getter!(
@@ -238,6 +254,58 @@ impl LuaRuntime {
     }
 }
 
+/// `engine.format_text` implementation: fills the `{key}` / `{self.key}` / `{key:.N}`
+/// placeholders of `template` through the core [`format_signal_text`].
+///
+/// World values come from the per-tick signal snapshot, so an `engine.set_*` queued earlier in
+/// the same callback is not visible yet. `{self.key}` reads `signals` (normally a callback's
+/// `ctx.signals`), whose values are frozen at the time that table was built, not live.
+fn format_text(lua: &Lua, template: &str, signals: Option<&LuaTable>) -> LuaResult<String> {
+    if let Err(err) = validate_signal_text(template) {
+        return Err(LuaError::runtime(format!(
+            "format_text: invalid template: {err}"
+        )));
+    }
+    let data = lua
+        .app_data_ref::<LuaAppData>()
+        .ok_or_else(|| LuaError::runtime("LuaAppData not found"))?;
+    let snapshot = data.signal_snapshot.borrow();
+    let entity = signals.map(entity_signals_from_table).transpose()?;
+    Ok(format_signal_text(template, &**snapshot, entity.as_ref()).into_owned())
+}
+
+/// Builds the entity [`Signals`] that `{self.key}` reads from a `signals` table shaped like a
+/// callback's `ctx.signals`: `flags` is a sequence of strings, `integers` / `scalars` / `strings`
+/// are string-keyed maps, and any of the four sub-tables may be absent. A sub-table key holding
+/// the wrong value type fails with the normal mlua conversion error.
+fn entity_signals_from_table(table: &LuaTable) -> LuaResult<Signals> {
+    let mut signals = Signals::default();
+    if let Some(flags) = table.get::<Option<LuaTable>>("flags")? {
+        for pair in flags.pairs::<i64, String>() {
+            signals.set_flag(pair?.1);
+        }
+    }
+    if let Some(integers) = table.get::<Option<LuaTable>>("integers")? {
+        for pair in integers.pairs::<String, i32>() {
+            let (key, value) = pair?;
+            signals.set_integer(key, value);
+        }
+    }
+    if let Some(scalars) = table.get::<Option<LuaTable>>("scalars")? {
+        for pair in scalars.pairs::<String, f32>() {
+            let (key, value) = pair?;
+            signals.set_scalar(key, value);
+        }
+    }
+    if let Some(strings) = table.get::<Option<LuaTable>>("strings")? {
+        for pair in strings.pairs::<String, String>() {
+            let (key, value) = pair?;
+            signals.set_string(key, value);
+        }
+    }
+    Ok(signals)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -419,5 +487,146 @@ mod tests {
             .eval()
             .unwrap();
         assert_eq!(missing, None);
+    }
+
+    fn world_snapshot(
+        integers: &[(&str, i32)],
+        scalars: &[(&str, f32)],
+        strings: &[(&str, &str)],
+    ) -> aberred_core::resources::world_signals::SignalSnapshot {
+        aberred_core::resources::world_signals::SignalSnapshot {
+            integers: Arc::new(integers.iter().map(|(k, v)| (k.to_string(), *v)).collect()),
+            scalars: Arc::new(scalars.iter().map(|(k, v)| (k.to_string(), *v)).collect()),
+            strings: Arc::new(
+                strings
+                    .iter()
+                    .map(|(k, v)| (k.to_string(), v.to_string()))
+                    .collect(),
+            ),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn format_text_fills_world_keys() {
+        let runtime = LuaRuntime::new().unwrap();
+        set_snapshot(
+            &runtime,
+            world_snapshot(&[("apples", 6)], &[], &[("player_name", "Idaho06")]),
+        );
+
+        let out: String = runtime
+            .lua()
+            .load("return engine.format_text('{player_name} has {apples}')")
+            .eval()
+            .unwrap();
+        assert_eq!(out, "Idaho06 has 6");
+    }
+
+    #[test]
+    fn format_text_reads_self_keys_from_signals_table() {
+        let runtime = LuaRuntime::new().unwrap();
+
+        let out: String = runtime
+            .lua()
+            .load("return engine.format_text('{self.apples}', {integers = {apples = 4}})")
+            .eval()
+            .unwrap();
+        assert_eq!(out, "4");
+
+        let out: String = runtime
+            .lua()
+            .load("return engine.format_text('{self.ratio}', {scalars = {ratio = 1.5}})")
+            .eval()
+            .unwrap();
+        assert_eq!(out, "1.5");
+
+        let out: String = runtime
+            .lua()
+            .load("return engine.format_text('{self.who}', {strings = {who = 'bot'}})")
+            .eval()
+            .unwrap();
+        assert_eq!(out, "bot");
+
+        let out: String = runtime
+            .lua()
+            .load("return engine.format_text('{self.open}', {flags = {'open'}})")
+            .eval()
+            .unwrap();
+        assert_eq!(out, "true");
+    }
+
+    #[test]
+    fn format_text_without_table_keeps_self_token_literal() {
+        let runtime = LuaRuntime::new().unwrap();
+
+        let out: String = runtime
+            .lua()
+            .load("return engine.format_text('{self.apples}')")
+            .eval()
+            .unwrap();
+        assert_eq!(out, "{self.apples}");
+    }
+
+    #[test]
+    fn format_text_reflects_snapshot_change_on_next_call() {
+        let runtime = LuaRuntime::new().unwrap();
+        set_snapshot(&runtime, world_snapshot(&[("apples", 6)], &[], &[]));
+
+        let first: String = runtime
+            .lua()
+            .load("return engine.format_text('{apples}')")
+            .eval()
+            .unwrap();
+        assert_eq!(first, "6");
+
+        set_snapshot(&runtime, world_snapshot(&[("apples", 9)], &[], &[]));
+
+        let second: String = runtime
+            .lua()
+            .load("return engine.format_text('{apples}')")
+            .eval()
+            .unwrap();
+        assert_eq!(second, "9");
+    }
+
+    #[test]
+    fn format_text_applies_precision_to_numbers() {
+        let runtime = LuaRuntime::new().unwrap();
+        set_snapshot(&runtime, world_snapshot(&[], &[("grain", 2.5)], &[]));
+
+        let out: String = runtime
+            .lua()
+            .load("return engine.format_text('{grain:.2}')")
+            .eval()
+            .unwrap();
+        assert_eq!(out, "2.50");
+    }
+
+    #[test]
+    fn format_text_rejects_malformed_template() {
+        let runtime = LuaRuntime::new().unwrap();
+
+        let err = runtime
+            .lua()
+            .load("return engine.format_text('{')")
+            .eval::<String>()
+            .unwrap_err();
+        assert!(
+            err.to_string().contains("format_text"),
+            "error should name format_text: {err}"
+        );
+    }
+
+    #[test]
+    fn format_text_keeps_literal_token_for_missing_world_key() {
+        let runtime = LuaRuntime::new().unwrap();
+
+        let out: String = runtime
+            .lua()
+            .load("return engine.format_text('a {missing} b')")
+            .eval()
+            .unwrap();
+        assert_eq!(out, "a {missing} b");
     }
 }
