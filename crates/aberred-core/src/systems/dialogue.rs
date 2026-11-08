@@ -6,7 +6,8 @@
 //! [`WorldSignals`] with the effects of the entered node and of the picked
 //! choice, and reports each transition as a [`DialogueStep`].
 //! [`dialogue_system`] runs it once per runner entity per tick and triggers
-//! the matching event of [`crate::events::dialogue`] for every returned step.
+//! the matching event of [`crate::events::dialogue`] for every returned step, and warns once
+//! per placeholder key that a newly entered node uses without a value.
 
 use std::sync::Arc;
 
@@ -17,9 +18,13 @@ use smallvec::SmallVec;
 use crate::components::dialogue::{
     DialogueEndReason, DialogueRequest, DialogueRunner, DialogueStatus,
 };
+use crate::components::signals::Signals;
 use crate::events::dialogue::{DialogueChoiceSelected, DialogueEnded, DialogueNodeEntered};
-use crate::resources::dialogue_tree::{DialogueTree, Next, NodeIdx};
-use crate::resources::world_signals::WorldSignals;
+use crate::resources::dialogue_tree::{
+    DialogueNode, DialogueTextField, DialogueTree, Next, NodeIdx,
+};
+use crate::resources::signal_text::for_each_missing_signal_key;
+use crate::resources::world_signals::{SignalsRead, WorldSignals};
 
 /// What one call of [`step_runner`] did, in order; a later layer turns each into an event.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -243,12 +248,17 @@ fn finish(
 /// moves at most once per run. The events are queued with
 /// [`Commands::trigger`], so observers run after the system and read the
 /// final state from the runner.
+///
+/// After each entered node, logs one `log::warn!` per `{key}` / `{self.key}` placeholder of
+/// the node's text, speaker and choices that has no value (`self.` keys read the runner
+/// entity's [`Signals`]). The scan runs after the node's `on_enter` effects, so a key they
+/// set is not reported; it is advisory and does not change the transition.
 pub fn dialogue_system(
-    mut runners: Query<(Entity, &mut DialogueRunner)>,
+    mut runners: Query<(Entity, &mut DialogueRunner, Option<&Signals>)>,
     mut signals: ResMut<WorldSignals>,
     mut commands: Commands,
 ) {
-    for (entity, mut runner) in &mut runners {
+    for (entity, mut runner, entity_signals) in &mut runners {
         // An idle runner (started, nothing requested) is untouched by
         // `step_runner`; skip it before any `DerefMut` marks it changed.
         if runner.pending().is_none() && runner.status() != DialogueStatus::NotStarted {
@@ -261,8 +271,55 @@ pub fn dialogue_system(
             signals.set_changed();
         }
         for step in steps {
+            if let DialogueStep::Entered { node, .. } = step {
+                warn_missing_placeholders(runner.tree.node(node), &*signals, entity_signals);
+            }
             trigger_step(&mut commands, entity, &runner.tree, step);
         }
+    }
+}
+
+/// Placeholders of `node` (speaker, text, then choices in declared order) whose key has no
+/// value, as `(field, key)` pairs. A key is listed once, at its first use; `self.` keys keep
+/// their prefix. A malformed template reports nothing.
+fn missing_placeholders(
+    node: &DialogueNode,
+    world: &dyn SignalsRead,
+    entity: Option<&Signals>,
+) -> SmallVec<[(DialogueTextField, String); 4]> {
+    let mut found: SmallVec<[(DialogueTextField, String); 4]> = SmallVec::new();
+    let mut scan = |field: DialogueTextField, template: &str| {
+        for_each_missing_signal_key(template, world, entity, |key| {
+            if !found.iter().any(|(_, known)| known == key) {
+                found.push((field, key.to_string()));
+            }
+        });
+    };
+    if let Some(speaker) = &node.speaker {
+        scan(DialogueTextField::Speaker, speaker);
+    }
+    scan(DialogueTextField::Text, &node.text);
+    if let Next::Choices(choices) = &node.next {
+        for (index, choice) in choices.iter().enumerate() {
+            scan(DialogueTextField::Choice(index), &choice.text);
+        }
+    }
+    found
+}
+
+/// Logs one warning per missing placeholder key of the node just entered.
+fn warn_missing_placeholders(
+    node: &DialogueNode,
+    world: &dyn SignalsRead,
+    entity: Option<&Signals>,
+) {
+    for (field, key) in missing_placeholders(node, world, entity) {
+        log::warn!(
+            "dialogue node \"{}\": the {field} uses {{{key}}}, which has no value; set the signal \
+             before the node is entered (a choice effect, on_enter, or before requesting the \
+             transition)",
+            node.id
+        );
     }
 }
 
@@ -1246,5 +1303,82 @@ mod tests {
             "an idle finished runner must not be marked changed"
         );
         assert!(!signals_changed_since(&mut world, since));
+    }
+
+    /// `missing_placeholders` over the node `id` of `tree`, as `(field, key)` pairs.
+    fn missing_on(
+        tree: &DialogueTree,
+        id: &str,
+        world: &WorldSignals,
+        entity: Option<&Signals>,
+    ) -> Vec<(DialogueTextField, String)> {
+        let node = tree.node(tree.idx_of(id).unwrap());
+        missing_placeholders(node, world, entity).into_vec()
+    }
+
+    #[test]
+    fn missing_placeholders_covers_text_speaker_and_choices_once_per_key() {
+        let tree = build_tree("n", |b| {
+            b.node("n")
+                .speaker("{npc_name}")
+                .text("{apples} for {player_name}, {self.stock}")
+                .choice("Buy {apples} from {self.shopkeeper}", "x")
+                .choice("Hi {player_name}", "x")
+                .node("x")
+                .text("X")
+        });
+        let mut world = WorldSignals::default();
+        world.set_integer("apples", 6);
+        let entity = Signals::default();
+
+        let missing = missing_on(&tree, "n", &world, Some(&entity));
+        assert_eq!(
+            missing,
+            [
+                (DialogueTextField::Speaker, "npc_name".to_string()),
+                (DialogueTextField::Text, "player_name".to_string()),
+                (DialogueTextField::Text, "self.stock".to_string()),
+                (DialogueTextField::Choice(0), "self.shopkeeper".to_string()),
+            ],
+            "player_name is reported once, at its first use"
+        );
+    }
+
+    #[test]
+    fn missing_placeholders_counts_self_keys_as_missing_without_an_entity() {
+        let tree = build_tree("n", |b| b.node("n").text("{self.stock}"));
+        let missing = missing_on(&tree, "n", &WorldSignals::default(), None);
+        assert_eq!(
+            missing,
+            [(DialogueTextField::Text, "self.stock".to_string())]
+        );
+    }
+
+    #[test]
+    fn missing_placeholders_is_empty_without_placeholders_or_when_all_resolve() {
+        let tree = build_tree("n", |b| {
+            b.node("n").text("plain").node("m").text("{apples} {{x}}")
+        });
+        let mut world = WorldSignals::default();
+        world.set_integer("apples", 1);
+        assert!(missing_on(&tree, "n", &WorldSignals::default(), None).is_empty());
+        assert!(missing_on(&tree, "m", &world, None).is_empty());
+    }
+
+    #[test]
+    fn a_key_set_by_the_entering_on_enter_effect_is_not_missing() {
+        let tree = build_tree("n", |b| {
+            b.node("n")
+                .text("{player_name}")
+                .on_enter(DialogueEffect::set_string("player_name", "Idaho06"))
+        });
+        let (mut runner, mut signals) = fresh(&tree);
+        let steps = step_runner(&mut runner, &mut signals);
+        let DialogueStep::Entered { node, .. } = steps[0] else {
+            panic!("the first step enters the start node")
+        };
+        // The scan runs after `step_runner`, so it sees the effect's write.
+        let missing = missing_placeholders(tree.node(node), &signals, None);
+        assert!(missing.is_empty(), "got {missing:?}");
     }
 }
