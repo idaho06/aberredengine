@@ -9,6 +9,7 @@
 //! `validate_signal_text` checks one, and `SignalTextError` says what is wrong with it.
 
 use arrayvec::ArrayString;
+use std::borrow::Cow;
 use std::fmt::Write as _;
 
 use crate::components::signals::Signals;
@@ -76,10 +77,11 @@ impl SignalLookup for Signals {
     }
 }
 
-/// Formats a number with `Display` into a stack buffer.
-fn display_to_stack<'a>(v: impl std::fmt::Display) -> SignalStr<'a> {
+/// Renders `args` into a stack buffer. A number never overflows [`NUM_BUF_LEN`] (precision is
+/// at most 6, see [`NUM_BUF_LEN`]).
+fn write_stack<'a>(args: std::fmt::Arguments<'_>) -> SignalStr<'a> {
     let mut buf = ArrayString::<NUM_BUF_LEN>::new();
-    let _ = write!(buf, "{}", v);
+    let _ = buf.write_fmt(args);
     SignalStr::Stack(buf)
 }
 
@@ -91,11 +93,27 @@ pub(crate) fn signal_as_str<'a, S: SignalLookup + ?Sized>(
     src: &'a S,
     key: &str,
 ) -> Option<SignalStr<'a>> {
+    signal_as_str_with(src, key, None)
+}
+
+/// Like [`signal_as_str`], with `precision` digits after the point for numbers (an integer
+/// prints as a float then). Strings and flags ignore it.
+pub(crate) fn signal_as_str_with<'a, S: SignalLookup + ?Sized>(
+    src: &'a S,
+    key: &str,
+    precision: Option<u8>,
+) -> Option<SignalStr<'a>> {
     if let Some(v) = src.get_integer(key) {
-        return Some(display_to_stack(v));
+        return Some(match precision {
+            Some(n) => write_stack(format_args!("{:.*}", usize::from(n), f64::from(v))),
+            None => write_stack(format_args!("{v}")),
+        });
     }
     if let Some(v) = src.get_scalar(key) {
-        return Some(display_to_stack(v));
+        return Some(match precision {
+            Some(n) => write_stack(format_args!("{:.*}", usize::from(n), v)),
+            None => write_stack(format_args!("{v}")),
+        });
     }
     if let Some(s) = src.get_string(key) {
         return Some(SignalStr::Borrowed(s));
@@ -264,6 +282,48 @@ pub fn validate_signal_text(template: &str) -> Result<(), SignalTextError> {
     segments(template).try_for_each(|segment| segment.map(drop))
 }
 
+/// Fills the placeholders of `template` from `world` and returns the text.
+///
+/// `{key}` reads `world`; `{key:.N}` prints a number with `N` digits after the point. A key
+/// that is not found keeps its literal token (`{key:.2}` included), and a malformed part is
+/// copied through as it was written, so this never fails and never panics. A template with no
+/// brace at all is returned borrowed. Call [`validate_signal_text`] to reject a malformed
+/// template up front.
+///
+/// `entity` is the signals that `{self.key}` reads.
+pub fn format_signal_text<'a>(
+    template: &'a str,
+    world: &dyn SignalsRead,
+    _entity: Option<&Signals>,
+) -> Cow<'a, str> {
+    if !template.contains(['{', '}']) {
+        return Cow::Borrowed(template);
+    }
+    let mut out = String::with_capacity(template.len());
+    let mut parts = segments(template);
+    loop {
+        let start = parts.pos;
+        let Some(part) = parts.next() else { break };
+        let value = match part {
+            Ok(Segment::Literal(text)) => {
+                out.push_str(text);
+                continue;
+            }
+            Ok(Segment::Placeholder(p)) => match p.source {
+                PlaceholderSource::World => signal_as_str_with(world, p.key, p.precision),
+                PlaceholderSource::Entity => None,
+            },
+            Err(_) => None,
+        };
+        match value {
+            Some(v) => out.push_str(v.as_str()),
+            // Missing key or malformed part: keep the source text.
+            None => out.push_str(&template[start..parts.pos]),
+        }
+    }
+    Cow::Owned(out)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -428,5 +488,107 @@ mod tests {
     fn error_messages_name_the_offset() {
         let msg = SignalTextError::BadPrecision { at: 4 }.to_string();
         assert!(msg.contains('4'), "{msg}");
+    }
+
+    mod format {
+        use super::super::*;
+        use crate::resources::world_signals::WorldSignals;
+        use std::borrow::Cow;
+
+        fn world() -> WorldSignals {
+            let mut w = WorldSignals::default();
+            w.set_integer("apples", 6);
+            w.set_scalar("grain", 5.0);
+            w.set_scalar("price", 2.5);
+            w.set_string("player_name", "Idaho06");
+            w.set_flag("open");
+            w
+        }
+
+        fn fmt(template: &str) -> String {
+            format_signal_text(template, &world(), None).into_owned()
+        }
+
+        #[test]
+        fn fills_each_signal_type() {
+            assert_eq!(
+                fmt("{apples} apples, {grain} kg, {price} gold, {player_name}, open={open}"),
+                "6 apples, 5 kg, 2.5 gold, Idaho06, open=true"
+            );
+        }
+
+        #[test]
+        fn lookup_order_is_integer_scalar_string_flag() {
+            let mut w = WorldSignals::default();
+            w.set_flag("k");
+            assert_eq!(format_signal_text("{k}", &w, None), "true");
+            w.set_string("k", "text");
+            assert_eq!(format_signal_text("{k}", &w, None), "text");
+            w.set_scalar("k", 1.5);
+            assert_eq!(format_signal_text("{k}", &w, None), "1.5");
+            w.set_integer("k", 7);
+            assert_eq!(format_signal_text("{k}", &w, None), "7");
+        }
+
+        #[test]
+        fn precision_applies_to_integers_and_scalars() {
+            assert_eq!(fmt("{apples:.2}"), "6.00");
+            assert_eq!(fmt("{apples:.0}"), "6");
+            assert_eq!(fmt("{price:.0}"), "2");
+            assert_eq!(fmt("{price:.3}"), "2.500");
+            assert_eq!(fmt("{grain:.1}"), "5.0");
+        }
+
+        #[test]
+        fn precision_on_a_string_or_flag_is_ignored() {
+            assert_eq!(fmt("{player_name:.2} {open:.3}"), "Idaho06 true");
+        }
+
+        #[test]
+        fn a_missing_key_keeps_its_literal_token() {
+            assert_eq!(fmt("Hi {nobody}!"), "Hi {nobody}!");
+            assert_eq!(fmt("{nobody:.2}"), "{nobody:.2}");
+            assert_eq!(fmt("{self.apples}"), "{self.apples}");
+        }
+
+        #[test]
+        fn escapes_become_single_braces() {
+            assert_eq!(fmt("{{{apples}}}"), "{6}");
+        }
+
+        #[test]
+        fn malformed_parts_are_copied_through_literally() {
+            assert_eq!(fmt("a } b {apples}"), "a } b 6");
+            assert_eq!(fmt("{} {apples}"), "{} 6");
+            assert_eq!(fmt("{apples:.9} {apples}"), "{apples:.9} 6");
+            assert_eq!(fmt("{apples"), "{apples");
+            assert_eq!(fmt("{a{apples}"), "{a6");
+        }
+
+        #[test]
+        fn a_template_without_braces_is_borrowed() {
+            let out = format_signal_text("no placeholders here", &world(), None);
+            assert!(matches!(out, Cow::Borrowed("no placeholders here")));
+        }
+
+        #[test]
+        fn world_signals_and_a_snapshot_format_identically() {
+            let mut w = world();
+            let snapshot = w.snapshot();
+            let template = "{apples} {grain:.2} {player_name} {open} {nobody}";
+            assert_eq!(
+                format_signal_text(template, &w, None),
+                format_signal_text(template, &*snapshot, None)
+            );
+        }
+
+        #[test]
+        fn the_widest_number_prints_in_full() {
+            let mut w = WorldSignals::default();
+            w.set_scalar("big", -f32::MAX);
+            let expected = format!("{:.6}", -f32::MAX);
+            assert_eq!(expected.len(), 47);
+            assert_eq!(format_signal_text("{big:.6}", &w, None), expected);
+        }
     }
 }
