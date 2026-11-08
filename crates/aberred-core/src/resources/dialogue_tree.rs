@@ -18,6 +18,7 @@ use rustc_hash::FxHashMap;
 use crate::resources::dialogue_def::{
     ChoiceDef, DialogueCondition, DialogueDef, DialogueEffect, NodeDef,
 };
+use crate::resources::signal_text::{SignalTextError, validate_signal_text};
 
 /// Index of a [`DialogueNode`] inside a [`DialogueTree`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -160,6 +161,31 @@ impl DialogueTree {
     }
 }
 
+/// Which text field of a dialogue node a malformed placeholder was found in.
+///
+/// Formats as `text`, `speaker`, or `choice {i} text` with the choice's
+/// zero-based index in the node's choices list, for use inside the
+/// [`DialogueError::BadPlaceholder`] message.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DialogueTextField {
+    /// The node's `text`.
+    Text,
+    /// The node's `speaker`, when set.
+    Speaker,
+    /// The `text` of the choice at this zero-based index in the node's choices list.
+    Choice(usize),
+}
+
+impl std::fmt::Display for DialogueTextField {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Text => f.write_str("text"),
+            Self::Speaker => f.write_str("speaker"),
+            Self::Choice(i) => write!(f, "choice {i} text"),
+        }
+    }
+}
+
 /// Errors returned when loading or validating a [`DialogueDef`].
 #[derive(Debug, thiserror::Error)]
 pub enum DialogueError {
@@ -195,6 +221,17 @@ pub enum DialogueError {
         /// Id of the node with `choices: Some(vec![])`.
         node: String,
     },
+    /// A node `text`, `speaker` or choice `text` has a malformed `{...}` placeholder.
+    #[error("dialogue node \"{node}\" has a malformed placeholder in its {field}: {source}")]
+    BadPlaceholder {
+        /// Id of the node holding the malformed template.
+        node: String,
+        /// Which text field of the node holds it.
+        field: DialogueTextField,
+        /// Why the template is malformed.
+        #[source]
+        source: SignalTextError,
+    },
     /// A [`DialogueBuilder`](crate::resources::dialogue_builder::DialogueBuilder)
     /// method was called out of order.
     #[error("dialogue builder misuse: {message}")]
@@ -223,9 +260,15 @@ fn intern_labels(labels: Vec<String>) -> Arc<[Arc<str>]> {
 /// 2. `start` id not among the nodes ([`DialogueError::StartMissing`]);
 /// 3. per node in node order: both `next` and `choices` set
 ///    ([`DialogueError::NextAndChoices`]); `choices == Some(vec![])`
-///    ([`DialogueError::EmptyChoices`]); `next` target unknown
-///    ([`DialogueError::UnknownTarget`]); then each choice `next`, in choice
-///    order ([`DialogueError::UnknownTarget`]).
+///    ([`DialogueError::EmptyChoices`]); a malformed `{...}` placeholder in
+///    `text`, then in `speaker` when set ([`DialogueError::BadPlaceholder`]);
+///    `next` target unknown ([`DialogueError::UnknownTarget`]); then each
+///    choice in choice order: a malformed placeholder in the choice `text`
+///    ([`DialogueError::BadPlaceholder`]), then that choice's `next` target
+///    ([`DialogueError::UnknownTarget`]).
+///
+/// Placeholder templates are checked with [`validate_signal_text`] but
+/// stored raw: substitution happens at render time, not here.
 ///
 /// A node with neither `next` nor `choices` is terminal ([`Next::End`]);
 /// `choices: None` and an absent `choices` key are the same. Unreachable
@@ -278,6 +321,22 @@ impl TryFrom<DialogueDef> for DialogueTree {
             if matches!(&choices, Some(list) if list.is_empty()) {
                 return Err(DialogueError::EmptyChoices { node: id.clone() });
             }
+            if let Err(source) = validate_signal_text(&text) {
+                return Err(DialogueError::BadPlaceholder {
+                    node: id.clone(),
+                    field: DialogueTextField::Text,
+                    source,
+                });
+            }
+            if let Some(speaker) = &speaker
+                && let Err(source) = validate_signal_text(speaker)
+            {
+                return Err(DialogueError::BadPlaceholder {
+                    node: id.clone(),
+                    field: DialogueTextField::Speaker,
+                    source,
+                });
+            }
 
             let next = if let Some(target) = &next_id {
                 let idx = names.get(target.as_str()).copied().ok_or_else(|| {
@@ -289,7 +348,7 @@ impl TryFrom<DialogueDef> for DialogueTree {
                 Next::Goto(idx)
             } else if let Some(choice_defs) = choices {
                 let mut built_choices = Vec::with_capacity(choice_defs.len());
-                for choice_def in choice_defs {
+                for (choice_index, choice_def) in choice_defs.into_iter().enumerate() {
                     let ChoiceDef {
                         text: choice_text,
                         next: choice_next,
@@ -297,6 +356,13 @@ impl TryFrom<DialogueDef> for DialogueTree {
                         effects,
                         labels: choice_labels,
                     } = choice_def;
+                    if let Err(source) = validate_signal_text(&choice_text) {
+                        return Err(DialogueError::BadPlaceholder {
+                            node: id.clone(),
+                            field: DialogueTextField::Choice(choice_index),
+                            source,
+                        });
+                    }
                     let target = match &choice_next {
                         Some(next_id) => {
                             Some(names.get(next_id.as_str()).copied().ok_or_else(|| {
@@ -363,6 +429,7 @@ mod tests {
     use crate::resources::dialogue_def::test_helpers::{
         choice, example_def, example_json, node, s,
     };
+    use crate::resources::signal_text::SignalTextError;
 
     /// Converts `def`, expecting a validation error.
     fn expect_err(def: DialogueDef) -> DialogueError {
@@ -566,6 +633,112 @@ mod tests {
     }
 
     #[test]
+    fn a_malformed_text_placeholder_is_reported() {
+        let def = DialogueDef {
+            start: s("a"),
+            nodes: vec![node("a", "hi {")],
+        };
+        let err = expect_err(def);
+        assert!(
+            matches!(&err, DialogueError::BadPlaceholder { node, field, source }
+                if node == "a"
+                    && *field == DialogueTextField::Text
+                    && *source == SignalTextError::UnclosedBrace { at: 3 }),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn a_malformed_speaker_placeholder_is_reported() {
+        let def = DialogueDef {
+            start: s("a"),
+            nodes: vec![NodeDef {
+                speaker: Some(s("{}")),
+                ..node("a", "t")
+            }],
+        };
+        let err = expect_err(def);
+        assert!(
+            matches!(&err, DialogueError::BadPlaceholder { node, field, source }
+                if node == "a"
+                    && *field == DialogueTextField::Speaker
+                    && *source == SignalTextError::EmptyKey { at: 0 }),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn a_malformed_choice_text_placeholder_is_reported_with_its_index() {
+        let mut a = node("a", "t");
+        a.choices = Some(vec![
+            choice("fine"),
+            ChoiceDef {
+                text: s("{k:.9}"),
+                ..choice("bad")
+            },
+        ]);
+        let def = DialogueDef {
+            start: s("a"),
+            nodes: vec![a],
+        };
+        let err = expect_err(def);
+        assert!(
+            matches!(&err, DialogueError::BadPlaceholder { node, field, source }
+                if node == "a"
+                    && *field == DialogueTextField::Choice(1)
+                    && *source == SignalTextError::BadPrecision { at: 0 }),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn valid_placeholders_build_and_are_stored_raw() {
+        let mut a = node(
+            "a",
+            "I have {self.apples} apples, {grain:.1} kg, {{literal}}",
+        );
+        a.speaker = Some(s("{player_name}"));
+        a.choices = Some(vec![ChoiceDef {
+            text: s("Hi {player_name}"),
+            ..choice("hi")
+        }]);
+        let def = DialogueDef {
+            start: s("a"),
+            nodes: vec![a],
+        };
+        let tree = DialogueTree::try_from(def).unwrap();
+        let a = tree.node(tree.idx_of("a").unwrap());
+        assert_eq!(
+            &*a.text, "I have {self.apples} apples, {grain:.1} kg, {{literal}}",
+            "the template is stored raw, not substituted"
+        );
+        assert_eq!(a.speaker.as_deref(), Some("{player_name}"));
+        let choices = match &a.next {
+            Next::Choices(choices) => choices,
+            other => panic!("a should offer choices, got {other:?}"),
+        };
+        assert_eq!(&*choices[0].text, "Hi {player_name}");
+    }
+
+    #[test]
+    fn next_and_choices_wins_over_a_malformed_text() {
+        // The structural NextAndChoices check runs before the placeholder
+        // checks, so it is reported even though the text is also malformed.
+        let mut a = node("a", "hi {");
+        a.next = Some(s("b"));
+        a.choices = Some(vec![choice("stay")]);
+        let def = DialogueDef {
+            start: s("a"),
+            nodes: vec![a, node("b", "t2")],
+        };
+        let err = expect_err(def);
+        assert!(
+            matches!(&err, DialogueError::NextAndChoices { node } if node == "a"),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
     fn unreachable_nodes_are_reported_in_index_order_but_still_build() {
         let mut b = node("b", "t");
         b.next = Some(s("c"));
@@ -659,6 +832,22 @@ mod tests {
         let err = load_dialogue(&path).unwrap_err();
         assert!(
             matches!(&err, DialogueError::UnknownTarget { node, target } if node == "a" && target == "ghost"),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn load_dialogue_reports_a_malformed_placeholder() {
+        let (_dir, path) = write_temp_file(
+            "bad_placeholder.json",
+            r#"{"start":"a","nodes":[{"id":"a","text":"hi {"}]}"#,
+        );
+        let err = load_dialogue(&path).unwrap_err();
+        assert!(
+            matches!(&err, DialogueError::BadPlaceholder { node, field, source }
+                if node == "a"
+                    && *field == DialogueTextField::Text
+                    && *source == SignalTextError::UnclosedBrace { at: 3 }),
             "got {err:?}"
         );
     }

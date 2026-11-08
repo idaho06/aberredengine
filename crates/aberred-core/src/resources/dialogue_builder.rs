@@ -276,6 +276,8 @@ impl DialogueBuilder {
 mod tests {
     use super::*;
     use crate::resources::dialogue_def::test_helpers::{example_def, example_json, s};
+    use crate::resources::dialogue_tree::DialogueTextField;
+    use crate::resources::signal_text::SignalTextError;
 
     /// The guard-conversation chain shared by the happy-path tests.
     fn guard_chain() -> DialogueBuilder {
@@ -512,6 +514,18 @@ mod tests {
         let err = DialogueBuilder::new("a").build().unwrap_err();
         assert!(
             matches!(&err, DialogueError::StartMissing { start } if start == "a"),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn build_rejects_a_malformed_text_placeholder() {
+        let err = node_a().text("hi {").build().unwrap_err();
+        assert!(
+            matches!(&err, DialogueError::BadPlaceholder { node, field, source }
+                if node == "a"
+                    && *field == DialogueTextField::Text
+                    && *source == SignalTextError::UnclosedBrace { at: 3 }),
             "got {err:?}"
         );
     }
