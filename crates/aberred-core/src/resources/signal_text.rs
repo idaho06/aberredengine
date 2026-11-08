@@ -156,6 +156,9 @@ pub enum SignalTextError {
     },
 }
 
+/// Marks a placeholder as reading the entity `Signals`: `{self.key}`.
+const SELF_PREFIX: &str = "self.";
+
 /// Which signal store a placeholder reads.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum PlaceholderSource {
@@ -251,7 +254,7 @@ impl<'a> Iterator for Segments<'a> {
 
 /// Parses the text between a placeholder's braces. `at` is the offset of its `{`.
 fn parse_placeholder(inner: &str, at: usize) -> Result<Placeholder<'_>, SignalTextError> {
-    let (source, rest) = match inner.strip_prefix("self.") {
+    let (source, rest) = match inner.strip_prefix(SELF_PREFIX) {
         Some(rest) => (PlaceholderSource::Entity, rest),
         None => (PlaceholderSource::World, inner),
     };
@@ -282,6 +285,22 @@ pub fn validate_signal_text(template: &str) -> Result<(), SignalTextError> {
     segments(template).try_for_each(|segment| segment.map(drop))
 }
 
+/// Looks up the value a placeholder names in its own source.
+fn resolve<'a>(
+    placeholder: &Placeholder<'_>,
+    world: &'a dyn SignalsRead,
+    entity: Option<&'a Signals>,
+) -> Option<SignalStr<'a>> {
+    match placeholder.source {
+        PlaceholderSource::World => {
+            signal_as_str_with(world, placeholder.key, placeholder.precision)
+        }
+        PlaceholderSource::Entity => {
+            signal_as_str_with(entity?, placeholder.key, placeholder.precision)
+        }
+    }
+}
+
 /// Fills the placeholders of `template` from `world` and returns the text.
 ///
 /// `{key}` reads `world`; `{key:.N}` prints a number with `N` digits after the point. A key
@@ -290,11 +309,12 @@ pub fn validate_signal_text(template: &str) -> Result<(), SignalTextError> {
 /// brace at all is returned borrowed. Call [`validate_signal_text`] to reject a malformed
 /// template up front.
 ///
-/// `entity` is the signals that `{self.key}` reads.
+/// `entity` is the signals that `{self.key}` reads; without one, every `{self.key}` is
+/// missing. There is no fallback between the two sources.
 pub fn format_signal_text<'a>(
     template: &'a str,
     world: &dyn SignalsRead,
-    _entity: Option<&Signals>,
+    entity: Option<&Signals>,
 ) -> Cow<'a, str> {
     if !template.contains(['{', '}']) {
         return Cow::Borrowed(template);
@@ -309,10 +329,7 @@ pub fn format_signal_text<'a>(
                 out.push_str(text);
                 continue;
             }
-            Ok(Segment::Placeholder(p)) => match p.source {
-                PlaceholderSource::World => signal_as_str_with(world, p.key, p.precision),
-                PlaceholderSource::Entity => None,
-            },
+            Ok(Segment::Placeholder(p)) => resolve(&p, world, entity),
             Err(_) => None,
         };
         match value {
@@ -322,6 +339,38 @@ pub fn format_signal_text<'a>(
         }
     }
     Cow::Owned(out)
+}
+
+/// Calls `f` with the key of every placeholder in `template` that has no value, in order and
+/// as written (`self.key` keeps its prefix). A key used twice is reported twice.
+///
+/// A malformed template reports nothing: [`validate_signal_text`] is the check for those.
+pub fn for_each_missing_signal_key(
+    template: &str,
+    world: &dyn SignalsRead,
+    entity: Option<&Signals>,
+    mut f: impl FnMut(&str),
+) {
+    if validate_signal_text(template).is_err() {
+        return;
+    }
+    let mut parts = segments(template);
+    loop {
+        let start = parts.pos;
+        let Some(part) = parts.next() else { break };
+        let Ok(Segment::Placeholder(p)) = part else {
+            continue;
+        };
+        if resolve(&p, world, entity).is_none() {
+            // The key as written: after the `{`, with its `self.` prefix if any.
+            let prefix = match p.source {
+                PlaceholderSource::World => 0,
+                PlaceholderSource::Entity => SELF_PREFIX.len(),
+            };
+            let inner = &template[start + 1..parts.pos - 1];
+            f(&inner[..prefix + p.key.len()]);
+        }
+    }
 }
 
 #[cfg(test)]
@@ -589,6 +638,89 @@ mod tests {
             let expected = format!("{:.6}", -f32::MAX);
             assert_eq!(expected.len(), 47);
             assert_eq!(format_signal_text("{big:.6}", &w, None), expected);
+        }
+    }
+
+    mod entity {
+        use super::super::*;
+        use crate::resources::world_signals::WorldSignals;
+
+        fn world() -> WorldSignals {
+            let mut w = WorldSignals::default();
+            w.set_integer("shared", 1);
+            w.set_string("player_name", "Idaho06");
+            w
+        }
+
+        fn entity() -> Signals {
+            let mut e = Signals::default();
+            e.set_integer("shared", 2);
+            e.set_integer("apples", 6);
+            e.set_scalar("grain", 5.0);
+            e
+        }
+
+        fn missing(template: &str, entity: Option<&Signals>) -> Vec<String> {
+            let mut keys = Vec::new();
+            for_each_missing_signal_key(template, &world(), entity, |k| keys.push(k.to_string()));
+            keys
+        }
+
+        #[test]
+        fn self_reads_only_the_entity_and_plain_reads_only_the_world() {
+            let (w, e) = (world(), entity());
+            let out = format_signal_text("{shared} {self.shared}", &w, Some(&e));
+            assert_eq!(out, "1 2");
+        }
+
+        #[test]
+        fn self_applies_precision() {
+            let (w, e) = (world(), entity());
+            let out = format_signal_text("{self.apples:.1} {self.grain:.2}", &w, Some(&e));
+            assert_eq!(out, "6.0 5.00");
+        }
+
+        #[test]
+        fn self_without_an_entity_is_missing_and_keeps_its_token() {
+            let w = world();
+            assert_eq!(
+                format_signal_text("{self.apples}", &w, None),
+                "{self.apples}"
+            );
+        }
+
+        #[test]
+        fn self_does_not_fall_back_to_the_world() {
+            let (w, e) = (world(), entity());
+            let out = format_signal_text("{self.player_name} {apples}", &w, Some(&e));
+            assert_eq!(out, "{self.player_name} {apples}");
+        }
+
+        #[test]
+        fn the_scan_yields_each_missing_key_in_order() {
+            let e = entity();
+            let keys = missing(
+                "{nobody} {player_name} {self.apples} {self.ghost:.2} {other}",
+                Some(&e),
+            );
+            assert_eq!(keys, ["nobody", "self.ghost", "other"]);
+        }
+
+        #[test]
+        fn the_scan_counts_self_keys_as_missing_without_an_entity() {
+            assert_eq!(missing("{self.apples}", None), ["self.apples"]);
+        }
+
+        #[test]
+        fn the_scan_yields_nothing_for_a_malformed_template() {
+            assert!(missing("{nobody} {", None).is_empty());
+            assert!(missing("{} {nobody}", None).is_empty());
+        }
+
+        #[test]
+        fn the_scan_yields_nothing_when_everything_resolves() {
+            let e = entity();
+            assert!(missing("{player_name} {self.apples} {{ok}}", Some(&e)).is_empty());
         }
     }
 }
