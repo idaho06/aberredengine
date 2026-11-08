@@ -30,6 +30,7 @@
 //! - [`render_size`] – game's internal render resolution in pixels
 //! - [`scene_manager`] – scene registry and active-scene tracking
 //! - [`signal_intents`] – deferred `WorldSignals` writes queued by render-side scene callbacks
+//! - [`signal_text`] – signal value to text lookup shared by signal bindings and dialogue placeholders
 //! - [`sim_rng`] – shared, deterministic RNG for sim-schedule systems and observers
 //! - [`systems_store`] – registry of dynamically-lookup-able systems by name
 //! - [`texture_filter`] – texture sampling filter mode shared by render target and texture store
@@ -72,6 +73,7 @@ pub mod render_size;
 pub mod scene_manager;
 pub mod signal_intents;
 pub mod signal_keys;
+pub mod signal_text;
 pub mod sim_rng;
 pub mod systems_store;
 pub mod texture_dims;

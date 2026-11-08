@@ -3,33 +3,10 @@
 //! This module provides the system that synchronizes [`DynamicText`]
 //! components with signal values based on their [`SignalBinding`].
 
-use arrayvec::ArrayString;
-use std::fmt::Write as _;
-
-/// Capacity for a formatted number. `f32`'s `Display` never uses exponent notation, so its
-/// widest output is `-f32::MAX` at 40 chars (`i32::MIN` is 11). A buffer that is too small
-/// makes `write!` fail part-way and the text shows a truncated number.
-const NUM_BUF_LEN: usize = 48;
-
-/// Stack-allocated string for signal-to-text conversion.
-/// Uses a [`NUM_BUF_LEN`]-byte ArrayString for numeric types (i32 / f32), borrowed &str for others.
-enum SignalStr<'a> {
-    Stack(ArrayString<NUM_BUF_LEN>),
-    Borrowed(&'a str),
-}
-
-impl<'a> SignalStr<'a> {
-    fn as_str(&self) -> &str {
-        match self {
-            SignalStr::Stack(s) => s.as_str(),
-            SignalStr::Borrowed(s) => s,
-        }
-    }
-}
-
 use crate::components::dynamic_text::DynamicText;
 use crate::components::signal_binding::{SignalBinding, SignalSource};
 use crate::components::signals::Signals;
+use crate::resources::signal_text::signal_as_str;
 use crate::resources::world_signals::WorldSignals;
 use bevy_ecs::change_detection::DetectChangesMut;
 use bevy_ecs::prelude::*;
@@ -58,13 +35,11 @@ pub fn update_world_signals_binding_system(
     crate::tracy::tracy_span!("update_world_signals_binding");
     for (mut dynamic_text, signal_binding) in query.iter_mut() {
         let value_opt = match &signal_binding.source {
-            SignalSource::World => {
-                get_world_signal_as_str(&world_signals, &signal_binding.signal_key)
-            }
+            SignalSource::World => signal_as_str(&*world_signals, &signal_binding.signal_key),
             SignalSource::Entity(entity) => signals_query
                 .get(*entity)
                 .ok()
-                .and_then(|signals| get_entity_signal_as_str(signals, &signal_binding.signal_key)),
+                .and_then(|signals| signal_as_str(signals, &signal_binding.signal_key)),
         };
 
         if let Some(value) = value_opt {
@@ -81,57 +56,6 @@ pub fn update_world_signals_binding_system(
             }
         }
     }
-}
-
-/// Converts a signal value from [`WorldSignals`] to a string representation.
-///
-/// Tries each signal type in order: integer, scalar, string, flag.
-/// Returns `None` if the signal key is not found.
-fn get_world_signal_as_str<'a>(
-    world_signals: &'a WorldSignals,
-    signal_key: &str,
-) -> Option<SignalStr<'a>> {
-    if let Some(v) = world_signals.get_integer(signal_key) {
-        let mut buf = ArrayString::<NUM_BUF_LEN>::new();
-        let _ = write!(buf, "{}", v);
-        return Some(SignalStr::Stack(buf));
-    }
-    if let Some(v) = world_signals.get_scalar(signal_key) {
-        let mut buf = ArrayString::<NUM_BUF_LEN>::new();
-        let _ = write!(buf, "{}", v);
-        return Some(SignalStr::Stack(buf));
-    }
-    if let Some(s) = world_signals.get_string(signal_key) {
-        return Some(SignalStr::Borrowed(s));
-    }
-    if world_signals.has_flag(signal_key) {
-        return Some(SignalStr::Borrowed("true"));
-    }
-    None
-}
-
-/// Converts a signal value from an entity's [`Signals`] component to a string representation.
-///
-/// Tries each signal type in order: integer, scalar, string, flag.
-/// Returns `None` if the signal key is not found.
-fn get_entity_signal_as_str<'a>(signals: &'a Signals, signal_key: &str) -> Option<SignalStr<'a>> {
-    if let Some(v) = signals.get_integer(signal_key) {
-        let mut buf = ArrayString::<NUM_BUF_LEN>::new();
-        let _ = write!(buf, "{}", v);
-        return Some(SignalStr::Stack(buf));
-    }
-    if let Some(v) = signals.get_scalar(signal_key) {
-        let mut buf = ArrayString::<NUM_BUF_LEN>::new();
-        let _ = write!(buf, "{}", v);
-        return Some(SignalStr::Stack(buf));
-    }
-    if let Some(s) = signals.get_string(signal_key) {
-        return Some(SignalStr::Borrowed(s));
-    }
-    if signals.has_flag(signal_key) {
-        return Some(SignalStr::Borrowed("true"));
-    }
-    None
 }
 
 #[cfg(test)]
