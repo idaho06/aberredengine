@@ -80,7 +80,9 @@ pub use aberred_core::resources::dialogue_def::{
     ChoiceDef, DialogueCmp, DialogueCondition, DialogueDef, DialogueEffect, NodeDef,
 };
 pub use aberred_core::resources::dialogue_store::DialogueStore;
-pub use aberred_core::resources::dialogue_tree::{DialogueError, DialogueTree, load_dialogue};
+pub use aberred_core::resources::dialogue_tree::{
+    DialogueError, DialogueTextField, DialogueTree, load_dialogue,
+};
 pub use aberred_core::resources::game_config::GameConfig;
 pub use aberred_core::resources::game_state::{GameState, NextGameState};
 pub use aberred_core::resources::gui_theme::{GuiButtonSkin, GuiNinePatch, GuiThemeStore};
@@ -91,7 +93,9 @@ pub use aberred_core::resources::post_process_shader::PostProcessShader;
 pub use aberred_core::resources::render_size::RenderSize;
 pub use aberred_core::resources::signal_intents::SignalIntents;
 pub use aberred_core::resources::signal_keys as sk;
-pub use aberred_core::resources::signal_text::{SignalTextError, format_signal_text};
+pub use aberred_core::resources::signal_text::{
+    SignalTextError, format_signal_text, validate_signal_text,
+};
 pub use aberred_core::resources::sim_rng::SimRng;
 pub use aberred_core::resources::texture_filter::TextureFilter;
 pub use aberred_core::resources::uniform_value::UniformValue;

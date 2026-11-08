@@ -581,6 +581,32 @@ mod dialogue {
         assert!(signals.has_flag("informed"));
     }
 
+    /// A tool that edits dialogues can check a template and read which field of
+    /// which node `DialogueError::BadPlaceholder` blames, with prelude names only.
+    #[test]
+    fn a_tool_validates_templates_and_reads_the_blamed_field_from_the_prelude() {
+        assert!(validate_signal_text("I have {self.apples} apples").is_ok());
+        assert_eq!(
+            validate_signal_text("{k:.9}"),
+            Err(SignalTextError::BadPrecision { at: 0 })
+        );
+
+        let err = DialogueBuilder::new("shop")
+            .node("shop")
+            .speaker("{}")
+            .text("Hi")
+            .build()
+            .expect_err("an empty placeholder key is malformed");
+        assert!(
+            matches!(
+                &err,
+                DialogueError::BadPlaceholder { node, field, .. }
+                    if node == "shop" && *field == DialogueTextField::Speaker
+            ),
+            "got {err:?}"
+        );
+    }
+
     /// Placeholders are filled by the game: the runner keeps the raw template,
     /// and each `format_signal_text` call reads the signals as they are now
     /// (`{self.key}` from the runner entity's `Signals`, `{key}` from
