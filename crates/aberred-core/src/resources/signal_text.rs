@@ -6,7 +6,9 @@
 //! flags as `"true"`.
 //!
 //! The module also parses placeholder templates (`{key}`, `{self.key}`, `{key:.2}`):
-//! `validate_signal_text` checks one, and `SignalTextError` says what is wrong with it.
+//! `format_signal_text` fills one in, `validate_signal_text` checks one,
+//! `for_each_missing_signal_key` lists the keys that have no value, and
+//! `SignalTextError` says what is wrong with a malformed template.
 
 use arrayvec::ArrayString;
 use std::borrow::Cow;
@@ -77,8 +79,8 @@ impl SignalLookup for Signals {
     }
 }
 
-/// Renders `args` into a stack buffer. A number never overflows [`NUM_BUF_LEN`] (precision is
-/// at most 6, see [`NUM_BUF_LEN`]).
+/// Renders `args` into a stack buffer. The widest number, `-f32::MAX` with the largest
+/// precision of 6, still fits in [`NUM_BUF_LEN`].
 fn write_stack<'a>(args: std::fmt::Arguments<'_>) -> SignalStr<'a> {
     let mut buf = ArrayString::<NUM_BUF_LEN>::new();
     let _ = buf.write_fmt(args);
