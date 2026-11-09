@@ -199,18 +199,17 @@ fn identical_scenario_allocates_identical_entity_ids_across_runs() {
 /// scenario (`scenario_driver`), with the sim schedule's unordered systems
 /// shuffled by `shuffle_seed` (`None` = declaration order).
 fn shuffled_scenario_trail(shuffle_seed: Option<u64>) -> Vec<u64> {
-    let mut builder = TestWorldBuilder::new()
+    let mut tw = TestWorldBuilder::new()
         .deterministic(42)
-        .add_system(scenario_driver);
-    if let Some(seed) = shuffle_seed {
-        builder = builder.configure_schedule(move |sim| {
+        .add_system(scenario_driver)
+        .configure_schedule(move |sim| {
             sim.set_build_settings(ScheduleBuildSettings {
-                shuffle_seed: Some(seed),
+                shuffle_seed,
                 ..Default::default()
             });
-        });
-    }
-    let mut tw = builder.build().expect("build should succeed");
+        })
+        .build()
+        .expect("build should succeed");
     tw.world.insert_resource(DeterminismLog::default());
 
     (0..12)

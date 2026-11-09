@@ -37,9 +37,7 @@ impl SceneCleanup<'_, '_> {
     ///
     /// The keep-set (the observers of [`Persistent`] entities) is read now; the
     /// [`CleanableEntity`] filter is evaluated when the command is applied, so
-    /// an entity spawned between queueing and applying is swept too. The sweep
-    /// despawns in a batch, then runs the `Remove`/`Despawn` observers' queued
-    /// commands.
+    /// an entity spawned between queueing and applying is swept too.
     pub fn despawn_all(&self, commands: &mut Commands) {
         let keep: FxHashSet<Entity> = self
             .persistent
