@@ -297,10 +297,10 @@ impl EngineBuilder {
     /// # Errors (at `.run()`/`.try_run()`)
     ///
     /// As [`add_scene_system`](Self::add_scene_system).
-    pub fn on_scene_enter<B: Bundle, M>(
+    pub fn on_scene_enter<M>(
         self,
         scene: impl Into<String>,
-        observer: impl IntoObserverSystem<SceneEntered, B, M>,
+        observer: impl IntoObserverSystem<SceneEntered, M>,
     ) -> Self {
         self.on_scene_event("on_scene_enter", scene, observer)
     }
@@ -313,19 +313,19 @@ impl EngineBuilder {
     /// # Errors (at `.run()`/`.try_run()`)
     ///
     /// As [`add_scene_system`](Self::add_scene_system).
-    pub fn on_scene_exit<B: Bundle, M>(
+    pub fn on_scene_exit<M>(
         self,
         scene: impl Into<String>,
-        observer: impl IntoObserverSystem<SceneExited, B, M>,
+        observer: impl IntoObserverSystem<SceneExited, M>,
     ) -> Self {
         self.on_scene_event("on_scene_exit", scene, observer)
     }
 
-    fn on_scene_event<E: EntityEvent, B: Bundle, M>(
+    fn on_scene_event<E: EntityEvent, M>(
         mut self,
         method: &'static str,
         scene: impl Into<String>,
-        observer: impl IntoObserverSystem<E, B, M>,
+        observer: impl IntoObserverSystem<E, M>,
     ) -> Self {
         let scene = self.scene_ref(method, scene);
         self.extra_observers
@@ -395,9 +395,9 @@ impl EngineBuilder {
     /// ```rust,ignore
     /// commands.trigger(TilemapLoaded { path: "…".into() });
     /// ```
-    pub fn add_observer<E: Event, B: Bundle, M>(
+    pub fn add_observer<E: EventPattern, M>(
         mut self,
-        observer: impl IntoObserverSystem<E, B, M>,
+        observer: impl IntoObserverSystem<E, M>,
     ) -> Self {
         self.extra_observers.push(observer_registrar(observer));
         self

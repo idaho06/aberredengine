@@ -6,7 +6,7 @@ use aberredengine::prelude::*;
 struct Boid;
 
 // Lua spawns with `:with_group("swarm")`; Rust adopts every such entity.
-fn adopt_swarm(ev: On<Add, Group>, groups: Query<&Group>, mut commands: Commands) {
+fn adopt_swarm(ev: On<Add<Group>>, groups: Query<&Group>, mut commands: Commands) {
     let entity = ev.event_target();
     if groups.get(entity).is_ok_and(|group| group.name() == "swarm") {
         commands.entity(entity).insert(Boid);
@@ -50,14 +50,14 @@ mod lua_tags {
     struct Leader;
 
     // Lua tags a drone "leader" at spawn or later; its RigidBody is already there.
-    fn promote(ev: On<Add, Leader>, mut drones: Query<&mut RigidBody, With<Drone>>) {
+    fn promote(ev: On<Add<Leader>>, mut drones: Query<&mut RigidBody, With<Drone>>) {
         if let Ok(mut body) = drones.get_mut(ev.event_target()) {
             body.max_speed = Some(240.0);
         }
     }
 
     // `engine.entity_remove_tag` (or a despawn) takes the tag off.
-    fn demote(ev: On<Remove, Leader>, mut drones: Query<&mut RigidBody, With<Drone>>) {
+    fn demote(ev: On<Remove<Leader>>, mut drones: Query<&mut RigidBody, With<Drone>>) {
         if let Ok(mut body) = drones.get_mut(ev.event_target()) {
             body.max_speed = Some(120.0);
         }

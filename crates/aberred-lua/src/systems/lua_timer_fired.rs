@@ -27,7 +27,7 @@ pub fn lua_timer_fired_observer(
 /// Removes [`LuaOnTimerFired`] when its entity loses its `Timer` (a fired
 /// one-shot, or an explicit removal), so the callback never outlives its timer.
 /// Replacing the `Timer` keeps the callback.
-pub fn lua_timer_removed_observer(trigger: On<Remove, Timer>, mut commands: Commands) {
+pub fn lua_timer_removed_observer(trigger: On<Remove<Timer>>, mut commands: Commands) {
     commands
         .entity(trigger.event().entity)
         .try_remove::<LuaOnTimerFired>();

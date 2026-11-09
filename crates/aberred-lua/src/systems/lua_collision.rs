@@ -201,7 +201,7 @@ pub struct LuaCollisionObserved;
 /// exchange, a Rust rule's collision events never run Lua dispatch. Lua rules
 /// spawned before this observer is registered get no callbacks.
 pub fn lua_collision_rule_added_observer(
-    trigger: On<Add, LuaOnCollision>,
+    trigger: On<Add<LuaOnCollision>>,
     observed: Query<(), With<LuaCollisionObserved>>,
     mut commands: Commands,
 ) {

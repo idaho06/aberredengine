@@ -470,9 +470,9 @@ mod tests {
 
     /// A global observer that survives scene switches, spawned the way
     /// `EngineBuilder::add_observer` does.
-    fn add_global_observer<E: Event, B: Bundle, M>(
+    fn add_global_observer<E: Event, M>(
         world: &mut World,
-        observer: impl IntoObserverSystem<E, B, M>,
+        observer: impl IntoObserverSystem<E, M>,
     ) {
         world.spawn((Observer::new(observer), Persistent));
     }

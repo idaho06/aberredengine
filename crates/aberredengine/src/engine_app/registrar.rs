@@ -139,8 +139,8 @@ pub(crate) fn late_scene_system<M>(
 
 /// Build the [`ObserverRegistrar`] behind `add_observer`: a global observer,
 /// spawned [`Persistent`] so scene switches keep it.
-pub(crate) fn observer_registrar<E: Event, B: Bundle, M>(
-    observer: impl IntoObserverSystem<E, B, M>,
+pub(crate) fn observer_registrar<E: EventPattern, M>(
+    observer: impl IntoObserverSystem<E, M>,
 ) -> ObserverRegistrar {
     Box::new(move |world| {
         world.spawn((Observer::new(observer), Persistent));
@@ -153,9 +153,9 @@ pub(crate) fn observer_registrar<E: Event, B: Bundle, M>(
 ///
 /// Runs after the `SceneManager` and its scene entities exist; an unregistered
 /// `scene` is rejected earlier by `validate_builder`.
-pub(crate) fn scene_observer_registrar<E: EntityEvent, B: Bundle, M>(
+pub(crate) fn scene_observer_registrar<E: EntityEvent, M>(
     scene: String,
-    observer: impl IntoObserverSystem<E, B, M>,
+    observer: impl IntoObserverSystem<E, M>,
 ) -> ObserverRegistrar {
     Box::new(move |world| {
         let entity = world

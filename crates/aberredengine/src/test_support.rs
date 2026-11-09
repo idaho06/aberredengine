@@ -224,10 +224,10 @@ impl TestWorldBuilder {
     }
 
     /// Observe one scene's `SceneEntered`, mirroring `EngineBuilder::on_scene_enter`.
-    pub fn on_scene_enter<B: Bundle, M>(
+    pub fn on_scene_enter<M>(
         mut self,
         scene: impl Into<String>,
-        observer: impl IntoObserverSystem<SceneEntered, B, M>,
+        observer: impl IntoObserverSystem<SceneEntered, M>,
     ) -> Self {
         let scene = self.scene_ref("on_scene_enter", scene);
         self.extra_observers
@@ -236,10 +236,10 @@ impl TestWorldBuilder {
     }
 
     /// Observe one scene's `SceneExited`, mirroring `EngineBuilder::on_scene_exit`.
-    pub fn on_scene_exit<B: Bundle, M>(
+    pub fn on_scene_exit<M>(
         mut self,
         scene: impl Into<String>,
-        observer: impl IntoObserverSystem<SceneExited, B, M>,
+        observer: impl IntoObserverSystem<SceneExited, M>,
     ) -> Self {
         let scene = self.scene_ref("on_scene_exit", scene);
         self.extra_observers
@@ -256,9 +256,9 @@ impl TestWorldBuilder {
 
     /// Add a persistent observer for a custom (or engine) event, mirroring
     /// `EngineBuilder::add_observer`.
-    pub fn add_observer<E: Event, B: Bundle, M>(
+    pub fn add_observer<E: EventPattern, M>(
         mut self,
-        observer: impl IntoObserverSystem<E, B, M>,
+        observer: impl IntoObserverSystem<E, M>,
     ) -> Self {
         self.extra_observers.push(observer_registrar(observer));
         self

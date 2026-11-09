@@ -365,7 +365,7 @@ For finer placement, use [`.configure_schedule()`](#configure_scheduleclosure--f
 
 ### Hybrid games (Rust + Lua)
 
-**Lua builds only.** A `.with_lua()` game accepts the other builder methods: Rust does the heavy or typed work, and `main.lua` scripts the scenes. Lua attaches core data (groups, components, signals); Rust adopts entities by observing `On<Add, Group>` and reads tuning values from `WorldSignals`:
+**Lua builds only.** A `.with_lua()` game accepts the other builder methods: Rust does the heavy or typed work, and `main.lua` scripts the scenes. Lua attaches core data (groups, components, signals); Rust adopts entities by observing `On<Add<Group>>` and reads tuning values from `WorldSignals`:
 
 ```rust
 use aberredengine::prelude::*;
@@ -375,7 +375,7 @@ use aberredengine::prelude::*;
 struct Boid;
 
 // Lua spawns with `:with_group("swarm")`; Rust adopts every such entity.
-fn adopt_swarm(ev: On<Add, Group>, groups: Query<&Group>, mut commands: Commands) {
+fn adopt_swarm(ev: On<Add<Group>>, groups: Query<&Group>, mut commands: Commands) {
     let entity = ev.event_target();
     if groups.get(entity).is_ok_and(|group| group.name() == "swarm") {
         commands.entity(entity).insert(Boid);
@@ -428,14 +428,14 @@ struct Drone;
 struct Leader;
 
 // Lua tags a drone "leader" at spawn or later; its RigidBody is already there.
-fn promote(ev: On<Add, Leader>, mut drones: Query<&mut RigidBody, With<Drone>>) {
+fn promote(ev: On<Add<Leader>>, mut drones: Query<&mut RigidBody, With<Drone>>) {
     if let Ok(mut body) = drones.get_mut(ev.event_target()) {
         body.max_speed = Some(240.0);
     }
 }
 
 // `engine.entity_remove_tag` (or a despawn) takes the tag off.
-fn demote(ev: On<Remove, Leader>, mut drones: Query<&mut RigidBody, With<Drone>>) {
+fn demote(ev: On<Remove<Leader>>, mut drones: Query<&mut RigidBody, With<Drone>>) {
     if let Ok(mut body) = drones.get_mut(ev.event_target()) {
         body.max_speed = Some(120.0);
     }
@@ -457,7 +457,7 @@ engine.spawn():with_max_speed(120):with_tag("drone"):with_tag("leader"):register
 engine.entity_remove_tag(engine.get_entity("lead"), "leader") -- demote runs; entity_insert_tag promotes again
 ```
 
-- Tags apply after the spawn's other components, in call order, so an `On<Add, T>` observer of a tag finds the entity's `RigidBody`, group and earlier tags.
+- Tags apply after the spawn's other components, in call order, so an `On<Add<T>>` observer of a tag finds the entity's `RigidBody`, group and earlier tags.
 - The entity gets `T::default()`; one that already has a `T` keeps its value.
 - A name Lua uses that Rust never registered is a Lua error at the call, listing the registered names. Registering one name twice is a startup error (`EngineError::DuplicateLuaTag`; see [Startup error handling](#startup-error-handling)).
 

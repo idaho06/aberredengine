@@ -182,7 +182,7 @@ pub(super) fn apply_components(
     );
     apply_particle_emitter(entity_commands, world_signals, cmd.particle_emitter);
 
-    // Last, so a Rust `On<Add, T>` observer of a tag sees the entity's other components.
+    // Last, so a Rust `On<Add<T>>` observer of a tag sees the entity's other components.
     for tag in cmd.tags {
         entity_commands.queue(move |mut entity: EntityWorldMut| tag.insert(&mut entity));
     }

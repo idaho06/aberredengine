@@ -4267,7 +4267,7 @@ fn lua_tags_attach_and_detach_registered_rust_components() {
     );
 }
 
-/// Tags apply after a spawn's other components and in call order, so a Rust `On<Add, T>`
+/// Tags apply after a spawn's other components and in call order, so a Rust `On<Add<T>>`
 /// observer of a tag finds the entity's `RigidBody` and earlier tags (the guide's recipe).
 #[cfg(feature = "lua")]
 #[test]
@@ -4277,12 +4277,12 @@ fn lua_tag_observers_see_the_spawns_other_components() {
     #[derive(Component, Default, Clone)]
     struct Leader;
 
-    fn promote(ev: On<Add, Leader>, mut drones: Query<&mut RigidBody, With<Drone>>) {
+    fn promote(ev: On<Add<Leader>>, mut drones: Query<&mut RigidBody, With<Drone>>) {
         if let Ok(mut body) = drones.get_mut(ev.event_target()) {
             body.max_speed = Some(240.0);
         }
     }
-    fn demote(ev: On<Remove, Leader>, mut drones: Query<&mut RigidBody, With<Drone>>) {
+    fn demote(ev: On<Remove<Leader>>, mut drones: Query<&mut RigidBody, With<Drone>>) {
         if let Ok(mut body) = drones.get_mut(ev.event_target()) {
             body.max_speed = Some(120.0);
         }
