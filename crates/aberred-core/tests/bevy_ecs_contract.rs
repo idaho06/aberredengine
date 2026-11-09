@@ -636,3 +636,116 @@ fn commands_reach_persistent_observer_and_system_after_cleanup() {
     assert_eq!(*hits.lock().unwrap(), 1);
     assert_eq!(world.resource::<Counter>().0, 1);
 }
+
+// =============================================================================
+// Lifecycle observers (`On<Add<T>>` / `On<Remove<T>>`)
+// =============================================================================
+
+// `lua_collision_rule_added_observer` (on `Add<LuaOnCollision>`) and the rule
+// that Rust `On<Add<Tag>>` observers see a spawn's other components rely on the
+// component being readable from inside the observer.
+#[test]
+fn add_observer_sees_the_component_already_present() {
+    let mut world = World::new();
+    let seen = Arc::new(Mutex::new(Vec::new()));
+    let seen_clone = seen.clone();
+    world.add_observer(move |on: On<Add<Health>>, healths: Query<&Health>| {
+        let value = healths.get(on.event_target()).map(|h| h.0).ok();
+        seen_clone.lock().unwrap().push(value);
+    });
+
+    world.spawn(Health(5));
+
+    assert_eq!(*seen.lock().unwrap(), vec![Some(5)]);
+}
+
+// `lua_timer_removed_observer` (on `Remove<Timer>`) reads the entity while the
+// removal is still being applied: the component is still queryable there.
+#[test]
+fn remove_observer_sees_the_component_before_removal() {
+    let mut world = World::new();
+    let seen = Arc::new(Mutex::new(Vec::new()));
+    let seen_clone = seen.clone();
+    world.add_observer(move |on: On<Remove<Health>>, healths: Query<&Health>| {
+        let value = healths.get(on.event_target()).map(|h| h.0).ok();
+        seen_clone.lock().unwrap().push(value);
+    });
+    let entity = world.spawn(Health(9)).id();
+
+    world.entity_mut(entity).remove::<Health>();
+
+    assert_eq!(*seen.lock().unwrap(), vec![Some(9)]);
+    assert!(world.get::<Health>(entity).is_none());
+}
+
+// =============================================================================
+// System panics
+// =============================================================================
+
+fn pinned_panic() {
+    panic!("pinned panic");
+}
+
+// The logic thread's shutdown relies on `install_panic_hook` firing at panic
+// time and on the panic unwinding out of `Schedule::run`: bevy's default
+// fallback error handler re-panics with the original payload instead of
+// swallowing it.
+#[test]
+#[should_panic(expected = "pinned panic")]
+fn a_panicking_system_unwinds_out_of_schedule_run() {
+    let mut world = World::new();
+    let mut schedule = Schedule::default();
+    schedule.add_systems(pinned_panic);
+
+    schedule.run(&mut world);
+}
+
+// =============================================================================
+// `Commands::despawn_all_where`
+// =============================================================================
+
+fn health_count(world: &mut World) -> usize {
+    world.query::<&Health>().iter(world).count()
+}
+
+// `SceneCleanup::despawn_all` sweeps with `despawn_all_where`: a parent and its
+// `ChildOf` subtree both match, and the cascade must not make the second
+// despawn panic.
+#[test]
+fn despawn_all_where_tolerates_children_already_cascaded() {
+    let mut world = World::new();
+    let parent = world.spawn(Health(1)).id();
+    world.spawn((Health(2), ChildOf(parent)));
+    world.flush();
+
+    let mut state = SystemState::<Commands>::new(&mut world);
+    state
+        .get_mut(&mut world)
+        .expect("Commands should fetch")
+        .despawn_all_where::<Entity, With<Health>>(|_| true);
+    state.apply(&mut world);
+
+    assert_eq!(health_count(&mut world), 0);
+}
+
+// The predicate decides per entity (`SceneCleanup` keeps the observers of
+// persistent entities), and the filter is evaluated when the command is
+// applied, not when it is queued: an entity spawned in between is swept too.
+#[test]
+fn despawn_all_where_evaluates_at_apply_time_and_honours_the_predicate() {
+    let mut world = World::new();
+    let kept = world.spawn(Health(1)).id();
+    let swept = world.spawn(Health(2)).id();
+
+    let mut state = SystemState::<Commands>::new(&mut world);
+    state
+        .get_mut(&mut world)
+        .expect("Commands should fetch")
+        .despawn_all_where::<Entity, With<Health>>(move |e| e != kept);
+    let late = world.spawn(Health(3)).id();
+    state.apply(&mut world);
+
+    assert!(world.get_entity(kept).is_ok());
+    assert!(world.get_entity(swept).is_err());
+    assert!(world.get_entity(late).is_err());
+}
