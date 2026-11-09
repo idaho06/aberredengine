@@ -10,6 +10,7 @@ pub mod lua_on_collision;
 pub mod lua_on_dialogue;
 pub mod lua_on_gui_clicked;
 pub mod lua_on_menu_selected;
+pub mod lua_on_menu_selection_changed;
 pub mod lua_on_phase;
 pub mod lua_on_timer_fired;
 pub mod lua_on_tween_finished;

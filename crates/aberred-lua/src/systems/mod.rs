@@ -17,6 +17,7 @@ pub mod lua_dialogue;
 pub mod lua_gui_clicked;
 pub mod lua_map_spawn;
 pub mod lua_menu_selected;
+pub mod lua_menu_selection_changed;
 pub mod lua_phase;
 pub mod lua_scene;
 pub mod lua_setup_entity;

@@ -2224,6 +2224,11 @@ function EntityBuilder:with_lua_gui_clicked(callback) end
 ---@return EntityBuilder
 function EntityBuilder:with_lua_menu_selected(callback) end
 
+---Set Lua callback for the menu highlight moving to another item
+---@param callback string
+---@return EntityBuilder
+function EntityBuilder:with_lua_menu_selection_changed(callback) end
+
 ---Call a Lua function `fn(ctx, input)` each time the core `Phase` enters a phase (branch on `ctx.phase`; `ctx.previous_phase` is the phase left). A returned phase name requests that phase.
 ---@param callback string
 ---@return EntityBuilder
@@ -2992,6 +2997,11 @@ function CollisionEntityBuilder:with_lua_gui_clicked(callback) end
 ---@param callback string
 ---@return CollisionEntityBuilder
 function CollisionEntityBuilder:with_lua_menu_selected(callback) end
+
+---Set Lua callback for the menu highlight moving to another item
+---@param callback string
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_lua_menu_selection_changed(callback) end
 
 ---Call a Lua function `fn(ctx, input)` each time the core `Phase` enters a phase (branch on `ctx.phase`; `ctx.previous_phase` is the phase left). A returned phase name requests that phase.
 ---@param callback string

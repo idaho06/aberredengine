@@ -12,6 +12,7 @@ use crate::components::lua_on_dialogue::{
 };
 use crate::components::lua_on_gui_clicked::LuaOnGuiClicked;
 use crate::components::lua_on_menu_selected::LuaOnMenuSelected;
+use crate::components::lua_on_menu_selection_changed::LuaOnMenuSelectionChanged;
 use crate::components::lua_on_phase::{LuaOnPhaseEntered, LuaOnPhaseExited, LuaOnPhaseUpdate};
 use crate::components::lua_on_timer_fired::LuaOnTimerFired;
 use crate::components::lua_setup::LuaSetup;
@@ -589,6 +590,9 @@ fn apply_ui_components(
         }
         if let Some(count) = menu_data.visible_count {
             menu_component = menu_component.with_visible_count(count);
+        }
+        if let Some(callback) = menu_data.lua_on_menu_selection_changed {
+            entity_commands.insert(LuaOnMenuSelectionChanged::new(callback));
         }
         if let Some(callback) = menu_data.lua_on_menu_selected {
             if !menu_data.actions.is_empty() {
@@ -1784,6 +1788,34 @@ mod tests {
             Some("on_menu")
         );
         assert!(world.get::<MenuActions>(e).is_none());
+    }
+
+    #[test]
+    fn lua_menu_selection_changed_is_independent_of_selected_and_actions() {
+        use crate::components::lua_on_menu_selection_changed::LuaOnMenuSelectionChanged;
+        use aberred_core::components::menu::MenuActions;
+        let mut world = World::new();
+        let mut signals = WorldSignals::default();
+
+        let e = spawn_from_lua(
+            &mut world,
+            &mut signals,
+            "engine.spawn():with_menu({ {id='play', label='Play'} }, 0, 0, 'arcade', 16, 24, true)\
+             :with_lua_menu_selection_changed('on_hint')\
+             :with_menu_action_request_scene('play', 'level01'):build()",
+        );
+
+        assert_eq!(
+            world
+                .get::<LuaOnMenuSelectionChanged>(e)
+                .map(|c| &*c.callback),
+            Some("on_hint")
+        );
+        assert!(
+            world.get::<MenuActions>(e).is_some(),
+            "the hint callback does not replace the actions"
+        );
+        assert!(world.get::<LuaOnMenuSelected>(e).is_none());
     }
 
     #[test]

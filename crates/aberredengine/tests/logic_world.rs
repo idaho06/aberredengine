@@ -85,6 +85,17 @@ fn press_space(tw: &mut TestWorld) {
     tw.send_input(raw);
 }
 
+/// Sends one raw input sample with the Down arrow held (`SecondaryDirectionDown`, menu navigation).
+fn press_down(tw: &mut TestWorld) {
+    let mut raw = RawDeviceSnapshot {
+        window_w: 800,
+        window_h: 600,
+        ..Default::default()
+    };
+    raw.set_key(KeyboardKey::KEY_DOWN as u32);
+    tw.send_input(raw);
+}
+
 /// (a) Input pipeline: a synthetic key-down sample resolves into exactly one
 /// `just_pressed` edge, consumed by the tick that observes it.
 #[test]
@@ -2969,6 +2980,39 @@ fn lua_menu_action_request_scene_switches_the_scene() {
         tw.world.resource::<WorldSignals>().get_string(sk::SCENE),
         Some("b")
     );
+}
+
+/// Lua callbacks that give scene "menu" a two-item menu whose highlight callback logs
+/// `hint:<item_id>:<item_index>:<previous_index>`.
+#[cfg(feature = "lua")]
+const LUA_MENU_HINT: &str = r#"
+function on_enter_play() engine.request_scene("menu") return "" end
+function on_scene_enter(scene)
+    if scene == "menu" then
+        engine.spawn()
+            :with_menu({ {id='go', label='Go'}, {id='stay', label='Stay'} }, 0, 0, 'f', 12, 10, true)
+            :with_lua_menu_selection_changed('on_menu_hint')
+            :build()
+    end
+end
+function on_menu_hint(ctx)
+    table.insert(LOG, "hint:" .. ctx.item_id .. ":" .. ctx.item_index .. ":" .. ctx.previous_index)
+end
+"#;
+
+/// Moving the highlight with the arrow keys calls the Lua selection-changed callback through
+/// the real schedule and the engine's observer registration.
+#[cfg(feature = "lua")]
+#[test]
+fn lua_menu_selection_changed_callback_runs_when_the_highlight_moves() {
+    let mut tw = lua_script_world(LUA_MENU_HINT);
+    tw.tick(1, DT);
+    assert!(take_lua_log(&mut tw).is_empty(), "no move yet, no callback");
+
+    press_down(&mut tw);
+    tw.tick(2, DT);
+
+    assert_eq!(take_lua_log(&mut tw), ["hint:stay:1:0"]);
 }
 
 /// Lua callbacks that spawn, in `on_scene_enter` for scene "menu", a menu with

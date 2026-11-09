@@ -238,6 +238,23 @@ pub(super) fn register<M: LuaUserDataMethods<LuaEntityBuilder>>(
     builder_method!(
         methods,
         meta,
+        "with_lua_menu_selection_changed",
+        "Set Lua callback for the menu highlight moving to another item",
+        [("callback", "string")],
+        |_, this: &mut LuaEntityBuilder, callback: String| {
+            let Some(ref mut menu) = this.cmd.menu else {
+                return Err(LuaError::runtime(
+                    "with_lua_menu_selection_changed() requires with_menu() first",
+                ));
+            };
+            menu.lua_on_menu_selection_changed = Some(callback);
+            Ok(())
+        }
+    );
+
+    builder_method!(
+        methods,
+        meta,
         "with_menu_visible_count",
         "Set max visible menu items (enables scrolling)",
         [("count", "integer")],
@@ -319,6 +336,10 @@ mod tests {
                 "with_menu_action_request_quit",
             ),
             ("with_lua_menu_selected('cb')", "with_lua_menu_selected"),
+            (
+                "with_lua_menu_selection_changed('cb')",
+                "with_lua_menu_selection_changed",
+            ),
             ("with_menu_visible_count(3)", "with_menu_visible_count"),
         ] {
             assert_runtime_error(
@@ -378,12 +399,17 @@ mod tests {
              :with_menu_cursor('cursor')\
              :with_menu_selection_sound('blip')\
              :with_lua_menu_selected('on_menu')\
+             :with_lua_menu_selection_changed('on_hint')\
              :with_menu_visible_count(3)",
         );
         assert_eq!(menu.dynamic_text, Some(true));
         assert_eq!(menu.cursor_entity_key.as_deref(), Some("cursor"));
         assert_eq!(menu.selection_change_sound.as_deref(), Some("blip"));
         assert_eq!(menu.lua_on_menu_selected.as_deref(), Some("on_menu"));
+        assert_eq!(
+            menu.lua_on_menu_selection_changed.as_deref(),
+            Some("on_hint")
+        );
         assert_eq!(menu.visible_count, Some(3));
     }
 
