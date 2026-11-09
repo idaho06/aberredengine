@@ -208,17 +208,23 @@ pub fn process_entity_commands(
                 process_lifecycle_cmd(cmd, commands, world_signals, systems_store)
             }
 
-            EntityCmd::MenuSetItems { entity_id, items } => {
+            EntityCmd::MenuSetItems {
+                entity_id,
+                items,
+                selected,
+            } => {
                 // Never writes `Menu.items` here; `menu_spawn_system` applies the
                 // `MenuRebuild` and replaces the items in place.
                 queue_on_entity(commands, entity_id, move |mut e| {
                     if e.contains::<Menu>() {
-                        e.insert(MenuRebuild::new(
+                        let mut rebuild = MenuRebuild::new(
                             items
                                 .into_iter()
                                 .map(MenuItemData::into_menu_item)
                                 .collect(),
-                        ));
+                        );
+                        rebuild.selected = selected;
+                        e.insert(rebuild);
                     }
                 });
             }
@@ -2556,12 +2562,41 @@ mod tests {
 
     /// Runs `EntityCmd::MenuSetItems` with `set_items_data()` on `entity_id`.
     fn run_menu_set_items(world: &mut World, entity_id: u64) {
+        run_menu_set_items_selecting(world, entity_id, None);
+    }
+
+    fn run_menu_set_items_selecting(world: &mut World, entity_id: u64, selected: Option<usize>) {
         run_entity_cmd(
             world,
             EntityCmd::MenuSetItems {
                 entity_id,
                 items: set_items_data(),
+                selected,
             },
+        );
+    }
+
+    #[test]
+    fn menu_set_items_forwards_the_selected_index_to_the_rebuild() {
+        use aberred_core::components::menu::MenuItem;
+
+        let mut world = World::new();
+        let menu_entity = world
+            .spawn(Menu::from_items(
+                vec![MenuItem::new("old", "Old")],
+                Vec2::ZERO,
+                "f",
+                12.0,
+                10.0,
+                true,
+            ))
+            .id();
+
+        run_menu_set_items_selecting(&mut world, menu_entity.to_bits(), Some(1));
+
+        assert_eq!(
+            world.get::<MenuRebuild>(menu_entity).unwrap().selected,
+            Some(1)
         );
     }
 

@@ -394,6 +394,9 @@ pub struct MenuData {
     pub lua_on_menu_selection_changed: Option<String>,
     /// Maximum number of visible items (None = show all, enables scrolling).
     pub visible_count: Option<usize>,
+    /// Item the menu opens on (0-based); a disabled or out-of-range index falls back to the
+    /// first enabled item.
+    pub selected: Option<usize>,
 }
 
 /// Shape of the particle emission area.

@@ -14,8 +14,8 @@ use std::sync::Arc;
 use crate::components::dynamic_text::DynamicText;
 use crate::components::group::Group;
 use crate::components::menu::{
-    Menu, MenuAction, MenuActions, MenuItem, MenuRebuild, MenuStep, ensure_visible, first_enabled,
-    step_selection,
+    Menu, MenuAction, MenuActions, MenuItem, MenuRebuild, MenuStep, ensure_visible,
+    resolve_selection, step_selection,
 };
 use crate::components::screen_position::ScreenPosition;
 use crate::components::signals::Signals;
@@ -122,7 +122,8 @@ type MenuSpawnQuery<'w, 's> = Query<
 /// An entity carrying a [`MenuRebuild`] marker has its items replaced in
 /// place first: the old item and indicator entities are despawned, the
 /// replacement items inherit the current `dynamic_text` mode, the menu is
-/// re-activated with the first enabled item selected and the scroll reset,
+/// re-activated with the requested item selected (the first enabled one by default)
+/// and the scroll reset,
 /// `item_indent` is re-measured, and the marker is removed once applied.
 pub fn menu_spawn_system(
     mut commands: Commands,
@@ -153,13 +154,14 @@ pub fn menu_spawn_system(
             // starts unspawned. The marker is removed below, so its items
             // move out by value instead of being cloned.
             let dynamic_text = menu.items.first().is_none_or(|i| i.dynamic_text);
+            let selected = rebuild.selected;
             let mut new_items = std::mem::take(&mut rebuild.items);
             for item in &mut new_items {
                 item.dynamic_text = dynamic_text;
                 item.entity = None;
             }
             menu.items = new_items;
-            menu.selected_index = first_enabled(&menu.items).unwrap_or(0);
+            menu.selected_index = resolve_selection(&menu.items, selected);
             menu.scroll_offset = 0;
             menu.active = true;
         }
@@ -1087,6 +1089,61 @@ mod tests {
         c.0.push((e.entity, e.item_id.clone(), e.index, e.previous_index));
     }
 
+    /// The colour of item `i`'s `DynamicText`.
+    fn item_color(world: &World, menu: Entity, i: usize) -> Color {
+        world
+            .get::<DynamicText>(item(world, menu, i))
+            .unwrap()
+            .color
+    }
+
+    #[test]
+    fn a_menu_spawns_on_its_requested_item_scrolled_into_view() {
+        let (world, menu) = spawn_menu(five_items().with_visible_count(2).with_selected(3));
+
+        let m = world.get::<Menu>(menu).unwrap();
+        assert_eq!((m.selected_index, m.scroll_offset), (3, 2));
+        assert_eq!(item_color(&world, menu, 3), m.selected_color);
+        assert_eq!(item_color(&world, menu, 0), m.normal_color);
+    }
+
+    #[test]
+    fn navigation_continues_from_the_requested_item() {
+        let (mut world, menu) = spawn_menu(five_items().with_selected(3));
+
+        press(&mut world, InputAction::SecondaryDirectionDown);
+
+        assert_eq!(world.get::<Menu>(menu).unwrap().selected_index, 4);
+    }
+
+    #[test]
+    fn rebuild_selects_the_requested_item_or_falls_back() {
+        let (mut world, menu) = spawn_menu(five_items());
+        let items = || {
+            vec![
+                MenuItem::new("x", "X").disabled(),
+                MenuItem::new("y", "Y"),
+                MenuItem::new("z", "Z"),
+            ]
+        };
+
+        world
+            .entity_mut(menu)
+            .insert(MenuRebuild::new(items()).with_selected(2));
+        menu_schedule().run(&mut world);
+        let m = world.get::<Menu>(menu).unwrap();
+        assert_eq!(m.selected_index, 2);
+        assert_eq!(item_color(&world, menu, 2), m.selected_color);
+        assert_eq!(item_color(&world, menu, 1), m.normal_color);
+
+        // A disabled request falls back to the first enabled item.
+        world
+            .entity_mut(menu)
+            .insert(MenuRebuild::new(items()).with_selected(0));
+        menu_schedule().run(&mut world);
+        assert_eq!(world.get::<Menu>(menu).unwrap().selected_index, 1);
+    }
+
     #[test]
     fn moving_the_selection_triggers_selection_changed() {
         let (mut world, menu) = spawn_menu(five_items());
@@ -1547,7 +1604,7 @@ mod tests {
         for item in &mut menu.items {
             item.enabled = !disabled.contains(&item.id.as_str());
         }
-        menu.selected_index = first_enabled(&menu.items).unwrap_or(0);
+        menu.selected_index = resolve_selection(&menu.items, None);
         menu
     }
 

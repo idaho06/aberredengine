@@ -3015,6 +3015,35 @@ fn lua_menu_selection_changed_callback_runs_when_the_highlight_moves() {
     assert_eq!(take_lua_log(&mut tw), ["hint:stay:1:0"]);
 }
 
+/// A Lua menu built with `:with_menu_selected(1)` opens on its second item, through the real
+/// spawn path.
+#[cfg(feature = "lua")]
+#[test]
+fn lua_menu_selected_opens_the_menu_on_the_requested_item() {
+    let mut tw = lua_script_world(
+        r#"
+function on_enter_play() engine.request_scene("menu") return "" end
+function on_scene_enter(scene)
+    if scene == "menu" then
+        engine.spawn()
+            :with_menu({ {id='go', label='Go'}, {id='stay', label='Stay'} }, 0, 0, 'f', 12, 10, true)
+            :with_menu_selected(1)
+            :register_as('open_menu')
+            :build()
+    end
+end
+"#,
+    );
+    tw.tick(2, DT);
+
+    let menu_entity = tw
+        .world
+        .resource::<WorldSignals>()
+        .get_entity("open_menu")
+        .expect("the menu registered itself");
+    assert_eq!(tw.world.get::<Menu>(menu_entity).unwrap().selected_index, 1);
+}
+
 /// Lua callbacks whose menu callback re-activates the menu with `engine.entity_menu_set_active`.
 #[cfg(feature = "lua")]
 const LUA_MENU_SET_ACTIVE: &str = r#"

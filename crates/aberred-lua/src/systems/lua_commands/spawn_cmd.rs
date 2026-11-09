@@ -591,6 +591,9 @@ fn apply_ui_components(
         if let Some(count) = menu_data.visible_count {
             menu_component = menu_component.with_visible_count(count);
         }
+        if let Some(index) = menu_data.selected {
+            menu_component = menu_component.with_selected(index);
+        }
         if let Some(callback) = menu_data.lua_on_menu_selection_changed {
             entity_commands.insert(LuaOnMenuSelectionChanged::new(callback));
         }
@@ -1816,6 +1819,33 @@ mod tests {
             "the hint callback does not replace the actions"
         );
         assert!(world.get::<LuaOnMenuSelected>(e).is_none());
+    }
+
+    #[test]
+    fn lua_menu_selected_starts_the_menu_on_that_item_or_falls_back() {
+        use aberred_core::components::menu::Menu;
+        let mut world = World::new();
+        let mut signals = WorldSignals::default();
+
+        let on_second = spawn_from_lua(
+            &mut world,
+            &mut signals,
+            "engine.spawn():with_menu({ {id='a', label='A'}, {id='b', label='B'} }, 0, 0, 'arcade', 16, 24, true)\
+             :with_menu_selected(1):build()",
+        );
+        let on_disabled = spawn_from_lua(
+            &mut world,
+            &mut signals,
+            "engine.spawn():with_menu({ {id='a', label='A'}, {id='b', label='B', enabled=false} }, 0, 0, 'arcade', 16, 24, true)\
+             :with_menu_selected(1):build()",
+        );
+
+        assert_eq!(world.get::<Menu>(on_second).unwrap().selected_index, 1);
+        assert_eq!(
+            world.get::<Menu>(on_disabled).unwrap().selected_index,
+            0,
+            "a disabled item falls back to the first enabled one"
+        );
     }
 
     #[test]

@@ -422,10 +422,12 @@ pub enum EntityCmd {
     MenuDespawn { entity_id: u64 },
     /// Replace a menu's items in place by inserting a
     /// [`MenuRebuild`](aberred_core::components::menu::MenuRebuild) on the entity;
-    /// no-op without a `Menu`
+    /// no-op without a `Menu`. `selected` is the 0-based item to select (a disabled or
+    /// out-of-range index, or `None`, selects the first enabled item).
     MenuSetItems {
         entity_id: u64,
         items: Vec<MenuItemData>,
+        selected: Option<usize>,
     },
     /// Activate or deactivate a menu without touching its items or selection; keeps the
     /// `waiting_selection` flag of its `Signals` in step. No-op without a `Menu`.

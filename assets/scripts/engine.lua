@@ -701,10 +701,11 @@ function engine.collision_entity_menu_despawn(entity_id) end
 ---@param active boolean
 function engine.collision_entity_menu_set_active(entity_id, active) end
 
----Replace a menu's items in place, re-activate it and select the first enabled item; no-op without a Menu
+---Replace a menu's items in place and re-activate it; selects the 0-based `selected` item, or the first enabled item when it is omitted, disabled or out of range; no-op without a Menu
 ---@param entity_id integer
 ---@param items MenuItem[]
-function engine.collision_entity_menu_set_items(entity_id, items) end
+---@param selected integer|nil
+function engine.collision_entity_menu_set_items(entity_id, items, selected) end
 
 ---Remove CameraTarget component from an entity
 ---@param entity_id integer
@@ -1208,10 +1209,11 @@ function engine.entity_menu_despawn(entity_id) end
 ---@param active boolean
 function engine.entity_menu_set_active(entity_id, active) end
 
----Replace a menu's items in place, re-activate it and select the first enabled item; no-op without a Menu
+---Replace a menu's items in place and re-activate it; selects the 0-based `selected` item, or the first enabled item when it is omitted, disabled or out of range; no-op without a Menu
 ---@param entity_id integer
 ---@param items MenuItem[]
-function engine.entity_menu_set_items(entity_id, items) end
+---@param selected integer|nil
+function engine.entity_menu_set_items(entity_id, items, selected) end
 
 ---Remove CameraTarget component from an entity
 ---@param entity_id integer
@@ -2358,6 +2360,11 @@ function EntityBuilder:with_menu_disabled_color(r, g, b, a) end
 ---@return EntityBuilder
 function EntityBuilder:with_menu_dynamic_text(dynamic) end
 
+---Open the menu on this item (0-based, like item_index); a disabled or out-of-range index selects the first enabled item
+---@param index integer
+---@return EntityBuilder
+function EntityBuilder:with_menu_selected(index) end
+
 ---Set sound for menu selection changes
 ---@param sound_key string
 ---@return EntityBuilder
@@ -3131,6 +3138,11 @@ function CollisionEntityBuilder:with_menu_disabled_color(r, g, b, a) end
 ---@param dynamic boolean
 ---@return CollisionEntityBuilder
 function CollisionEntityBuilder:with_menu_dynamic_text(dynamic) end
+
+---Open the menu on this item (0-based, like item_index); a disabled or out-of-range index selects the first enabled item
+---@param index integer
+---@return CollisionEntityBuilder
+function CollisionEntityBuilder:with_menu_selected(index) end
 
 ---Set sound for menu selection changes
 ---@param sound_key string

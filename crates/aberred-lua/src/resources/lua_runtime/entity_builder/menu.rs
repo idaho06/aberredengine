@@ -268,6 +268,23 @@ pub(super) fn register<M: LuaUserDataMethods<LuaEntityBuilder>>(
             Ok(())
         }
     );
+
+    builder_method!(
+        methods,
+        meta,
+        "with_menu_selected",
+        "Open the menu on this item (0-based, like item_index); a disabled or out-of-range index selects the first enabled item",
+        [("index", "integer")],
+        |_, this: &mut LuaEntityBuilder, index: usize| {
+            let Some(ref mut menu) = this.cmd.menu else {
+                return Err(LuaError::runtime(
+                    "with_menu_selected() requires with_menu() first",
+                ));
+            };
+            menu.selected = Some(index);
+            Ok(())
+        }
+    );
 }
 
 #[cfg(test)]
@@ -341,6 +358,7 @@ mod tests {
                 "with_lua_menu_selection_changed",
             ),
             ("with_menu_visible_count(3)", "with_menu_visible_count"),
+            ("with_menu_selected(1)", "with_menu_selected"),
         ] {
             assert_runtime_error(
                 &format!("engine.spawn():{call}"),
@@ -400,7 +418,8 @@ mod tests {
              :with_menu_selection_sound('blip')\
              :with_lua_menu_selected('on_menu')\
              :with_lua_menu_selection_changed('on_hint')\
-             :with_menu_visible_count(3)",
+             :with_menu_visible_count(3)\
+             :with_menu_selected(1)",
         );
         assert_eq!(menu.dynamic_text, Some(true));
         assert_eq!(menu.cursor_entity_key.as_deref(), Some("cursor"));
@@ -411,6 +430,7 @@ mod tests {
             Some("on_hint")
         );
         assert_eq!(menu.visible_count, Some(3));
+        assert_eq!(menu.selected, Some(1));
     }
 
     #[test]

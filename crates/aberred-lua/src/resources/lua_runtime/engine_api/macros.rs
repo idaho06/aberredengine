@@ -350,13 +350,15 @@ macro_rules! define_entity_cmds {
                 desc = "Despawn a menu entity and its children",
                 params = [("entity_id", "integer")]),
             ("entity_menu_set_items",
-                |(entity_id, items)| (u64, mlua::Table),
+                |(entity_id, items, selected)| (u64, mlua::Table, Option<usize>),
                 EntityCmd::MenuSetItems {
                     entity_id,
                     items: $crate::resources::lua_runtime::spawn_data::parse_menu_items(&items)?,
+                    selected,
                 },
-                desc = "Replace a menu's items in place, re-activate it and select the first enabled item; no-op without a Menu",
-                params = [("entity_id", "integer"), ("items", "MenuItem[]")]),
+                desc = "Replace a menu's items in place and re-activate it; selects the 0-based `selected` item, or the first \
+                        enabled item when it is omitted, disabled or out of range; no-op without a Menu",
+                params = [("entity_id", "integer"), ("items", "MenuItem[]"), ("selected", "integer?")]),
             ("entity_menu_set_active",
                 |(entity_id, active)| (u64, bool), EntityCmd::MenuSetActive { entity_id, active },
                 desc = "Activate or deactivate a menu, keeping its items and selection (a confirm deactivates it; \

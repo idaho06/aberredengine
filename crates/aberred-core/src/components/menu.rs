@@ -177,6 +177,13 @@ impl Menu {
         self.visible_count = Some(count);
         self
     }
+    /// Starts the menu on item `index` instead of the first enabled one. A disabled or
+    /// out-of-range `index` falls back to the first enabled item ([`resolve_selection`]).
+    /// `menu_spawn_system` scrolls a windowed menu to show it.
+    pub fn with_selected(mut self, index: usize) -> Self {
+        self.selected_index = resolve_selection(&self.items, Some(index));
+        self
+    }
     /// Builds a menu from existing items with the same defaults as [`Menu::new`].
     /// `selected_index` starts at the first enabled item ([`first_enabled`]), or 0
     /// when every item is disabled.
@@ -216,18 +223,30 @@ impl Menu {
 /// Marker requesting an in-place replacement of a [`Menu`]'s items.
 ///
 /// Inserting this component on a menu entity replaces the menu's items in
-/// place, re-activates the menu and selects the first enabled item; the
-/// marker is removed once applied.
+/// place, re-activates the menu and selects the requested item (the first
+/// enabled one by default); the marker is removed once applied.
 #[derive(Component, Clone, Debug)]
 pub struct MenuRebuild {
     /// The replacement items.
     pub items: Vec<MenuItem>,
+    /// The item to select; a disabled or out-of-range index (or `None`) selects the
+    /// first enabled item ([`resolve_selection`]).
+    pub selected: Option<usize>,
 }
 
 impl MenuRebuild {
     /// Creates a rebuild request carrying the replacement `items`.
     pub fn new(items: Vec<MenuItem>) -> Self {
-        MenuRebuild { items }
+        MenuRebuild {
+            items,
+            selected: None,
+        }
+    }
+
+    /// Selects item `index` after the rebuild instead of the first enabled one.
+    pub fn with_selected(mut self, index: usize) -> Self {
+        self.selected = Some(index);
+        self
     }
 }
 
@@ -244,6 +263,15 @@ pub enum MenuStep {
 /// empty or every item is disabled.
 pub fn first_enabled(items: &[MenuItem]) -> Option<usize> {
     items.iter().position(|item| item.enabled)
+}
+
+/// Returns the index a menu selects at start: `requested` when it names an enabled item,
+/// else the first enabled item, else 0 (an all-disabled or empty menu).
+pub fn resolve_selection(items: &[MenuItem], requested: Option<usize>) -> usize {
+    requested
+        .filter(|&i| items.get(i).is_some_and(|item| item.enabled))
+        .or_else(|| first_enabled(items))
+        .unwrap_or(0)
 }
 
 /// Returns the index of the next enabled item in the `step` direction from
@@ -422,6 +450,70 @@ mod tests {
         let items = vec![item("a", false), item("b", false)];
         let menu = Menu::from_items(items, Vec2::ZERO, "font", 12.0, 4.0, false);
         assert_eq!(menu.selected_index, 0);
+    }
+
+    fn three_items_middle_disabled() -> Vec<MenuItem> {
+        vec![
+            MenuItem::new("a", "A"),
+            MenuItem::new("b", "B").disabled(),
+            MenuItem::new("c", "C"),
+        ]
+    }
+
+    #[test]
+    fn resolve_selection_keeps_an_enabled_request() {
+        let items = three_items_middle_disabled();
+        assert_eq!(resolve_selection(&items, Some(2)), 2);
+        assert_eq!(resolve_selection(&items, Some(0)), 0);
+    }
+
+    #[test]
+    fn resolve_selection_falls_back_to_the_first_enabled_item() {
+        let items = vec![
+            MenuItem::new("a", "A").disabled(),
+            MenuItem::new("b", "B"),
+            MenuItem::new("c", "C"),
+        ];
+        assert_eq!(resolve_selection(&items, None), 1, "no request");
+        assert_eq!(resolve_selection(&items, Some(0)), 1, "disabled request");
+        assert_eq!(resolve_selection(&items, Some(9)), 1, "out of range");
+    }
+
+    #[test]
+    fn resolve_selection_is_zero_without_an_enabled_item() {
+        let all_disabled = vec![MenuItem::new("a", "A").disabled()];
+        assert_eq!(resolve_selection(&all_disabled, Some(0)), 0);
+        assert_eq!(resolve_selection(&[], Some(3)), 0);
+    }
+
+    #[test]
+    fn with_selected_starts_on_the_requested_enabled_item() {
+        let menu = Menu::from_items(
+            three_items_middle_disabled(),
+            Vec2::ZERO,
+            "f",
+            12.0,
+            10.0,
+            true,
+        )
+        .with_selected(2);
+        assert_eq!(menu.selected_index, 2);
+        let menu = Menu::from_items(
+            three_items_middle_disabled(),
+            Vec2::ZERO,
+            "f",
+            12.0,
+            10.0,
+            true,
+        )
+        .with_selected(1);
+        assert_eq!(menu.selected_index, 0, "a disabled request falls back");
+    }
+
+    #[test]
+    fn rebuild_carries_an_optional_selection() {
+        assert_eq!(MenuRebuild::new(vec![]).selected, None);
+        assert_eq!(MenuRebuild::new(vec![]).with_selected(2).selected, Some(2));
     }
 
     #[test]

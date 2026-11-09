@@ -386,6 +386,7 @@ mod tests {
                 EntityCmd::MenuSetItems {
                     entity_id: 42,
                     items,
+                    selected: None,
                 } if items.len() == 2
                     && items[0].id == "a"
                     && items[0].label == "A"
@@ -452,6 +453,31 @@ mod tests {
             "{:?}",
             collision[0].cmd
         );
+    }
+
+    #[test]
+    fn entity_menu_set_items_takes_an_optional_selected_index() {
+        let runtime = LuaRuntime::new().unwrap();
+        runtime
+            .lua()
+            .load(
+                "local items = { {id='a', label='A'}, {id='b', label='B'} }\n\
+                 engine.entity_menu_set_items(42, items, 1)\n\
+                 engine.collision_entity_menu_set_items(42, items, 1)",
+            )
+            .exec()
+            .unwrap();
+
+        let selected_of = |cmd: &EntityCmd| match cmd {
+            EntityCmd::MenuSetItems { selected, .. } => *selected,
+            other => panic!("unexpected command {other:?}"),
+        };
+        let mut regular = Vec::new();
+        runtime.drain_entity_commands_into(&mut regular);
+        assert_eq!(selected_of(&regular[0].cmd), Some(1));
+        let mut collision = Vec::new();
+        runtime.drain_collision_entity_commands_into(&mut collision);
+        assert_eq!(selected_of(&collision[0].cmd), Some(1));
     }
 
     #[test]
