@@ -21,7 +21,10 @@
 -- find the key before "I found the key." appears). A choice item's id carries
 -- the choice's declared index, because hidden choices shift the menu positions.
 -- A plain node lists one "Continue" item, and an ended dialogue lists the two
--- NPCs to talk to. The scene's update reads no action keys: the menu confirms
+-- NPCs to talk to. A node that re-enters itself (the guard's "I found the key."
+-- loops back to "greet", which unlocks "Open the gate!") reopens the menu on the
+-- item the player just confirmed instead of on the first one.
+-- The scene's update reads no action keys: the menu confirms
 -- during input resolution, ahead of the dialogue system in the same tick,
 -- so a second reader of the same press would act on the node the press just
 -- entered.
@@ -50,6 +53,10 @@ local entity_signals = nil
 local shown_text = ""
 local grain = GRAIN_START
 
+-- Id of the menu item the player confirmed last; a node that re-enters itself
+-- reopens the menu on it.
+local last_pick_id = nil
+
 -- ─── Choice menu ────────────────────────────────────────────────────────────
 
 --- Spawns the dialogue choice menu, registered as "dialogue_menu", with an
@@ -67,12 +74,23 @@ local function spawn_choice_menu()
 end
 
 --- Replaces the items of the menu registered as "dialogue_menu", when it
---- exists.
-local function set_menu_items(items)
+--- exists. `selected` (optional, 0-based) is the item to select instead of the
+--- first enabled one.
+local function set_menu_items(items, selected)
     local menu = engine.get_entity("dialogue_menu")
     if menu then
-        engine.entity_menu_set_items(menu, items)
+        engine.entity_menu_set_items(menu, items, selected)
     end
+end
+
+--- 0-based position of the item with id `id` in `items`, or nil.
+local function position_of(items, id)
+    for i, item in ipairs(items) do
+        if item.id == id then
+            return i - 1
+        end
+    end
+    return nil
 end
 
 --- True when the dialogue choice `choice` carries the dialogue label `label`.
@@ -130,6 +148,7 @@ local function clear_dialogue_signals()
     raw_text = ""
     entity_signals = nil
     shown_text = ""
+    last_pick_id = nil
     engine.set_string("dlg_speaker", "")
     engine.set_string("dlg_text", "")
     engine.set_string("dlg_hint", "")
@@ -169,7 +188,9 @@ end
 --- signal-driven text, replaces the menu's items with the node's choices
 --- (formatted once here; a locked choice a disabled item, or no item when it is
 --- labelled "hide_when_locked") or with one "Continue" item on a node without
---- any choices, and writes the hint line.
+--- any choices, and writes the hint line. A node that re-enters itself keeps the
+--- selection on the item the player confirmed (its id is stable across the
+--- rebuild, its position is not).
 --- @param ctx EntityContext
 --- @param dialogue DialogueLine
 local function dialogue_demo_node_entered(ctx, dialogue)
@@ -190,7 +211,8 @@ local function dialogue_demo_node_entered(ctx, dialogue)
     if #dialogue.choices == 0 then
         items[1] = { id = "continue", label = "Continue" }
     end
-    set_menu_items(items)
+    local reentered = dialogue.previous == dialogue.node
+    set_menu_items(items, reentered and last_pick_id and position_of(items, last_pick_id) or nil)
     engine.set_string("dlg_hint", "up/down: select - action_1: confirm - back: leave")
 end
 
@@ -199,6 +221,7 @@ end
 --- pick restarts a conversation.
 --- @param ctx table Context with menu_id, item_id (string) and item_index (0-based)
 local function dialogue_demo_menu_selected(ctx)
+    last_pick_id = ctx.item_id
     local npc = engine.get_entity("dialogue_npc")
     if not npc then
         return
