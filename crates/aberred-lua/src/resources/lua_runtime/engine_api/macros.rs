@@ -357,6 +357,11 @@ macro_rules! define_entity_cmds {
                 },
                 desc = "Replace a menu's items in place, re-activate it and select the first enabled item; no-op without a Menu",
                 params = [("entity_id", "integer"), ("items", "MenuItem[]")]),
+            ("entity_menu_set_active",
+                |(entity_id, active)| (u64, bool), EntityCmd::MenuSetActive { entity_id, active },
+                desc = "Activate or deactivate a menu, keeping its items and selection (a confirm deactivates it; \
+                        true makes it respond to input again); no-op without a Menu",
+                params = [("entity_id", "integer"), ("active", "boolean")]),
             ("release_stuck_to", |entity_id| u64, EntityCmd::ReleaseStuckTo { entity_id },
                 desc = "Release entity from its StuckTo target, restoring stored velocity",
                 params = [("entity_id", "integer")]),

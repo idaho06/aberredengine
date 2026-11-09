@@ -223,6 +223,24 @@ pub fn process_entity_commands(
                 });
             }
 
+            EntityCmd::MenuSetActive { entity_id, active } => {
+                // Only flips `Menu.active` and the `waiting_selection` flag (set at spawn,
+                // removed on a confirm); items and selection are untouched.
+                queue_on_entity(commands, entity_id, move |mut e| {
+                    let Some(mut menu) = e.get_mut::<Menu>() else {
+                        return;
+                    };
+                    menu.active = active;
+                    if let Some(mut signals) = e.get_mut::<Signals>() {
+                        if active {
+                            signals.set_flag("waiting_selection");
+                        } else {
+                            signals.remove_flag("waiting_selection");
+                        }
+                    }
+                });
+            }
+
             EntityCmd::SetGuiDisabled {
                 entity_id,
                 disabled,
@@ -2610,6 +2628,91 @@ mod tests {
         assert!(world.get_entity(e).is_err());
 
         run_menu_set_items(&mut world, id);
+
+        assert!(world.get_entity(e).is_err(), "the entity stays despawned");
+    }
+
+    /// A one-item menu with its `Signals`, as `menu_spawn_system` leaves it, but with the
+    /// given `active` state and `waiting_selection` flag matching it.
+    fn spawn_menu_with_state(world: &mut World, active: bool) -> Entity {
+        use aberred_core::components::menu::MenuItem;
+        let mut menu = Menu::from_items(
+            vec![MenuItem::new("a", "A"), MenuItem::new("b", "B")],
+            Vec2::ZERO,
+            "f",
+            12.0,
+            10.0,
+            true,
+        );
+        menu.selected_index = 1;
+        menu.active = active;
+        let signals = if active {
+            Signals::default().with_flag("waiting_selection")
+        } else {
+            Signals::default()
+        };
+        world.spawn((menu, signals)).id()
+    }
+
+    fn run_menu_set_active(world: &mut World, entity_id: u64, active: bool) {
+        run_entity_cmd(world, EntityCmd::MenuSetActive { entity_id, active });
+    }
+
+    #[test]
+    fn menu_set_active_true_reactivates_a_confirmed_menu_and_keeps_the_selection() {
+        let mut world = World::new();
+        let e = spawn_menu_with_state(&mut world, false);
+
+        run_menu_set_active(&mut world, e.to_bits(), true);
+
+        let menu = world.get::<Menu>(e).unwrap();
+        assert!(menu.active);
+        assert_eq!(menu.selected_index, 1, "the cursor stays where it was");
+        assert!(
+            world
+                .get::<Signals>(e)
+                .unwrap()
+                .has_flag("waiting_selection"),
+            "the flag mirrors an active menu"
+        );
+        assert!(world.get::<MenuRebuild>(e).is_none(), "no rebuild");
+    }
+
+    #[test]
+    fn menu_set_active_false_deactivates_and_clears_the_waiting_flag() {
+        let mut world = World::new();
+        let e = spawn_menu_with_state(&mut world, true);
+
+        run_menu_set_active(&mut world, e.to_bits(), false);
+
+        assert!(!world.get::<Menu>(e).unwrap().active);
+        assert!(
+            !world
+                .get::<Signals>(e)
+                .unwrap()
+                .has_flag("waiting_selection")
+        );
+    }
+
+    #[test]
+    fn menu_set_active_without_a_menu_inserts_nothing() {
+        let mut world = World::new();
+        let e = world.spawn_empty().id();
+
+        run_menu_set_active(&mut world, e.to_bits(), true);
+
+        assert!(world.get::<Menu>(e).is_none());
+        assert!(world.get::<Signals>(e).is_none(), "no Signals invented");
+    }
+
+    #[test]
+    fn menu_set_active_on_a_despawned_entity_is_skipped_without_panicking() {
+        let mut world = World::new();
+        let e = world.spawn_empty().id();
+        let id = e.to_bits();
+        run_entity_cmd(&mut world, EntityCmd::Despawn { entity_id: id });
+
+        run_menu_set_active(&mut world, id, true);
 
         assert!(world.get_entity(e).is_err(), "the entity stays despawned");
     }

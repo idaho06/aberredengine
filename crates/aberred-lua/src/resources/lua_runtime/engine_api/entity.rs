@@ -412,6 +412,49 @@ mod tests {
     }
 
     #[test]
+    fn entity_menu_set_active_queues_one_command_and_has_a_collision_twin() {
+        let runtime = LuaRuntime::new().unwrap();
+        runtime
+            .lua()
+            .load(
+                "engine.entity_menu_set_active(42, true)\n\
+                 engine.collision_entity_menu_set_active(43, false)",
+            )
+            .exec()
+            .unwrap();
+
+        let mut regular = Vec::new();
+        runtime.drain_entity_commands_into(&mut regular);
+        assert_eq!(regular.len(), 1, "exactly one command on the entity queue");
+        assert!(
+            matches!(
+                regular[0].cmd,
+                EntityCmd::MenuSetActive {
+                    entity_id: 42,
+                    active: true
+                }
+            ),
+            "{:?}",
+            regular[0].cmd
+        );
+
+        let mut collision = Vec::new();
+        runtime.drain_collision_entity_commands_into(&mut collision);
+        assert_eq!(collision.len(), 1);
+        assert!(
+            matches!(
+                collision[0].cmd,
+                EntityCmd::MenuSetActive {
+                    entity_id: 43,
+                    active: false
+                }
+            ),
+            "{:?}",
+            collision[0].cmd
+        );
+    }
+
+    #[test]
     fn bad_menu_items_table_raises_at_the_call_and_queues_nothing() {
         let runtime = LuaRuntime::new().unwrap();
         let err = runtime

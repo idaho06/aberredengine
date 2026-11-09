@@ -3015,6 +3015,63 @@ fn lua_menu_selection_changed_callback_runs_when_the_highlight_moves() {
     assert_eq!(take_lua_log(&mut tw), ["hint:stay:1:0"]);
 }
 
+/// Lua callbacks whose menu callback re-activates the menu with `engine.entity_menu_set_active`.
+#[cfg(feature = "lua")]
+const LUA_MENU_SET_ACTIVE: &str = r#"
+function on_enter_play() engine.request_scene("menu") return "" end
+function on_scene_enter(scene)
+    if scene == "menu" then
+        engine.spawn()
+            :with_menu({ {id='go', label='Go'}, {id='stay', label='Stay'} }, 0, 0, 'f', 12, 10, true)
+            :with_lua_menu_selected('on_menu_pick')
+            :register_as('pick_menu')
+            :build()
+    end
+end
+function on_menu_pick(ctx)
+    engine.entity_menu_set_active(ctx.menu_id, true)
+end
+"#;
+
+/// A confirm deactivates the menu; the callback's `engine.entity_menu_set_active(id, true)` makes
+/// it respond again without a rebuild: same items (and entities), same selection.
+#[cfg(feature = "lua")]
+#[test]
+fn lua_entity_menu_set_active_reactivates_a_confirmed_menu_in_place() {
+    let mut tw = lua_script_world(LUA_MENU_SET_ACTIVE);
+    tw.tick(1, DT);
+    let menu_entity = tw
+        .world
+        .resource::<WorldSignals>()
+        .get_entity("pick_menu")
+        .expect("the menu registered itself");
+    let item_entities: Vec<_> = tw
+        .world
+        .get::<Menu>(menu_entity)
+        .unwrap()
+        .items
+        .iter()
+        .map(|item| item.entity)
+        .collect();
+
+    press_space(&mut tw);
+    tw.tick(3, DT);
+
+    let menu = tw.world.get::<Menu>(menu_entity).unwrap();
+    assert!(
+        menu.active,
+        "set_active(true) re-activated the confirmed menu"
+    );
+    assert_eq!(
+        menu.items
+            .iter()
+            .map(|item| item.entity)
+            .collect::<Vec<_>>(),
+        item_entities,
+        "no rebuild: the item entities are the same"
+    );
+}
+
 /// Lua callbacks that spawn, in `on_scene_enter` for scene "menu", a menu with
 /// items `go`/"Go" and `stay`/"Stay", a text cursor and a Lua selection callback
 /// that replaces the menu's items via `engine.entity_menu_set_items`.

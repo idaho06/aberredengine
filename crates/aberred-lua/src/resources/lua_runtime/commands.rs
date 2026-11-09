@@ -427,6 +427,9 @@ pub enum EntityCmd {
         entity_id: u64,
         items: Vec<MenuItemData>,
     },
+    /// Activate or deactivate a menu without touching its items or selection; keeps the
+    /// `waiting_selection` flag of its `Signals` in step. No-op without a `Menu`.
+    MenuSetActive { entity_id: u64, active: bool },
     /// Set an integer signal on an entity's Signals component
     SignalSetInteger {
         entity_id: u64,
