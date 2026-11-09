@@ -28,12 +28,18 @@ pub type CleanableEntity = (Without<Persistent>, Without<bevy_ecs::resource::IsR
 /// (`EntityCommands::observe` spawns them without `Persistent`).
 #[derive(SystemParam)]
 pub struct SceneCleanup<'w, 's> {
-    cleanable: Query<'w, 's, Entity, CleanableEntity>,
     persistent: Query<'w, 's, (Entity, Option<&'static ObservedBy>), With<Persistent>>,
 }
 
 impl SceneCleanup<'_, '_> {
-    /// Queues a `try_despawn` for every entity a scene switch removes.
+    /// Queues one `despawn_all_where` sweep of every entity a scene switch
+    /// removes.
+    ///
+    /// The keep-set (the observers of [`Persistent`] entities) is read now; the
+    /// [`CleanableEntity`] filter is evaluated when the command is applied, so
+    /// an entity spawned between queueing and applying is swept too. The sweep
+    /// despawns in a batch, then runs the `Remove`/`Despawn` observers' queued
+    /// commands.
     pub fn despawn_all(&self, commands: &mut Commands) {
         let keep: FxHashSet<Entity> = self
             .persistent
@@ -41,13 +47,8 @@ impl SceneCleanup<'_, '_> {
             .filter_map(|(_, observed_by)| observed_by)
             .flat_map(|observed_by| observed_by.get().iter().copied())
             .collect();
-        for entity in self
-            .cleanable
-            .iter()
-            .filter(|entity| !keep.contains(entity))
-        {
-            commands.entity(entity).try_despawn();
-        }
+        commands
+            .despawn_all_where::<Entity, CleanableEntity>(move |entity| !keep.contains(&entity));
     }
 
     /// The [`Persistent`] entities, e.g. for

@@ -749,3 +749,32 @@ fn despawn_all_where_evaluates_at_apply_time_and_honours_the_predicate() {
     assert!(world.get_entity(swept).is_err());
     assert!(world.get_entity(late).is_err());
 }
+
+// `lua_timer_removed_observer` (on `Remove<Timer>`) queues `try_remove` on the
+// entity whose `Timer` is going away, and a scene sweep despawns exactly such
+// entities: the observer must run for every swept entity without panicking,
+// and a `Persistent` entity must keep its component and its own observer.
+#[test]
+fn cleanup_runs_remove_observers_that_queue_commands_on_swept_entities() {
+    let mut world = World::new();
+    let removed = Arc::new(Mutex::new(0));
+    let removed_clone = removed.clone();
+    world.spawn((
+        Observer::new(move |on: On<Remove<Health>>, mut commands: Commands| {
+            *removed_clone.lock().unwrap() += 1;
+            commands.entity(on.event_target()).try_remove::<Health>();
+        }),
+        Persistent,
+    ));
+    let swept_a = world.spawn(Health(1)).id();
+    let swept_b = world.spawn(Health(2)).id();
+    let kept = world.spawn((Health(3), Persistent)).id();
+    world.flush();
+
+    run_scene_cleanup(&mut world);
+
+    assert!(world.get_entity(swept_a).is_err());
+    assert!(world.get_entity(swept_b).is_err());
+    assert_eq!(world.get::<Health>(kept), Some(&Health(3)));
+    assert_eq!(*removed.lock().unwrap(), 2);
+}
