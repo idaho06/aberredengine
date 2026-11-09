@@ -23,7 +23,7 @@ use crate::components::sprite::Sprite;
 use crate::components::world_position::WorldPosition;
 use crate::components::z_index::ZIndex;
 use crate::events::input::InputActionChanged;
-use crate::events::menu::MenuSelected;
+use crate::events::menu::{MenuSelected, MenuSelectionChanged};
 use crate::math::Vec2;
 use crate::protocol::audio::AudioCmd;
 use crate::protocol::render_assets::RenderAssetCmd;
@@ -624,6 +624,14 @@ pub fn menu_controller_observer(
                     id: sound_key.clone(),
                 });
             }
+            if let Some(item) = menu.items.get(menu.selected_index) {
+                commands.trigger(MenuSelectionChanged {
+                    entity,
+                    item_id: item.id.clone(),
+                    index: menu.selected_index,
+                    previous_index: old_selected_index,
+                });
+            }
         }
     }
 }
@@ -1069,6 +1077,47 @@ mod tests {
             0,
             "down from last wraps to first"
         );
+    }
+
+    #[derive(Resource, Default)]
+    struct Changes(Vec<(Entity, String, usize, usize)>);
+
+    fn record_change(trigger: On<MenuSelectionChanged>, mut c: ResMut<Changes>) {
+        let e = trigger.event();
+        c.0.push((e.entity, e.item_id.clone(), e.index, e.previous_index));
+    }
+
+    #[test]
+    fn moving_the_selection_triggers_selection_changed() {
+        let (mut world, menu) = spawn_menu(five_items());
+        world.init_resource::<Changes>();
+        world.add_observer(record_change);
+
+        press(&mut world, InputAction::SecondaryDirectionDown);
+        press(&mut world, InputAction::SecondaryDirectionUp);
+        press(&mut world, InputAction::SecondaryDirectionUp); // wraps to the last item
+
+        assert_eq!(
+            world.resource::<Changes>().0,
+            [
+                (menu, "b".to_string(), 1, 0),
+                (menu, "a".to_string(), 0, 1),
+                (menu, "e".to_string(), 4, 0),
+            ]
+        );
+    }
+
+    #[test]
+    fn selection_changed_is_not_triggered_without_a_move() {
+        // A bounded (scrolling) menu does not wrap: up at the top changes nothing.
+        let (mut world, _menu) = spawn_menu(five_items().with_visible_count(2));
+        world.init_resource::<Changes>();
+        world.add_observer(record_change);
+
+        press(&mut world, InputAction::SecondaryDirectionUp);
+        press(&mut world, InputAction::Action1); // a confirm is not a selection change
+
+        assert!(world.resource::<Changes>().0.is_empty());
     }
 
     #[test]

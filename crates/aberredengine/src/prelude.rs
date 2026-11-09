@@ -60,7 +60,7 @@ pub use aberred_core::events::dialogue::{
     DialogueChoiceSelected, DialogueEnded, DialogueNodeEntered,
 };
 pub use aberred_core::events::gui_interactable::GuiClicked;
-pub use aberred_core::events::menu::MenuSelected;
+pub use aberred_core::events::menu::{MenuSelected, MenuSelectionChanged};
 pub use aberred_core::events::phase::{PhaseEntered, PhaseExited};
 pub use aberred_core::events::scene::{SceneEntered, SceneExited, SceneReady};
 pub use aberred_core::events::timer::TimerFired;
