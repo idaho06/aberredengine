@@ -20,6 +20,7 @@
 #![cfg(feature = "test-support")]
 
 use aberredengine::bevy_ecs::prelude::*;
+use aberredengine::bevy_ecs::schedule::ScheduleBuildSettings;
 use aberredengine::core::components::box_collider::BoxCollider;
 use aberredengine::core::components::collision::CollisionRule;
 use aberredengine::core::components::group::Group;
@@ -190,6 +191,73 @@ fn identical_scenario_allocates_identical_entity_ids_across_runs() {
          bit-identical across two runs (archetype/table order is \
          deterministic given identical spawn/despawn history)"
     );
+}
+
+// --- schedule-shuffle independence ---
+
+/// `hash_world_state` after every applied tick of the collision/churn
+/// scenario (`scenario_driver`), with the sim schedule's unordered systems
+/// shuffled by `shuffle_seed` (`None` = declaration order).
+fn shuffled_scenario_trail(shuffle_seed: Option<u64>) -> Vec<u64> {
+    let mut builder = TestWorldBuilder::new()
+        .deterministic(42)
+        .add_system(scenario_driver);
+    if let Some(seed) = shuffle_seed {
+        builder = builder.configure_schedule(move |sim| {
+            sim.set_build_settings(ScheduleBuildSettings {
+                shuffle_seed: Some(seed),
+                ..Default::default()
+            });
+        });
+    }
+    let mut tw = builder.build().expect("build should succeed");
+    tw.world.insert_resource(DeterminismLog::default());
+
+    (0..12)
+        .map(|tick| {
+            let input = TickInput {
+                tick,
+                ..Default::default()
+            };
+            tw.apply_tick_input(&input, DT);
+            hash_world_state(&tw.world)
+        })
+        .collect()
+}
+
+/// Every shuffle seed in `seeds` must reproduce the declaration-order hash trail.
+fn assert_shuffle_independent(seeds: std::ops::Range<u64>) {
+    let baseline = shuffled_scenario_trail(None);
+    for seed in seeds {
+        assert_eq!(
+            shuffled_scenario_trail(Some(seed)),
+            baseline,
+            "hash trail diverged under schedule shuffle seed {seed}"
+        );
+    }
+}
+
+/// Two systems with no ordering edge between them may run in either order
+/// without changing the simulation: the ambiguity audit only sees conflicting
+/// *tracked* access, so this also catches order-dependent `Commands`
+/// (entity-id allocation) and untracked state. A failure here means some pair
+/// needs an explicit `.after()`/`.before()` edge in `engine_app/schedule.rs`.
+///
+/// bevy's shuffle only perturbs the topological sort, so it is strongly
+/// biased toward the default order: a given pair of unordered systems swaps in
+/// about 3% of seeds. The seed list is fixed (the test is deterministic) and
+/// sized as a smoke check; the `#[ignore]`d sweep below is the thorough one.
+#[test]
+fn unordered_sim_systems_can_run_in_any_order_without_changing_the_hash_trail() {
+    assert_shuffle_independent(0..64);
+}
+
+/// The thorough version of the test above:
+/// `cargo test --features test-support --test determinism -- --ignored`.
+#[test]
+#[ignore = "slow: a thousand scenario runs"]
+fn unordered_sim_systems_deep_shuffle_sweep() {
+    assert_shuffle_independent(0..1000);
 }
 
 // --- TickInput round-trip / empty-tick tests ---
