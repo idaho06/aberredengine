@@ -9,7 +9,7 @@ Aberred Engine currently ships as a multi-scene showcase containing a menu plus 
 Built with:
 
 - **Rust** (edition 2024)
-- **bevy_ecs** (0.19) for ECS
+- **bevy_ecs** (0.20) for ECS
 - **sola-raylib** (6.3) for windowing, rendering, input, and audio integration
 - **mlua** (0.12, LuaJIT) for optional Lua scripting
 

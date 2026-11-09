@@ -518,7 +518,7 @@ fn cascade_despawn_removes_children() {
 // Scene cleanup (`clean_all_entities` / `SceneCleanup`)
 // =============================================================================
 // Observers, registered systems and resources are all entities in bevy_ecs
-// 0.18+/0.19, so the scene-switch cleanup query would despawn them unless
+// bevy_ecs, so the scene-switch cleanup query would despawn them unless
 // they carry `Persistent` (observers, `SystemsStore` entries) or are excluded
 // via `IsResource` (resources).
 

@@ -43,7 +43,7 @@ use super::mirror::{
 /// entities needs simultaneous spawn/despawn plus resource access, which an
 /// ordinary `SystemParam` bundle can't express (same justification
 /// `drain_cmds` uses in `src/systems/audio/systems.rs`) -- only `&mut World`
-/// plus `ExclusiveSystemParam`s can. The snapshot itself is read through a
+/// (with at most `Local`-style params beside it) can. The snapshot itself is read through a
 /// `resource_scope::<SnapshotConsumer, _>` so `world` stays mutable for the
 /// reconcile/global-fan-out calls while the triple buffer's output stays
 /// borrowed (not moved) for the duration; the `reconcile_*` functions

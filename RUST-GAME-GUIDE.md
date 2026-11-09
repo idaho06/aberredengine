@@ -20,7 +20,7 @@ This guide explains how to build a 2D game in pure Rust using the Aberred Engine
 
 ## 1. What the Engine Provides
 
-Aberred Engine is a 2D game engine built on **Bevy ECS 0.19** and **sola-raylib 6.3**. It handles the main loop, windowing, rendering, and a full ECS system schedule. You supply game logic as ordinary ECS systems and observers.
+Aberred Engine is a 2D game engine built on **Bevy ECS 0.20** and **sola-raylib 6.3**. It handles the main loop, windowing, rendering, and a full ECS system schedule. You supply game logic as ordinary ECS systems and observers.
 
 Built-in systems:
 
@@ -92,6 +92,8 @@ use aberredengine::prelude::*;
 It brings in the `bevy_ecs` prelude (`Commands`, `Query`, `Res`, `On`, …) and the `bevy_ecs` crate itself, so `#[derive(Component)]`, `#[derive(Resource)]` and `#[derive(Event)]` work; the math types (`Vec2`, `Color`, `Rect`); the common components, resources, events and commands; the scene events (`SceneEntered`, `SceneReady`, `SceneExited`) and the `in_scene` run condition; and `EngineBuilder`, `SimSet` and `EngineError`. Less common items keep their full path under `aberredengine::core::...`, and the examples below import those explicitly. The render-thread types a GUI callback receives (`TextureStore`, `FontStore`, `GuiCtx`, `GuiCallback`) are in the prelude and in `aberredengine::render`; the rest of the render thread is out of reach of game code.
 
 The `bevy_ecs` prelude has its own `Result` (`Result<T = (), E = BevyError>`) and a lifecycle event named `Add`, so in a module that glob-imports the prelude they shadow `std::result::Result` and `std::ops::Add`. `Result<T, E>` with an explicit error type is the standard `Result`; write `std::ops::Add` in full when implementing it.
+
+A system can return `Result` and use `?`; the prelude's `ContextExt` adds `.context("what failed")` and `.with_context(|| ..)` to `Result` and `Option`, so the error handler prints a readable "Caused by:" chain.
 
 ### Recommended directory layout
 
@@ -545,7 +547,7 @@ commands.spawn((
 
 A per-entity observer added with `.observe(...)` on a `Persistent` entity survives scene switches too: the engine keeps the observers of persistent entities. Observers of scene entities go away with the entity they watch. A global observer (`EngineBuilder::add_observer` or a spawned `Observer`) is an entity of its own, so it survives only if it carries `Persistent` itself.
 
-> **Custom cleanup:** to despawn "everything a scene switch would" from your own system (e.g. a reset), use `aberredengine::core::components::persistent::SceneCleanup`, the system parameter the engine's own scene-switch cleanup uses. A bare `Query<Entity, Without<Persistent>>` also matches the internal entities Bevy 0.19 backs each `Resource` with, and the observer entities of persistent entities, and would despawn both:
+> **Custom cleanup:** to despawn "everything a scene switch would" from your own system (e.g. a reset), use `aberredengine::core::components::persistent::SceneCleanup`, the system parameter the engine's own scene-switch cleanup uses. A bare `Query<Entity, Without<Persistent>>` also matches the internal entities Bevy backs each `Resource` with, and the observer entities of persistent entities, and would despawn both:
 >
 > ```rust
 > use aberredengine::core::components::persistent::SceneCleanup;

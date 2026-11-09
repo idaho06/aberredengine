@@ -17,7 +17,7 @@ pub struct Persistent;
 
 /// Query filter for entities that are not [`Persistent`] and not one of
 /// bevy's resource-backed entities (which `Query<Entity, ...>` would
-/// otherwise also match in bevy_ecs 0.19+).
+/// otherwise also match).
 ///
 /// It still matches the observer entities of `Persistent` entities, so a
 /// scene-cleanup sweep uses [`SceneCleanup`] instead.

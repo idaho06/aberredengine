@@ -661,7 +661,7 @@ mod ambiguity_audit {
     //! Regression gate: builds the real `sim` schedule (via the engine's own
     //! `configure_sim_sets`/`add_engine_sim_systems`, not a hand-listed
     //! system set) with `ambiguity_detection: LogLevel::Warn` and asserts
-    //! zero ambiguities remain. Every ambiguity bevy 0.19 reports here is
+    //! zero ambiguities remain. Every ambiguity bevy reports here is
     //! closed with an explicit `.after()`/`.before()` edge at its
     //! registration site in `add_engine_sim_systems` (see the comments
     //! there) -- most pin a real preferred order, and one
