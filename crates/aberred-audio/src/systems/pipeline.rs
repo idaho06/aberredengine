@@ -10,7 +10,7 @@
 
 use std::ffi::CString;
 
-use bevy_ecs::prelude::{Component, Entity, World};
+use bevy_ecs::prelude::{Entity, World};
 use bevy_ecs::world::Mut;
 use log::{debug, error, warn};
 
@@ -101,17 +101,6 @@ fn playing_fx_entities<B: AudioBackend>(world: &mut World) -> Vec<(Entity, B::So
     // Optimization opportunity: return an iterator instead of a Vec, to avoid heap allocation.
     let mut q = world.query::<(Entity, &PlayingFx<B::Sound>)>();
     q.iter(world).map(|(e, f)| (e, f.alias)).collect()
-}
-
-/// Despawn every entity carrying component `T`.
-pub(crate) fn despawn_all<T: Component>(world: &mut World) {
-    let entities: Vec<Entity> = {
-        let mut q = world.query::<(Entity, &T)>();
-        q.iter(world).map(|(e, _)| e).collect()
-    };
-    for entity in entities {
-        world.despawn(entity);
-    }
 }
 
 /// Load a sound, spawn its alias, and start it playing -- shared by

@@ -2,7 +2,7 @@
 //! owns its own `bevy_ecs::World` + single-threaded `Schedule`, paced by a
 //! [`Pacer`]/`audio_hz` loop.
 
-use bevy_ecs::prelude::World;
+use bevy_ecs::prelude::{With, World};
 use bevy_ecs::schedule::{IntoScheduleConfigs, Schedule, SingleThreadedExecutor};
 use crossbeam_channel::{Receiver, Sender};
 use log::info;
@@ -17,8 +17,7 @@ use crate::resources::channels::{CmdReceiver, MsgSender, ShouldExit};
 use crate::resources::store::AudioStore;
 
 use super::pipeline::{
-    despawn_all, drain_cmds, pump_fx, pump_music, unload_all_fx_aliases, unload_all_music,
-    unload_all_sounds,
+    drain_cmds, pump_fx, pump_music, unload_all_fx_aliases, unload_all_music, unload_all_sounds,
 };
 
 /// Entry point of the dedicated audio thread.
@@ -130,7 +129,7 @@ pub fn build_world<B: AudioBackend>(
 /// re-implementing the same queries here.
 pub(crate) fn teardown<B: AudioBackend>(world: &mut World) {
     unload_all_fx_aliases::<B>(world, false);
-    despawn_all::<MusicTrack<B::Music>>(world);
+    world.despawn_all::<With<MusicTrack<B::Music>>>();
 
     // Unload any remaining loaded (not-currently-playing) assets so the
     // device drops with nothing outstanding.
