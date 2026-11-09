@@ -11,11 +11,16 @@
 //! A confirmed item triggers [`MenuSelected`](crate::events::menu::MenuSelected)
 //! on the menu entity.
 
+use crate::components::signals::Signals;
 use crate::math::Vec2;
 use bevy_ecs::prelude::{Component, Entity};
 use rustc_hash::FxHashMap;
 
 use crate::math::Color;
+
+/// Entity-signal flag set while a menu is active (waiting for a selection); the menu spawn
+/// sets it, a confirm clears it and [`Menu::set_active`] keeps it in step with `active`.
+pub const WAITING_SELECTION: &str = "waiting_selection";
 
 /// A single item within a [`Menu`].
 ///
@@ -177,6 +182,20 @@ impl Menu {
         self.visible_count = Some(count);
         self
     }
+    /// Activates or deactivates the menu, keeping the [`WAITING_SELECTION`] flag of its
+    /// entity `signals` in step (set when active, removed otherwise). Items and selection are
+    /// untouched; a confirmed menu responds to input again after `set_active(.., true)`.
+    pub fn set_active(&mut self, signals: Option<&mut Signals>, active: bool) {
+        self.active = active;
+        if let Some(signals) = signals {
+            if active {
+                signals.set_flag(WAITING_SELECTION);
+            } else {
+                signals.remove_flag(WAITING_SELECTION);
+            }
+        }
+    }
+
     /// Starts the menu on item `index` instead of the first enabled one. A disabled or
     /// out-of-range `index` falls back to the first enabled item ([`resolve_selection`]).
     /// `menu_spawn_system` scrolls a windowed menu to show it.
@@ -195,7 +214,7 @@ impl Menu {
         item_spacing: f32,
         use_screen_space: bool,
     ) -> Menu {
-        let selected_index = first_enabled(&items).unwrap_or(0);
+        let selected_index = resolve_selection(&items, None);
         Menu {
             active: true,
             items,
@@ -452,12 +471,45 @@ mod tests {
         assert_eq!(menu.selected_index, 0);
     }
 
+    /// Three items, the middle one disabled, in a default menu.
+    fn three_item_menu() -> Menu {
+        Menu::from_items(
+            three_items_middle_disabled(),
+            Vec2::ZERO,
+            "f",
+            12.0,
+            10.0,
+            true,
+        )
+    }
+
     fn three_items_middle_disabled() -> Vec<MenuItem> {
         vec![
             MenuItem::new("a", "A"),
             MenuItem::new("b", "B").disabled(),
             MenuItem::new("c", "C"),
         ]
+    }
+
+    #[test]
+    fn set_active_keeps_the_waiting_selection_flag_in_step() {
+        let mut menu = three_item_menu();
+        let mut signals = Signals::default().with_flag(WAITING_SELECTION);
+
+        menu.set_active(Some(&mut signals), false);
+        assert!(!menu.active);
+        assert!(!signals.has_flag(WAITING_SELECTION));
+
+        menu.set_active(Some(&mut signals), true);
+        assert!(menu.active);
+        assert!(signals.has_flag(WAITING_SELECTION));
+    }
+
+    #[test]
+    fn set_active_without_signals_only_flips_the_menu() {
+        let mut menu = three_item_menu();
+        menu.set_active(None, false);
+        assert!(!menu.active);
     }
 
     #[test]
@@ -488,26 +540,12 @@ mod tests {
 
     #[test]
     fn with_selected_starts_on_the_requested_enabled_item() {
-        let menu = Menu::from_items(
-            three_items_middle_disabled(),
-            Vec2::ZERO,
-            "f",
-            12.0,
-            10.0,
-            true,
-        )
-        .with_selected(2);
-        assert_eq!(menu.selected_index, 2);
-        let menu = Menu::from_items(
-            three_items_middle_disabled(),
-            Vec2::ZERO,
-            "f",
-            12.0,
-            10.0,
-            true,
-        )
-        .with_selected(1);
-        assert_eq!(menu.selected_index, 0, "a disabled request falls back");
+        assert_eq!(three_item_menu().with_selected(2).selected_index, 2);
+        assert_eq!(
+            three_item_menu().with_selected(1).selected_index,
+            0,
+            "a disabled request falls back"
+        );
     }
 
     #[test]

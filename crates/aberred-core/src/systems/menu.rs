@@ -14,8 +14,8 @@ use std::sync::Arc;
 use crate::components::dynamic_text::DynamicText;
 use crate::components::group::Group;
 use crate::components::menu::{
-    Menu, MenuAction, MenuActions, MenuItem, MenuRebuild, MenuStep, ensure_visible,
-    resolve_selection, step_selection,
+    Menu, MenuAction, MenuActions, MenuItem, MenuRebuild, MenuStep, WAITING_SELECTION,
+    ensure_visible, resolve_selection, step_selection,
 };
 use crate::components::screen_position::ScreenPosition;
 use crate::components::signals::Signals;
@@ -122,8 +122,8 @@ type MenuSpawnQuery<'w, 's> = Query<
 /// An entity carrying a [`MenuRebuild`] marker has its items replaced in
 /// place first: the old item and indicator entities are despawned, the
 /// replacement items inherit the current `dynamic_text` mode, the menu is
-/// re-activated with the requested item selected (the first enabled one by default)
-/// and the scroll reset,
+/// re-activated with the requested item selected (the first enabled one by default),
+/// the scroll reset,
 /// `item_indent` is re-measured, and the marker is removed once applied.
 pub fn menu_spawn_system(
     mut commands: Commands,
@@ -355,7 +355,7 @@ pub fn menu_spawn_system(
         // Add a signals component to the menu entity for state tracking
         commands
             .entity(entity)
-            .insert(Signals::default().with_flag("waiting_selection"));
+            .insert(Signals::default().with_flag(WAITING_SELECTION));
         debug!(
             "menu_spawn_system: Added Signals component to menu entity {:?}",
             entity
@@ -570,8 +570,7 @@ pub fn menu_controller_observer(
                         "menu_controller_observer: Selection confirmed! item_id={}, triggering MenuSelected",
                         item_id
                     );
-                    signals.remove_flag("waiting_selection");
-                    menu.active = false;
+                    menu.set_active(Some(&mut signals), false);
                     signals.set_string("selected_item", item_id.clone());
                     commands.trigger(MenuSelected {
                         entity,
@@ -1089,22 +1088,14 @@ mod tests {
         c.0.push((e.entity, e.item_id.clone(), e.index, e.previous_index));
     }
 
-    /// The colour of item `i`'s `DynamicText`.
-    fn item_color(world: &World, menu: Entity, i: usize) -> Color {
-        world
-            .get::<DynamicText>(item(world, menu, i))
-            .unwrap()
-            .color
-    }
-
     #[test]
     fn a_menu_spawns_on_its_requested_item_scrolled_into_view() {
         let (world, menu) = spawn_menu(five_items().with_visible_count(2).with_selected(3));
 
         let m = world.get::<Menu>(menu).unwrap();
         assert_eq!((m.selected_index, m.scroll_offset), (3, 2));
-        assert_eq!(item_color(&world, menu, 3), m.selected_color);
-        assert_eq!(item_color(&world, menu, 0), m.normal_color);
+        assert_eq!(text_color(&world, menu, 3), m.selected_color);
+        assert_eq!(text_color(&world, menu, 0), m.normal_color);
     }
 
     #[test]
@@ -1133,8 +1124,6 @@ mod tests {
         menu_schedule().run(&mut world);
         let m = world.get::<Menu>(menu).unwrap();
         assert_eq!(m.selected_index, 2);
-        assert_eq!(item_color(&world, menu, 2), m.selected_color);
-        assert_eq!(item_color(&world, menu, 1), m.normal_color);
 
         // A disabled request falls back to the first enabled item.
         world

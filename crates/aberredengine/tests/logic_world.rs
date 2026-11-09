@@ -74,26 +74,26 @@ use rustc_hash::FxHashMap;
 mod common;
 use common::DT;
 
-/// Sends one raw input sample with Space held (`Action1`, menu confirm).
-fn press_space(tw: &mut TestWorld) {
+/// Sends one raw input sample with `key` held.
+fn press_key(tw: &mut TestWorld, key: KeyboardKey) {
     let mut raw = RawDeviceSnapshot {
         window_w: 800,
         window_h: 600,
         ..Default::default()
     };
-    raw.set_key(KeyboardKey::KEY_SPACE as u32);
+    raw.set_key(key as u32);
     tw.send_input(raw);
 }
 
-/// Sends one raw input sample with the Down arrow held (`SecondaryDirectionDown`, menu navigation).
+/// Space held (`Action1`, menu confirm).
+fn press_space(tw: &mut TestWorld) {
+    press_key(tw, KeyboardKey::KEY_SPACE);
+}
+
+/// Down arrow held (`SecondaryDirectionDown`, menu navigation).
+#[cfg(feature = "lua")]
 fn press_down(tw: &mut TestWorld) {
-    let mut raw = RawDeviceSnapshot {
-        window_w: 800,
-        window_h: 600,
-        ..Default::default()
-    };
-    raw.set_key(KeyboardKey::KEY_DOWN as u32);
-    tw.send_input(raw);
+    press_key(tw, KeyboardKey::KEY_DOWN);
 }
 
 /// (a) Input pipeline: a synthetic key-down sample resolves into exactly one

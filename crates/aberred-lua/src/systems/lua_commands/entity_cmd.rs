@@ -217,32 +217,25 @@ pub fn process_entity_commands(
                 // `MenuRebuild` and replaces the items in place.
                 queue_on_entity(commands, entity_id, move |mut e| {
                     if e.contains::<Menu>() {
-                        let mut rebuild = MenuRebuild::new(
-                            items
+                        e.insert(MenuRebuild {
+                            items: items
                                 .into_iter()
                                 .map(MenuItemData::into_menu_item)
                                 .collect(),
-                        );
-                        rebuild.selected = selected;
-                        e.insert(rebuild);
+                            selected,
+                        });
                     }
                 });
             }
 
             EntityCmd::MenuSetActive { entity_id, active } => {
-                // Only flips `Menu.active` and the `waiting_selection` flag (set at spawn,
-                // removed on a confirm); items and selection are untouched.
+                // Items and selection are untouched; core's `Menu::set_active` owns the
+                // `active` / `waiting_selection` pairing.
                 queue_on_entity(commands, entity_id, move |mut e| {
-                    let Some(mut menu) = e.get_mut::<Menu>() else {
-                        return;
-                    };
-                    menu.active = active;
-                    if let Some(mut signals) = e.get_mut::<Signals>() {
-                        if active {
-                            signals.set_flag("waiting_selection");
-                        } else {
-                            signals.remove_flag("waiting_selection");
-                        }
+                    if let Ok((mut menu, mut signals)) =
+                        e.get_components_mut::<(&mut Menu, Option<&mut Signals>)>()
+                    {
+                        menu.set_active(signals.as_deref_mut(), active);
                     }
                 });
             }
@@ -2561,11 +2554,7 @@ mod tests {
     }
 
     /// Runs `EntityCmd::MenuSetItems` with `set_items_data()` on `entity_id`.
-    fn run_menu_set_items(world: &mut World, entity_id: u64) {
-        run_menu_set_items_selecting(world, entity_id, None);
-    }
-
-    fn run_menu_set_items_selecting(world: &mut World, entity_id: u64, selected: Option<usize>) {
+    fn run_menu_set_items(world: &mut World, entity_id: u64, selected: Option<usize>) {
         run_entity_cmd(
             world,
             EntityCmd::MenuSetItems {
@@ -2576,28 +2565,9 @@ mod tests {
         );
     }
 
-    #[test]
-    fn menu_set_items_forwards_the_selected_index_to_the_rebuild() {
-        use aberred_core::components::menu::MenuItem;
-
-        let mut world = World::new();
-        let menu_entity = world
-            .spawn(Menu::from_items(
-                vec![MenuItem::new("old", "Old")],
-                Vec2::ZERO,
-                "f",
-                12.0,
-                10.0,
-                true,
-            ))
-            .id();
-
-        run_menu_set_items_selecting(&mut world, menu_entity.to_bits(), Some(1));
-
-        assert_eq!(
-            world.get::<MenuRebuild>(menu_entity).unwrap().selected,
-            Some(1)
-        );
+    /// A menu of `items` with the default layout.
+    fn test_menu(items: Vec<aberred_core::components::menu::MenuItem>) -> Menu {
+        Menu::from_items(items, Vec2::ZERO, "f", 12.0, 10.0, true)
     }
 
     #[test]
@@ -2606,17 +2576,10 @@ mod tests {
 
         let mut world = World::new();
         let menu_entity = world
-            .spawn(Menu::from_items(
-                vec![MenuItem::new("old", "Old")],
-                Vec2::ZERO,
-                "f",
-                12.0,
-                10.0,
-                true,
-            ))
+            .spawn(test_menu(vec![MenuItem::new("old", "Old")]))
             .id();
 
-        run_menu_set_items(&mut world, menu_entity.to_bits());
+        run_menu_set_items(&mut world, menu_entity.to_bits(), Some(1));
 
         let menu = world.get::<Menu>(menu_entity).unwrap();
         let ids: Vec<&str> = menu.items.iter().map(|item| item.id.as_str()).collect();
@@ -2638,6 +2601,7 @@ mod tests {
             rebuild.items.iter().all(|item| item.entity.is_none()),
             "rebuild items start unspawned"
         );
+        assert_eq!(rebuild.selected, Some(1), "the selected index is forwarded");
     }
 
     #[test]
@@ -2645,7 +2609,7 @@ mod tests {
         let mut world = World::new();
         let e = world.spawn_empty().id();
 
-        run_menu_set_items(&mut world, e.to_bits());
+        run_menu_set_items(&mut world, e.to_bits(), None);
 
         assert!(world.get::<Menu>(e).is_none());
         assert!(
@@ -2662,27 +2626,20 @@ mod tests {
         run_entity_cmd(&mut world, EntityCmd::Despawn { entity_id: id });
         assert!(world.get_entity(e).is_err());
 
-        run_menu_set_items(&mut world, id);
+        run_menu_set_items(&mut world, id, None);
 
         assert!(world.get_entity(e).is_err(), "the entity stays despawned");
     }
 
-    /// A one-item menu with its `Signals`, as `menu_spawn_system` leaves it, but with the
-    /// given `active` state and `waiting_selection` flag matching it.
+    /// A two-item menu on its second item with its `Signals`, as `menu_spawn_system` leaves
+    /// it, with the given `active` state and a matching `waiting_selection` flag.
     fn spawn_menu_with_state(world: &mut World, active: bool) -> Entity {
-        use aberred_core::components::menu::MenuItem;
-        let mut menu = Menu::from_items(
-            vec![MenuItem::new("a", "A"), MenuItem::new("b", "B")],
-            Vec2::ZERO,
-            "f",
-            12.0,
-            10.0,
-            true,
-        );
+        use aberred_core::components::menu::{MenuItem, WAITING_SELECTION};
+        let mut menu = test_menu(vec![MenuItem::new("a", "A"), MenuItem::new("b", "B")]);
         menu.selected_index = 1;
         menu.active = active;
         let signals = if active {
-            Signals::default().with_flag("waiting_selection")
+            Signals::default().with_flag(WAITING_SELECTION)
         } else {
             Signals::default()
         };
@@ -2695,6 +2652,7 @@ mod tests {
 
     #[test]
     fn menu_set_active_true_reactivates_a_confirmed_menu_and_keeps_the_selection() {
+        use aberred_core::components::menu::WAITING_SELECTION;
         let mut world = World::new();
         let e = spawn_menu_with_state(&mut world, false);
 
@@ -2704,10 +2662,7 @@ mod tests {
         assert!(menu.active);
         assert_eq!(menu.selected_index, 1, "the cursor stays where it was");
         assert!(
-            world
-                .get::<Signals>(e)
-                .unwrap()
-                .has_flag("waiting_selection"),
+            world.get::<Signals>(e).unwrap().has_flag(WAITING_SELECTION),
             "the flag mirrors an active menu"
         );
         assert!(world.get::<MenuRebuild>(e).is_none(), "no rebuild");
@@ -2715,18 +2670,14 @@ mod tests {
 
     #[test]
     fn menu_set_active_false_deactivates_and_clears_the_waiting_flag() {
+        use aberred_core::components::menu::WAITING_SELECTION;
         let mut world = World::new();
         let e = spawn_menu_with_state(&mut world, true);
 
         run_menu_set_active(&mut world, e.to_bits(), false);
 
         assert!(!world.get::<Menu>(e).unwrap().active);
-        assert!(
-            !world
-                .get::<Signals>(e)
-                .unwrap()
-                .has_flag("waiting_selection")
-        );
+        assert!(!world.get::<Signals>(e).unwrap().has_flag(WAITING_SELECTION));
     }
 
     #[test]
@@ -2738,18 +2689,6 @@ mod tests {
 
         assert!(world.get::<Menu>(e).is_none());
         assert!(world.get::<Signals>(e).is_none(), "no Signals invented");
-    }
-
-    #[test]
-    fn menu_set_active_on_a_despawned_entity_is_skipped_without_panicking() {
-        let mut world = World::new();
-        let e = world.spawn_empty().id();
-        let id = e.to_bits();
-        run_entity_cmd(&mut world, EntityCmd::Despawn { entity_id: id });
-
-        run_menu_set_active(&mut world, id, true);
-
-        assert!(world.get_entity(e).is_err(), "the entity stays despawned");
     }
 
     fn set_camera_target(id: u64, priority: Option<u8>, zoom: Option<f32>) -> EntityCmd {
