@@ -420,6 +420,7 @@ the event fires.
 | `CollisionEnded` | `LuaOnCollision.ended` | `:with_lua_collision_ended(callback)` | `fn(ctx)` (ids and groups only) |
 | `GuiClicked` | `LuaOnGuiClicked` | `:with_lua_gui_clicked(callback)` | `fn(ctx)` (`ctx.entity_id`) |
 | `MenuSelected` | `LuaOnMenuSelected` | `:with_lua_menu_selected(callback)` | `fn(ctx)` (`menu_id`, `item_id`, `item_index`) |
+| `MenuSelectionChanged` | `LuaOnMenuSelectionChanged` | `:with_lua_menu_selection_changed(callback)` | `fn(ctx)` (`menu_id`, `item_id`, `item_index`, `previous_index`) |
 | `AnimationFinished` | `LuaOnAnimationFinished` | `:with_lua_animation_finished(callback)` | `fn(ctx, input)` |
 | `TweenFinished<T>` | `LuaOnTweenFinished<T>` | `:with_lua_tween_{position,rotation,scale,screen_position,tint}_finished(callback)` | `fn(ctx, input)` |
 | `TimerFired` | `LuaOnTimerFired` | `:with_lua_timer(duration, callback)` / `:with_lua_timer_once(duration, callback)` | `fn(ctx, input)` |
@@ -1718,7 +1719,7 @@ Create an interactive menu.
 )
 ```
 
-A confirm deactivates the menu, whether it runs a callback or a `MenuActions` action: the menu ignores input until `engine.entity_menu_set_items()` replaces its items, which re-activates it.
+A confirm deactivates the menu, whether it runs a callback or a `MenuActions` action: the menu ignores input until `engine.entity_menu_set_active(id, true)` re-activates it (items and selection stay) or `engine.entity_menu_set_items()` replaces its items (which also re-activates it).
 
 #### `:with_menu_colors(normal_r, normal_g, normal_b, normal_a, selected_r, selected_g, selected_b, selected_a)`
 
@@ -1854,6 +1855,40 @@ function on_main_menu_select(ctx)
         engine.request_quit()
     end
 end
+```
+
+#### `:with_lua_menu_selection_changed(callback)`
+
+Set a Lua callback called whenever the highlight moves to another item (requires `:with_menu()`). It is independent of `:with_lua_menu_selected` and of `MenuActions`: a menu can have any combination. A confirm, a move that stays put (a scrolling menu at its first or last item) and an items rebuild do not call it.
+
+The callback receives a single context table:
+
+- `menu_id` (u64) - Entity ID of the menu
+- `item_id` (string) - ID of the newly highlighted item
+- `item_index` (integer) - 0-based index of the newly highlighted item
+- `previous_index` (integer) - 0-based index of the item that was highlighted
+
+```lua
+engine.spawn()
+    :with_menu({
+        { id = "new",  label = "New Game" },
+        { id = "load", label = "Load Game" },
+    }, 16, 64, "arcade", 16, 24, true)
+    :with_lua_menu_selection_changed("on_menu_hint")
+    :build()
+
+local HINTS = { new = "Start from the beginning", load = "Continue a saved game" }
+function on_menu_hint(ctx)
+    engine.log_info(HINTS[ctx.item_id] or "")
+end
+```
+
+#### `:with_menu_selected(index)`
+
+Open the menu on item `index` (0-based, like `item_index`) instead of the first enabled item (requires `:with_menu()`). A disabled or out-of-range `index` selects the first enabled item. A menu with `:with_menu_visible_count()` scrolls to show the item.
+
+```lua
+:with_menu_selected(2)  -- start on the third item
 ```
 
 #### `:with_menu_visible_count(count)`
@@ -3440,14 +3475,15 @@ end
 - Generated menu item textures from TextureStore
 - The menu entity itself
 
-### `engine.entity_menu_set_items(entity_id, items)`
+### `engine.entity_menu_set_items(entity_id, items, selected?)`
 
-Replace a menu's items in place. The replacement lands after the call, no later than the next tick; until then the menu is unchanged. The old items are removed, the menu becomes active again (a confirm deactivates it), the first enabled item is selected, and the scroll resets. The cursor, colors, selection sound and callback stay, and the new items keep the menu's static or dynamic text mode. Does nothing when the entity has no `Menu`.
+Replace a menu's items in place. The replacement lands after the call, no later than the next tick; until then the menu is unchanged. The old items are removed, the menu becomes active again (a confirm deactivates it), the `selected` item is selected (the first enabled item when `selected` is omitted, disabled or out of range), and the scroll resets. The cursor, colors, selection sound and callback stay, and the new items keep the menu's static or dynamic text mode. Does nothing when the entity has no `Menu`.
 
 **Parameters:**
 
 - `entity_id` - Menu entity ID (entity with Menu component)
 - `items` - Table of `{ id = "...", label = "...", enabled = true }`, in the same shape as `:with_menu()`. A malformed table raises a Lua error at the call and queues nothing.
+- `selected` - Optional 0-based index of the item to select after the rebuild.
 
 ```lua
 -- Show the next dialogue node's choices on the same menu
@@ -3461,7 +3497,28 @@ end
 
 Available collision variant:
 
-- `engine.collision_entity_menu_set_items(entity_id, items)`
+- `engine.collision_entity_menu_set_items(entity_id, items, selected?)`
+
+### `engine.entity_menu_set_active(entity_id, active)`
+
+Activate or deactivate a menu without touching its items or selection. A confirm deactivates a menu; `engine.entity_menu_set_active(id, true)` makes it respond to input again with the same items and the same highlighted item, with no rebuild. `false` makes it ignore input. The `waiting_selection` flag in the menu's entity signals follows `active`. Does nothing when the entity has no `Menu`.
+
+**Parameters:**
+
+- `entity_id` - Menu entity ID (entity with Menu component)
+- `active` - `true` to accept input, `false` to ignore it
+
+```lua
+-- A menu that stays usable after a confirm
+function on_menu_pick(ctx)
+    engine.log_info("picked " .. ctx.item_id)
+    engine.entity_menu_set_active(ctx.menu_id, true)
+end
+```
+
+Available collision variant:
+
+- `engine.collision_entity_menu_set_active(entity_id, active)`
 
 ### `engine.entity_set_rotation(entity_id, degrees)`
 

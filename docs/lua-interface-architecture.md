@@ -338,7 +338,7 @@ A Lua collision rule is a plain core `CollisionRule` plus a `LuaOnCollision { st
 
 ### Menu Selection and GUI Interactable Click Dispatch
 
-`lua_menu_selected_observer` (`lua_menu_selected.rs`) runs alongside `aberred-core`'s `menu_selection_observer` in games that run a Lua script. It calls the menu's Lua callback (its `LuaOnMenuSelected` component, set via `:with_lua_menu_selected()`; a missing function only warns). A Lua menu with a callback is spawned without `MenuActions`, so core's observer has nothing to run for it. Rust code observes the `MenuSelected` event on the menu entity, which fires for every selection regardless. `lua_gui_clicked_observer` (`lua_gui_clicked.rs`) is likewise spawned only in games that run a Lua script. It calls the widget's Lua callback (its `LuaOnGuiClicked` component, set via `with_lua_gui_clicked`; a missing function only warns). Rust code observes the `GuiClicked` event on the widget entity. Both observers run through `LuaDispatch` (`dispatch_custom_and_drain`): the signal cache is refreshed before the call and the commands the callback queued are drained right after it. They build a small ad-hoc context table rather than using the pooled `EntityCtxTables`/`CollisionCtxTables` (these fire far less often than phase/timer/collision callbacks, so pooling isn't worth the complexity) — the menu callback's table carries `menu_id`/`item_id`/`item_index`; the GUI interactable callback's carries just `entity_id` — and calls the named function with that single table as its only argument (no `input`).
+`lua_menu_selected_observer` (`lua_menu_selected.rs`) runs alongside `aberred-core`'s `menu_selection_observer` in games that run a Lua script. It calls the menu's Lua callback (its `LuaOnMenuSelected` component, set via `:with_lua_menu_selected()`; a missing function only warns). A Lua menu with a callback is spawned without `MenuActions`, so core's observer has nothing to run for it. Rust code observes the `MenuSelected` event on the menu entity, which fires for every selection regardless. `lua_menu_selection_changed_observer` (`lua_menu_selection_changed.rs`) is its sibling for `MenuSelectionChanged`: it calls the menu's `LuaOnMenuSelectionChanged` callback (set via `:with_lua_menu_selection_changed()`, independent of `LuaOnMenuSelected` and `MenuActions`) with a table of `menu_id`/`item_id`/`item_index`/`previous_index`. `lua_gui_clicked_observer` (`lua_gui_clicked.rs`) is likewise spawned only in games that run a Lua script. It calls the widget's Lua callback (its `LuaOnGuiClicked` component, set via `with_lua_gui_clicked`; a missing function only warns). Rust code observes the `GuiClicked` event on the widget entity. Both observers run through `LuaDispatch` (`dispatch_custom_and_drain`): the signal cache is refreshed before the call and the commands the callback queued are drained right after it. They build a small ad-hoc context table rather than using the pooled `EntityCtxTables`/`CollisionCtxTables` (these fire far less often than phase/timer/collision callbacks, so pooling isn't worth the complexity) — the menu callback's table carries `menu_id`/`item_id`/`item_index`; the GUI interactable callback's carries just `entity_id` — and calls the named function with that single table as its only argument (no `input`).
 
 ### Stub and `.luarc.json` Generation
 
@@ -645,11 +645,13 @@ with_menu
 with_menu_action_request_quit
 with_menu_action_request_scene
 with_lua_menu_selected
+with_lua_menu_selection_changed
 with_menu_colors
 with_menu_cursor
 with_menu_dynamic_text
 with_menu_selection_sound
 with_menu_visible_count
+with_menu_selected
 ```
 
 **Tweens** (`tween.rs`)
@@ -764,14 +766,18 @@ Menus can optionally invoke a Lua callback when an item is selected.
 - Set the callback via `:with_lua_menu_selected(callback)`.
 - When a callback is set, `MenuActions` are ignored (the callback takes full control).
 
-The callback receives three arguments:
+The callback receives a single context table:
 
 ```lua
--- entity_id = menu entity, item_id = string ID, item_index = 1-based index
-function on_menu_select(entity_id, item_id, item_index)
+-- ctx.menu_id = menu entity, ctx.item_id = string ID, ctx.item_index = 0-based index
+function on_menu_select(ctx)
     -- Use engine.* to queue commands
 end
 ```
+
+- `:with_lua_menu_selection_changed(callback)` calls `callback(ctx)` when the highlight moves, with `ctx.menu_id`, `ctx.item_id`, `ctx.item_index` and `ctx.previous_index` (0-based). It is independent of the selected callback and of `MenuActions`.
+- `engine.entity_menu_set_active(id, active)` (+ `collision_` twin) flips `Menu.active` and the `waiting_selection` flag without touching items or selection.
+- `:with_menu_selected(index)` and the optional third argument of `engine.entity_menu_set_items(id, items, selected?)` choose the item a menu opens or rebuilds on (0-based; a disabled or out-of-range index selects the first enabled item).
 
 ### How it Works
 

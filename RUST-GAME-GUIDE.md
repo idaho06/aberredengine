@@ -2303,6 +2303,7 @@ Item ids identify items: `MenuActions` and `MenuSelected` use them, and a static
 | `.with_colors(normal, selected)` | Set normal and selected item colors |
 | `.with_selection_sound("key")` | Play a sound on selection change |
 | `.with_visible_count(n)` | Limit visible items (enables scrolling) |
+| `.with_selected(i)` | Open on item `i` (0-based) instead of the first enabled item |
 | `.with_cursor(entity)` | Attach a cursor entity to the selection |
 | `.with_cursor_text("→")` | Spawn a text cursor owned by the menu (replaces `.with_cursor`) |
 | `.with_disabled_color(color)` | Set the color of disabled items (default: the normal color at half alpha) |
@@ -2352,9 +2353,11 @@ A global observer registered with `EngineBuilder::add_observer` sees every menu'
 
 **Dispatch order:** When an item is confirmed, the engine triggers `MenuSelected`, and the menu's `MenuActions` run alongside its `MenuSelected` observers. Don't combine `MenuActions` with an observer for the same item, or both act on it.
 
-**Navigation:** Up/down arrows move selection and skip disabled items. `action_1` or `action_2` confirms the selected item; the menu then deactivates until a `MenuRebuild` re-activates it. With `.with_visible_count(n)`, the menu shows at most `n` items at a time with bounded navigation and auto-scrolling.
+**Highlight changes:** when navigation moves the highlight, the engine triggers `MenuSelectionChanged` on the menu entity (observe it like `MenuSelected`). It carries the menu `entity`, the newly highlighted `item_id` and `index`, and the `previous_index`. A confirm, a move that stays put (a scrolling menu at its first or last item) and a rebuild trigger nothing. Use it to show a hint for the highlighted item.
 
-**Disabled items:** `Menu::from_items` takes `MenuItem`s, and `MenuItem::new(id, label).disabled()` marks one that cannot be chosen. Navigation skips a disabled item, a confirm never fires on one, and it draws in the menu's disabled color. The initial selection is the first enabled item. A menu whose items are all disabled selects nothing: navigation and confirm do nothing and the cursor is hidden.
+**Navigation:** Up/down arrows move selection and skip disabled items. `action_1` or `action_2` confirms the selected item; the menu then deactivates until a `MenuRebuild` re-activates it, or until your code sets `Menu::active` back to `true` (items and selection are kept; a direct write leaves the `waiting_selection` flag in the menu's `Signals` cleared, so set it too if your code reads it). With `.with_visible_count(n)`, the menu shows at most `n` items at a time with bounded navigation and auto-scrolling.
+
+**Disabled items:** `Menu::from_items` takes `MenuItem`s, and `MenuItem::new(id, label).disabled()` marks one that cannot be chosen. Navigation skips a disabled item, a confirm never fires on one, and it draws in the menu's disabled color. The initial selection is the first enabled item, or the item given to `.with_selected(i)` when that one is enabled. A menu whose items are all disabled selects nothing: navigation and confirm do nothing and the cursor is hidden.
 
 ```rust
 use aberredengine::prelude::*;
@@ -2394,7 +2397,7 @@ let menu = Menu::new(
 commands.spawn(menu);
 ```
 
-**Replacing items:** inserting `MenuRebuild` on a menu entity replaces its items in place. Nothing changes at the insert: the replacement is applied by the next spawn step of the simulation, no later than the next tick, and the `MenuRebuild` is consumed then, so it can be inserted again later. The old items are removed, the menu becomes active again, the first enabled item is selected and the scroll resets. The cursor, colors and selection sound stay, and the new items keep the menu's static or dynamic text mode. `MenuActions` is keyed by item id and a rebuild leaves it alone: new items resolve against the existing actions, and an id without an action does nothing. A rebuild creates the item entities (and static label textures) anew, so insert it when the items change, not every frame.
+**Replacing items:** inserting `MenuRebuild` on a menu entity replaces its items in place. Nothing changes at the insert: the replacement is applied by the next spawn step of the simulation, no later than the next tick, and the `MenuRebuild` is consumed then, so it can be inserted again later. The old items are removed, the menu becomes active again, the first enabled item is selected (or the item given to `MenuRebuild::with_selected(i)`, when that one is enabled) and the scroll resets. The cursor, colors and selection sound stay, and the new items keep the menu's static or dynamic text mode. `MenuActions` is keyed by item id and a rebuild leaves it alone: new items resolve against the existing actions, and an id without an action does nothing. A rebuild creates the item entities (and static label textures) anew, so insert it when the items change, not every frame.
 
 ```rust
 use aberredengine::prelude::*;
